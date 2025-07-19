@@ -1,48 +1,72 @@
 # CS50 Final Project
-This is my final project for CS50. I'm going to build a mobile-first web app for a (real) local dog walking company to manage client bookings. I'll use Python, Flask and an SQL databased on the backend, and an interactive frontend with React and Boostrap for styling.
 
-## Features and users
-The app should have different functions depending on the type of user. There are three user types: admin (the business owner), clients and walkers (the staff)
+This is my final project for CS50. I'm building a mobile-first web app for a local dog walking company to manage client bookings. The backend will use Python, Flask, and an SQL database, while the frontend will be built with React and styled using Bootstrap.
+
+## Features and Users
+
+The app will have different functionalities depending on the type of user. There are three user types: admin (the business owner), clients, and walkers (the staff).
+
+### Clients
 
 Clients can:
 
-Register and manage their profile, including adding a profile picture, adding contact details, specific instructions for pick ups / drop offs (eg codes to access their building, a google maps link to their address).
+- Register and manage their profile, including adding a profile picture, contact details, and specific instructions for pick-ups/drop-offs (e.g., codes to access their building, a Google Maps link to their address).
+- Add and manage dogs associated with their account, including uploading a picture of the dog and providing basic info like breed, age, and allergies.
+- Request to book services (currently either a 'walk', 'sitting', or 'drop-in'; additional services may be added in the future) for their dog. Walks can be booked as 'morning', 'afternoon', or 'both'.
+- View, edit, and cancel their upcoming bookings.
+- View their booking history and invoices for previous months.
+- Opt in to notifications when their booking is confirmed or if the admin needs to override their booked preference (e.g., allocating their dog to a slot other than the one the client requested).
 
-Add and manage dogs associated with their account, including adding a picture of the dog, basic info like breed, age and allergies.
+The app will enforce validation on client actions:
 
-Request to book services (currently either a 'walk', 'sitting' or 'drop in', there may be more services in future) for their dog. Walks can be booked as 'morning', 'afternoon' or 'both'.
+- Bookings will be limited to weekdays and up to 3 months in advance.
+- Availability will be managed based on the number of slots available for each service on a given day.
+- Cancellation policies will be enforced (e.g., walks canceled within 5 days will incur a 100% charge).
+- Discounts will be applied automatically (e.g., a 10% discount if the client books both a 'morning' and 'afternoon' slot on a given day).
 
-View, edit and cancel their bookings.
-
-The app should layer some validation onto user actions:
-
-Bookings should be limited to weekdays, up to 3 months in advance. The app should manage availablity, based on the number of slots available for each service on the give day. It should also enforce the cancellation policy (eg walks cancelled within 5 days will still incur a charge).
+### Admin
 
 The admin can:
 
-Approve requests to book.
+- Manage availability for each service, such as setting the number of 'morning' and 'afternoon' walking slots available per day.
+- Approve booking requests and override the client's preferred booking day or slot manually.
+- Allocate bookings to team members (walkers) based on their availability. The allocation UX will feature a drag-and-drop interface, with each dog's booking represented as a draggable tile that can be dropped into a walker's morning or afternoon slot.
+- Generate client invoices based on the services booked, including additional charges or discounts.
+- Adjust pricing for different services.
+- Generate payslips for each walker based on the number of dogs they have walked in a given month.
+- View dashboards showing booking trends over time, bookings per day, revenue per month, etc.
 
-Allocate bookings to team members (walkers), based on which walkers are available on a given day.
-
-Generate client invoices, based on the services that the client has booked, with any additional charges or discounts.
-
-Adjust the pricing for different services.
-
-Generate payslips for each walker, based on the number of dogs they have walked in a given month. 
-
-See some nice dashbords showing booking trends over time, bookings per day, revenue per month etc. 
+### Walkers
 
 Walkers can:
 
-See their schedule (ie which dogs are allocated to them for the 'morning' and 'afternoon' of a given day).
+- View their schedule, including which dogs are allocated to them for the 'morning' and 'afternoon' of a given day.
+- Access client-provided information about each dog, including a photo and basic details like allergies.
+- View client-provided pick-up and drop-off instructions.
 
-See client-provided information about each dog, including a photo, basic information like allergies. 
+## App Optimization
 
-See client-provided pick up and drop off instructions.
+The app will be optimized for different screen sizes:
 
-## App optimisation
+- Clients and walkers will primarily use the app via a web browser on their mobile devices, so the app will be designed to work seamlessly on smaller screens.
+- The admin will primarily use the app via a desktop web browser, so their views will target larger screen sizes.
 
-Clients and walkers will mostly use the app via a web browser on thier mobile, so the app should be optmised to work on smaller screens. The admin will mostly use the app via a desktop web browser, so their views can target larger screen sizes.
+## Tech Stack
+
+The app will be built using the following technologies:
+
+- **Backend**: Python and Flask for server-side logic and API development.
+- **Database**: An SQL database for storing user, dog, booking, and service data.
+- **Frontend**: React for building interactive user interfaces.
+- **Styling**: Bootstrap for responsive and mobile-first design.
+
+## Roadmap
+
+To keep the scope manageable:
+
+- Walkers will not be able to update their own availability. The admin will manage walker availability manually.
+- The app will not include payment processing. The admin will request payment manually.
+
 
 
 
