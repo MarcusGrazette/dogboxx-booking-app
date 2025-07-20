@@ -1,6 +1,6 @@
 # CS50 Final Project
 
-This is my final project for CS50. I'm building a mobile-first web app for a local dog walking company to manage client bookings. The backend will use Python, Flask, and an SQL database, while the frontend will be built with React and styled using Bootstrap.
+This is my final project for CS50. I'm building a mobile-first web app for a local dog walking company to manage client bookings. The backend will use Python, Flask, and an SQL database, and the frontend will be built with React and styled with Bootstrap.
 
 ## Features and Users
 
