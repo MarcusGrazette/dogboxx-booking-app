@@ -1,9 +1,10 @@
-Flask               # The core web framework for building the backend.
-Flask-Session       # Provides server-side session management for Flask.
-Flask-SQLAlchemy    # Adds SQLAlchemy ORM support for database interactions in Flask.
-Flask-CORS          # Handles cross-origin requests for React and Flask integration.
-Flask-WTF           # Simplifies form handling and validation in Flask.
-python-dotenv       # Used to load env variables.
-pytz                # Handles timezone conversions and manipulations.
-requests            # Simplifies HTTP requests for interacting with APIs or external services.
-email-validator       # Validates email addresses for proper syntax and domain.
+email-validator
+Flask
+flask-login
+Flask-Session
+Flask-SQLAlchemy
+Flask-CORS
+Flask-WTF
+python-dotenv
+pytz
+requests

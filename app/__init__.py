@@ -1,6 +1,7 @@
 from flask import Flask, flash, redirect, render_template, request, session
 from flask_session import Session
 from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager
 from dotenv import load_dotenv
 import os
 
@@ -8,6 +9,7 @@ import os
 load_dotenv()
 
 db = SQLAlchemy()
+login_manager = LoginManager()
 
 def create_app():
     app = Flask(__name__)
@@ -20,6 +22,10 @@ def create_app():
 
     Session(app)
 
+    # Initialize LoginManager
+    login_manager.init_app(app)
+    login_manager.login_view = "login"
+
     @app.after_request
     def after_request(response):
         """Ensure responses aren't cached"""
@@ -27,6 +33,11 @@ def create_app():
         response.headers["Expires"] = 0
         response.headers["Pragma"] = "no-cache"
         return response
+
+    @login_manager.user_loader
+    def load_user(user_id):
+        """Load a user by their ID."""
+        return User.query.get(int(user_id))
 
     db.init_app(app)
 

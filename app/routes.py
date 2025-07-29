@@ -1,4 +1,5 @@
 from flask import request, session, redirect, render_template, flash, jsonify
+from flask_login import login_required, current_user, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from sqlalchemy.exc import IntegrityError
 from app.models import User
@@ -29,6 +30,8 @@ def register_routes(app):
         if request.method == "POST":
             email = request.form.get("email", "").strip().lower()
             password = request.form.get("password", "")
+            remember_me = request.form.get("remember_me", False)
+
 
             # Validation
             if not email:
@@ -40,19 +43,24 @@ def register_routes(app):
                 return render_template("login.html")
 
             # Query database for user
-            user = User.query.filter_by(email=email).first()
+            user = User.query.filter_by(email=email, is_active=True).first()
 
             # Check credentials
             if not user or not check_password_hash(user.hashed_password, password):
                 flash("Invalid email or password", "error")
                 return render_template("login.html")
 
-            # Log user in
-            session["user_id"] = user.id
+            # Log user in using Flask-Login
+            login_user(user, remember=remember_me)
             flash(f"Welcome back, {user.firstname}!", "success")
             return redirect("/")
 
         return render_template("login.html")
+    
+    @app.route("/onboard", methods=["GET", "POST"])
+    @login_required
+    def onboard():
+        return ("TODO")
 
     @app.route("/register", methods=["GET", "POST"])
     def register():
@@ -121,12 +129,12 @@ def register_routes(app):
                 db.session.add(new_user)
                 db.session.commit()
 
-                # Log the user in automatically
-                session["user_id"] = new_user.id
+                # Log the user in automatically, redirect to the onboarding page
+                login_user(new_user)
                 flash(f"Welcome to our platform, {firstname}!", "success")
                 
                 logging.info(f"New user registered: {email}")
-                return redirect("/")
+                return redirect("/onboard")
 
             except IntegrityError as e:
                 # Handle database constraint violations
@@ -147,10 +155,6 @@ def register_routes(app):
     @app.route("/logout")
     def logout():
         """Log user out"""
-        session.clear()
+        logout_user()
         flash("You have been logged out", "info")
         return redirect("/login")
-
-    def apology(message, code=400):
-        """Render message as an apology to user."""
-        return render_template("apology.html", message=message), code

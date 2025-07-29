@@ -4,7 +4,7 @@ This is my final project for CS50. I'm building a mobile-first web app for a loc
 
 ## Features and Users
 
-The app will have different functionalities depending on the type of user. There are three user types: admin (the business owner), clients, and walkers (the staff).
+The app will have different functionalities depending on the type of user. There are three user types: admin (the business owner), clients, and walkers (the staff). New user registrations default to 'client' and trigger an onboarding flow to capture basic information.
 
 ### Clients
 

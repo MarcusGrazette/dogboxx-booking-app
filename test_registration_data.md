@@ -4,7 +4,7 @@
 
 | First Name | Last Name | Email | Password | Confirm Password | Expected Result |
 |------------|-----------|-------|----------|------------------|-----------------|
-| John | Smith | john.smith@example.com | Password123! | Password123! | ✅ Success |
+| John | Smith | john.smith@gmail.com | Password123! | Password123! | ✅ Success |
 | Sarah | Johnson | sarah.j@gmail.com | MySecure99 | MySecure99 | ✅ Success |
 | Michael | Brown | m.brown@company.org | StrongPass1 | StrongPass1 | ✅ Success |
 | Emma | Wilson | emma_wilson@outlook.com | Testing456 | Testing456 | ✅ Success |
