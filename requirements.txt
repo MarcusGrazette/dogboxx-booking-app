@@ -6,3 +6,4 @@ Flask-WTF           # Simplifies form handling and validation in Flask.
 python-dotenv       # Used to load env variables.
 pytz                # Handles timezone conversions and manipulations.
 requests            # Simplifies HTTP requests for interacting with APIs or external services.
+email-validator       # Validates email addresses for proper syntax and domain.
