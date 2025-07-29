@@ -2,10 +2,12 @@ from flask import request, session, redirect, render_template, flash, jsonify
 from flask_login import login_required, current_user, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from sqlalchemy.exc import IntegrityError
-from app.models import User
+from app.models import User, Client
 from app import db
 from email_validator import validate_email, EmailNotValidError
 import logging
+import os
+from datetime import datetime, timezone
 
 def register_routes(app):
     
@@ -60,7 +62,102 @@ def register_routes(app):
     @app.route("/onboard", methods=["GET", "POST"])
     @login_required
     def onboard():
-        return ("TODO")
+        if request.method == "GET":
+            api_key = os.getenv("GOOGLE_MAPS_API_KEY")
+            return render_template("onboarding.html", google_maps_api_key=api_key)
+        
+        # Only clients need onboarding for now
+        if current_user.role != 'client':
+            return redirect("/")
+        
+          # Check if user already completed onboarding
+        client = Client.query.filter_by(user_id=current_user.id).first()
+        if client and client.onboarding_completed:
+            flash("You have already completed onboarding!", "info")
+            return redirect("/")
+        
+        if request.method == "POST":
+            try:
+                # Check if user wants to skip address entry
+                skip_address = request.form.get("skip_address") == "true"
+                
+                if skip_address:
+                    # Create client record without address
+                    if not client:
+                        client = Client(user_id=current_user.id)
+                        db.session.add(client)
+                    
+                    client.onboarding_completed = True
+                    client.onboarding_completed_at = datetime.now(timezone.utc)
+                    db.session.commit()
+                    
+                    flash("Welcome! You can add your address later in your profile settings.", "success")
+                    return redirect("/")
+                
+                # Get address data from form
+                address = request.form.get("address", "").strip()
+                street_address = request.form.get("street_address", "").strip()
+                city = request.form.get("city", "").strip()
+                state = request.form.get("state", "").strip()
+                postal_code = request.form.get("postal_code", "").strip()
+                country = request.form.get("country", "").strip()
+                place_id = request.form.get("place_id", "").strip()
+                formatted_address = request.form.get("formatted_address", "").strip()
+                
+                # Get coordinates
+                latitude = request.form.get("latitude")
+                longitude = request.form.get("longitude")
+                
+                # Convert coordinates to float if provided
+                try:
+                    latitude = float(latitude) if latitude else None
+                    longitude = float(longitude) if longitude else None
+                except (ValueError, TypeError):
+                    latitude = longitude = None
+                
+                # Validation
+                errors = []
+                
+                if not address:
+                    errors.append("Please enter your address")
+                elif not street_address and not formatted_address:
+                    errors.append("Please select an address from the dropdown suggestions")
+                
+                if errors:
+                    for error in errors:
+                        flash(error, "error")
+                    return render_template("onboard.html")
+                
+                # Create or update client record
+                if not client:
+                    client = Client(user_id=current_user.id)
+                    db.session.add(client)
+                
+                # Update client with address information
+                client.street_address = street_address
+                client.city = city
+                client.state = state
+                client.postal_code = postal_code
+                client.country = country
+                client.place_id = place_id
+                client.formatted_address = formatted_address
+                client.latitude = latitude
+                client.longitude = longitude
+                client.onboarding_completed = True
+                client.onboarding_completed_at = datetime.now(timezone.utc)
+                
+                db.session.commit()
+                
+                flash(f"Welcome to our platform, {current_user.firstname}! Your profile is now complete.", "success")
+                logging.info(f"User {current_user.email} completed onboarding with address: {formatted_address or address}")
+                
+                return redirect("/")
+                
+            except Exception as e:
+                db.session.rollback()
+                logging.error(f"Error during onboarding for user {current_user.email}: {e}")
+                flash("There was an error saving your information. Please try again.", "error")
+                return render_template("onboard.html")
 
     @app.route("/register", methods=["GET", "POST"])
     def register():

@@ -6,7 +6,6 @@
 |------------|-----------|-------|----------|------------------|-----------------|
 | John | Smith | john.smith@gmail.com | Password123! | Password123! | ✅ Success |
 | Sarah | Johnson | sarah.j@gmail.com | MySecure99 | MySecure99 | ✅ Success |
-| Michael | Brown | m.brown@company.org | StrongPass1 | StrongPass1 | ✅ Success |
 | Emma | Wilson | emma_wilson@outlook.com | Testing456 | Testing456 | ✅ Success |
 
 ## Invalid Test Cases (Should Trigger Validation Errors)
@@ -62,7 +61,6 @@
 ## Client-Side vs Server-Side Testing
 
 ### Client-Side Only (JavaScript validation)
-- Try submitting without checking "Terms of Service" checkbox
 - Type passwords that don't match (should show validation immediately)
 - Try submitting empty required fields
 
@@ -70,24 +68,6 @@
 - Disable JavaScript in browser and test all invalid cases above
 - Use browser dev tools to modify form validation attributes
 - Send direct POST requests with invalid data
-
-## Test Automation Script (Optional)
-
-```python
-# Quick test data generator for automated testing
-test_cases = [
-    # Valid cases
-    ("John", "Smith", "john.smith@test.com", "Password123!", "Password123!"),
-    ("Sarah", "Johnson", "sarah.j@test.com", "MySecure99", "MySecure99"),
-    
-    # Invalid cases
-    ("J", "Smith", "j@test.com", "Password123!", "Password123!"),  # Short first name
-    ("John", "", "john@test.com", "Password123!", "Password123!"),  # Empty last name
-    ("John", "Smith", "invalid-email", "Password123!", "Password123!"),  # Bad email
-    ("John", "Smith", "john@test.com", "short", "short"),  # Short password
-    ("John", "Smith", "john@test.com", "Password123!", "Different123!"),  # Mismatched passwords
-]
-```
 
 ## Testing Checklist
 

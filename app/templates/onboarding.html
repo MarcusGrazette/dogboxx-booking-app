@@ -1,0 +1,299 @@
+{% extends "layout.html" %}
+
+{% block title %}
+Complete Your Profile
+{% endblock %}
+
+{% block main %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-8 col-lg-6">
+            <div class="py-4 py-md-5">
+                <div class="text-center mb-4">
+                    <h2 class="fw-semibold mb-2">Welcome, {{ current_user.firstname }}!</h2>
+                    <p class="text-muted">Let's complete your profile to get started</p>
+                </div>
+                
+                <!-- Progress indicator -->
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <small class="text-muted">Step 1 of 1</small>
+                        <small class="text-muted">Address Information</small>
+                    </div>
+                    <div class="progress" style="height: 4px;">
+                        <div class="progress-bar" role="progressbar" style="width: 100%"></div>
+                    </div>
+                </div>
+                
+                <!-- Display flash messages -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+                
+                <form action="/onboard" method="post" novalidate id="onboardingForm">
+                    <!-- Address field with Google Maps autocomplete -->
+                    <div class="mb-4">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="bg-light rounded p-2 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; flex-shrink: 0;">
+                                <i class="bi bi-geo-alt fs-5 text-secondary"></i>
+                            </div>
+                            <div class="flex-fill">
+                                
+                                <input 
+                                    class="form-control form-control-lg" 
+                                    id="address"
+                                    name="address" 
+                                    placeholder="Start typing your address..." 
+                                    required 
+                                    type="text"
+                                    value="{{ request.form.get('address', '') }}"
+                                    autocomplete="off">
+                               
+                            </div>
+                            <div class="d-flex align-items-center justify-content-center text-muted" 
+                                 style="width: 40px; height: 40px; cursor: help;"
+                                 data-bs-toggle="tooltip" 
+                                 data-bs-placement="left" 
+                                 title="We'll need your street address, you can add instructions below">
+                                <i class="bi bi-info-circle fs-5"></i>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Hidden fields for parsed address components -->
+                    <input type="hidden" id="street_address" name="street_address">
+                    <input type="hidden" id="city" name="city">
+                    <input type="hidden" id="state" name="state">
+                    <input type="hidden" id="postal_code" name="postal_code">
+                    <input type="hidden" id="country" name="country">
+                    <input type="hidden" id="place_id" name="place_id">
+                    <input type="hidden" id="formatted_address" name="formatted_address">
+                    <input type="hidden" id="latitude" name="latitude">
+                    <input type="hidden" id="longitude" name="longitude">
+                    
+                    <!-- Address confirmation display (hidden initially) -->
+                    <div id="addressConfirmation" class="mb-4" style="display: none;">
+                        <div class="card bg-light border-0">
+                            <div class="card-body">
+                                <h6 class="card-title mb-2">
+                                    <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                    Address Confirmed
+                                </h6>
+                                <p class="card-text mb-0" id="confirmedAddress"></p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Submit button -->
+                    <div class="d-grid mb-3">
+                        <button class="btn btn-primary btn-lg fw-semibold" type="submit" id="submitBtn" disabled>
+                            <span class="spinner-border spinner-border-sm me-2" role="status" id="submitSpinner" style="display: none;"></span>
+                            Complete Setup
+                        </button>
+                    </div>
+                    
+                    <!-- Skip option (optional) -->
+                    <div class="text-center">
+                        <p class="text-muted mb-0">
+                            <a href="#" class="text-decoration-none" id="skipLink">I'll add this later</a>
+                        </p>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Google Maps JavaScript API -->
+<script async defer 
+    src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=places&callback=initAutocomplete">
+</script>
+
+<script>
+let autocomplete;
+let addressSelected = false;
+
+function initAutocomplete() {
+    // Create the autocomplete object
+    autocomplete = new google.maps.places.Autocomplete(
+        document.getElementById('address'),
+        {
+            types: ['address'],
+            componentRestrictions: { country: ['gb'] }, // Limit to GB
+            fields: ['address_components', 'formatted_address', 'geometry', 'place_id']
+        }
+    );
+
+    // When the user selects an address from the dropdown
+    autocomplete.addListener('place_changed', function() {
+        const place = autocomplete.getPlace();
+        
+        if (!place.geometry) {
+            // User entered the name of a Place that was not suggested
+            console.log("No details available for input: '" + place.name + "'");
+            return;
+        }
+
+        // Parse the address components
+        parseAddressComponents(place);
+        
+        // Show confirmation
+        showAddressConfirmation(place.formatted_address);
+        
+        // Enable submit button
+        document.getElementById('submitBtn').disabled = false;
+        addressSelected = true;
+    });
+}
+
+function parseAddressComponents(place) {
+    // Clear previous values
+    document.getElementById('street_address').value = '';
+    document.getElementById('city').value = '';
+    document.getElementById('state').value = '';
+    document.getElementById('postal_code').value = '';
+    document.getElementById('country').value = '';
+    
+    let streetNumber = '';
+    let streetName = '';
+    
+    // Parse address components
+    for (let component of place.address_components) {
+        const types = component.types;
+        
+        if (types.includes('street_number')) {
+            streetNumber = component.long_name;
+        }
+        else if (types.includes('route')) {
+            streetName = component.long_name;
+        }
+        else if (types.includes('locality')) {
+            document.getElementById('city').value = component.long_name;
+        }
+        else if (types.includes('administrative_area_level_1')) {
+            document.getElementById('state').value = component.short_name;
+        }
+        else if (types.includes('postal_code')) {
+            document.getElementById('postal_code').value = component.long_name;
+        }
+        else if (types.includes('country')) {
+            document.getElementById('country').value = component.long_name;
+        }
+    }
+    
+    // Combine street number and name
+    const fullStreetAddress = `${streetNumber} ${streetName}`.trim();
+    document.getElementById('street_address').value = fullStreetAddress;
+    
+    // Set additional place data
+    document.getElementById('place_id').value = place.place_id || '';
+    document.getElementById('formatted_address').value = place.formatted_address || '';
+    
+    if (place.geometry && place.geometry.location) {
+        document.getElementById('latitude').value = place.geometry.location.lat();
+        document.getElementById('longitude').value = place.geometry.location.lng();
+    }
+}
+
+function showAddressConfirmation(address) {
+    document.getElementById('confirmedAddress').textContent = address;
+    document.getElementById('addressConfirmation').style.display = 'block';
+}
+
+// Initialize Bootstrap tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    // Handle form submission
+    document.getElementById('onboardingForm').addEventListener('submit', function(e) {
+        if (!addressSelected) {
+            e.preventDefault();
+            alert('Please select an address from the dropdown suggestions.');
+            return false;
+        }
+        
+        // Show loading spinner
+        document.getElementById('submitSpinner').style.display = 'inline-block';
+        document.getElementById('submitBtn').disabled = true;
+    });
+    
+    // Handle skip functionality
+    document.getElementById('skipLink').addEventListener('click', function(e) {
+        e.preventDefault();
+        if (confirm('Are you sure you want to skip adding your address? You can add it later in your profile settings.')) {
+            // Submit form with skip flag
+            const form = document.getElementById('onboardingForm');
+            const skipInput = document.createElement('input');
+            skipInput.type = 'hidden';
+            skipInput.name = 'skip_address';
+            skipInput.value = 'true';
+            form.appendChild(skipInput);
+            form.submit();
+        }
+    });
+    
+    // Reset address selection when user types manually
+    document.getElementById('address').addEventListener('input', function() {
+        if (this.value === '') {
+            addressSelected = false;
+            document.getElementById('submitBtn').disabled = true;
+            document.getElementById('addressConfirmation').style.display = 'none';
+        }
+    });
+});
+
+// Handle API loading errors
+window.gm_authFailure = function() {
+    console.error('Google Maps API authentication failed');
+    alert('There was an error loading the address lookup service. Please try refreshing the page.');
+};
+</script>
+
+<style>
+/* Custom styles for Google Places autocomplete */
+.pac-container {
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    font-family: inherit;
+}
+
+.pac-item {
+    padding: 12px 16px;
+    border-top: 1px solid #f8f9fa;
+    cursor: pointer;
+}
+
+.pac-item:first-child {
+    border-top: none;
+}
+
+.pac-item:hover {
+    background-color: #f8f9fa;
+}
+
+.pac-item-selected {
+    background-color: #e9ecef;
+}
+
+.pac-matched {
+    font-weight: 600;
+}
+
+/* Loading animation for submit button */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+</style>
+{% endblock %}
