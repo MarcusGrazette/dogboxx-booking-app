@@ -40,7 +40,7 @@ def register_routes(app):
                 return render_template("login.html")
 
             # Query database for user
-            user = User.query.filter_by(email=email, is_active=True).first()
+            user = User.query.filter_by(email=email).first()
 
             # Check credentials
             if not user or not check_password_hash(user.hashed_password, password):
