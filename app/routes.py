@@ -9,31 +9,26 @@ import logging
 import os
 from datetime import datetime, timezone
 
+logging.basicConfig(level=logging.DEBUG)
+
 def register_routes(app):
     
     @app.route("/")
+    @login_required  # Use Flask-Login decorator instead of manual session check
     def index():
-        """Render the home page or redirect to login."""
-        if "user_id" not in session:
-            return redirect("/login")
-
-        user = User.query.get(session["user_id"])
-        if not user:
-            session.clear()
-            return redirect("/login")
-
-        return render_template("index.html", user=user)
+        """Render the home page."""
+        return render_template("index.html", user=current_user)
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
         """Log user in"""
+        # Clear any existing session
         session.clear()
 
         if request.method == "POST":
             email = request.form.get("email", "").strip().lower()
             password = request.form.get("password", "")
             remember_me = request.form.get("remember_me", False)
-
 
             # Validation
             if not email:
@@ -45,16 +40,29 @@ def register_routes(app):
                 return render_template("login.html")
 
             # Query database for user
-            user = User.query.filter_by(email=email, is_active=True).first()
+            user = User.query.filter_by(email=email).first()
+            logging.debug(f"Query result for email '{email}': {user}")
 
             # Check credentials
             if not user or not check_password_hash(user.hashed_password, password):
                 flash("Invalid email or password", "error")
                 return render_template("login.html")
 
+            # Check if user account is active
+            if not user.is_active():
+                flash("Your account has been deactivated. Please contact support.", "error")
+                return render_template("login.html")
+
             # Log user in using Flask-Login
             login_user(user, remember=remember_me)
             flash(f"Welcome back, {user.firstname}!", "success")
+            
+            # Check if user needs onboarding (for clients)
+            if user.role == 'client':
+                client = Client.query.filter_by(user_id=user.id).first()
+                if not client or not client.onboarding_completed:
+                    return redirect("/onboard")
+            
             return redirect("/")
 
         return render_template("login.html")
@@ -70,7 +78,7 @@ def register_routes(app):
         if current_user.role != 'client':
             return redirect("/")
         
-          # Check if user already completed onboarding
+        # Check if user already completed onboarding
         client = Client.query.filter_by(user_id=current_user.id).first()
         if client and client.onboarding_completed:
             flash("You have already completed onboarding!", "info")
@@ -126,7 +134,8 @@ def register_routes(app):
                 if errors:
                     for error in errors:
                         flash(error, "error")
-                    return render_template("onboard.html")
+                    api_key = os.getenv("GOOGLE_MAPS_API_KEY")
+                    return render_template("onboarding.html", google_maps_api_key=api_key)
                 
                 # Create or update client record
                 if not client:
@@ -157,7 +166,8 @@ def register_routes(app):
                 db.session.rollback()
                 logging.error(f"Error during onboarding for user {current_user.email}: {e}")
                 flash("There was an error saving your information. Please try again.", "error")
-                return render_template("onboard.html")
+                api_key = os.getenv("GOOGLE_MAPS_API_KEY")
+                return render_template("onboarding.html", google_maps_api_key=api_key)
 
     @app.route("/register", methods=["GET", "POST"])
     def register():

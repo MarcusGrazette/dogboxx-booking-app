@@ -1,3 +1,4 @@
+# Solution 1: Rename the database column to avoid conflict
 from . import db
 from datetime import datetime, timezone
 import re
@@ -12,7 +13,7 @@ class User(db.Model):
     role = db.Column(db.Enum('client', 'walker', 'admin', name='user_roles'), 
                     nullable=False, default='client')
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    active = db.Column(db.Boolean, default=True, nullable=False)
     hashed_password = db.Column(db.String(128), nullable=False)
 
     # Flask-Login required methods
@@ -26,7 +27,7 @@ class User(db.Model):
     
     def is_active(self):
         """Return True if user account is active"""
-        return self.is_active
+        return self.active  # Now references the renamed column
     
     def is_anonymous(self):
         """Return True if user is anonymous (not logged in)"""
@@ -43,7 +44,7 @@ class User(db.Model):
             'email': self.email,
             'role': self.role,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'is_active': self.is_active
+            'is_active': self.active  # Return the active status
             }
 
     @property
