@@ -1,4 +1,4 @@
-from flask import request, session, redirect, render_template, flash, jsonify
+from flask import request, redirect, render_template, flash, url_for
 from flask_login import login_required, current_user, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from sqlalchemy.exc import IntegrityError
@@ -9,12 +9,13 @@ import logging
 import os
 from datetime import datetime, timezone
 
+# Temporary logging
 logging.basicConfig(level=logging.DEBUG)
 
 def register_routes(app):
     
     @app.route("/")
-    @login_required  # Use Flask-Login decorator instead of manual session check
+    @login_required
     def index():
         """Render the home page."""
         return render_template("index.html", user=current_user)
@@ -22,13 +23,14 @@ def register_routes(app):
     @app.route("/login", methods=["GET", "POST"])
     def login():
         """Log user in"""
-        # Clear any existing session
-        session.clear()
+        # Redirect if user is already authenticated
+        if current_user.is_authenticated:
+            return redirect("/")
 
         if request.method == "POST":
             email = request.form.get("email", "").strip().lower()
             password = request.form.get("password", "")
-            remember_me = request.form.get("remember_me", False)
+            remember_me = bool(request.form.get("remember_me"))
 
             # Validation
             if not email:
@@ -41,7 +43,6 @@ def register_routes(app):
 
             # Query database for user
             user = User.query.filter_by(email=email).first()
-            logging.debug(f"Query result for email '{email}': {user}")
 
             # Check credentials
             if not user or not check_password_hash(user.hashed_password, password):
@@ -57,6 +58,11 @@ def register_routes(app):
             login_user(user, remember=remember_me)
             flash(f"Welcome back, {user.firstname}!", "success")
             
+            # Handle redirect to next page if specified
+            next_page = request.args.get('next')
+            if next_page and next_page.startswith('/'):
+                return redirect(next_page)
+            
             # Check if user needs onboarding (for clients)
             if user.role == 'client':
                 client = Client.query.filter_by(user_id=user.id).first()
@@ -70,12 +76,10 @@ def register_routes(app):
     @app.route("/onboard", methods=["GET", "POST"])
     @login_required
     def onboard():
-        if request.method == "GET":
-            api_key = os.getenv("GOOGLE_MAPS_API_KEY")
-            return render_template("onboarding.html", google_maps_api_key=api_key)
-        
+        """Handle user onboarding process"""
         # Only clients need onboarding for now
         if current_user.role != 'client':
+            flash("Onboarding is only required for clients.", "info")
             return redirect("/")
         
         # Check if user already completed onboarding
@@ -83,6 +87,10 @@ def register_routes(app):
         if client and client.onboarding_completed:
             flash("You have already completed onboarding!", "info")
             return redirect("/")
+
+        if request.method == "GET":
+            api_key = os.getenv("GOOGLE_MAPS_API_KEY")
+            return render_template("onboarding.html", google_maps_api_key=api_key)
         
         if request.method == "POST":
             try:
@@ -102,15 +110,10 @@ def register_routes(app):
                     flash("Welcome! You can add your address later in your profile settings.", "success")
                     return redirect("/")
                 
-                # Get address data from form
-                address = request.form.get("address", "").strip()
-                street_address = request.form.get("street_address", "").strip()
-                city = request.form.get("city", "").strip()
-                state = request.form.get("state", "").strip()
-                postal_code = request.form.get("postal_code", "").strip()
-                country = request.form.get("country", "").strip()
+                # Get Google Places data from form
                 place_id = request.form.get("place_id", "").strip()
                 formatted_address = request.form.get("formatted_address", "").strip()
+                display_name = request.form.get("display_name", "").strip()
                 
                 # Get coordinates
                 latitude = request.form.get("latitude")
@@ -126,9 +129,7 @@ def register_routes(app):
                 # Validation
                 errors = []
                 
-                if not address:
-                    errors.append("Please enter your address")
-                elif not street_address and not formatted_address:
+                if not place_id or not formatted_address:
                     errors.append("Please select an address from the dropdown suggestions")
                 
                 if errors:
@@ -142,14 +143,10 @@ def register_routes(app):
                     client = Client(user_id=current_user.id)
                     db.session.add(client)
                 
-                # Update client with address information
-                client.street_address = street_address
-                client.city = city
-                client.state = state
-                client.postal_code = postal_code
-                client.country = country
+                # Update client with Google Places information
                 client.place_id = place_id
                 client.formatted_address = formatted_address
+                client.display_name = display_name
                 client.latitude = latitude
                 client.longitude = longitude
                 client.onboarding_completed = True
@@ -158,7 +155,7 @@ def register_routes(app):
                 db.session.commit()
                 
                 flash(f"Welcome to our platform, {current_user.firstname}! Your profile is now complete.", "success")
-                logging.info(f"User {current_user.email} completed onboarding with address: {formatted_address or address}")
+                logging.info(f"User {current_user.email} completed onboarding with address: {formatted_address}")
                 
                 return redirect("/")
                 
@@ -169,9 +166,14 @@ def register_routes(app):
                 api_key = os.getenv("GOOGLE_MAPS_API_KEY")
                 return render_template("onboarding.html", google_maps_api_key=api_key)
 
+
     @app.route("/register", methods=["GET", "POST"])
     def register():
         """Register a new user with improved validation and error handling"""
+        # Redirect if user is already authenticated
+        if current_user.is_authenticated:
+            return redirect("/")
+
         if request.method == "POST":
             try:
                 # Get and sanitize form data
@@ -260,8 +262,18 @@ def register_routes(app):
         return render_template("register.html")
 
     @app.route("/logout")
+    @login_required
     def logout():
         """Log user out"""
         logout_user()
         flash("You have been logged out", "info")
         return redirect("/login")
+        
+    @app.route("/profile")
+    @login_required
+    def profile():
+        """Display user profile"""
+        client = None
+        if current_user.role == 'client':
+            client = Client.query.filter_by(user_id=current_user.id).first()
+        return render_template("profile.html", user=current_user, client=client)

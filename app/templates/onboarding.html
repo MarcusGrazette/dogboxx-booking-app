@@ -13,7 +13,7 @@ Complete Your Profile
                     <h2 class="fw-semibold mb-2">Welcome, {{ current_user.firstname }}!</h2>
                     <p class="text-muted">Let's complete your profile to get started</p>
                 </div>
-                
+
                 <!-- Progress indicator -->
                 <div class="mb-4">
                     <div class="d-flex justify-content-between align-items-center mb-2">
@@ -24,60 +24,41 @@ Complete Your Profile
                         <div class="progress-bar" role="progressbar" style="width: 100%"></div>
                     </div>
                 </div>
-                
+
                 <!-- Display flash messages -->
                 {% with messages = get_flashed_messages(with_categories=true) %}
-                    {% if messages %}
-                        {% for category, message in messages %}
-                            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
-                                {{ message }}
-                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                            </div>
-                        {% endfor %}
-                    {% endif %}
+                {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show"
+                    role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+                {% endif %}
                 {% endwith %}
-                
+
                 <form action="/onboard" method="post" novalidate id="onboardingForm">
                     <!-- Address field with Google Maps autocomplete -->
                     <div class="mb-4">
                         <div class="d-flex align-items-start gap-3">
-                            <div class="bg-light rounded p-2 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; flex-shrink: 0;">
-                                <i class="bi bi-geo-alt fs-5 text-secondary"></i>
-                            </div>
+            
                             <div class="flex-fill">
+                                <div id="autocomplete-container">
+                                    <!-- Google Places Autocomplete will be inserted here -->
+                                </div>
                                 
-                                <input 
-                                    class="form-control form-control-lg" 
-                                    id="address"
-                                    name="address" 
-                                    placeholder="Start typing your address..." 
-                                    required 
-                                    type="text"
-                                    value="{{ request.form.get('address', '') }}"
-                                    autocomplete="off">
-                               
-                            </div>
-                            <div class="d-flex align-items-center justify-content-center text-muted" 
-                                 style="width: 40px; height: 40px; cursor: help;"
-                                 data-bs-toggle="tooltip" 
-                                 data-bs-placement="left" 
-                                 title="We'll need your street address, you can add instructions below">
-                                <i class="bi bi-info-circle fs-5"></i>
                             </div>
                         </div>
                     </div>
-                    
+
                     <!-- Hidden fields for parsed address components -->
-                    <input type="hidden" id="street_address" name="street_address">
-                    <input type="hidden" id="city" name="city">
-                    <input type="hidden" id="state" name="state">
-                    <input type="hidden" id="postal_code" name="postal_code">
-                    <input type="hidden" id="country" name="country">
                     <input type="hidden" id="place_id" name="place_id">
                     <input type="hidden" id="formatted_address" name="formatted_address">
+                    <input type="hidden" id="display_name" name="display_name">
                     <input type="hidden" id="latitude" name="latitude">
                     <input type="hidden" id="longitude" name="longitude">
-                    
+
                     <!-- Address confirmation display (hidden initially) -->
                     <div id="addressConfirmation" class="mb-4" style="display: none;">
                         <div class="card bg-light border-0">
@@ -90,20 +71,21 @@ Complete Your Profile
                             </div>
                         </div>
                     </div>
-                    
+
                     <!-- Submit button -->
                     <div class="d-grid mb-3">
                         <button class="btn btn-primary btn-lg fw-semibold" type="submit" id="submitBtn" disabled>
-                            <span class="spinner-border spinner-border-sm me-2" role="status" id="submitSpinner" style="display: none;"></span>
+                            <span class="spinner-border spinner-border-sm me-2" role="status" id="submitSpinner"
+                                style="display: none;"></span>
                             Complete Setup
                         </button>
                     </div>
-                    
-                    <!-- Skip option (optional) -->
+
+                    <!-- Skip option -->
                     <div class="text-center">
-                        <p class="text-muted mb-0">
-                            <a href="#" class="text-decoration-none" id="skipLink">I'll add this later</a>
-                        </p>
+                        <button type="button" class="btn btn-link text-muted" id="skipBtn">
+                            Skip for now - I'll add this later
+                        </button>
                     </div>
                 </form>
             </div>
@@ -112,188 +94,175 @@ Complete Your Profile
 </div>
 
 <!-- Google Maps JavaScript API -->
-<script async defer 
-    src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=places&callback=initAutocomplete">
-</script>
+<script>(g => { var h, a, k, p = "The Google Maps JavaScript API", c = "google", l = "importLibrary", q = "__ib__", m = document, b = window; b = b[c] || (b[c] = {}); var d = b.maps || (b.maps = {}), r = new Set, e = new URLSearchParams, u = () => h || (h = new Promise(async (f, n) => { await (a = m.createElement("script")); e.set("libraries", [...r] + ""); for (k in g) e.set(k.replace(/[A-Z]/g, t => "_" + t[0].toLowerCase()), g[k]); e.set("callback", c + ".maps." + q); a.src = `https://maps.${c}apis.com/maps/api/js?` + e; d[q] = f; a.onerror = () => h = n(Error(p + " could not load.")); a.nonce = m.querySelector("script[nonce]")?.nonce || ""; m.head.append(a) })); d[l] ? console.warn(p + " only loads once. Ignoring:", g) : d[l] = (f, ...n) => r.add(f) && u().then(() => d[l](f, ...n)) })
+    ({ key: "{{ google_maps_api_key }}", v: "weekly" });</script>
 
 <script>
-let autocomplete;
-let addressSelected = false;
+    let placeAutocomplete;
+    let addressSelected = false;
 
-function initAutocomplete() {
-    // Create the autocomplete object
-    autocomplete = new google.maps.places.Autocomplete(
-        document.getElementById('address'),
-        {
-            types: ['address'],
-            componentRestrictions: { country: ['gb'] }, // Limit to GB
-            fields: ['address_components', 'formatted_address', 'geometry', 'place_id']
-        }
-    );
-
-    // When the user selects an address from the dropdown
-    autocomplete.addListener('place_changed', function() {
-        const place = autocomplete.getPlace();
-        
-        if (!place.geometry) {
-            // User entered the name of a Place that was not suggested
-            console.log("No details available for input: '" + place.name + "'");
-            return;
-        }
-
-        // Parse the address components
-        parseAddressComponents(place);
-        
-        // Show confirmation
-        showAddressConfirmation(place.formatted_address);
-        
-        // Enable submit button
-        document.getElementById('submitBtn').disabled = false;
-        addressSelected = true;
-    });
-}
-
-function parseAddressComponents(place) {
-    // Clear previous values
-    document.getElementById('street_address').value = '';
-    document.getElementById('city').value = '';
-    document.getElementById('state').value = '';
-    document.getElementById('postal_code').value = '';
-    document.getElementById('country').value = '';
-    
-    let streetNumber = '';
-    let streetName = '';
-    
-    // Parse address components
-    for (let component of place.address_components) {
-        const types = component.types;
-        
-        if (types.includes('street_number')) {
-            streetNumber = component.long_name;
-        }
-        else if (types.includes('route')) {
-            streetName = component.long_name;
-        }
-        else if (types.includes('locality')) {
-            document.getElementById('city').value = component.long_name;
-        }
-        else if (types.includes('administrative_area_level_1')) {
-            document.getElementById('state').value = component.short_name;
-        }
-        else if (types.includes('postal_code')) {
-            document.getElementById('postal_code').value = component.long_name;
-        }
-        else if (types.includes('country')) {
-            document.getElementById('country').value = component.long_name;
+    async function initMap() {
+        try {
+            // Request needed libraries
+            await google.maps.importLibrary("places");
+            
+            // Create the autocomplete element with UK restriction and location bias
+            placeAutocomplete = new google.maps.places.PlaceAutocompleteElement({
+                includedRegionCodes: ['gb'], // Restrict to UK
+                locationBias: {
+                    radius: 5000, // 5km radius
+                    center: { lat: 51.500249, lng: -0.081035 } // Coordinates of Tanner St Park
+                }
+            });
+            
+            // Insert into the container
+            const container = document.getElementById('autocomplete-container');
+            container.appendChild(placeAutocomplete);
+            
+            // Add the place selection listener
+            placeAutocomplete.addEventListener('gmp-select', async (event) => {
+                const place = event.placePrediction.toPlace();
+                
+                try {
+                    // Fetch the required fields
+                    await place.fetchFields({ 
+                        fields: ['id', 'displayName', 'formattedAddress', 'location'] 
+                    });
+                    
+                    // Parse and store the place data
+                    parseAndStorePlace(place);
+                    
+                    // Show confirmation
+                    showAddressConfirmation(place.formattedAddress);
+                    
+                    // Enable submit button
+                    document.getElementById('submitBtn').disabled = false;
+                    addressSelected = true;
+                    
+                } catch (error) {
+                    console.error('Error fetching place details:', error);
+                    showError('Error loading place details. Please try selecting again.');
+                }
+            });
+            
+        } catch (error) {
+            console.error('Error initializing Google Maps:', error);
+            showError('Error loading address lookup service. Please refresh the page.');
         }
     }
-    
-    // Combine street number and name
-    const fullStreetAddress = `${streetNumber} ${streetName}`.trim();
-    document.getElementById('street_address').value = fullStreetAddress;
-    
-    // Set additional place data
-    document.getElementById('place_id').value = place.place_id || '';
-    document.getElementById('formatted_address').value = place.formatted_address || '';
-    
-    if (place.geometry && place.geometry.location) {
-        document.getElementById('latitude').value = place.geometry.location.lat();
-        document.getElementById('longitude').value = place.geometry.location.lng();
-    }
-}
 
-function showAddressConfirmation(address) {
-    document.getElementById('confirmedAddress').textContent = address;
-    document.getElementById('addressConfirmation').style.display = 'block';
-}
-
-// Initialize Bootstrap tooltips
-document.addEventListener('DOMContentLoaded', function() {
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
-    });
-    
-    // Handle form submission
-    document.getElementById('onboardingForm').addEventListener('submit', function(e) {
-        if (!addressSelected) {
-            e.preventDefault();
-            alert('Please select an address from the dropdown suggestions.');
-            return false;
-        }
+    function parseAndStorePlace(place) {
+        // Clear previous values
+        clearHiddenFields();
         
-        // Show loading spinner
-        document.getElementById('submitSpinner').style.display = 'inline-block';
-        document.getElementById('submitBtn').disabled = true;
-    });
-    
-    // Handle skip functionality
-    document.getElementById('skipLink').addEventListener('click', function(e) {
-        e.preventDefault();
-        if (confirm('Are you sure you want to skip adding your address? You can add it later in your profile settings.')) {
-            // Submit form with skip flag
-            const form = document.getElementById('onboardingForm');
-            const skipInput = document.createElement('input');
-            skipInput.type = 'hidden';
-            skipInput.name = 'skip_address';
-            skipInput.value = 'true';
-            form.appendChild(skipInput);
-            form.submit();
+        // Get the place data as JSON
+        const placeData = place.toJSON();
+        
+        // Store the required fields
+        document.getElementById('place_id').value = placeData.id || '';
+        document.getElementById('formatted_address').value = placeData.formattedAddress || '';
+        document.getElementById('display_name').value = placeData.displayName || '';
+        
+        // Store coordinates if available
+        if (placeData.location) {
+            document.getElementById('latitude').value = placeData.location.lat || '';
+            document.getElementById('longitude').value = placeData.location.lng || '';
         }
-    });
-    
-    // Reset address selection when user types manually
-    document.getElementById('address').addEventListener('input', function() {
-        if (this.value === '') {
-            addressSelected = false;
+        /*
+        // For debugging - delete in 'production'
+        console.log('Stored place data:', {
+            id: placeData.id,
+            displayName: placeData.displayName,
+            formattedAddress: placeData.formattedAddress,
+            location: placeData.location
+        });
+        */
+    }
+
+    function clearHiddenFields() {
+        document.getElementById('place_id').value = '';
+        document.getElementById('formatted_address').value = '';
+        document.getElementById('display_name').value = '';
+        document.getElementById('latitude').value = '';
+        document.getElementById('longitude').value = '';
+    }
+
+    function showAddressConfirmation(address) {
+        document.getElementById('confirmedAddress').textContent = address;
+        document.getElementById('addressConfirmation').style.display = 'block';
+    }
+
+    function hideAddressConfirmation() {
+        document.getElementById('addressConfirmation').style.display = 'none';
+    }
+
+    function showError(message) {
+        // Create and show error alert
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert alert-danger alert-dismissible fade show';
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        // Insert after the progress indicator
+        const progressDiv = document.querySelector('.progress').parentElement;
+        progressDiv.insertAdjacentElement('afterend', alertDiv);
+        
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => {
+            if (alertDiv.parentElement) {
+                alertDiv.remove();
+            }
+        }, 5000);
+    }
+
+    // Initialize the map when the page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        initMap();
+        
+        // Handle form submission
+        document.getElementById('onboardingForm').addEventListener('submit', function(e) {
+            if (!addressSelected) {
+                e.preventDefault();
+                showError('Please select an address from the dropdown suggestions.');
+                return false;
+            }
+            
+            // Show loading spinner
+            document.getElementById('submitSpinner').style.display = 'inline-block';
             document.getElementById('submitBtn').disabled = true;
-            document.getElementById('addressConfirmation').style.display = 'none';
-        }
+        });
+        
+        // Handle skip button
+        document.getElementById('skipBtn').addEventListener('click', function() {
+            if (confirm('Are you sure you want to skip adding your address? You can add it later in your profile.')) {
+                // Create a hidden input to indicate skipping
+                const skipInput = document.createElement('input');
+                skipInput.type = 'hidden';
+                skipInput.name = 'skip_address';
+                skipInput.value = 'true';
+                document.getElementById('onboardingForm').appendChild(skipInput);
+                
+                // Submit the form
+                document.getElementById('onboardingForm').submit();
+            }
+        });
+        
+        // Reset when user starts typing (if we can detect it)
+        // Note: The PlaceAutocompleteElement doesn't expose input events directly,
+        // but we can monitor for changes in a different way if needed
     });
-});
 
-// Handle API loading errors
-window.gm_authFailure = function() {
-    console.error('Google Maps API authentication failed');
-    alert('There was an error loading the address lookup service. Please try refreshing the page.');
-};
+    // Handle API loading errors
+    window.gm_authFailure = function() {
+        console.error('Google Maps API authentication failed');
+        showError('There was an error with the address lookup service. Please try refreshing the page.');
+    };
 </script>
-
 <style>
-/* Custom styles for Google Places autocomplete */
-.pac-container {
-    border-radius: 8px;
-    border: 1px solid #dee2e6;
-    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
-    font-family: inherit;
-}
-
-.pac-item {
-    padding: 12px 16px;
-    border-top: 1px solid #f8f9fa;
-    cursor: pointer;
-}
-
-.pac-item:first-child {
-    border-top: none;
-}
-
-.pac-item:hover {
-    background-color: #f8f9fa;
-}
-
-.pac-item-selected {
-    background-color: #e9ecef;
-}
-
-.pac-matched {
-    font-weight: 600;
-}
-
-/* Loading animation for submit button */
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    gmp-place-autocomplete {
+    color-scheme: light;
 }
 </style>
 {% endblock %}
