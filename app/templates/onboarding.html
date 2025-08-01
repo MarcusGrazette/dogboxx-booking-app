@@ -9,21 +9,6 @@ Complete Your Profile
     <div class="row justify-content-center">
         <div class="col-12 col-md-8 col-lg-6">
             <div class="py-4 py-md-5">
-                <div class="text-center mb-4">
-                    <h2 class="fw-semibold mb-2">Welcome, {{ current_user.firstname }}!</h2>
-                    <p class="text-muted">Let's complete your profile to get started</p>
-                </div>
-
-                <!-- Progress indicator -->
-                <div class="mb-4">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <small class="text-muted">Step 1 of 1</small>
-                        <small class="text-muted">Address Information</small>
-                    </div>
-                    <div class="progress" style="height: 4px;">
-                        <div class="progress-bar" role="progressbar" style="width: 100%"></div>
-                    </div>
-                </div>
 
                 <!-- Display flash messages -->
                 {% with messages = get_flashed_messages(with_categories=true) %}
@@ -38,56 +23,132 @@ Complete Your Profile
                 {% endif %}
                 {% endwith %}
 
-                <form action="/onboard" method="post" novalidate id="onboardingForm">
-                    <!-- Address field with Google Maps autocomplete -->
-                    <div class="mb-4">
-                        <div class="d-flex align-items-start gap-3">
-            
-                            <div class="flex-fill">
-                                <div id="autocomplete-container">
-                                    <!-- Google Places Autocomplete will be inserted here -->
+                <div class="text-center mb-4">
+                    <h2 class="fw-semibold mb-2">Hello {{ current_user.firstname }}!</h2>
+                    <p class="text-muted">Let's complete your profile to get started.</p>
+                </div>
+
+                <!-- Progress indicator -->
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <small class="text-muted">Step 1 of 2</small>
+                        <small class="text-muted">Address & Access</small>
+                    </div>
+                    <div class="progress" style="height: 4px;">
+                        <div class="progress-bar" role="progressbar" style="width: 50%"></div>
+                    </div>
+                </div>
+
+                <!-- Step 1: Address and Access -->
+                <div id="step-1">
+                    <form action="/onboard" method="post" novalidate id="onboardingForm">
+                        <!-- Address field with Google Maps autocomplete -->
+                        <div class="mb-4">
+                            <div class="d-flex align-items-start gap-3">
+
+                                <div class="flex-fill">
+                                    <div id="autocomplete-container">
+                                        <!-- Google Places Autocomplete will be inserted here -->
+                                    </div>
+
                                 </div>
-                                
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Hidden fields for parsed address components -->
-                    <input type="hidden" id="place_id" name="place_id">
-                    <input type="hidden" id="formatted_address" name="formatted_address">
-                    <input type="hidden" id="display_name" name="display_name">
-                    <input type="hidden" id="latitude" name="latitude">
-                    <input type="hidden" id="longitude" name="longitude">
+                        <!-- Hidden fields for parsed address components -->
+                        <input type="hidden" id="place_id" name="place_id">
+                        <input type="hidden" id="formatted_address" name="formatted_address">
+                        <input type="hidden" id="display_name" name="display_name">
+                        <input type="hidden" id="latitude" name="latitude">
+                        <input type="hidden" id="longitude" name="longitude">
 
-                    <!-- Address confirmation display (hidden initially) -->
-                    <div id="addressConfirmation" class="mb-4" style="display: none;">
-                        <div class="card bg-light border-0">
-                            <div class="card-body">
-                                <h6 class="card-title mb-2">
-                                    <i class="bi bi-check-circle-fill text-success me-2"></i>
-                                    Address Confirmed
-                                </h6>
-                                <p class="card-text mb-0" id="confirmedAddress"></p>
+                        <!-- Address confirmation display (hidden initially) -->
+                        <div id="addressConfirmation" class="mb-4" style="display: none;">
+                            <div class="card bg-light border-0">
+                                <div class="card-body">
+                                    <h6 class="card-title mb-2">
+                                        <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                        Address Confirmed
+                                    </h6>
+                                    <p class="card-text mb-0" id="confirmedAddress"></p>
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Submit button -->
-                    <div class="d-grid mb-3">
-                        <button class="btn btn-primary btn-lg fw-semibold" type="submit" id="submitBtn" disabled>
-                            <span class="spinner-border spinner-border-sm me-2" role="status" id="submitSpinner"
-                                style="display: none;"></span>
-                            Complete Setup
-                        </button>
-                    </div>
+                        <!-- Pickup instructions -->
+                        <div class="mb-4">
+                            <label for="pickup_instructions" class="form-label">Access instructions (optional)</label>
+                            <textarea id="pickup_instructions" name="pickup_instructions" class="form-control"
+                                maxlength="500" rows="3"
+                                placeholder="Anything we need to know when accessing your home? Eg, door codes, notes on the concierage, fiddly keys... Or any special instructions for pickup and drop off?"></textarea>
+                        </div>
 
-                    <!-- Skip option -->
-                    <div class="text-center">
-                        <button type="button" class="btn btn-link text-muted" id="skipBtn">
-                            Skip for now - I'll add this later
-                        </button>
-                    </div>
-                </form>
+                        <!-- Next button -->
+                        <div class="d-grid mb-3">
+                            <button class="btn btn-primary btn-lg fw-semibold" type="button" id="nextBtn">
+                                Next
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Step 2: Dog information -->
+                <div id="step-2" style="display: none;">
+                    <h3>Step 2 of 2: Tell us about your dog</h3>
+                    <form action="/onboard/dog" method="post" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="dog_name" class="form-label">Dog's Name</label>
+                            <input type="text" id="dog_name" name="dog_name" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="dog_gender" class="form-label">Gender</label>
+                            <select id="dog_gender" name="dog_gender" class="form-select" required>
+                                <option value="">Select Gender</option>
+                                <option value="male">Male</option>
+                                <option value="female">Female</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="dog_breed" class="form-label">Breed</label>
+                            <input type="text" id="dog_breed" name="dog_breed" class="form-control">
+                        </div>
+                        <div class="mb-3">
+                            <label for="dog_allergies" class="form-label">Allergies</label>
+                            <input type="text" id="dog_allergies" name="dog_allergies" class="form-control">
+                        </div>
+                        <div class="mb-3">
+                            <label for="dog_other_info" class="form-label">Other Information</label>
+                            <textarea id="dog_other_info" name="dog_other_info" class="form-control" maxlength="500"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="dog_years" class="form-label">Age</label>
+                            <div class="row">
+                                <div class="col">
+                                    <select id="dog_years" name="dog_years" class="form-select" required>
+                                        <option value="">Years</option>
+                                        {% for year in range(16) %}
+                                        <option value="{{ year }}">{{ year }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col">
+                                    <select id="dog_months" name="dog_months" class="form-select" required>
+                                        <option value="">Months</option>
+                                        {% for month in range(13) %}
+                                        <option value="{{ month }}">{{ month }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="dog_pic" class="form-label">Upload a Picture</label>
+                            <input type="file" id="dog_pic" name="dog_pic" class="form-control" accept="image/*">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Submit</button>
+                    </form>
+                </div>
+
             </div>
         </div>
     </div>
@@ -95,7 +156,7 @@ Complete Your Profile
 
 <!-- Google Maps JavaScript API -->
 <script>(g => { var h, a, k, p = "The Google Maps JavaScript API", c = "google", l = "importLibrary", q = "__ib__", m = document, b = window; b = b[c] || (b[c] = {}); var d = b.maps || (b.maps = {}), r = new Set, e = new URLSearchParams, u = () => h || (h = new Promise(async (f, n) => { await (a = m.createElement("script")); e.set("libraries", [...r] + ""); for (k in g) e.set(k.replace(/[A-Z]/g, t => "_" + t[0].toLowerCase()), g[k]); e.set("callback", c + ".maps." + q); a.src = `https://maps.${c}apis.com/maps/api/js?` + e; d[q] = f; a.onerror = () => h = n(Error(p + " could not load.")); a.nonce = m.querySelector("script[nonce]")?.nonce || ""; m.head.append(a) })); d[l] ? console.warn(p + " only loads once. Ignoring:", g) : d[l] = (f, ...n) => r.add(f) && u().then(() => d[l](f, ...n)) })
-    ({ key: "{{ google_maps_api_key }}", v: "weekly" });</script>
+        ({ key: "{{ google_maps_api_key }}", v: "weekly" });</script>
 
 <script>
     let placeAutocomplete;
@@ -105,7 +166,7 @@ Complete Your Profile
         try {
             // Request needed libraries
             await google.maps.importLibrary("places");
-            
+
             // Create the autocomplete element with UK restriction and location bias
             placeAutocomplete = new google.maps.places.PlaceAutocompleteElement({
                 includedRegionCodes: ['gb'], // Restrict to UK
@@ -114,37 +175,37 @@ Complete Your Profile
                     center: { lat: 51.500249, lng: -0.081035 } // Coordinates of Tanner St Park
                 }
             });
-            
+
             // Insert into the container
             const container = document.getElementById('autocomplete-container');
             container.appendChild(placeAutocomplete);
-            
+
             // Add the place selection listener
             placeAutocomplete.addEventListener('gmp-select', async (event) => {
                 const place = event.placePrediction.toPlace();
-                
+
                 try {
                     // Fetch the required fields
-                    await place.fetchFields({ 
-                        fields: ['id', 'displayName', 'formattedAddress', 'location'] 
+                    await place.fetchFields({
+                        fields: ['id', 'displayName', 'formattedAddress', 'location']
                     });
-                    
+
                     // Parse and store the place data
                     parseAndStorePlace(place);
-                    
+
                     // Show confirmation
                     showAddressConfirmation(place.formattedAddress);
-                    
+
                     // Enable submit button
-                    document.getElementById('submitBtn').disabled = false;
+                    document.getElementById('nextBtn').disabled = false;
                     addressSelected = true;
-                    
+
                 } catch (error) {
                     console.error('Error fetching place details:', error);
                     showError('Error loading place details. Please try selecting again.');
                 }
             });
-            
+
         } catch (error) {
             console.error('Error initializing Google Maps:', error);
             showError('Error loading address lookup service. Please refresh the page.');
@@ -154,15 +215,15 @@ Complete Your Profile
     function parseAndStorePlace(place) {
         // Clear previous values
         clearHiddenFields();
-        
+
         // Get the place data as JSON
         const placeData = place.toJSON();
-        
+
         // Store the required fields
         document.getElementById('place_id').value = placeData.id || '';
         document.getElementById('formatted_address').value = placeData.formattedAddress || '';
         document.getElementById('display_name').value = placeData.displayName || '';
-        
+
         // Store coordinates if available
         if (placeData.location) {
             document.getElementById('latitude').value = placeData.location.lat || '';
@@ -204,11 +265,11 @@ Complete Your Profile
             ${message}
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         `;
-        
+
         // Insert after the progress indicator
         const progressDiv = document.querySelector('.progress').parentElement;
         progressDiv.insertAdjacentElement('afterend', alertDiv);
-        
+
         // Auto-dismiss after 5 seconds
         setTimeout(() => {
             if (alertDiv.parentElement) {
@@ -218,51 +279,51 @@ Complete Your Profile
     }
 
     // Initialize the map when the page loads
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
         initMap();
-        
+
         // Handle form submission
-        document.getElementById('onboardingForm').addEventListener('submit', function(e) {
+        document.getElementById('onboardingForm').addEventListener('submit', function (e) {
             if (!addressSelected) {
                 e.preventDefault();
                 showError('Please select an address from the dropdown suggestions.');
                 return false;
             }
-            
+
             // Show loading spinner
             document.getElementById('submitSpinner').style.display = 'inline-block';
-            document.getElementById('submitBtn').disabled = true;
+            document.getElementById('nextBtn').disabled = true;
         });
-        
-        // Handle skip button
-        document.getElementById('skipBtn').addEventListener('click', function() {
-            if (confirm('Are you sure you want to skip adding your address? You can add it later in your profile.')) {
-                // Create a hidden input to indicate skipping
-                const skipInput = document.createElement('input');
-                skipInput.type = 'hidden';
-                skipInput.name = 'skip_address';
-                skipInput.value = 'true';
-                document.getElementById('onboardingForm').appendChild(skipInput);
-                
-                // Submit the form
-                document.getElementById('onboardingForm').submit();
-            }
+
+        // Step 1 to Step 2 transition
+        const nextButton = document.getElementById('nextBtn');
+        const step1 = document.getElementById('step-1');
+        const step2 = document.getElementById('step-2');
+        const completeButton = document.getElementById('submitBtn');
+
+        nextButton.addEventListener('click', function (e) {
+            e.preventDefault();
+            step1.style.display = 'none';
+            step2.style.display = 'block';
+            completeButton.style.display = 'inline-block';
+            nextButton.style.display = 'none';
+
+            // Update progress indicator
+            document.querySelector('.progress-bar').style.width = '100%';
+            document.querySelector('.d-flex small:first-child').textContent = 'Step 2 of 2';
+            document.querySelector('.d-flex small:last-child').textContent = 'About Your Dog';
         });
-        
-        // Reset when user starts typing (if we can detect it)
-        // Note: The PlaceAutocompleteElement doesn't expose input events directly,
-        // but we can monitor for changes in a different way if needed
     });
 
     // Handle API loading errors
-    window.gm_authFailure = function() {
+    window.gm_authFailure = function () {
         console.error('Google Maps API authentication failed');
         showError('There was an error with the address lookup service. Please try refreshing the page.');
     };
 </script>
 <style>
     gmp-place-autocomplete {
-    color-scheme: light;
-}
+        color-scheme: light;
+    }
 </style>
 {% endblock %}

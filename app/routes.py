@@ -2,7 +2,7 @@ from flask import request, redirect, render_template, flash, url_for
 from flask_login import login_required, current_user, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from sqlalchemy.exc import IntegrityError
-from app.models import User, Client
+from app.models import User, Client, Dog
 from app import db
 from email_validator import validate_email, EmailNotValidError
 import logging
@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 logging.basicConfig(level=logging.DEBUG)
 
 def register_routes(app):
+    app.config["UPLOAD_FOLDER"] = os.path.join(os.getcwd(), "app", "static", "images")
     
     @app.route("/")
     @login_required
@@ -126,6 +127,9 @@ def register_routes(app):
                 except (ValueError, TypeError):
                     latitude = longitude = None
                 
+                # Get pickup instructions
+                pickup_instructions = request.form.get("pickup_instructions", "").strip()
+                
                 # Validation
                 errors = []
                 
@@ -149,6 +153,7 @@ def register_routes(app):
                 client.display_name = display_name
                 client.latitude = latitude
                 client.longitude = longitude
+                client.pickup_instructions = pickup_instructions
                 client.onboarding_completed = True
                 client.onboarding_completed_at = datetime.now(timezone.utc)
                 
@@ -166,6 +171,57 @@ def register_routes(app):
                 api_key = os.getenv("GOOGLE_MAPS_API_KEY")
                 return render_template("onboarding.html", google_maps_api_key=api_key)
 
+
+    @app.route("/onboard/dog", methods=["POST"])
+    @login_required
+    def onboard_dog():
+        """Handle dog information submission"""
+        from werkzeug.utils import secure_filename
+        from uuid import uuid1
+
+        # Get form data
+        dog_name = request.form.get("dog_name", "").strip()
+        dog_gender = request.form.get("dog_gender", "").strip()
+        dog_breed = request.form.get("dog_breed", "").strip()
+        dog_allergies = request.form.get("dog_allergies", "").strip()
+        dog_other_info = request.form.get("dog_other_info", "").strip()
+        dog_years = int(request.form.get("dog_years", 0))
+        dog_months = int(request.form.get("dog_months", 0))
+
+        # Calculate birth year and month
+        today = datetime.now()
+        birth_year = today.year - dog_years
+        birth_month = today.month - dog_months
+        if birth_month <= 0:
+            birth_year -= 1
+            birth_month += 12
+
+        # Handle file upload
+        dog_pic = request.files.get("dog_pic")
+        pic_filename = None
+        if dog_pic:
+            original_filename = secure_filename(dog_pic.filename)
+            unique_filename = f"{uuid1()}_{original_filename}"
+            upload_path = os.path.join(app.config["UPLOAD_FOLDER"], unique_filename)
+            dog_pic.save(upload_path)
+            pic_filename = unique_filename
+
+        # Save dog information to database
+        new_dog = Dog(
+            user_id=current_user.id,
+            name=dog_name,
+            gender=dog_gender,
+            breed=dog_breed,
+            allergies=dog_allergies,
+            other_info=dog_other_info,
+            birth_year_month=birth_year * 100 + birth_month,
+            pic=pic_filename
+        )
+        db.session.add(new_dog)
+        db.session.commit()
+
+        flash("Your dog's information has been saved!", "success")
+        return redirect("/")
 
     @app.route("/register", methods=["GET", "POST"])
     def register():

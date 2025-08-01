@@ -95,6 +95,9 @@ class Client(db.Model):
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), 
                           onupdate=lambda: datetime.now(timezone.utc))
 
+    # New field for pickup instructions
+    pickup_instructions = db.Column(db.String(500), nullable=True)
+
     # Relationship
     user = db.relationship('User', backref=db.backref('client', uselist=False))
 
@@ -122,5 +125,38 @@ class Client(db.Model):
             'onboarding_completed_at': self.onboarding_completed_at.isoformat() if self.onboarding_completed_at else None,
             # Timestamps
             'created_at': self.created_at,
-            'updated_at': self.updated_at
+            'updated_at': self.updated_at,
+            # Pickup instructions
+            'pickup_instructions': self.pickup_instructions
+        }
+
+class Dog(db.Model):
+    __tablename__ = 'dogs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    name = db.Column(db.String, nullable=False)
+    birth_year_month = db.Column(db.Numeric, nullable=True)
+    gender = db.Column(db.Enum('male', 'female', name='dog_gender'), nullable=True)
+    breed = db.Column(db.String, nullable=True)
+    allergies = db.Column(db.String, nullable=True)
+    other_info = db.Column(db.String(500), nullable=True)
+    pic = db.Column(db.String, nullable=True)
+
+    user = db.relationship('User', backref=db.backref('dogs', lazy=True))
+
+    def __repr__(self):
+        return f'<Dog {self.name}>'
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'name': self.name,
+            'birth_year_month': self.birth_year_month,
+            'gender': self.gender,
+            'breed': self.breed,
+            'allergies': self.allergies,
+            'other_info': self.other_info,
+            'pic': self.pic
         }

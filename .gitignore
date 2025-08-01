@@ -5,3 +5,4 @@ instance/
 flask_session/
 *.db
 *.pyc
+/app/static/images

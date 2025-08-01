@@ -67,6 +67,11 @@ To keep the scope manageable:
 - Walkers will not be able to update their own availability. The admin will manage walker availability manually.
 - The app will not include payment processing. The admin will request payment manually.
 
+## TODO
+- Get rid of the flash message between register and onboarding
+- Change the onboarding h1 to something like 'welcome' w a hand wave emoji
+- Add 'skip' functionality to the user onboarding form, so that users can register but defer completing their onboarding
+
 
 
 
