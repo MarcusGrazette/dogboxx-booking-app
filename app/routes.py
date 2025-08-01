@@ -8,6 +8,9 @@ from email_validator import validate_email, EmailNotValidError
 import logging
 import os
 from datetime import datetime, timezone
+from werkzeug.utils import secure_filename
+from uuid import uuid1
+from app.forms import LoginForm
 
 # Temporary logging
 logging.basicConfig(level=logging.DEBUG)
@@ -28,19 +31,11 @@ def register_routes(app):
         if current_user.is_authenticated:
             return redirect("/")
 
-        if request.method == "POST":
-            email = request.form.get("email", "").strip().lower()
-            password = request.form.get("password", "")
-            remember_me = bool(request.form.get("remember_me"))
-
-            # Validation
-            if not email:
-                flash("Please provide email address", "error")
-                return render_template("login.html")
-
-            if not password:
-                flash("Please provide password", "error")
-                return render_template("login.html")
+        form = LoginForm()
+        if form.validate_on_submit():
+            email = form.email.data.strip().lower()
+            password = form.password.data
+            remember_me = form.remember_me.data
 
             # Query database for user
             user = User.query.filter_by(email=email).first()
@@ -48,31 +43,21 @@ def register_routes(app):
             # Check credentials
             if not user or not check_password_hash(user.hashed_password, password):
                 flash("Invalid email or password", "error")
-                return render_template("login.html")
+                return render_template("login.html", form=form)
 
             # Check if user account is active
             if not user.is_active():
                 flash("Your account has been deactivated. Please contact support.", "error")
-                return render_template("login.html")
+                return render_template("login.html", form=form)
 
-            # Log user in using Flask-Login
+            # Log user in
             login_user(user, remember=remember_me)
-            flash(f"Welcome back, {user.firstname}!", "success")
-            
-            # Handle redirect to next page if specified
-            next_page = request.args.get('next')
-            if next_page and next_page.startswith('/'):
-                return redirect(next_page)
-            
-            # Check if user needs onboarding (for clients)
-            if user.role == 'client':
-                client = Client.query.filter_by(user_id=user.id).first()
-                if not client or not client.onboarding_completed:
-                    return redirect("/onboard")
-            
-            return redirect("/")
 
-        return render_template("login.html")
+            # Redirect to next page or home
+            next_page = request.args.get('next')
+            return redirect(next_page if next_page and next_page.startswith('/') else "/")
+
+        return render_template("login.html", form=form)
     
     @app.route("/onboard", methods=["GET", "POST"])
     @login_required
@@ -176,9 +161,6 @@ def register_routes(app):
     @login_required
     def onboard_dog():
         """Handle dog information submission"""
-        from werkzeug.utils import secure_filename
-        from uuid import uuid1
-
         # Get form data
         dog_name = request.form.get("dog_name", "").strip()
         dog_gender = request.form.get("dog_gender", "").strip()

@@ -68,6 +68,8 @@ To keep the scope manageable:
 - The app will not include payment processing. The admin will request payment manually.
 
 ## TODO
+- Add a business name and logo using the favicon image
+- Redo the login, registration and onboarding forms to use flask-wtf
 - Get rid of the flash message between register and onboarding
 - Change the onboarding h1 to something like 'welcome' w a hand wave emoji
 - Add 'skip' functionality to the user onboarding form, so that users can register but defer completing their onboarding
