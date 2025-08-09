@@ -1,10 +1,29 @@
 # CS50 Final Project
 
-This is my final project for CS50. I'm building a mobile-first web app for a local dog walking company to manage client bookings. The backend will use Python, Flask, and an SQL database, and the frontend will be built with React and styled with Bootstrap.
+This is my final project for CS50. I'm building a mobile-first web app for a local dog walking company to manage client bookings. The backend will use Python, Flask, and an SQL database, and the frontend will be HTML styled with Bootstrap CSS.
 
-## Features and Users
+## App Users
 
-The app will have different functionalities depending on the type of user. There are three user types: admin (the business owner), clients, and walkers (the staff). New user registrations default to 'client' and trigger an onboarding flow to capture basic information.
+The app will have different functionalities depending on the type of user. There are three user types: admin (the business owner), clients, and walkers (the staff). Accounts created via the 'register' UX default to 'client'. I'll create 'admin' and 'walker' accounts by editing the db manually to keep the scope managable. I'm also assuming (for simplicity) that client - dog is a one to one relationship. In reality, a client could have more than one dog and the business offers multi dog discounts.
+
+### Admin
+The admin can:
+- Manage walkers; add or delete walkers from the roster
+- Manage walker availability; if a walker is on the roster they are available by default, unless the admin marks them as unavailable on a particular day.
+- Allocate bookings to walkers
+- See monthly summaries, by walker, client or dog.
+
+### Clients
+CLients can:
+- Register for an account
+- Complete an onboarding flow to provide basic information including their address, pick up instructions and details about their dog.
+- Manage bookings; clients can make new walk bookings, edit or cancel existing bookings.
+- See a monthly walk summary and their invoice.
+
+### Walkers
+
+
+
 
 ### Clients
 
@@ -60,12 +79,16 @@ The app will be built using the following technologies:
 - **Frontend**: React for building interactive user interfaces.
 - **Styling**: Bootstrap for responsive and mobile-first design.
 
-## Roadmap
+## Feature backlog
 
-To keep the scope manageable:
+I've excluded some features to keep the project's scope managable. With more time and skill, I could add features to:
 
-- Walkers will not be able to update their own availability. The admin will manage walker availability manually.
-- The app will not include payment processing. The admin will request payment manually.
+- Allow walkers to manage their own availability
+- Generate pdf invoices
+- Email invoices to clients
+- Handle card payments in app
+- Support multi-dog discounts, where a client has multiple dogs
+
 
 ## TODO
 - Add a business name and logo using the favicon image
@@ -73,6 +96,7 @@ To keep the scope manageable:
 - Get rid of the flash message between register and onboarding
 - Change the onboarding h1 to something like 'welcome' w a hand wave emoji
 - Add 'skip' functionality to the user onboarding form, so that users can register but defer completing their onboarding
+- delete the 'other info' col from the dogs table, I'm not going to use that anymore.
 
 
 

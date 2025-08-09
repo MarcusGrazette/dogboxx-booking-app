@@ -9,172 +9,76 @@ Register
     <div class="row justify-content-center">
         <div class="col-12 col-md-8 col-lg-6">
             <div class="py-4 py-md-5">
-                        <h2 class="text-center mb-4 fw-semibold">Create Account</h2>
+                <h2 class="text-center mb-4 fw-semibold">Create Account</h2>
+
+                <form method="post" novalidate>
+                    {{ form.hidden_tag() }}
+
+                    <div class="input-group mb-4">
+                        <span class="input-group-text">
+                            <i class="bi bi-person fs-5 text-secondary"></i>
+                        </span>
+                        {{ form.firstname(autocomplete="given-name", class="form-control", placeholder="First name") }}
+                            {% for error in form.firstname.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                            {% endfor %}
+
+                        {{ form.lastname(autocomplete="family-name", class="form-control", placeholder="Last name") }}
+                            {% for error in form.lastname.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                            {% endfor %}
+
                         
-                        
-                        <form action="/register" method="post" novalidate>
-                            <!-- Name fields -->
-                            <div class="mb-4">
-                                <div class="d-flex align-items-start gap-3">
-                                    <div class="bg-light rounded p-2 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; flex-shrink: 0;">
-                                        <i class="bi bi-person fs-5 text-secondary"></i>
-                                    </div>
-                                    <div class="flex-fill">
-                                        <div class="row g-2">
-                                            <div class="col-12 col-sm-6">
-                                                <input 
-                                                    autofocus 
-                                                    class="form-control form-control-lg" 
-                                                    id="firstname"
-                                                    name="firstname" 
-                                                    placeholder="First name" 
-                                                    required 
-                                                    type="text"
-                                                    value="{{ request.form.get('firstname', '') }}"
-                                                    minlength="2"
-                                                    maxlength="80">
-                                            </div>
-                                            <div class="col-12 col-sm-6">
-                                                <input 
-                                                    class="form-control form-control-lg" 
-                                                    id="lastname"
-                                                    name="lastname" 
-                                                    placeholder="Last name" 
-                                                    required 
-                                                    type="text"
-                                                    value="{{ request.form.get('lastname', '') }}"
-                                                    minlength="2"
-                                                    maxlength="80">
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Email field -->
-                            <div class="mb-4">
-                                <div class="d-flex align-items-start gap-3">
-                                    <div class="bg-light rounded p-2 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; flex-shrink: 0;">
-                                        <i class="bi bi-envelope-at fs-5 text-secondary"></i>
-                                    </div>
-                                    <div class="flex-fill">
-                                        <input 
-                                            class="form-control form-control-lg" 
-                                            id="email"
-                                            name="email" 
-                                            placeholder="Enter your email address" 
-                                            required 
-                                            type="email"
-                                            value="{{ request.form.get('email', '') }}"
-                                            maxlength="120">
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Password field -->
-                            <div class="mb-4">
-                                <div class="d-flex align-items-start gap-3">
-                                    <div class="bg-light rounded p-2 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; flex-shrink: 0;">
-                                        <i class="bi bi-lock fs-5 text-secondary"></i>
-                                    </div>
-                                    <div class="flex-fill">
-                                        <input 
-                                            autocomplete="new-password" 
-                                            class="form-control form-control-lg" 
-                                            id="password"
-                                            name="password" 
-                                            placeholder="Create a strong password" 
-                                            required 
-                                            type="password"
-                                            minlength="8">
-                                    </div>
-                                    <div class="d-flex align-items-center justify-content-center text-muted" 
-                                         style="width: 40px; height: 40px; cursor: help;"
-                                         data-bs-toggle="tooltip" 
-                                         data-bs-placement="left" 
-                                         title="Password must be at least 8 characters long">
-                                        <i class="bi bi-info-circle fs-5"></i>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Password confirmation field -->
-                            <div class="mb-4">
-                                <div class="d-flex align-items-start gap-3">
-                                    <div class="bg-light rounded p-2 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; flex-shrink: 0;">
-                                        <i class="bi bi-lock-fill fs-5 text-secondary"></i>
-                                    </div>
-                                    <div class="flex-fill">
-                                        <input 
-                                            autocomplete="new-password" 
-                                            class="form-control form-control-lg" 
-                                            id="confirmation"
-                                            name="confirmation" 
-                                            placeholder="Confirm your password" 
-                                            required 
-                                            type="password"
-                                            minlength="8">
-                                        <div class="invalid-feedback" id="password-mismatch" style="display: none;">
-                                            Passwords do not match
-                                        </div>
-                                    </div>
-                                    <div class="d-flex align-items-center justify-content-center text-muted" 
-                                         style="width: 40px; height: 40px; cursor: help;"
-                                         data-bs-toggle="tooltip" 
-                                         data-bs-placement="left" 
-                                         title="Re-enter your chosen password to confirm">
-                                        <i class="bi bi-info-circle fs-5"></i>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Submit button -->
-                            <div class="d-grid mb-3">
-                                <button class="btn btn-primary btn-lg fw-semibold" type="submit">Create Account</button>
-                            </div>
-                            
-                            <!-- Login link -->
-                            <div class="text-center">
-                                <p class="text-muted mb-0">Already have an account? <a href="/login" class="text-decoration-none">Sign in here</a></p>
-                            </div>
-                        </form>
-                </div>
+                    </div>
+
+                    <div class="input-group mb-4">
+                        <span class="input-group-text" id="basic-addon1">
+                            <i class="bi bi-envelope-at-fill fs-5 text-secondary"></i>
+                        </span>
+
+                        {{ form.email(autocomplete="email", class="form-control", placeholder="Email") }}
+                        {% for error in form.email.errors %}
+                        <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+
+
+                    </div>
+
+                    <div class="input-group mb-4">
+                        <span class="input-group-text" id="basic-addon1">
+                            <i class="bi bi-key-fill fs-5 text-secondary"></i>
+                        </span>
+
+                        {{ form.password(autocomplete="new-password", class="form-control",
+                        placeholder="Create a password") }}
+                        {% for error in form.password.errors %}
+                        <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+
+
+                    </div>
+                    
+
+                    <div class="input-group mb-4">
+                        <span class="input-group-text">
+                            <i class="bi bi-key fs-5 text-secondary"></i>
+                        </span>
+                        {{ form.confirmation(class="form-control", placeholder="Confirm your password") }}
+                        {% for error in form.confirmation.errors %}
+                        <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-12 mb-3">
+                        {{ form.submit(class="btn btn-primary btn-lg fw-semibold") }}
+                    </div>
+
+                    <div class="text-center">
+                        <p class="text-secondary fs-6">Already have an account? <a href="/login" class="text-decoration-none">Sign in here</a>.</p>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
-
-<script>
-    // Initialize Bootstrap tooltips
-    document.addEventListener('DOMContentLoaded', function() {
-        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-        var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
-            return new bootstrap.Tooltip(tooltipTriggerEl);
-        });
-    });
-
-    // Client-side password confirmation validation
-    document.getElementById('confirmation').addEventListener('input', function() {
-        const password = document.getElementById('password').value;
-        const confirmation = this.value;
-        const errorDiv = document.getElementById('password-mismatch');
-        
-        if (password !== confirmation && confirmation.length > 0) {
-            this.classList.add('is-invalid');
-            errorDiv.style.display = 'block';
-            this.setCustomValidity('Passwords do not match');
-        } else {
-            this.classList.remove('is-invalid');
-            errorDiv.style.display = 'none';
-            this.setCustomValidity('');
-        }
-    });
-
-    // Also validate when password field changes
-    document.getElementById('password').addEventListener('input', function() {
-        const confirmation = document.getElementById('confirmation');
-        if (confirmation.value.length > 0) {
-            confirmation.dispatchEvent(new Event('input'));
-        }
-    });
-</script>
+</div>
 {% endblock %}
