@@ -18,42 +18,43 @@ Complete Your Profile
                 <!-- Progress indicator -->
                 <div class="mb-4">
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <small class="text-muted">Step 1 of 2</small>
-                        <small class="text-muted">Address & Access</small>
+                        <small id="progress-step" class="text-muted">Step 1 of 2</small>
+                        <small id="progress-text" class="text-muted">Address & Access</small>
                     </div>
                     <div class="progress" style="height: 4px;">
                         <div class="progress-bar" role="progressbar" style="width: 50%"></div>
                     </div>
                 </div>
 
+                <!-- Single form encompassing both steps -->
+                <form action="/onboard" method="post" novalidate id="onboardingForm"
+                    enctype="multipart/form-data">
+                    {{ form.hidden_tag() }}
 
-<!-- Single form encompassing both steps -->
-<form action="/onboard" method="post" novalidate id="onboardingForm" enctype="multipart/form-data">
-    {{ form.hidden_tag() }}
+                    <!-- Hidden file input for Dropzone -->
+                    <input type="file" name="file" id="file" style="display: none;" accept="image/*">
 
-                <!-- Step 1: Address and Access -->
-                <div id="step-1">
+                    <!-- Step 1: Address and Access -->
+                    <div id="step-1">
 
                         <!-- Address field with Google Maps autocomplete -->
                         <div class="mb-4">
                             <div class="d-flex align-items-start gap-3">
-
                                 <div class="flex-fill">
                                     <p>Enter your address</p>
                                     <div id="autocomplete-container">
                                         <!-- Google Places Autocomplete will be inserted here -->
                                     </div>
-
                                 </div>
                             </div>
                         </div>
 
-                                <!-- Hidden fields for parsed address components -->
-        {{ form.place_id }}
-        {{ form.formatted_address }}
-        {{ form.display_name }}
-        {{ form.latitude }}
-        {{ form.longitude }}
+                        <!-- Hidden fields for parsed address components -->
+                        {{ form.place_id }}
+                        {{ form.formatted_address }}
+                        {{ form.display_name }}
+                        {{ form.latitude }}
+                        {{ form.longitude }}
 
                         <!-- Address confirmation display (hidden initially) -->
                         <div id="addressConfirmation" class="mb-4" style="display: none;">
@@ -78,18 +79,16 @@ Complete Your Profile
                         </div>
 
                         <div class="col-12 mb-3">
-                            <button class="btn btn-primary btn-lg fw-semibold" type="button" id="nextBtn">
+                            <button class="btn btn-primary btn-lg fw-semibold" type="button" id="nextBtn" disabled>
                                 Next
                             </button>
                         </div>
-                    
-                </div>
 
-                <!-- Step 2: Dog information -->
-                <div id="step-2" style="display: none;">
-                    <h3>Step 2 of 2: Tell us about your dog</h3>
-                    
-                        {{ form.hidden_tag() }}
+                    </div>
+
+                    <!-- Step 2: Dog information -->
+                    <div id="step-2" style="display: none;">
+                        <h3>Step 2 of 2: Tell us about your dog</h3>
 
                         <div class="input-group mb-3">
                             <span class="input-group-text">
@@ -100,6 +99,7 @@ Complete Your Profile
                             <div class="text-danger small">{{ error }}</div>
                             {% endfor %}
                         </div>
+                        
                         <div class="mb-3">
                             <div class="input-group">
                                 <span class="input-group-text">
@@ -128,7 +128,7 @@ Complete Your Profile
                                 {{ form.dog_allergies.label() }}
                             </span>
                             {{ form.dog_allergies(class="form-control") }}
-                            {% for error in form.dog_name.errors %}
+                            {% for error in form.dog_allergies.errors %}
                             <div class="text-danger small">{{ error }}</div>
                             {% endfor %}
                         </div>
@@ -143,34 +143,30 @@ Complete Your Profile
                             {% endfor %}
 
                             {{ form.dog_months(class="form-select") }}
-                            {% for error in form.dog_years.errors %}
+                            {% for error in form.dog_months.errors %}
                             <div class="text-danger small">{{ error }}</div>
                             {% endfor %}
                         </div>
-
+                        
+                        <!-- Dropzone container -->
                         <div class="mb-3">
                             <div class="form-text">Upload a picture</div>
-                            <div class="input-group">
-
-                                {{ form.dog_pic(class="form-control") }}
-                                {% for error in form.dog_pic.errors %}
-                                <div class="text-danger small">{{ error }}</div>
-                                {% endfor %}
+                            <div id="insert-dropzone" class="border border-2 border-dashed rounded p-4 text-center" style="min-height: 120px;">
+                                <div id="dropzone-message" class="text-muted">
+                                    <i class="bi bi-cloud-upload fs-1"></i>
+                                    <p class="mb-0">Drop image here or click to select</p>
+                                </div>
                             </div>
-
                         </div>
-
 
                         <div class="col-12 mb-3">
                             {{ form.submit(class="btn btn-primary") }}
-
                         </div>
+                    </div>
 
-
-                    </form>
-                </div>
-
+                </form>
             </div>
+
         </div>
     </div>
 </div>
@@ -182,6 +178,7 @@ Complete Your Profile
 <script>
     let placeAutocomplete;
     let addressSelected = false;
+    let myDropzone;
 
     async function initMap() {
         try {
@@ -217,7 +214,7 @@ Complete Your Profile
                     // Show confirmation
                     showAddressConfirmation(place.formattedAddress);
 
-                    // Enable submit button
+                    // Enable next button
                     document.getElementById('nextBtn').disabled = false;
                     addressSelected = true;
 
@@ -250,7 +247,6 @@ Complete Your Profile
             document.getElementById('latitude').value = placeData.location.lat || '';
             document.getElementById('longitude').value = placeData.location.lng || '';
         }
-     
     }
 
     function clearHiddenFields() {
@@ -291,21 +287,84 @@ Complete Your Profile
         }, 5000);
     }
 
-    // Initialize the map when the page loads
+    // Initialize everything when the page loads
     document.addEventListener('DOMContentLoaded', function () {
+        // Initialize Google Maps
         initMap();
 
-        // Handle form submission
-        document.getElementById('onboardingForm').addEventListener('submit', function (e) {
-            if (!addressSelected) {
-                e.preventDefault();
-                showError('Please select an address from the dropdown suggestions.');
-                return false;
-            }
+        // Initialize Dropzone
+        const dropzoneContainer = document.getElementById('insert-dropzone');
+        const fileInput = document.getElementById('file');
+        const dropzoneMessage = document.getElementById('dropzone-message');
 
-            // Show loading spinner
-            document.getElementById('submitSpinner').style.display = 'inline-block';
-            document.getElementById('nextBtn').disabled = true;
+        // Disable Dropzone's autodiscover to avoid conflicts
+        Dropzone.autoDiscover = false;
+
+        myDropzone = new Dropzone(dropzoneContainer, {
+            url: "/dummy", // This won't be used since we're not auto-uploading
+            autoProcessQueue: false, // Don't auto-upload
+            uploadMultiple: false,
+            parallelUploads: 1,
+            maxFiles: 1,
+            acceptedFiles: 'image/*',
+            clickable: true,
+            previewsContainer: dropzoneContainer,
+            previewTemplate: `
+                <div class="dz-preview dz-file-preview">
+                    <div class="dz-image">
+                        <img data-dz-thumbnail />
+                    </div>
+                    <div class="dz-details">
+                        <div class="dz-filename"><span data-dz-name></span></div>
+                        <div class="dz-size" data-dz-size></div>
+                    </div>
+                    <div class="dz-progress">
+                        <span class="dz-upload" data-dz-uploadprogress></span>
+                    </div>
+                    <div class="dz-success-mark"><span>✓</span></div>
+                    <div class="dz-error-mark"><span>✗</span></div>
+                    <div class="dz-error-message"><span data-dz-errormessage></span></div>
+                </div>
+            `,
+            init: function() {
+                const dropzone = this;
+
+                // When a file is added
+                this.on("addedfile", function(file) {
+                    // Hide the default message
+                    dropzoneMessage.style.display = 'none';
+
+                    // Transfer the file to the hidden input
+                    const dataTransfer = new DataTransfer();
+                    dataTransfer.items.add(file);
+                    fileInput.files = dataTransfer.files;
+                });
+
+                // When file is removed
+                this.on("removedfile", function(file) {
+                    // Clear the hidden input
+                    fileInput.value = '';
+
+                    // Show the default message if no files remain
+                    if (dropzone.files.length === 0) {
+                        dropzoneMessage.style.display = 'block';
+                    }
+                });
+
+                // Handle max files exceeded
+                this.on("maxfilesexceeded", function(file) {
+                    showError("Only one image can be uploaded.");
+                    this.removeFile(file);
+                });
+
+                // Handle invalid file types
+                this.on("error", function(file, message) {
+                    if (typeof message === 'string' && message.includes('not accepted')) {
+                        showError("Please upload only image files (JPG, PNG, GIF, etc.).");
+                    }
+                    this.removeFile(file);
+                });
+            }
         });
 
         // Step 1 to Step 2 transition
@@ -328,11 +387,28 @@ Complete Your Profile
 
             // Update progress indicator
             document.querySelector('.progress-bar').style.width = '100%';
-            document.querySelector('.d-flex small:first-child').textContent = 'Step 2 of 2';
-            document.querySelector('.d-flex small:last-child').textContent = 'About Your Dog';
+            document.getElementById('progress-step').textContent = 'Step 2 of 2';
+            document.getElementById('progress-text').textContent = 'About Your Dog';
         });
 
-        
+        // Handle form submission
+        const onboardingForm = document.getElementById('onboardingForm');
+        onboardingForm.addEventListener('submit', function (e) {
+            // Validate address is selected
+            if (!addressSelected) {
+                e.preventDefault();
+                showError('Please select an address from the dropdown suggestions.');
+                return false;
+            }
+
+            // Form will submit normally with all data including the file from hidden input
+            // Show loading state
+            const submitBtn = onboardingForm.querySelector('input[type="submit"]');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.value = 'Saving...';
+            }
+        });
 
         // Handle API loading errors
         window.gm_authFailure = function () {
@@ -341,9 +417,63 @@ Complete Your Profile
         };
     });
 </script>
+
 <style>
     gmp-place-autocomplete {
         color-scheme: light;
+    }
+
+    /* Dropzone styling */
+    #insert-dropzone {
+        transition: border-color 0.15s ease-in-out;
+    }
+
+    #insert-dropzone:hover {
+        border-color: #0d6efd !important;
+    }
+
+    #insert-dropzone.dz-drag-hover {
+        border-color: #0d6efd !important;
+        background-color: rgba(13, 110, 253, 0.05);
+    }
+
+    .dz-preview {
+        margin: 10px;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background: white;
+        position: relative;
+    }
+
+    .dz-preview .dz-image {
+        width: 80px;
+        height: 80px;
+        position: relative;
+        display: inline-block;
+        margin-right: 10px;
+    }
+
+    .dz-preview .dz-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 4px;
+    }
+
+    .dz-preview .dz-details {
+        display: inline-block;
+        vertical-align: top;
+    }
+
+    .dz-preview .dz-filename {
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+
+    .dz-preview .dz-size {
+        font-size: 0.9em;
+        color: #666;
     }
 </style>
 

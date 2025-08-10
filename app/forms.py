@@ -75,7 +75,7 @@ class OnboardingForm(FlaskForm):
     )
     dog_name = StringField(
         "Dog's Name",
-        validators=[DataRequired()]
+        validators=[DataRequired(), Length(max=50)]
     )
 
     dog_gender = SelectField(
@@ -104,13 +104,6 @@ class OnboardingForm(FlaskForm):
         'Months',
         choices=[('', 'Months')] + [(str(i), str(i)) for i in range(13)],
         validators=[DataRequired()]
-    )
-
-    dog_pic = FileField(
-        validators=[
-            Optional(),
-            FileAllowed(['jpg', 'jpeg', 'png'], 'Images only!')
-        ]
     )
     
     submit = SubmitField("Next")

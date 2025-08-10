@@ -4,6 +4,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from dotenv import load_dotenv
 import os
+from flask_dropzone import Dropzone
 
 # Load environment variables from .env file
 load_dotenv()
@@ -11,6 +12,7 @@ load_dotenv()
 # Initialize extensions
 db = SQLAlchemy()
 login_manager = LoginManager()
+dropzone = Dropzone()
 
 def create_app():
     app = Flask(__name__)
@@ -21,9 +23,18 @@ def create_app():
     app.config["SESSION_PERMANENT"] = False
     app.config["SESSION_TYPE"] = "filesystem"
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'dev-key-change-me'
+    
+    # Dropzone configuration
+    app.config['DROPZONE_UPLOAD_MULTIPLE'] = False  # Single file upload
+    app.config['DROPZONE_ALLOWED_FILE_TYPE'] = 'image'  # Only allow images
+    app.config['DROPZONE_MAX_FILE_SIZE'] = 3  # Max file size in MB
+    app.config['UPLOAD_FOLDER'] = os.path.join(os.getcwd(), "app", "static", "images")  # Upload folder
 
     # Initialize Flask-Session
     Session(app)
+
+    # Initialize Dropzone
+    dropzone.init_app(app)
 
     # Initialize SQLAlchemy
     db.init_app(app)

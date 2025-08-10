@@ -1,4 +1,4 @@
-from flask import request, redirect, render_template, flash, url_for
+from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from sqlalchemy.exc import IntegrityError
@@ -58,7 +58,7 @@ def register_routes(app):
             return redirect(next_page if next_page and next_page.startswith('/') else "/")
 
         return render_template("login.html", form=form)
-    
+
     @app.route("/onboard", methods=["GET", "POST"])
     @login_required
     def onboard():
@@ -79,8 +79,8 @@ def register_routes(app):
                 place_id = form.place_id.data.strip()
                 formatted_address = form.formatted_address.data.strip()
                 display_name = form.display_name.data.strip()
-                latitude = form.latitude.data
-                longitude = form.longitude.data
+                latitude = float(form.latitude.data) if form.latitude.data else None
+                longitude = float(form.longitude.data) if form.longitude.data else None
                 pickup_instructions = form.pickup_instructions.data.strip()
 
                 # Create or update client record
@@ -115,14 +115,15 @@ def register_routes(app):
                     birth_month += 12
 
                 # Handle file upload
-                dog_pic = form.dog_pic.data
                 pic_filename = None
-                if dog_pic:
-                    original_filename = secure_filename(dog_pic.filename)
-                    unique_filename = f"{uuid1()}_{original_filename}"
-                    upload_path = os.path.join(app.config["UPLOAD_FOLDER"], unique_filename)
-                    dog_pic.save(upload_path)
-                    pic_filename = unique_filename
+                if 'file' in request.files:
+                    dog_pic = request.files['file']
+                    if dog_pic and dog_pic.filename:
+                        original_filename = secure_filename(dog_pic.filename)
+                        unique_filename = f"{uuid1()}_{original_filename}"
+                        upload_path = os.path.join(app.config["UPLOAD_FOLDER"], unique_filename)
+                        dog_pic.save(upload_path)
+                        pic_filename = unique_filename
 
                 # Create dog record
                 new_dog = Dog(
