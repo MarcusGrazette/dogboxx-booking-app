@@ -27,8 +27,7 @@ Complete Your Profile
                 </div>
 
                 <!-- Single form encompassing both steps -->
-                <form action="/onboard" method="post" novalidate id="onboardingForm"
-                    enctype="multipart/form-data">
+                <form action="/onboard" method="post" novalidate id="onboardingForm" enctype="multipart/form-data">
                     {{ form.hidden_tag() }}
 
                     <!-- Hidden file input for Dropzone -->
@@ -99,7 +98,7 @@ Complete Your Profile
                             <div class="text-danger small">{{ error }}</div>
                             {% endfor %}
                         </div>
-                        
+
                         <div class="mb-3">
                             <div class="input-group">
                                 <span class="input-group-text">
@@ -147,11 +146,12 @@ Complete Your Profile
                             <div class="text-danger small">{{ error }}</div>
                             {% endfor %}
                         </div>
-                        
+
                         <!-- Dropzone container -->
                         <div class="mb-3">
                             <div class="form-text">Upload a picture</div>
-                            <div id="insert-dropzone" class="border border-2 border-dashed rounded p-4 text-center" style="min-height: 120px;">
+                            <div id="insert-dropzone" class="border border-2 border-dashed rounded p-4 text-center"
+                                style="min-height: 120px;">
                                 <div id="dropzone-message" class="text-muted">
                                     <i class="bi bi-cloud-upload fs-1"></i>
                                     <p class="mb-0">Drop image here or click to select</p>
@@ -307,7 +307,7 @@ Complete Your Profile
             parallelUploads: 1,
             maxFiles: 1,
             acceptedFiles: 'image/*',
-            clickable: true,
+            clickable: dropzoneContainer, // Explicitly set the clickable element
             previewsContainer: dropzoneContainer,
             previewTemplate: `
                 <div class="dz-preview dz-file-preview">
@@ -318,19 +318,23 @@ Complete Your Profile
                         <div class="dz-filename"><span data-dz-name></span></div>
                         <div class="dz-size" data-dz-size></div>
                     </div>
-                    <div class="dz-progress">
-                        <span class="dz-upload" data-dz-uploadprogress></span>
+                    <div class="dz-success-mark">
+                        <i class="bi bi-check-circle-fill text-success"></i>
                     </div>
-                    <div class="dz-success-mark"><span>✓</span></div>
-                    <div class="dz-error-mark"><span>✗</span></div>
+                    <div class="dz-error-mark">
+                        <i class="bi bi-x-circle-fill text-danger"></i>
+                    </div>
                     <div class="dz-error-message"><span data-dz-errormessage></span></div>
+                    <div class="dz-remove" data-dz-remove>
+                        <i class="bi bi-trash text-muted"></i>
+                    </div>
                 </div>
             `,
-            init: function() {
+            init: function () {
                 const dropzone = this;
 
                 // When a file is added
-                this.on("addedfile", function(file) {
+                this.on("addedfile", function (file) {
                     // Hide the default message
                     dropzoneMessage.style.display = 'none';
 
@@ -338,27 +342,39 @@ Complete Your Profile
                     const dataTransfer = new DataTransfer();
                     dataTransfer.items.add(file);
                     fileInput.files = dataTransfer.files;
+
+                    // Manually mark as success since we're not actually uploading
+                    setTimeout(() => {
+                        file.status = Dropzone.SUCCESS;
+                        dropzone.emit("success", file);
+                        dropzone.emit("complete", file);
+                    }, 100);
+
+                    // Make sure clicking still works after file is added
+                    dropzone.setupEventListeners();
                 });
 
                 // When file is removed
-                this.on("removedfile", function(file) {
+                this.on("removedfile", function (file) {
                     // Clear the hidden input
                     fileInput.value = '';
 
                     // Show the default message if no files remain
                     if (dropzone.files.length === 0) {
                         dropzoneMessage.style.display = 'block';
+                        // Re-enable clicking when no files are present
+                        dropzone.setupEventListeners();
                     }
                 });
 
                 // Handle max files exceeded
-                this.on("maxfilesexceeded", function(file) {
+                this.on("maxfilesexceeded", function (file) {
                     showError("Only one image can be uploaded.");
                     this.removeFile(file);
                 });
 
                 // Handle invalid file types
-                this.on("error", function(file, message) {
+                this.on("error", function (file, message) {
                     if (typeof message === 'string' && message.includes('not accepted')) {
                         showError("Please upload only image files (JPG, PNG, GIF, etc.).");
                     }
@@ -474,6 +490,35 @@ Complete Your Profile
     .dz-preview .dz-size {
         font-size: 0.9em;
         color: #666;
+    }
+
+    .dz-preview .dz-success-mark,
+    .dz-preview .dz-error-mark {
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        display: none;
+        font-size: 1.2em;
+    }
+
+    .dz-preview.dz-success .dz-success-mark {
+        display: block;
+    }
+
+    .dz-preview.dz-error .dz-error-mark {
+        display: block;
+    }
+
+    .dz-preview .dz-remove {
+        position: absolute;
+        top: 5px;
+        left: 5px;
+        cursor: pointer;
+        font-size: 1.1em;
+    }
+
+    .dz-preview .dz-remove:hover {
+        color: #dc3545 !important;
     }
 </style>
 
