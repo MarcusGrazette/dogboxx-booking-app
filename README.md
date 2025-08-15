@@ -2,16 +2,31 @@
 
 This is my final project for CS50. I'm building a mobile-first web app for a local dog walking company to manage client bookings. The backend will use Python, Flask, and an SQL database, and the frontend will be HTML styled with Bootstrap CSS.
 
-## App Users
+## Intended Users
+There are three user types: admin (the business owner), clients, and walkers (the staff). Accounts created via the 'register' UX default to 'client'. I'll create 'admin' and 'walker' accounts by editing the db manually to keep the scope managable. I'm also assuming (for simplicity) that client - dog is a one to one relationship. In reality, a client could have more than one dog and the business offers multi dog discounts.
 
-The app will have different functionalities depending on the type of user. There are three user types: admin (the business owner), clients, and walkers (the staff). Accounts created via the 'register' UX default to 'client'. I'll create 'admin' and 'walker' accounts by editing the db manually to keep the scope managable. I'm also assuming (for simplicity) that client - dog is a one to one relationship. In reality, a client could have more than one dog and the business offers multi dog discounts.
+## Scope
+I've limited the scope to keep the project managable. I plan to submit a minimum viable poduct (MVP) version for CS50, then continue to build out the feature set to match the real-world product requirements. 
+
+The MVP features are:
+- Clients can register and onboard (ie add their address and dog details)
+- Clients can manage walks (view, edit, delete booked walks)
+- Admins can also manage walks (confirm or edit bookings) - eg the admin may need to edit a booking to deconflict a personality clash between dogs, or to make a walker's pick up route more efficient.
+- Admins can display alerts on client dashboards
+- Admins can allocate walks to walkers
+- Walkers can view their daily and weekly walk schedule
+- Admins can see dashboards showing walks per day and walks per walker.
+
+## Feature Roadmap
+I'm working with the company to build out a set of feature requirements. Sometimes, I'll need to do these by interacting directly with the db via sqlite or phpMyAdmin (eg adding walkers) to enable MVP functionality (eg walk booking flow won't work unless there are walkers in the db but there is no UX for adding walkers in the MVP). 
+
+The feature roadmap could include:
 
 ### Admin
-The admin can:
+The admin will be able to:
 - Manage walkers; add or delete walkers from the roster
 - Manage walker availability; if a walker is on the roster they are available by default, unless the admin marks them as unavailable on a particular day.
-- Allocate bookings to walkers
-- See monthly summaries, by walker, client or dog.
+
 
 ### Clients
 CLients can:
@@ -97,6 +112,16 @@ I've excluded some features to keep the project's scope managable. With more tim
 - Change the onboarding h1 to something like 'welcome' w a hand wave emoji
 - Add 'skip' functionality to the user onboarding form, so that users can register but defer completing their onboarding
 - delete the 'other info' col from the dogs table, I'm not going to use that anymore.
+- the 'remember me' feature on the login page doesn't work as expected 
+- check why I get a 403 error persistantly when the server stops and restarts
+- check my redirects use url_for not hardcoded.
+- Move the flash message handing code out of layout.
+- add options for the user to see all upcoming walks? or add pagination?
+- index layout breaks when there are no bookings, the card should have a min height.
+
+ERRORS
+- booking form validation - a date in the past throws an error. Can I limit the options in wtf?
+
 
 
 

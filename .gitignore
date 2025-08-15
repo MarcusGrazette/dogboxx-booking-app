@@ -6,3 +6,6 @@ flask_session/
 *.db
 *.pyc
 /app/static/images
+/app/static/css
+/app/static/js
+/app/static/icons
