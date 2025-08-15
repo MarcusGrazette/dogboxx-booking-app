@@ -1,16 +1,17 @@
 from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
+from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError
-from app.models import User, Client, Dog
+from app.models import User, Client, Dog, Booking
 from app import db
 from email_validator import validate_email, EmailNotValidError
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from werkzeug.utils import secure_filename
 from uuid import uuid1
-from app.forms import LoginForm, RegisterForm, OnboardingForm
+from app.forms import LoginForm, RegisterForm, OnboardingForm, BookingForm
 
 # Temporary logging
 logging.basicConfig(level=logging.DEBUG)
@@ -18,11 +19,71 @@ logging.basicConfig(level=logging.DEBUG)
 def register_routes(app):
     app.config["UPLOAD_FOLDER"] = os.path.join(os.getcwd(), "app", "static", "images")
     
-    @app.route("/")
+    @app.route("/", methods=["GET", "POST"])
     @login_required
     def index():
         """Render the home page."""
-        return render_template("index.html", user=current_user)
+        user = User.query.options(
+        joinedload(User.client),  
+        joinedload(User.dogs)
+        ).filter_by(id=current_user.id).first()
+
+        # Return the next 5 confirmed bookings
+        today = datetime.now(timezone.utc).date()
+        upcoming_bookings_query = Booking.query.filter(
+            Booking.user_id == current_user.id,
+            Booking.status == 'Confirmed',
+            Booking.date > today
+        ).order_by(Booking.date.asc()).limit(5)
+
+        upcoming_bookings = list(upcoming_bookings_query)
+        for b in upcoming_bookings:
+            if b.date:
+                b.date_display = b.date.strftime("%d %b")
+            else:
+                b.date_display = None
+
+        form = BookingForm()
+        if form.validate_on_submit():
+            booking_date = form.date.data
+            booking_slot = form.slot.data
+
+            # Set date bounds, not in the past or more than three months in the future
+            today = datetime.now(timezone.utc).date()
+            max_date = (datetime.now(timezone.utc) + timedelta(days=90)).date()
+
+            errors = []
+            if booking_date < today:
+                errors.append("Booking date cannot be in the past.")
+            if booking_date > max_date:
+                errors.append("Booking date cannot be more than 3 months in the future.")
+            
+            # Validate slot against allowed enum values
+            if booking_slot not in ("Morning", "Afternoon"):
+                errors.append("Invalid booking slot selected.")
+
+             # Ensure the user has at least one dog to book
+            if not user or not getattr(user, "dogs", None):
+                errors.append("No dog found on your account. Please add a dog before booking.")
+
+            if errors:
+                for e in errors:
+                    flash(e, "danger")
+            else:
+                dog_id = user.dogs[0].id  # This assumes a one to one user to dog relationship
+                new_booking = Booking(
+                    user_id=user.id,
+                    dog_id=dog_id,
+                    date=booking_date,
+                    slot=booking_slot
+            )
+            db.session.add(new_booking)
+            db.session.commit()
+            flash("Booking created successfully.", "success")
+            return redirect(url_for("index"))
+        
+
+        return render_template("index.html", user=user, client=user.client, dogs=user.dogs, bookings=upcoming_bookings, form=form) # type: ignore
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
@@ -33,7 +94,7 @@ def register_routes(app):
 
         form = LoginForm()
         if form.validate_on_submit():
-            email = form.email.data.strip().lower()
+            email = form.email.data.strip().lower() # type: ignore
             password = form.password.data
             remember_me = form.remember_me.data
 
@@ -41,7 +102,7 @@ def register_routes(app):
             user = User.query.filter_by(email=email).first()
 
             # Check credentials
-            if not user or not check_password_hash(user.hashed_password, password):
+            if not user or not check_password_hash(user.hashed_password, password): # type: ignore
                 flash("Invalid email or password", "error")
                 return render_template("login.html", form=form)
 
@@ -76,8 +137,8 @@ def register_routes(app):
         if form.validate_on_submit():
             try:
                 # Step 1: Address information
-                place_id = form.place_id.data.strip()
-                formatted_address = form.formatted_address.data.strip()
+                place_id = form.place_id.data.strip() # type: ignore
+                formatted_address = form.formatted_address.data.strip() # type: ignore
                 display_name = form.display_name.data.strip()
                 latitude = float(form.latitude.data) if form.latitude.data else None
                 longitude = float(form.longitude.data) if form.longitude.data else None
@@ -214,3 +275,12 @@ def register_routes(app):
         if current_user.role == 'client':
             client = Client.query.filter_by(user_id=current_user.id).first()
         return render_template("profile.html", user=current_user, client=client)
+    
+    @app.route("/admin")
+    @login_required
+    def admin():
+        if current_user.role == 'admin':
+            return render_template("admin.html")
+        else:
+            flash("Only admins can access.", "danger")
+            return redirect(url_for("index"))

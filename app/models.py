@@ -1,7 +1,7 @@
-# Solution 1: Rename the database column to avoid conflict
 from . import db
 from datetime import datetime, timezone
 import re
+from .validators import password_strength_check
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -54,15 +54,7 @@ class User(db.Model):
     @staticmethod
     def validate_password(password):
         """Validate password strength"""
-        if len(password) < 8:
-            return False, "Password must be at least 8 characters long"
-        if not re.search(r'[A-Z]', password):
-            return False, "Password must contain at least one uppercase letter"
-        if not re.search(r'[a-z]', password):
-            return False, "Password must contain at least one lowercase letter"
-        if not re.search(r'\d', password):
-            return False, "Password must contain at least one number"
-        return True, "Valid password"
+        return password_strength_check(password)
 
 class Client(db.Model):
     __tablename__ = 'clients'
@@ -159,4 +151,61 @@ class Dog(db.Model):
             'allergies': self.allergies,
             'other_info': self.other_info,
             'pic': self.pic
+        }
+
+class Walker(db.Model):
+    __tablename__ = 'walkers'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    firstname = db.Column(db.String(80), nullable=False)
+    lastname = db.Column(db.String(80), nullable=False)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'firstname': self.firstname,
+            'lastname': self.lastname,
+            }
+
+class Booking(db.Model):
+    __tablename__ = 'bookings'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    dog_id = db.Column(db.Integer, db.ForeignKey('dogs.id'), nullable=False)
+    date = db.Column(db.Date, default=lambda: datetime.now(timezone.utc).date())
+    slot = db.Column(db.Enum('Morning', 'Afternoon', name='booking_slot'), 
+                    nullable=False, default='Morning')
+    walker_id = db.Column(db.Integer, db.ForeignKey('walkers.id'), nullable=False, default='1')
+    status = db.Column(db.Enum('Confirmed', 'Pending', 'Modified' ,'Cancelled', name='booking_status'), 
+                    nullable=False, default='Pending')
+    
+    user = db.relationship('User', backref=db.backref('bookings', lazy=True))
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'dog_id': self.dog_id,
+            'date': self.date.isoformat() if self.date else None,
+            'slot': self.slot,
+            'status': self.status
+        }
+
+class Message (db.Model):
+    __tablename__ = 'messages'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    content = db.Column(db.String, nullable=False)
+    
+    display_from = db.Column(db.Date, default=lambda: datetime.now(timezone.utc).date())
+    display_to = db.Column(db.Date, default=lambda: datetime.now(timezone.utc).date())
+    type = db.Column(db.Enum('Warning', 'Info', name='message_type'), 
+                    nullable=False, default='Info')
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'content': self.content,
+            'display_from': self.display_from.isoformat() if self.display_from else None,
+            'display_to': self.display_to.isoformat() if self.display_to else None,
         }
