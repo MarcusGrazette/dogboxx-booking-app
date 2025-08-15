@@ -1,7 +1,10 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, BooleanField, SubmitField, TextAreaField, HiddenField, SelectField
+from wtforms import StringField, PasswordField, BooleanField, SubmitField, TextAreaField, HiddenField, SelectField, DateField
 from wtforms.validators import DataRequired, Email, Length, EqualTo, Optional
 from flask_wtf.file import FileField, FileAllowed
+from .validators import wtforms_password_validator
+from datetime import datetime, timezone, timedelta
+from wtforms import ValidationError
 
 class LoginForm(FlaskForm):
     email = StringField(
@@ -48,7 +51,8 @@ class RegisterForm(FlaskForm):
         'Password',
         validators=[
             DataRequired(message="Password is required"),
-            Length(min=8, message="Password must be at least 8 characters long")
+            Length(min=8, message="Password must be at least 8 characters long"),
+            wtforms_password_validator
         ]
     )
     confirmation = PasswordField(
@@ -96,9 +100,7 @@ class OnboardingForm(FlaskForm):
 
     dog_years = SelectField(
         'Years',
-        choices=[('', 'Years')] + [(str(i), str(i)) for i in range(16)],
-        validators=[DataRequired()],
-    )
+    )   
 
     dog_months = SelectField(
         'Months',
@@ -107,3 +109,15 @@ class OnboardingForm(FlaskForm):
     )
     
     submit = SubmitField("Next")
+
+class BookingForm(FlaskForm):
+    date = DateField(
+        validators=[DataRequired()]
+    )
+    slot = SelectField(
+        'Slot',
+        choices=[('', 'Slot'), ('Morning', 'Morning'), ('Afternoon', 'Afternoon')],
+        validators=[DataRequired()]
+    )
+
+    submit = SubmitField('Book')
