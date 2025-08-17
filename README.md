@@ -11,11 +11,10 @@ I've limited the scope to keep the project managable. I plan to submit a minimum
 The MVP features are:
 - Clients can register and onboard (ie add their address and dog details)
 - Clients can manage walks (view, edit, delete booked walks)
-- Admins can also manage walks (confirm or edit bookings) - eg the admin may need to edit a booking to deconflict a personality clash between dogs, or to make a walker's pick up route more efficient.
-- Admins can display alerts on client dashboards
-- Admins can allocate walks to walkers
+- Admins can allocate walkers to bookings
+- Admins can see schedules for all walkers, and filter by walker by day and by week
 - Walkers can view their daily and weekly walk schedule
-- Admins can see dashboards showing walks per day and walks per walker.
+
 
 ## Feature Roadmap
 I'm working with the company to build out a set of feature requirements. Sometimes, I'll need to do these by interacting directly with the db via sqlite or phpMyAdmin (eg adding walkers) to enable MVP functionality (eg walk booking flow won't work unless there are walkers in the db but there is no UX for adding walkers in the MVP). 
@@ -106,18 +105,15 @@ I've excluded some features to keep the project's scope managable. With more tim
 
 
 ## TODO
-- Add a business name and logo using the favicon image
-- Redo the login, registration and onboarding forms to use flask-wtf
 - Get rid of the flash message between register and onboarding
 - Change the onboarding h1 to something like 'welcome' w a hand wave emoji
 - Add 'skip' functionality to the user onboarding form, so that users can register but defer completing their onboarding
-- delete the 'other info' col from the dogs table, I'm not going to use that anymore.
 - the 'remember me' feature on the login page doesn't work as expected 
 - check why I get a 403 error persistantly when the server stops and restarts
 - check my redirects use url_for not hardcoded.
 - Move the flash message handing code out of layout.
 - add options for the user to see all upcoming walks? or add pagination?
-- index layout breaks when there are no bookings, the card should have a min height.
+- add a limit to the number of bookings per day
 
 ERRORS
 - booking form validation - a date in the past throws an error. Can I limit the options in wtf?

@@ -22,10 +22,10 @@
     <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
     -->
 
-    <!-- Dropzone 
+    <!-- Dropzone -->
     <script src="https://unpkg.com/dropzone@5/dist/min/dropzone.min.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/dropzone@5/dist/min/dropzone.min.css" type="text/css" />
-    -->
+    
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
     <title>{% block title %}{% endblock %}</title>
@@ -86,25 +86,27 @@
         </div>
     </nav>
 
-    <main class="container py-5 text-center">
-        <!-- Display flash messages -->
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        {% for category, message in messages %}
-        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show"
-            role="alert">
-            {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-        {% endfor %}
-        {% endif %}
-        {% endwith %}
-
+    <main class="container py-3 text-center">
         {% block main %}{% endblock %}
     </main>
 
     <footer class="mb-5">
     </footer>
+    
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+        const alerts = document.querySelectorAll('.alert-dismissible.fade.show');
+        if (!alerts || alerts.length === 0) return; // nothing to do
+
+        alerts.forEach(function (alert) {
+          const bsAlert = bootstrap.Alert.getOrCreateInstance(alert);
+          let timeout = setTimeout(() => bsAlert.close(), 5000);
+          alert.addEventListener('mouseenter', () => clearTimeout(timeout));
+          alert.addEventListener('mouseleave', () => { timeout = setTimeout(() => bsAlert.close(), 2000); });
+        });
+      });
+    </script>
+    
     {% block scripts %}{% endblock %}
 </body>
 

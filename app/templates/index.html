@@ -6,21 +6,12 @@ Home
 
 {% block main %}
 <div class="container">
-    <div class="row justify-content-center mb-5">
+    <div class="row justify-content-center mb-3">
         <h1>Hello, {{ user.firstname }}.</h1>
     </div>
-    <!-- TODO: Generate this card dynamically if there are warnings or client info messages to show -->
-    <div class="card text-start mb-3 w-75 border-warning" style="margin: auto;">
-        <h5 class="card-header text-bg-warning">
-            <i class="bi bi-exclamation-triangle"></i>
-            Heatwave schedule
-        </h5>
-        <div class="card-body">
-            <p class="card-text">We're switching to the 'heatwave' schedule next week. Morning walks will start at 7am.
-            </p>
-            <div class="text-end"><a href="#" class="btn btn-secondary btn-warning">Got it!</a></div>
-        </div>
-    </div>
+
+    <!-- Show flash messages. -->
+    {% include '_flashes.html' %}
 
     {% if user.dogs %}
     <!-- Show the next three walks for each dog associated with the current user -->
@@ -37,11 +28,17 @@ Home
             </div>
             <div class="col-md-8">
                 <div class="card-body text-start">
-                    <p class="card-text">                    
-                    {% if bookings %}
+                    <p class="card-text">
+                        {% if bookings %}
 
-                    <p>Here are {{ dog.name }}'s upcoming walks. You can edit or cancel them using the buttons as
-                        needed.</p>
+                    <p>
+                        Here are {{ dog.name }}'s upcoming walks and booking requests.
+                    </p>
+                    <p>
+                        <i class="bi bi-check2-circle"></i> = confirmed.<br />
+                        <i class="bi bi-hourglass"></i> = requested, pending confirmation.<br />
+                        Click <i class="bi bi-x-square"></i> to cancel.<br />
+                    </p>
 
                     <table class="table">
                         <tbody>
@@ -50,11 +47,12 @@ Home
                                 <td>{{ booking.date_display }}</td>
                                 <td>{{ booking.slot }}</td>
                                 <td><i class="bi bi-pencil-square"></i></td>
-                                <td><i class="bi bi-x-square"></td>
+                                <td><i class="bi bi-x-square"></i></td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
+                    <p class="card-text"><small class="text-body-secondary">NB: Our cancellation policy applies to confirmed bookings cancelled within 5 days.</small></p>
                     {% else %}
                     <p>No bookings found.</p>
                     {% endif %}
@@ -70,14 +68,14 @@ Home
     <div class="card mb-3 w-75" style="margin: auto;">
         <h5 class="card-header text-start text-bg-secondary">
             <i class="bi bi-plus-square"></i>
-            New booking
+            New booking request
         </h5>
-        <div class="row g-0">
-            <div class="col-md-8">
+        
+            <div class="col-md-12">
                 <div class="card-body text-start">
+                    <p class="card-text">Select a date and slot (morning or afternnon) to request a new booking. We manually review booking requests to make sure your dog only walks with others they get on well with.</p>
                     <form action="/" method="post" id="BookingForm" novalidate>
                         {{ form.hidden_tag() }}
-
                         <div class="row g-3">
                             <div class="col-md-5">
                                 {{ form.date(class="form-control") }}
@@ -101,7 +99,7 @@ Home
                     </form>
                 </div>
             </div>
-        </div>
+        
     </div>
 
 </div>

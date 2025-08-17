@@ -38,7 +38,6 @@ def register_routes(app):
         today = datetime.now(timezone.utc).date()
         upcoming_bookings_query = Booking.query.filter(
             Booking.user_id == current_user.id,
-            Booking.status == 'Confirmed',
             Booking.date > today
         ).order_by(Booking.date.asc()).limit(5)
 

@@ -12,6 +12,7 @@ Complete Your Profile
 
                 <div class="text-center mb-4">
                     <h2 class="fw-semibold mb-2">Hello {{ current_user.firstname }}!</h2>
+                    {% include '_flashes.html' %}
                     <p class="text-muted">Let's complete your profile to get started.</p>
                 </div>
 
@@ -78,7 +79,7 @@ Complete Your Profile
                         </div>
 
                         <div class="col-12 mb-3">
-                            <button class="btn btn-primary btn-lg fw-semibold" type="button" id="nextBtn" disabled>
+                            <button class="btn btn-primary fw-semibold" type="button" id="nextBtn" disabled>
                                 Next
                             </button>
                         </div>

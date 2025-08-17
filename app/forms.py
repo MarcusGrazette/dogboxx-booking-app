@@ -100,6 +100,8 @@ class OnboardingForm(FlaskForm):
 
     dog_years = SelectField(
         'Years',
+        choices=[('', 'Years')] + [(str(i), str(i)) for i in range(10)],
+        validators=[DataRequired()]
     )   
 
     dog_months = SelectField(

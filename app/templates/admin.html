@@ -15,7 +15,7 @@ Admin
         <div class="card-body text-start">
             <div class="row mb-3">
                 <div class="col-md-4">
-                    <label for="booking-date-picker" class="form-label">Filter by date:</label>
+                    <label for="booking-date-picker" class="form-label">See pending bookings on:</label>
                     <input type="date" 
                            id="booking-date-picker" 
                            class="form-control" 
@@ -31,7 +31,7 @@ Admin
                         <td>Dog</td>
                         <td>Slot</td>
                         <td>Assigned to</td>
-                        <td>Confirm</td>
+                        <td></td>
                     </tr>
                 </thead>
                 <tbody id="bookings-tbody">
@@ -50,7 +50,7 @@ Admin
                             <button class="btn btn-success btn-sm confirm-booking-btn" 
                                     data-booking-id="{{ booking.id }}"
                                     {% if not booking.walker_id %}disabled{% endif %}>
-                                <i class="bi bi-check-circle"></i> Confirm
+                                <i class="bi bi-check-circle"></i>
                             </button>
                         </td>
                     </tr>
@@ -58,7 +58,10 @@ Admin
                 </tbody>
             </table>
             {% else %}
-            <p class="card-text">No pending bookings for this date.</p>
+            <p class="card-text">
+                <i class="bi bi-info-circle"></i>
+                No pending bookings for this date.
+            </p>
             {% endif %}
             </div>
         </div>
@@ -243,7 +246,7 @@ Admin
                 if (isLastRow) {
                   const container = document.getElementById('pending-bookings-container');
                   if (container) {
-                    container.innerHTML = '<p class="card-text">No pending bookings for this date.</p>';
+                    container.innerHTML = '<p class="card-text"> <i class="bi bi-info-circle"></i> No pending bookings for this date.</p>';
                   }
                 }
               }, 500);
