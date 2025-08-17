@@ -5,6 +5,7 @@ from flask_login import LoginManager
 from dotenv import load_dotenv
 import os
 from flask_dropzone import Dropzone
+from flask_wtf import CSRFProtect
 
 # Load environment variables from .env file
 load_dotenv()
@@ -13,6 +14,7 @@ load_dotenv()
 db = SQLAlchemy()
 login_manager = LoginManager()
 dropzone = Dropzone()
+csrf = CSRFProtect()
 
 def create_app():
     app = Flask(__name__)
@@ -35,6 +37,9 @@ def create_app():
 
     # Initialize Dropzone
     dropzone.init_app(app)
+
+    # Initialize CSRF protection
+    csrf.init_app(app)
 
     # Initialize SQLAlchemy
     db.init_app(app)

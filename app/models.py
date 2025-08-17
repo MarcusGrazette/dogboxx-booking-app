@@ -181,6 +181,7 @@ class Booking(db.Model):
                     nullable=False, default='Pending')
     
     user = db.relationship('User', backref=db.backref('bookings', lazy=True))
+    dog = db.relationship('Dog', backref=db.backref('bookings', lazy=True))
     
     def to_dict(self):
         return {
