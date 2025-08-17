@@ -105,18 +105,25 @@ I've excluded some features to keep the project's scope managable. With more tim
 
 
 ## TODO
+- check my redirects use url_for not hardcoded.
+- add a limit to the number of bookings per day
+- build out the 'walkers' card on admin.html
+- add an 'admin' user who isn't also a client
+
 - Get rid of the flash message between register and onboarding
 - Change the onboarding h1 to something like 'welcome' w a hand wave emoji
+
 - Add 'skip' functionality to the user onboarding form, so that users can register but defer completing their onboarding
-- the 'remember me' feature on the login page doesn't work as expected 
+ 
 - check why I get a 403 error persistantly when the server stops and restarts
-- check my redirects use url_for not hardcoded.
-- Move the flash message handing code out of layout.
+
+
 - add options for the user to see all upcoming walks? or add pagination?
-- add a limit to the number of bookings per day
+
 
 ERRORS
-- booking form validation - a date in the past throws an error. Can I limit the options in wtf?
+- booking form validation - stop duplicate bookings where dog + day + slot are the same.
+- the 'remember me' feature on the login page doesn't work as expected
 
 
 

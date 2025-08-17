@@ -13,8 +13,46 @@ Home
     <!-- Show flash messages. -->
     {% include '_flashes.html' %}
 
+    <div class="card mb-3 w-75" style="margin: auto;">
+        <h5 class="card-header text-start text-bg-secondary">
+            <i class="bi bi-plus-square"></i>
+            New booking request
+        </h5>
+
+        <div class="col-md-12">
+            <div class="card-body text-start">
+                <p class="card-text">Select a date and slot (morning or afternnon) to request a new booking. We manually
+                    review booking requests to make sure your dog only walks with others they get on well with.</p>
+                <form action="/" method="post" id="BookingForm" novalidate>
+                    {{ form.hidden_tag() }}
+                    <div class="row g-3">
+                        <div class="col-md-5">
+                            {{ form.date(class="form-control") }}
+                            {% for error in form.date.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-md-5">
+                            {{ form.slot(class="form-select") }}
+                            {% for error in form.slot.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        <div class="col-md-2">
+                            {{ form.submit(class="btn btn-secondary") }}
+                        </div>
+                    </div>
+
+
+                </form>
+            </div>
+        </div>
+
+    </div>
+
     {% if user.dogs %}
-    <!-- Show the next three walks for each dog associated with the current user -->
+
     {% for dog in user.dogs %}
     <div class="card mb-3 w-75" style="margin: auto; min-height: 250px;">
         <h5 class="card-header text-start text-bg-primary">
@@ -43,16 +81,29 @@ Home
                     <table class="table">
                         <tbody>
                             {% for booking in bookings %}
-                            <tr>
+                            <tr{% if booking.status=='Pending' %} class="table-warning" {% endif %}>
                                 <td>{{ booking.date_display }}</td>
                                 <td>{{ booking.slot }}</td>
-                                <td><i class="bi bi-pencil-square"></i></td>
-                                <td><i class="bi bi-x-square"></i></td>
-                            </tr>
-                            {% endfor %}
+                                <td>
+                                    {% if booking.status == 'Confirmed' %}
+                                    <i class="bi bi-check2-circle"></i>
+                                    {% elif booking.status == 'Pending' %}
+                                    <i class="bi bi-hourglass"></i>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <button class="btn btn-link p-0 cancel-booking-btn"
+                                        data-booking-id="{{ booking.id }}" data-booking-slot="{{ booking.slot }}"
+                                        data-booking-date="{{ booking.date_display }}" title="Cancel booking">
+                                        <i class="bi bi-x-square text-danger"></i>
+                                    </button>
+                                </td>
+                                </tr>
+                                {% endfor %}
                         </tbody>
                     </table>
-                    <p class="card-text"><small class="text-body-secondary">NB: Our cancellation policy applies to confirmed bookings cancelled within 5 days.</small></p>
+                    <p class="card-text"><small class="text-body-secondary">NB: Our cancellation policy applies to
+                            confirmed bookings cancelled within 5 days.</small></p>
                     {% else %}
                     <p>No bookings found.</p>
                     {% endif %}
@@ -65,42 +116,119 @@ Home
     <p>No dogs registered. Update your profile to add a dog</p>
     {% endif %}
 
-    <div class="card mb-3 w-75" style="margin: auto;">
-        <h5 class="card-header text-start text-bg-secondary">
-            <i class="bi bi-plus-square"></i>
-            New booking request
-        </h5>
-        
-            <div class="col-md-12">
-                <div class="card-body text-start">
-                    <p class="card-text">Select a date and slot (morning or afternnon) to request a new booking. We manually review booking requests to make sure your dog only walks with others they get on well with.</p>
-                    <form action="/" method="post" id="BookingForm" novalidate>
-                        {{ form.hidden_tag() }}
-                        <div class="row g-3">
-                            <div class="col-md-5">
-                                {{ form.date(class="form-control") }}
-                                {% for error in form.date.errors %}
-                                <div class="text-danger small">{{ error }}</div>
-                                {% endfor %}
-                            </div>
-
-                            <div class="col-md-5">
-                                {{ form.slot(class="form-select") }}
-                                {% for error in form.slot.errors %}
-                                <div class="text-danger small">{{ error }}</div>
-                                {% endfor %}
-                            </div>
-                            <div class="col-md-2">
-                                {{ form.submit(class="btn btn-secondary") }}
-                            </div>
-                        </div>
-
-
-                    </form>
-                </div>
-            </div>
-        
-    </div>
-
 </div>
+{% endblock %}
+
+{% block scripts %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Cancel booking functionality loaded');
+    
+    // Add click event listeners to all cancel buttons
+    document.querySelectorAll('.cancel-booking-btn').forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            const bookingId = this.getAttribute('data-booking-id');
+            const bookingSlot = this.getAttribute('data-booking-slot');
+            const bookingDate = this.getAttribute('data-booking-date');
+            
+            console.log('Cancel button clicked:', {
+                bookingId: bookingId,
+                bookingSlot: bookingSlot,
+                bookingDate: bookingDate
+            });
+            
+            // Show confirmation dialog
+            const confirmMessage = `Are you sure you want to cancel the ${bookingSlot} walk on ${bookingDate}?`;
+            
+            if (confirm(confirmMessage)) {
+                console.log('User confirmed cancellation for booking:', bookingId);
+                cancelBooking(bookingId, this);
+            } else {
+                console.log('User cancelled the cancellation for booking:', bookingId);
+            }
+        });
+    });
+});
+
+function cancelBooking(bookingId, buttonElement) {
+    console.log('Sending cancel request for booking:', bookingId);
+    
+    // Disable the button to prevent multiple clicks
+    buttonElement.disabled = true;
+    buttonElement.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+    
+    // Get CSRF token
+    const csrfToken = document.querySelector('meta[name=csrf-token]')?.getAttribute('content') || 
+                     document.querySelector('input[name=csrf_token]')?.value;
+    
+    console.log('CSRF token:', csrfToken ? 'Found' : 'Not found');
+    
+    fetch('/cancel_booking', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({
+            booking_id: bookingId
+        })
+    })
+    .then(response => {
+        console.log('Response status:', response.status);
+        return response.json();
+    })
+    .then(data => {
+        console.log('Response data:', data);
+        
+        if (data.success) {
+            console.log('Booking cancelled successfully');
+            
+            // Find the table row and fade it out
+            const row = buttonElement.closest('tr');
+            if (row) {
+                console.log('Fading out row for booking:', bookingId);
+                row.style.transition = 'opacity 0.5s ease';
+                row.style.opacity = '0.3';
+                
+                // Add cancelled styling
+                row.classList.add('table-secondary');
+                
+                // Update the row to show it's cancelled
+                const statusCell = row.cells[2]; // Column 3 (0-indexed)
+                statusCell.innerHTML = '<i class="bi bi-x-circle text-muted"></i>';
+                
+                // Replace cancel button with "Cancelled" text
+                buttonElement.outerHTML = '<span class="text-muted small">Cancelled</span>';
+                
+                // The flash message is now handled by the server-side route
+                console.log('Booking cancelled successfully, flash message handled by server');
+            }
+        } else {
+            console.error('Failed to cancel booking:', data.message);
+            
+            // Re-enable button and restore original content
+            buttonElement.disabled = false;
+            buttonElement.innerHTML = '<i class="bi bi-x-square text-danger"></i>';
+            
+            // Flash message already handled by server
+            console.log('Cancel failed, flash message handled by server');
+        }
+    })
+    .catch(error => {
+        console.error('Error cancelling booking:', error);
+        
+        // Re-enable button and restore original content
+        buttonElement.disabled = false;
+        buttonElement.innerHTML = '<i class="bi bi-x-square text-danger"></i>';
+        
+        // Show a generic client-side error since server flash won't work for network errors
+        alert('Network error: Could not cancel booking. Please try again.');
+    });
+}
+
+</script>
+
 {% endblock %}

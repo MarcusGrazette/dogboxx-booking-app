@@ -34,12 +34,13 @@ def register_routes(app):
         joinedload(User.dogs)
         ).filter_by(id=current_user.id).first()
 
-        # Return the next 5 confirmed bookings
+        # Return upcoming bookings
         today = datetime.now(timezone.utc).date()
         upcoming_bookings_query = Booking.query.filter(
             Booking.user_id == current_user.id,
+            Booking.status != 'Cancelled',
             Booking.date > today
-        ).order_by(Booking.date.asc()).limit(5)
+        ).order_by(Booking.date.asc()).limit(15)
 
         upcoming_bookings = list(upcoming_bookings_query)
         for b in upcoming_bookings:
@@ -58,10 +59,6 @@ def register_routes(app):
             max_date = (datetime.now(timezone.utc) + timedelta(days=90)).date()
 
             errors = []
-            if booking_date < today:
-                errors.append("Booking date cannot be in the past.")
-            if booking_date > max_date:
-                errors.append("Booking date cannot be more than 3 months in the future.")
             
             # Validate slot against allowed enum values
             if booking_slot not in ("Morning", "Afternoon"):
@@ -84,10 +81,9 @@ def register_routes(app):
             )
             db.session.add(new_booking)
             db.session.commit()
-            flash("Booking created successfully.", "success")
+            flash("Success - booking request submitted", "success")
             return redirect(url_for("index"))
         
-
         return render_template("index.html", user=user, client=user.client, dogs=user.dogs, bookings=upcoming_bookings, form=form) # type: ignore
 
     @app.route("/login", methods=["GET", "POST"])
@@ -476,3 +472,62 @@ def register_routes(app):
         except Exception as e:
             logging.error(f"Error loading bookings by date: {e}")
             return "Server error", 500
+    
+    @app.route("/cancel_booking", methods=["POST"])
+    @login_required
+    def cancel_booking():
+        """Cancel a booking by changing status to 'Cancelled'. Returns JSON for AJAX requests."""
+        
+        # Accept JSON or form-encoded data
+        data = request.get_json(silent=True) or request.form
+        booking_id = data.get("booking_id")
+        
+        logging.debug(f"Cancel booking request received for booking_id: {booking_id}")
+        
+        if not booking_id:
+            logging.error("Missing booking_id in cancel request")
+            return jsonify(success=False, message="Missing booking ID"), 400
+
+        try:
+            booking = Booking.query.filter_by(
+                id=int(booking_id), 
+                user_id=current_user.id  # Ensure user can only cancel their own bookings
+            ).first()
+            
+            logging.debug(f"Booking found: {booking}")
+            
+            if not booking:
+                logging.error(f"Booking not found or user {current_user.id} not authorized")
+                flash("Booking not found or you're not authorized to cancel it.", "danger")
+                return jsonify(success=False, message="Booking not found or not authorized"), 404
+                
+            # Check if booking can be cancelled (not already cancelled)
+            if booking.status == 'Cancelled':
+                logging.warning(f"Booking {booking_id} is already cancelled")
+                flash("This booking is already cancelled.", "warning")
+                return jsonify(success=False, message="Booking is already cancelled"), 400
+
+            # Update booking status to Cancelled
+            booking.status = "Cancelled"
+            db.session.commit()
+            
+            logging.info(f"Booking {booking_id} successfully cancelled by user {current_user.id}")
+            
+            # Flash success message
+            flash("Booking cancelled successfully.", "success")
+
+            return jsonify(
+                success=True, 
+                message="Booking cancelled successfully", 
+                booking={"id": booking.id, "status": booking.status}
+            ), 200
+            
+        except ValueError:
+            logging.error(f"Invalid booking_id format: {booking_id}")
+            flash("Invalid booking ID.", "danger")
+            return jsonify(success=False, message="Invalid booking ID"), 400
+        except Exception as e:
+            db.session.rollback()
+            logging.error(f"Error cancelling booking {booking_id}: {e}")
+            flash("An error occurred while cancelling the booking.", "danger")
+            return jsonify(success=False, message="Server error"), 500
