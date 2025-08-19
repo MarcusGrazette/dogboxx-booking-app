@@ -10,8 +10,8 @@ I've limited the scope to keep the project managable. I plan to submit a minimum
 
 The MVP features are:
 - Clients can register and onboard (ie add their address and dog details)
-- Clients can manage walks (view, edit, delete booked walks)
-- Admins can allocate walkers to bookings
+- Clients can manage booking requestes (view, edit, delete)
+- Admins can confirm or reject booking requests and allocate walkers to bookings
 - Admins can see schedules for all walkers, and filter by walker by day and by week
 - Walkers can view their daily and weekly walk schedule
 
@@ -23,16 +23,17 @@ The feature roadmap could include:
 
 ### Admin
 The admin will be able to:
+- Extend the service offering (adding different service types like pet sitting, drop ins, grooming)
 - Manage walkers; add or delete walkers from the roster
 - Manage walker availability; if a walker is on the roster they are available by default, unless the admin marks them as unavailable on a particular day.
 
 
 ### Clients
 CLients can:
-- Register for an account
-- Complete an onboarding flow to provide basic information including their address, pick up instructions and details about their dog.
-- Manage bookings; clients can make new walk bookings, edit or cancel existing bookings.
-- See a monthly walk summary and their invoice.
+- Make recurring bookings, eg every Tuesday morning for the next 3 weeks.
+- See a monthly walk summary 
+- View their monthly invoice.
+- Pay online (perhaps with Stripe integration?)
 
 ### Walkers
 

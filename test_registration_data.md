@@ -2,11 +2,16 @@
 
 ## Valid Test Cases (Should Pass All Validation)
 
-| First Name | Last Name | Email | Password | Confirm Password | Expected Result |
-|------------|-----------|-------|----------|------------------|-----------------|
-| John | Smith | john.smith@gmail.com | Password123! | Password123! | ✅ Success |
-| Sarah | Johnson | sarah.j@gmail.com | MySecure99 | MySecure99 | ✅ Success |
-| Emma | Wilson | emma_wilson@outlook.com | Testing456 | Testing456 | ✅ Success |
+|First Name|Last Name|Email                    |Password     |Confirm Password|Expected Result|
+|----------|---------|-------------------------|-------------|----------------|---------------|
+|John      |Smith    |john.smith@gmail.com     |Password123! |Password123!    |✅ Success      |
+|Sarah     |Johnson  |sarah.j@gmail.com        |MySecure99   |MySecure99      |✅ Success      |
+|Emma      |Wilson   |emma_wilson@outlook.com  |Testing456   |Testing456      |✅ Success      |
+|Michael   |Lee      |michael.lee@yahoo.com    |LeePass2025  |LeePass2025     |✅ Success      |
+|Olivia    |Brown    |olivia.brown@icloud.com  |Brownie$789  |Brownie$789     |✅ Success      |
+|David     |Kim      |david.kim@protonmail.com |KimSecure!1  |KimSecure!1     |✅ Success      |
+|Sophia    |Martinez |sophia.martinez@gmail.com|SophiaM@2025 |SophiaM@2025    |✅ Success      |
+|Ethan     |Clark    |ethan.clark@hotmail.com  |ClarkEthan#55|ClarkEthan#55   |✅ Success      |
 
 ## Invalid Test Cases (Should Trigger Validation Errors)
 

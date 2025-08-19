@@ -120,10 +120,8 @@ Home
 {% endblock %}
 
 {% block scripts %}
-
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Cancel booking functionality loaded');
     
     // Add click event listeners to all cancel buttons
     document.querySelectorAll('.cancel-booking-btn').forEach(button => {
@@ -134,27 +132,17 @@ document.addEventListener('DOMContentLoaded', function() {
             const bookingSlot = this.getAttribute('data-booking-slot');
             const bookingDate = this.getAttribute('data-booking-date');
             
-            console.log('Cancel button clicked:', {
-                bookingId: bookingId,
-                bookingSlot: bookingSlot,
-                bookingDate: bookingDate
-            });
-            
             // Show confirmation dialog
             const confirmMessage = `Are you sure you want to cancel the ${bookingSlot} walk on ${bookingDate}?`;
             
             if (confirm(confirmMessage)) {
-                console.log('User confirmed cancellation for booking:', bookingId);
                 cancelBooking(bookingId, this);
-            } else {
-                console.log('User cancelled the cancellation for booking:', bookingId);
             }
         });
     });
 });
 
 function cancelBooking(bookingId, buttonElement) {
-    console.log('Sending cancel request for booking:', bookingId);
     
     // Disable the button to prevent multiple clicks
     buttonElement.disabled = true;
@@ -164,7 +152,6 @@ function cancelBooking(bookingId, buttonElement) {
     const csrfToken = document.querySelector('meta[name=csrf-token]')?.getAttribute('content') || 
                      document.querySelector('input[name=csrf_token]')?.value;
     
-    console.log('CSRF token:', csrfToken ? 'Found' : 'Not found');
     
     fetch('/cancel_booking', {
         method: 'POST',
@@ -177,19 +164,15 @@ function cancelBooking(bookingId, buttonElement) {
         })
     })
     .then(response => {
-        console.log('Response status:', response.status);
         return response.json();
     })
     .then(data => {
-        console.log('Response data:', data);
         
         if (data.success) {
-            console.log('Booking cancelled successfully');
-            
+           
             // Find the table row and fade it out
             const row = buttonElement.closest('tr');
             if (row) {
-                console.log('Fading out row for booking:', bookingId);
                 row.style.transition = 'opacity 0.5s ease';
                 row.style.opacity = '0.3';
                 
@@ -202,19 +185,12 @@ function cancelBooking(bookingId, buttonElement) {
                 
                 // Replace cancel button with "Cancelled" text
                 buttonElement.outerHTML = '<span class="text-muted small">Cancelled</span>';
-                
-                // The flash message is now handled by the server-side route
-                console.log('Booking cancelled successfully, flash message handled by server');
             }
         } else {
-            console.error('Failed to cancel booking:', data.message);
-            
+           
             // Re-enable button and restore original content
             buttonElement.disabled = false;
             buttonElement.innerHTML = '<i class="bi bi-x-square text-danger"></i>';
-            
-            // Flash message already handled by server
-            console.log('Cancel failed, flash message handled by server');
         }
     })
     .catch(error => {
@@ -228,7 +204,6 @@ function cancelBooking(bookingId, buttonElement) {
         alert('Network error: Could not cancel booking. Please try again.');
     });
 }
-
 </script>
 
 {% endblock %}

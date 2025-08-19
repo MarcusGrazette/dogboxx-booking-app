@@ -91,11 +91,12 @@ def register_routes(app):
         """Log user in"""
         # Redirect if user is already authenticated
         if current_user.is_authenticated:
-            return redirect("/")
+            # Use role-based redirect even for already authenticated users
+            return _redirect_by_role(current_user)
 
         form = LoginForm()
         if form.validate_on_submit():
-            email = form.email.data.strip().lower() # type: ignore
+            email = form.email.data.strip().lower()
             password = form.password.data
             remember_me = form.remember_me.data
 
@@ -103,7 +104,7 @@ def register_routes(app):
             user = User.query.filter_by(email=email).first()
 
             # Check credentials
-            if not user or not check_password_hash(user.hashed_password, password): # type: ignore
+            if not user or not check_password_hash(user.hashed_password, password):
                 flash("Invalid email or password", "error")
                 return render_template("login.html", form=form)
 
@@ -115,11 +116,28 @@ def register_routes(app):
             # Log user in
             login_user(user, remember=remember_me)
 
-            # Redirect to next page or home
+            # Handle next page parameter with role-based fallback
             next_page = request.args.get('next')
-            return redirect(next_page if next_page and next_page.startswith('/') else "/")
+            if next_page and next_page.startswith('/'):
+                return redirect(next_page)
+            
+            # Redirect based on user role
+            return _redirect_by_role(user)
 
         return render_template("login.html", form=form)
+
+    def _redirect_by_role(user):
+        """Helper function to redirect users based on their role"""
+        if user.role == 'admin':
+            return redirect(url_for('admin'))
+        elif user.role == 'walker':
+            return redirect(url_for('walker'))
+        elif user.role == 'client':
+            return redirect(url_for('index'))
+        else:
+            # Handle unexpected roles gracefully
+            flash("Unknown user role. Please contact support.", "warning")
+            return redirect(url_for('index'))
 
     @app.route("/onboard", methods=["GET", "POST"])
     @login_required
@@ -217,7 +235,7 @@ def register_routes(app):
         """Register a new user with improved validation and error handling"""
         # Redirect if user is already authenticated
         if current_user.is_authenticated:
-            return redirect("/")
+            return _redirect_by_role(current_user)
 
         form = RegisterForm()
         if form.validate_on_submit():
@@ -265,8 +283,7 @@ def register_routes(app):
     def logout():
         """Log user out"""
         logout_user()
-        flash("You have been logged out", "info")
-        return redirect("/login")
+        return redirect(url_for('login'))
         
     @app.route("/profile")
     @login_required
@@ -281,14 +298,14 @@ def register_routes(app):
     @login_required
     def admin():
         if current_user.role == 'admin':
-            # Return the next 5 confirmed bookings (could I turn this block into a resuable function? I've used it twice)
+            # Return the next 10 pending bookings
             today = datetime.now(timezone.utc).date()
             pending_bookings = (
                 Booking.query
                 .options(joinedload(Booking.dog))
-                .filter(Booking.status == 'Pending', Booking.date == today)
+                .filter(Booking.status == 'Pending', Booking.date > today)
                 .order_by(Booking.date.asc())
-                .limit(50)
+                .limit(10)
                 .all()
             )
             
@@ -498,13 +515,11 @@ def register_routes(app):
             
             if not booking:
                 logging.error(f"Booking not found or user {current_user.id} not authorized")
-                flash("Booking not found or you're not authorized to cancel it.", "danger")
                 return jsonify(success=False, message="Booking not found or not authorized"), 404
                 
             # Check if booking can be cancelled (not already cancelled)
             if booking.status == 'Cancelled':
                 logging.warning(f"Booking {booking_id} is already cancelled")
-                flash("This booking is already cancelled.", "warning")
                 return jsonify(success=False, message="Booking is already cancelled"), 400
 
             # Update booking status to Cancelled
@@ -512,9 +527,6 @@ def register_routes(app):
             db.session.commit()
             
             logging.info(f"Booking {booking_id} successfully cancelled by user {current_user.id}")
-            
-            # Flash success message
-            flash("Booking cancelled successfully.", "success")
 
             return jsonify(
                 success=True, 
@@ -524,10 +536,8 @@ def register_routes(app):
             
         except ValueError:
             logging.error(f"Invalid booking_id format: {booking_id}")
-            flash("Invalid booking ID.", "danger")
             return jsonify(success=False, message="Invalid booking ID"), 400
         except Exception as e:
             db.session.rollback()
             logging.error(f"Error cancelling booking {booking_id}: {e}")
-            flash("An error occurred while cancelling the booking.", "danger")
             return jsonify(success=False, message="Server error"), 500
