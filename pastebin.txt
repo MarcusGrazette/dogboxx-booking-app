@@ -1,0 +1,112 @@
+  <!--
+  <div class="card mb-3 w-85" style="margin: auto; min-height: 250px;">
+    <h5 class="card-header text-start text-bg-primary">
+      <i class="bi bi-calendar-event"></i>
+      Pending bookings
+    </h5>
+    <div class="card-body text-start">
+      <div class="row mb-3">
+        <p class="card-text">Here are the next 10 upcoming booking requests.</p>
+        <div class="col-md-4">
+
+          <label for="booking-date-picker" class="form-label">Filter by date</label>
+          <input type="date" id="booking-date-picker" class="form-control" value="{{ today_date }}"
+            min="{{ today_date }}">
+        </div>
+      </div>
+      <div id="pending-bookings-container">
+        {% if pending_bookings %}
+          <table class="table table-striped table-bordered table-align-middle">
+            <thead class="table-dark">
+              <tr>
+                <td>Date</td>
+                <td>Dog</td>
+                <td>Slot</td>
+                <td>Assigned to</td>
+                <td></td>
+              </tr>
+            </thead>
+            <tbody id="bookings-tbody">
+              {% for booking in pending_bookings %}
+              <tr id="booking-row-{{ booking.id }}">
+                <td>{{ booking.date_display }}</td>
+                <td>
+                  <div class="d-flex align-items-center gap-2">
+                    <div style="width: 40px; height: 40px; overflow: hidden;" class="rounded-circle flex-shrink-0">
+                      <img src="{{ url_for('static', filename='images/' + booking.dog.pic) }}" class="img-fluid"
+                        alt="{{ booking.dog_name }}" style="width: 100%; height: 100%; object-fit: cover;">
+                    </div>
+                    <div>
+                      <span>{{ booking.dog_name }}</span>
+                    </div>
+                  </div>
+                </td>
+                <td>{{ booking.slot }}</td>
+                <td>
+                  <select class="form-select assign-walker-select" data-booking-id="{{ booking.id }}">
+                    {% for w in walkers %}
+                    <option value="{{ w.id }}" {% if booking.walker_id==w.id %}selected{% endif %}>{{ w.firstname }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td>
+                  <button class="btn btn-success btn-sm confirm-booking-btn" data-booking-id="{{ booking.id }}" {% if not
+                    booking.walker_id %}disabled{% endif %}>
+                    <i class="bi bi-check-circle"></i>
+                  </button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+        <p class="card-text">
+          <i class="bi bi-info-circle"></i>
+          No pending bookings for this date.
+        </p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  -->
+
+
+  @app.route("/admin/confirm_booking", methods=["POST"])
+    @login_required
+    def confirm_booking():
+        """Confirm a booking by changing status to 'Confirmed' (admin only). Returns JSON for AJAX requests."""
+        if current_user.role != 'admin':
+            return jsonify(success=False, message="Forbidden"), 403
+
+        # Accept JSON or form-encoded
+        data = request.get_json(silent=True) or request.form
+        booking_id = data.get("booking_id")
+
+        if not booking_id:
+            return jsonify(success=False, message="Missing booking ID"), 400
+
+        try:
+            booking = Booking.query.filter_by(id=int(booking_id)).first()
+
+            if not booking:
+                return jsonify(success=False, message="Booking not found"), 404
+
+            # Check if booking already has a walker assigned
+            if not booking.walker_id:
+                return jsonify(success=False, message="Cannot confirm booking without assigned walker"), 400
+
+            # Update booking status to Confirmed
+            booking.status = "Confirmed"
+            db.session.commit()
+
+            return jsonify(
+                success=True, 
+                message="Booking confirmed", 
+                booking={"id": booking.id, "status": booking.status}
+            ), 200
+            
+        except Exception as e:
+            db.session.rollback()
+            logging.error(f"Error confirming booking: {e}")
+            return jsonify(success=False, message="Server error"), 500
