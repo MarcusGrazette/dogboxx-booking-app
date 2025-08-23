@@ -1,0 +1,18 @@
+[
+  {"firstname": "Admin", "lastname": "User", "email": "admin@example.com", "role": "admin", "password": "adminpass"},
+
+  {"firstname": "Alice", "lastname": "Walker", "email": "alice.walker@example.com", "role": "walker", "password": "walkerpass1"},
+  {"firstname": "Bob", "lastname": "Walker", "email": "bob.walker@example.com", "role": "walker", "password": "walkerpass2"},
+  {"firstname": "Carol", "lastname": "Walker", "email": "carol.walker@example.com", "role": "walker", "password": "walkerpass3"},
+
+  {"firstname": "John", "lastname": "Doe", "email": "john.doe@example.com", "role": "client", "password": "clientpass"},
+  {"firstname": "Jane", "lastname": "Smith", "email": "jane.smith@example.com", "role": "client", "password": "clientpass"},
+  {"firstname": "Mike", "lastname": "Brown", "email": "mike.brown@example.com", "role": "client", "password": "clientpass"},
+  {"firstname": "Lucy", "lastname": "Green", "email": "lucy.green@example.com", "role": "client", "password": "clientpass"},
+  {"firstname": "Carlos", "lastname": "Ruiz", "email": "carlos.ruiz@example.com", "role": "client", "password": "clientpass"},
+  {"firstname": "Priya", "lastname": "Patel", "email": "priya.patel@example.com", "role": "client", "password": "clientpass"},
+  {"firstname": "Ahmed", "lastname": "Khan", "email": "ahmed.khan@example.com", "role": "client", "password": "clientpass"},
+  {"firstname": "Sara", "lastname": "Lee", "email": "sara.lee@example.com", "role": "client", "password": "clientpass"},
+  {"firstname": "Tom", "lastname": "Clark", "email": "tom.clark@example.com", "role": "client", "password": "clientpass"},
+  {"firstname": "Nina", "lastname": "Gomez", "email": "nina.gomez@example.com", "role": "client", "password": "clientpass"}
+]

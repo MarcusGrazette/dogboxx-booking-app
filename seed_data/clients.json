@@ -1,0 +1,12 @@
+[
+  {"user_email": "john.doe@example.com", "street_address": "123 Main St", "city": "Cambridge", "state": "MA", "postal_code": "02139", "country": "USA", "pickup_instructions": "Leave gate open"},
+  {"user_email": "jane.smith@example.com", "street_address": "45 Oak Ave", "city": "Somerville", "state": "MA", "postal_code": "02143", "country": "USA", "pickup_instructions": "Ring doorbell"},
+  {"user_email": "mike.brown@example.com", "street_address": "9 Pine Rd", "city": "Boston", "state": "MA", "postal_code": "02115", "country": "USA", "pickup_instructions": "Text on arrival"},
+  {"user_email": "lucy.green@example.com", "street_address": "78 Elm St", "city": "Cambridge", "state": "MA", "postal_code": "02138", "country": "USA", "pickup_instructions": "Back door"},
+  {"user_email": "carlos.ruiz@example.com", "street_address": "200 River St", "city": "Boston", "state": "MA", "postal_code": "02107", "country": "USA", "pickup_instructions": "Call on arrival"},
+  {"user_email": "priya.patel@example.com", "street_address": "56 Cedar Ln", "city": "Arlington", "state": "MA", "postal_code": "02474", "country": "USA", "pickup_instructions": "Use side gate"},
+  {"user_email": "ahmed.khan@example.com", "street_address": "101 Maple Ave", "city": "Somerville", "state": "MA", "postal_code": "02144", "country": "USA", "pickup_instructions": "Leave with neighbor if not home"},
+  {"user_email": "sara.lee@example.com", "street_address": "33 Willow Dr", "city": "Boston", "state": "MA", "postal_code": "02116", "country": "USA", "pickup_instructions": "Knock loudly"},
+  {"user_email": "tom.clark@example.com", "street_address": "12 Birch St", "city": "Cambridge", "state": "MA", "postal_code": "02140", "country": "USA", "pickup_instructions": "Use building buzzer"},
+  {"user_email": "nina.gomez@example.com", "street_address": "7 Spruce Ct", "city": "Cambridge", "state": "MA", "postal_code": "02142", "country": "USA", "pickup_instructions": "Gate code 1234"}
+]

@@ -5,125 +5,45 @@ Admin
 {% endblock %}
 
 {% block main %}
-<div class="container">
+<div class="container-fluid">
   <h1> Hello, {{ user.firstname }}</h1>
-  <div class="card mb-3 w-85" style="margin: auto; min-height: 250px;">
+
+  <div class="card mb-3" style="min-height: 600px;">
     <h5 class="card-header text-start text-bg-primary">
-      <i class="bi bi-calendar-event"></i>
-      Pending bookings
+      <i class="bi bi-calendar2-check"></i>
+      Allocate booking requests
     </h5>
     <div class="card-body text-start">
       <div class="row mb-3">
-        <p class="card-text">Here are the next 10 upcoming booking requests.</p>
         <div class="col-md-4">
-
-          <label for="booking-date-picker" class="form-label">Filter by date</label>
-          <input type="date" id="booking-date-picker" class="form-control" value="{{ today_date }}"
-            min="{{ today_date }}">
+          
+          <input type="date" id="booking-date-picker" class="form-control" value="{{ today_date }}">
+        </div>
+        <div class="col-md-8">
+          <p class="text-muted mb-0"><i class="bi bi-info-circle"></i> Select a date to see booking requests.</p>
         </div>
       </div>
       <div id="pending-bookings-container">
-        {% if pending_bookings %}
-          <table class="table table-striped table-bordered table-align-middle">
-            <thead class="table-dark">
-              <tr>
-                <td>Date</td>
-                <td>Dog</td>
-                <td>Slot</td>
-                <td>Assigned to</td>
-                <td></td>
-              </tr>
-            </thead>
-            <tbody id="bookings-tbody">
-              {% for booking in pending_bookings %}
-              <tr id="booking-row-{{ booking.id }}">
-                <td>{{ booking.date_display }}</td>
-                <td>
-                  <div class="d-flex align-items-center gap-2">
-                    <div style="width: 40px; height: 40px; overflow: hidden;" class="rounded-circle flex-shrink-0">
-                      <img src="{{ url_for('static', filename='images/' + booking.dog.pic) }}" class="img-fluid"
-                        alt="{{ booking.dog_name }}" style="width: 100%; height: 100%; object-fit: cover;">
-                    </div>
-                    <div>
-                      <span>{{ booking.dog_name }}</span>
-                    </div>
-                  </div>
-                </td>
-                <td>{{ booking.slot }}</td>
-                <td>
-                  <select class="form-select assign-walker-select" data-booking-id="{{ booking.id }}">
-                    {% for w in walkers %}
-                    <option value="{{ w.id }}" {% if booking.walker_id==w.id %}selected{% endif %}>{{ w.firstname }}
-                    </option>
-                    {% endfor %}
-                  </select>
-                </td>
-                <td>
-                  <button class="btn btn-success btn-sm confirm-booking-btn" data-booking-id="{{ booking.id }}" {% if not
-                    booking.walker_id %}disabled{% endif %}>
-                    <i class="bi bi-check-circle"></i>
-                  </button>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        {% else %}
-        <p class="card-text">
-          <i class="bi bi-info-circle"></i>
-          No pending bookings for this date.
-        </p>
-        {% endif %}
+        <!-- Drag and drop interface will be loaded here -->
       </div>
     </div>
   </div>
 
-  <div class="card mb-3 w-85" style="margin: auto; min-height: 250px;">
-    <h5 class="card-header text-start text-bg-secondary">
-      <i class="bi bi-person-walking"></i>
-      Walker schedules
-    </h5>
-    <div class="card-body text-start">
-      <p class="card-text"> Pick a walker to see their schedule for the week.</p>
-      <table class="table table-striped table-bordered">
-        <thead class="table-dark">
-          <tr>
-            <td></td>
-            <td></td>
-            <td>Mon</td>
-            <td>Tues</td>
-            <td>Weds</td>
-            <td>Thurs</td>
-            <td>Fri</td>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Mon 5 Aug</td>
-            <td>Paddy</td>
-            <td>Morning</td>
-          </tr>
-          <tr>
-            <td>Tues 6 Aug</td>
-            <td>Fluffy</td>
-            <td>Afternoon</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-  <h1>Dashboards/stats</h1>
-</div>
 {% endblock %}
 
 {% block scripts %}
 {{ super() }}
 <script>
+  // Based on "How To Build Sortable Drag & Drop With Vanilla Javascript" https://youtu.be/jfYWwQrtzzY
+  // Code generated with Claude.ai
   (function () {
-    console.log("Script loading...");
+    console.log("Drag-and-drop admin script loading...");
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
     console.log("CSRF Token found:", !!csrfToken);
+
+    let draggedCard = null;
+    let originalParent = null;
 
     async function loadBookingsForDate(selectedDate) {
       console.log("Loading bookings for date:", selectedDate);
@@ -132,7 +52,7 @@ Admin
       if (!container) return;
 
       // Show loading state
-      container.innerHTML = '<div class="text-center"><i class="bi bi-hourglass-split"></i> Loading...</div>';
+      container.innerHTML = '<div class="text-center p-4"><i class="bi bi-hourglass-split"></i> Loading...</div>';
 
       try {
         const res = await fetch(`{{ url_for('admin_bookings_by_date') }}?date=${selectedDate}`, {
@@ -150,7 +70,10 @@ Admin
 
         const html = await res.text();
         container.innerHTML = html;
-        console.log("Bookings updated for date:", selectedDate);
+        console.log("Bookings interface updated for date:", selectedDate);
+
+        // Initialize drag and drop after content is loaded
+        initializeDragAndDrop();
 
       } catch (err) {
         console.error("Network/JS error in loadBookingsForDate:", err);
@@ -158,16 +81,176 @@ Admin
       }
     }
 
-    async function assignWalker(bookingId, walkerId, selectEl) {
-      console.log("assignWalker() called with:", bookingId, walkerId);
+    function initializeDragAndDrop() {
+      console.log("Initializing drag and drop functionality...");
 
-      // Show loading state
-      selectEl.disabled = true;
+      // Add drag event listeners to all draggable cards
+      document.querySelectorAll('.booking-card.draggable').forEach(card => {
+        card.addEventListener('dragstart', handleDragStart);
+        card.addEventListener('dragend', handleDragEnd);
+      });
 
+      // Add drop event listeners to all drop zones
+      document.querySelectorAll('.drop-zone').forEach(zone => {
+        zone.addEventListener('dragover', handleDragOver);
+        zone.addEventListener('dragenter', handleDragEnter);
+        zone.addEventListener('dragleave', handleDragLeave);
+        zone.addEventListener('drop', handleDrop);
+      });
+
+      console.log("Drag and drop initialized successfully");
+    }
+
+    function handleDragStart(e) {
+      draggedCard = e.currentTarget;
+      originalParent = draggedCard.parentNode;
+      
+      console.log("Drag started for booking:", draggedCard.dataset.bookingId);
+      
+      // Store booking data in dataTransfer
+      e.dataTransfer.setData('text/plain', JSON.stringify({
+        bookingId: draggedCard.dataset.bookingId,
+        currentSlot: draggedCard.dataset.currentSlot,
+        currentWalkerId: draggedCard.dataset.currentWalkerId,
+        dogName: draggedCard.dataset.dogName
+      }));
+      
+      // Add visual feedback
+      draggedCard.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    }
+
+    function handleDragEnd(e) {
+      console.log("Drag ended");
+      
+      // Remove visual feedback
+      if (draggedCard) {
+        draggedCard.classList.remove('dragging');
+      }
+      
+      // Clear drop zone highlights
+      document.querySelectorAll('.drop-zone').forEach(zone => {
+        zone.classList.remove('drag-over', 'drag-over-invalid');
+      });
+    }
+
+    function handleDragOver(e) {
+      e.preventDefault(); // Allow drop
+      
+      const dropZone = e.currentTarget;
+      const walkerId = dropZone.dataset.walkerId;
+      const slot = dropZone.dataset.slot;
+      
+      // Check capacity for walker zones
+      if (walkerId && !canAcceptDrop(dropZone)) {
+        e.dataTransfer.dropEffect = 'none';
+        return;
+      }
+      
+      e.dataTransfer.dropEffect = 'move';
+    }
+
+    function handleDragEnter(e) {
+      e.preventDefault();
+      
+      const dropZone = e.currentTarget;
+      
+      // Add appropriate highlight class
+      if (canAcceptDrop(dropZone)) {
+        dropZone.classList.add('drag-over');
+        dropZone.classList.remove('drag-over-invalid');
+      } else {
+        dropZone.classList.add('drag-over-invalid');
+        dropZone.classList.remove('drag-over');
+      }
+    }
+
+    function handleDragLeave(e) {
+      const dropZone = e.currentTarget;
+      
+      // Only remove highlights if we're actually leaving the zone
+      if (!dropZone.contains(e.relatedTarget)) {
+        dropZone.classList.remove('drag-over', 'drag-over-invalid');
+      }
+    }
+
+    function canAcceptDrop(dropZone) {
+      const walkerId = dropZone.dataset.walkerId;
+      
+      // Pending zones always accept drops
+      if (!walkerId) return true;
+      
+      // Check walker zone capacity
+      const currentCards = dropZone.querySelectorAll('.booking-card').length;
+      return currentCards < 6;
+    }
+
+    async function handleDrop(e) {
+      e.preventDefault();
+      
+      const dropZone = e.currentTarget;
+      const walkerId = dropZone.dataset.walkerId;
+      const newSlot = dropZone.dataset.slot;
+      
+      console.log("Drop detected in zone:", { walkerId, newSlot });
+      
+      // Remove highlight classes
+      dropZone.classList.remove('drag-over', 'drag-over-invalid');
+      
+      // Check if drop is valid
+      if (!canAcceptDrop(dropZone)) {
+        console.log("Drop rejected - zone at capacity");
+        animateSnapBack();
+        return;
+      }
+      
       try {
-        const payload = { booking_id: bookingId, walker_id: walkerId };
-        console.log("Sending payload:", payload);
+        // Get booking data
+        const bookingData = JSON.parse(e.dataTransfer.getData('text/plain'));
+        console.log("Processing drop for booking:", bookingData);
+        
+        // Check if this is actually a change
+        const currentWalkerId = bookingData.currentWalkerId || '';
+        const currentSlot = bookingData.currentSlot;
+        
+        if (walkerId === currentWalkerId && newSlot === currentSlot) {
+          console.log("No change needed - same position");
+          return;
+        }
+        
+        // Make API call to update booking
+        await updateBookingAssignment(
+          bookingData.bookingId, 
+          walkerId, 
+          newSlot, 
+          dropZone
+        );
+        
+      } catch (error) {
+        console.error("Error processing drop:", error);
+        animateSnapBack();
+      }
+    }
 
+    async function updateBookingAssignment(bookingId, walkerId, slot, dropZone) {
+      console.log("Updating booking assignment:", { bookingId, walkerId, slot });
+      
+      // Show loading state on card
+      if (draggedCard) {
+        const originalContent = draggedCard.innerHTML;
+        draggedCard.innerHTML = '<div class="text-center p-2"><i class="bi bi-hourglass-split"></i></div>';
+        draggedCard.style.pointerEvents = 'none';
+      }
+      
+      try {
+        const payload = { 
+          booking_id: bookingId, 
+          walker_id: walkerId || null,
+          slot: slot 
+        };
+        
+        console.log("Sending API request:", payload);
+        
         const res = await fetch("{{ url_for('assign_walker') }}", {
           method: "POST",
           headers: {
@@ -178,125 +261,180 @@ Admin
           credentials: "same-origin"
         });
 
-        console.log("Response status:", res.status);
+        console.log("API response status:", res.status);
+        
         if (!res.ok) {
           const text = await res.text();
-          console.error("assign_walker failed", res.status, text);
-          return;
+          console.error("API request failed:", res.status, text);
+          throw new Error(`API request failed: ${res.status}`);
         }
 
         const data = await res.json();
-        console.log("assign_walker response", data);
+        console.log("API response:", data);
 
         if (data.success) {
-          // Enable the confirm button for this booking
-          const row = document.getElementById(`booking-row-${bookingId}`);
-          if (row) {
-            const confirmBtn = row.querySelector('.confirm-booking-btn');
-            if (confirmBtn) {
-              confirmBtn.disabled = false;
-              console.log("Enabled confirm button for booking", bookingId);
-            }
-          }
+          // Move card to new location
+          moveCardToDropZone(draggedCard, dropZone);
+          
+          // Update card styling and data
+          updateCardAfterSuccess(draggedCard, walkerId, slot);
+          
+          // Update capacity counters
+          updateCapacityCounters();
+          
+          console.log("Booking assignment updated successfully");
+          
         } else {
-          console.warn("assign_walker returned success=false", data);
+          console.error("API returned failure:", data.message);
+          throw new Error(data.message || "Assignment failed");
         }
-      } catch (err) {
-        console.error("Network/JS error in assignWalker:", err);
-      } finally {
-        // Re-enable select
-        selectEl.disabled = false;
+        
+      } catch (error) {
+        console.error("Error updating booking assignment:", error);
+        animateSnapBack();
+        
+        // Show error message
+        showNotification("Failed to update booking assignment. Please try again.", "error");
       }
     }
 
-    async function confirmBooking(bookingId, buttonEl) {
-      console.log("confirmBooking() called with:", bookingId);
-
-      // Show loading state
-      const originalText = buttonEl.innerHTML;
-      buttonEl.disabled = true;
-      buttonEl.innerHTML = '<i class="bi bi-hourglass-split"></i> Confirming...';
-
-      try {
-        const payload = { booking_id: bookingId };
-        console.log("Sending payload:", payload);
-
-        const res = await fetch("{{ url_for('confirm_booking') }}", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(csrfToken ? { "X-CSRFToken": csrfToken } : {})
-          },
-          body: JSON.stringify(payload),
-          credentials: "same-origin"
-        });
-
-        console.log("Response status:", res.status);
-        if (!res.ok) {
-          const text = await res.text();
-          console.error("confirm_booking failed", res.status, text);
-          buttonEl.innerHTML = originalText;
-          buttonEl.disabled = false;
-          return;
-        }
-
-        const data = await res.json();
-        console.log("confirm_booking response", data);
-
-        if (data.success) {
-          // Fade out the row
-          const row = document.getElementById(`booking-row-${bookingId}`);
-          if (row) {
-            const tbody = row.closest('tbody');
-            const isLastRow = tbody && tbody.children.length === 1;
-
-            row.style.transition = 'opacity 0.5s ease-out';
-            row.style.opacity = '0';
-
-            // Remove row after animation completes
-            setTimeout(() => {
-              row.remove();
-
-              // If this was the last row, replace the entire table with empty message
-              if (isLastRow) {
-                const container = document.getElementById('pending-bookings-container');
-                if (container) {
-                  container.innerHTML = '<p class="card-text"> <i class="bi bi-info-circle"></i> No pending bookings for this date.</p>';
-                }
-              }
-            }, 500);
-          }
-        } else {
-          console.warn("confirm_booking returned success=false", data);
-          buttonEl.innerHTML = originalText;
-          buttonEl.disabled = false;
-        }
-      } catch (err) {
-        console.error("Network/JS error in confirmBooking:", err);
-        buttonEl.innerHTML = originalText;
-        buttonEl.disabled = false;
+    function moveCardToDropZone(card, dropZone) {
+      // Find the booking-cards container within the drop zone
+      const cardsContainer = dropZone.querySelector('.booking-cards');
+      if (cardsContainer) {
+        cardsContainer.appendChild(card);
+      } else {
+        dropZone.appendChild(card);
       }
     }
 
-    // Event delegation for both select changes and button clicks
-    document.addEventListener('DOMContentLoaded', () => {
-      console.log("DOM loaded, setting up event delegation...");
+    function updateCardAfterSuccess(card, walkerId, slot) {
+      // Update data attributes
+      card.dataset.currentWalkerId = walkerId || '';
+      card.dataset.currentSlot = slot;
 
-      // Check if elements exist
-      const selects = document.querySelectorAll('.assign-walker-select');
-      const buttons = document.querySelectorAll('.confirm-booking-btn');
-      console.log(`Found ${selects.length} select elements and ${buttons.length} button elements`);
+      // Determine img src from data attribute (prefer original filename)
+      const dogPic = card.dataset.dogPic || '';
+      const imgSrc = dogPic ? `/static/images/${dogPic}` : '/static/images/default-dog.png';
+      
+      // Update styling
+      if (walkerId) {
+        // Card is now assigned to a walker
+        card.classList.remove('border-dark');
+        card.classList.add('border-success');
+      } else {
+        // Card is back to pending
+        card.classList.remove('border-success');
+        card.classList.add('border-dark');
+      }
+      
+      // Restore interactivity
+      card.style.pointerEvents = '';
+      
+      // Restore original content structure
+      card.style.pointerEvents = '';
+      const dogName = card.dataset.dogName || '';
+      
+      card.innerHTML = `
+        <div class="d-flex align-items-center gap-2 p-2">
+          <div style="width: 30px; height: 30px; overflow: hidden;" class="rounded-circle flex-shrink-0">
+            <img src="${imgSrc}" class="img-fluid" alt="${dogName}" 
+                 style="width: 100%; height: 100%; object-fit: cover;"
+                 onerror="this.src='/static/images/default-dog.png'">
+          </div>
+          <div>
+            <small>${dogName}</small>
+          </div>
+        </div>
+      `;
+    }
 
-      // Debug: Log all select elements and their data
-      selects.forEach((select, index) => {
-        console.log(`Select ${index}:`, {
-          bookingId: select.dataset.bookingId,
-          value: select.value,
-          classes: select.className
-        });
+    function updateCapacityCounters() {
+      // Update capacity counters for all walker zones
+      document.querySelectorAll('.drop-zone.walker-zone').forEach(zone => {
+        const walkerId = zone.dataset.walkerId;
+        const slot = zone.dataset.slot;
+        const currentCount = zone.querySelectorAll('.booking-card').length;
+        
+        const header = zone.querySelector('h6');
+        if (header) {
+          header.textContent = `${slot} (${currentCount}/6)`;
+        }
+        
+        // Update zone background based on capacity
+        if (currentCount >= 6) {
+          zone.classList.remove('bg-light');
+          zone.classList.add('bg-danger', 'bg-opacity-25');
+        } else {
+          zone.classList.remove('bg-danger', 'bg-opacity-25');
+          zone.classList.add('bg-light');
+        }
       });
+    }
 
-      // Event listener for date picker
+    function animateSnapBack() {
+      if (draggedCard && originalParent) {
+        console.log("Animating snap back to original position");
+        
+        // Add snap-back animation
+        draggedCard.classList.add('snap-back');
+        
+        // Move card back to original position
+        originalParent.appendChild(draggedCard);
+        
+        // Remove animation class after animation completes
+        setTimeout(() => {
+          if (draggedCard) {
+            draggedCard.classList.remove('snap-back');
+            draggedCard.style.pointerEvents = '';
+            
+            // Restore original content if it was modified
+            const dogName = card.dataset.dogName || '';
+            const dogPic = card.dataset.dogPic || '';
+            const imgSrc = dogPic ? `/static/images/${dogPic}` : '/static/images/default-dog.png';
+            
+            draggedCard.innerHTML = `
+              <div class="d-flex align-items-center gap-2 p-2">
+                <div style="width: 30px; height: 30px; overflow: hidden;" class="rounded-circle flex-shrink-0">
+                  <img src="${imgSrc}" class="img-fluid" alt="${dogName}" 
+                       style="width: 100%; height: 100%; object-fit: cover;"
+                       onerror="this.src='/static/images/default-dog.png'">
+                </div>
+                <div>
+                  <small>${dogName}</small>
+                </div>
+              </div>
+            `;
+          }
+        }, 500);
+      }
+    }
+
+    function showNotification(message, type = 'info') {
+      // Create notification element
+      const notification = document.createElement('div');
+      notification.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
+      notification.style.cssText = 'top: 20px; right: 20px; z-index: 1050; max-width: 400px;';
+      notification.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      `;
+      
+      document.body.appendChild(notification);
+      
+      // Auto-dismiss after 5 seconds
+      setTimeout(() => {
+        if (notification.parentNode) {
+          notification.parentNode.removeChild(notification);
+        }
+      }, 5000);
+    }
+
+    // Initialize on DOM ready
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log("DOM loaded, setting up drag-and-drop admin interface...");
+
+      // Set up date picker event listener
       const datePicker = document.getElementById('booking-date-picker');
       if (datePicker) {
         console.log("Date picker found, attaching change listener");
@@ -307,56 +445,25 @@ Admin
             loadBookingsForDate(selectedDate);
           }
         });
+
+        // Load bookings for initial date
+        const initialDate = datePicker.value;
+        if (initialDate) {
+          loadBookingsForDate(initialDate);
+        }
       } else {
         console.log("Date picker not found");
       }
 
-      // Single event delegation handler for the entire document
-      document.body.addEventListener('change', (e) => {
-        console.log("Change event detected on:", e.target);
-        const el = e.target;
-
-        // Handle walker assignment select changes
-        if (el.classList && el.classList.contains('assign-walker-select')) {
-          const bookingId = el.dataset.bookingId;
-          const walkerId = el.value;
-          console.log("Walker select change detected:", bookingId, walkerId);
-
-          if (bookingId && walkerId) {
-            console.log("Calling assignWalker...");
-            assignWalker(bookingId, walkerId, el);
-          } else {
-            console.log("Missing bookingId or walkerId:", { bookingId, walkerId });
-          }
-        } else {
-          console.log("Element does not have assign-walker-select class:", el.className);
-        }
-      });
-
-      // Event delegation for confirm button clicks
-      document.body.addEventListener('click', (e) => {
-        console.log("Click event detected on:", e.target);
-        const el = e.target.closest('.confirm-booking-btn');
-
-        if (el && !el.disabled) {
-          const bookingId = el.dataset.bookingId;
-          console.log("Confirm button click detected:", bookingId);
-
-          if (bookingId) {
-            console.log("Calling confirmBooking...");
-            confirmBooking(bookingId, el);
-          } else {
-            console.log("Missing bookingId:", bookingId);
-          }
-        } else if (el && el.disabled) {
-          console.log("Button is disabled, ignoring click");
-        } else {
-          console.log("Click target is not a confirm button");
-        }
-      });
-
-      console.log("Event listeners attached successfully");
+      console.log("Drag-and-drop admin interface setup complete");
     });
+
+    // Clean up on page unload
+    window.addEventListener('beforeunload', () => {
+      draggedCard = null;
+      originalParent = null;
+    });
+
   })();
 </script>
 {% endblock %}

@@ -1,0 +1,38 @@
+{% extends "layout.html" %}
+
+{% block title %}
+Home
+{% endblock %}
+
+{% block main %}
+<div class="container">
+    <div class="row justify-content-center mb-3">
+        <h1>Hello, {{ user.firstname }}.</h1>
+    </div>
+
+    <!-- Show flash messages. -->
+    {% include '_flashes.html' %}
+
+    <div class="card mb-3 w-75" style="margin: auto;">
+        <h5 class="card-header text-start text-bg-primary">
+            <i class="bi bi-calendar-week"></i>
+            Weekly schedule
+        </h5>
+
+        <div class="col-md-12">
+            <div class="card-body text-start">
+                <p class="card-text">
+                    
+                </p>
+            </div>
+        </div>
+
+    </div>
+
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+
+{% endblock %}

@@ -10,7 +10,7 @@
 |Michael   |Lee      |michael.lee@yahoo.com    |LeePass2025  |LeePass2025     |✅ Success      |
 |Olivia    |Brown    |olivia.brown@icloud.com  |Brownie$789  |Brownie$789     |✅ Success      |
 |David     |Kim      |david.kim@protonmail.com |KimSecure!1  |KimSecure!1     |✅ Success      |
-|Sophia    |Martinez |sophia.martinez@gmail.com|SophiaM@2025 |SophiaM@2025    |✅ Success      |
+|Alice      |Martinez |alice.martinez@gmail.com|SophiaM@2025 |SophiaM@2025    |✅ Success      |
 |Ethan     |Clark    |ethan.clark@hotmail.com  |ClarkEthan#55|ClarkEthan#55   |✅ Success      |
 
 ## Invalid Test Cases (Should Trigger Validation Errors)

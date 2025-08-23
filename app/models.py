@@ -157,6 +157,7 @@ class Walker(db.Model):
     __tablename__ = 'walkers'
     
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     firstname = db.Column(db.String(80), nullable=False)
     lastname = db.Column(db.String(80), nullable=False)
     
@@ -166,6 +167,8 @@ class Walker(db.Model):
             'firstname': self.firstname,
             'lastname': self.lastname,
             }
+    
+    user = db.relationship('User', backref=db.backref('walker', uselist=False))
 
 class Booking(db.Model):
     __tablename__ = 'bookings'
@@ -174,14 +177,13 @@ class Booking(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     dog_id = db.Column(db.Integer, db.ForeignKey('dogs.id'), nullable=False)
     date = db.Column(db.Date, default=lambda: datetime.now(timezone.utc).date())
-    slot = db.Column(db.Enum('Morning', 'Afternoon', name='booking_slot'), 
-                    nullable=False, default='Morning')
-    walker_id = db.Column(db.Integer, db.ForeignKey('walkers.id'), nullable=False, default='1')
-    status = db.Column(db.Enum('Confirmed', 'Pending', 'Modified' ,'Cancelled', name='booking_status'), 
-                    nullable=False, default='Pending')
+    slot = db.Column(db.Enum('Morning', 'Afternoon', name='booking_slot'), nullable=False, default='Morning')
+    walker_id = db.Column(db.Integer, db.ForeignKey('walkers.id'), nullable=True, default='')
+    status = db.Column(db.Enum('Confirmed', 'Pending', 'Modified' ,'Cancelled', name='booking_status'), nullable=False, default='Pending')
     
     user = db.relationship('User', backref=db.backref('bookings', lazy=True))
     dog = db.relationship('Dog', backref=db.backref('bookings', lazy=True))
+    walker = db.relationship('Walker', backref=db.backref('walkers', lazy=True))
     
     def to_dict(self):
         return {
@@ -191,22 +193,4 @@ class Booking(db.Model):
             'date': self.date.isoformat() if self.date else None,
             'slot': self.slot,
             'status': self.status
-        }
-
-class Message (db.Model):
-    __tablename__ = 'messages'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    content = db.Column(db.String, nullable=False)
-    
-    display_from = db.Column(db.Date, default=lambda: datetime.now(timezone.utc).date())
-    display_to = db.Column(db.Date, default=lambda: datetime.now(timezone.utc).date())
-    type = db.Column(db.Enum('Warning', 'Info', name='message_type'), 
-                    nullable=False, default='Info')
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'content': self.content,
-            'display_from': self.display_from.isoformat() if self.display_from else None,
-            'display_to': self.display_to.isoformat() if self.display_to else None,
         }

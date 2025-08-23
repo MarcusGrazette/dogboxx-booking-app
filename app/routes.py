@@ -327,7 +327,7 @@ def register_routes(app):
     @app.route("/admin/assign_walker", methods=["POST"])
     @login_required
     def assign_walker():
-        """Assign a walker to a booking without changing status (admin only). Returns JSON for AJAX requests."""
+        """Assign a walker and slot to a booking (admin only). Returns JSON for AJAX requests."""
         if current_user.role != 'admin':
             return jsonify(success=False, message="Forbidden"), 403
 
@@ -335,75 +335,84 @@ def register_routes(app):
         data = request.get_json(silent=True) or request.form
         booking_id = data.get("booking_id")
         walker_id = data.get("walker_id")
+        slot = data.get("slot")  # New parameter for slot assignment
 
-        if not booking_id or not walker_id:
-            return jsonify(success=False, message="Missing booking or walker"), 400
-
-        try:
-            booking = Booking.query.filter_by(id=int(booking_id)).first()
-            walker = Walker.query.filter_by(id=int(walker_id)).first()
-
-            if not booking or not walker:
-                return jsonify(success=False, message="Booking or walker not found"), 404
-
-            # Only update the walker assignment - do not change status
-            booking.walker_id = walker.id
-            db.session.commit()
-
-            return jsonify(
-                success=True, 
-                message="Walker assigned", 
-                walker={"id": walker.id, "name": walker.firstname}
-            ), 200
-            
-        except Exception as e:
-            db.session.rollback()
-            logging.error(f"Error assigning walker: {e}")
-            return jsonify(success=False, message="Server error"), 500
-        
-    @app.route("/admin/confirm_booking", methods=["POST"])
-    @login_required
-    def confirm_booking():
-        """Confirm a booking by changing status to 'Confirmed' (admin only). Returns JSON for AJAX requests."""
-        if current_user.role != 'admin':
-            return jsonify(success=False, message="Forbidden"), 403
-
-        # Accept JSON or form-encoded
-        data = request.get_json(silent=True) or request.form
-        booking_id = data.get("booking_id")
-
+        # booking_id is required
         if not booking_id:
             return jsonify(success=False, message="Missing booking ID"), 400
 
+        # Normalize walker_id: treat None, empty string, or literal 'null'/'None' as unassign
+        unassign = False
+        if walker_id is None or str(walker_id).strip() == "" or str(walker_id).lower() in ("null", "none"):
+            unassign = True
+
+        # Validate slot if provided
+        if slot and slot not in ("Morning", "Afternoon"):
+            return jsonify(success=False, message="Invalid slot value"), 400
+
         try:
             booking = Booking.query.filter_by(id=int(booking_id)).first()
-
             if not booking:
                 return jsonify(success=False, message="Booking not found"), 404
 
-            # Check if booking already has a walker assigned
-            if not booking.walker_id:
-                return jsonify(success=False, message="Cannot confirm booking without assigned walker"), 400
+            # Handle unassign (move back to pending)
+            if unassign:
+                if slot:
+                    booking.slot = slot
+                booking.walker_id = None
+                booking.status = 'Pending'
+                db.session.commit()
+                return jsonify(
+                    success=True,
+                    message="Booking unassigned and set to Pending",
+                    booking={"id": booking.id, "walker_id": None, "status": booking.status}
+                ), 200
 
-            # Update booking status to Confirmed
-            booking.status = "Confirmed"
+            # Otherwise, assign to a walker (normal flow)
+            walker = Walker.query.filter_by(id=int(walker_id)).first()
+            if not walker:
+                return jsonify(success=False, message="Walker not found"), 404
+
+            # Check walker capacity for the given slot and date
+            if slot:
+                same_slot_bookings = Booking.query.filter(
+                    Booking.walker_id == walker.id,
+                    Booking.date == booking.date,
+                    Booking.slot == slot,
+                    Booking.status != 'Cancelled',
+                    Booking.id != booking.id  # Exclude current booking if reassigning
+                ).count()
+                
+                if same_slot_bookings >= 6:
+                    return jsonify(success=False, message=f"Walker already has maximum bookings (6) for {slot} slot"), 400
+
+            # Update walker assignment and slot
+            booking.walker_id = walker.id
+            booking.status = 'Confirmed'
+            if slot:
+                booking.slot = slot
             db.session.commit()
 
             return jsonify(
                 success=True, 
-                message="Booking confirmed", 
-                booking={"id": booking.id, "status": booking.status}
+                message="Walker and slot assigned successfully", 
+                booking={
+                    "id": booking.id, 
+                    "walker_id": walker.id,
+                    "walker_name": walker.firstname,
+                    "slot": booking.slot
+                }
             ), 200
             
         except Exception as e:
             db.session.rollback()
-            logging.error(f"Error confirming booking: {e}")
+            logging.error(f"Error assigning/unassigning walker: {e}")
             return jsonify(success=False, message="Server error"), 500
-        
+         
     @app.route("/admin/bookings_by_date")
     @login_required
     def admin_bookings_by_date():
-        """Return HTML fragment of pending bookings for a specific date (admin only)."""
+        """Return HTML fragment of drag-and-drop booking allocation interface (admin only)."""
         if current_user.role != 'admin':
             return "Forbidden", 403
 
@@ -416,74 +425,280 @@ def register_routes(app):
             # Parse the date string (format: YYYY-MM-DD)
             selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
             
-            # Get pending bookings for the selected date
-            pending_bookings = (
+            # Get all bookings for the selected date (pending and assigned)
+            all_bookings = (
                 Booking.query
-                .options(joinedload(Booking.dog))
+                .options(joinedload(Booking.dog), joinedload(Booking.walker))
                 .filter(
-                    Booking.status == 'Pending', 
-                    Booking.date == selected_date
+                    Booking.date == selected_date,
+                    Booking.status != 'Cancelled'
                 )
-                .order_by(Booking.slot.asc())
                 .all()
             )
             
-            # Add display properties
-            for b in pending_bookings:
-                b.dog_name = b.dog.name if b.dog else None
+            # Separate pending and assigned bookings
+            pending_bookings = [b for b in all_bookings if b.status == 'Pending']
+            assigned_bookings = [b for b in all_bookings if b.walker_id is not None]
+            
+            # Add display properties to all bookings
+            for b in all_bookings:
+                b.dog_name = b.dog.name if b.dog else "Unknown"
+                b.dog_pic = b.dog.pic if b.dog and b.dog.pic else None
+                b.walker_name = b.walker.firstname if b.walker else None
 
-            # Get walkers for the select dropdowns
+            # Get all walkers
             walkers = Walker.query.all()
             
-            # Return just the table HTML fragment
-            if pending_bookings:
-                table_html = '''
-                <table class="table table-striped table-bordered">
-                    <thead class="table-dark">
-                        <tr>
-                            <td>Dog</td>
-                            <td>Slot</td>
-                            <td>Assigned to</td>
-                            <td>Confirm</td>
-                        </tr>
-                    </thead>
-                    <tbody id="bookings-tbody">
+            # Create walker capacity tracking
+            walker_capacity = {}
+            for walker in walkers:
+                walker_capacity[walker.id] = {
+                    'Morning': 0,
+                    'Afternoon': 0
+                }
+            
+            # Count assigned bookings per walker per slot
+            for booking in assigned_bookings:
+                if booking.walker_id and booking.slot:
+                    walker_capacity[booking.walker_id][booking.slot] += 1
+            
+            # Generate the drag-and-drop HTML interface
+            if not pending_bookings and not assigned_bookings:
+                return '<p class="card-text"><i class="bi bi-info-circle"></i> No booking requests for the selected date. </p>'
+            
+            html = '''
+            <div class="row g-3" id="drag-drop-container">
+                <!-- Pending Bookings Column -->
+                <div class="col-md-3">
+                    <div class="card h-100">
+                        <div class="card-header bg-warning text-dark">
+                            <h6 class="mb-0"><i class="bi bi-hourglass"></i> Pending</h6>
+                        </div>
+                        <div class="card-body p-2">
+                            <!-- Morning Pending -->
+                            <div class="drop-zone pending-zone" data-slot="Morning" data-walker-id="">
+                                <h6 class="text-muted mb-2">Morning</h6>
+                                <div class="booking-cards">
+            '''
+            
+            # Add morning pending bookings
+            morning_pending = [b for b in pending_bookings if b.slot == 'Morning']
+            for booking in morning_pending:
+                pic_src = f"/static/images/{booking.dog_pic}" if booking.dog_pic else "/static/images/default-dog.png"
+                html += f'''
+                    <div class="card booking-card draggable bg-light border-dark" 
+                        draggable="true" 
+                        data-booking-id="{booking.id}"
+                        data-current-slot="{booking.slot}"
+                        data-current-walker-id="{booking.walker_id or ''}"
+                        data-dog-name="{booking.dog_name}"
+                        data-dog-pic="{booking.dog_pic or ''}">
+                        <div class="d-flex align-items-center gap-2 p-2">
+                            <div style="width: 30px; height: 30px; overflow: hidden;" class="rounded-circle flex-shrink-0">
+                                <img src="{pic_src}" class="img-fluid" alt="{booking.dog_name}" 
+                                    style="width: 100%; height: 100%; object-fit: cover;"
+                                    onerror="this.onerror=null; this.src='/static/images/default-dog.png'">
+                            </div>
+                            <div>
+                                <small>{booking.dog_name}</small>
+                            </div>
+                        </div>
+                    </div>
+                '''
+            
+            html += '''
+                                </div>
+                            </div>
+                            
+                            <hr>
+                            
+                            <!-- Afternoon Pending -->
+                            <div class="drop-zone pending-zone" data-slot="Afternoon" data-walker-id="">
+                                <h6 class="text-muted mb-2">Afternoon</h6>
+                                <div class="booking-cards">
+            '''
+            
+            # Add afternoon pending bookings
+            afternoon_pending = [b for b in pending_bookings if b.slot == 'Afternoon']
+            for booking in afternoon_pending:
+                pic_src = f"/static/images/{booking.dog_pic}" if booking.dog_pic else "/static/images/default-dog.png"
+                html += f'''
+                    <div class="card booking-card draggable bg-light border-dark" 
+                        draggable="true" 
+                        data-booking-id="{booking.id}"
+                        data-current-slot="{booking.slot}"
+                        data-current-walker-id="{booking.walker_id or ''}"
+                        data-dog-name="{booking.dog_name}"
+                        data-dog-pic="{booking.dog_pic or ''}">
+                        <div class="d-flex align-items-center gap-2 p-2">
+                            <div style="width: 30px; height: 30px; overflow: hidden;" class="rounded-circle flex-shrink-0">
+                                <img src="{pic_src}" class="img-fluid" alt="{booking.dog_name}" 
+                                    style="width: 100%; height: 100%; object-fit: cover;"
+                                    onerror="this.onerror=null; this.src='/static/images/default-dog.png'">
+                            </div>
+                            <div>
+                                <small>{booking.dog_name}</small>
+                            </div>
+                        </div>
+                    </div>
+                '''
+            
+            html += '''
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            '''
+            
+            # Add walker columns
+            for walker in walkers:
+                morning_count = walker_capacity[walker.id]['Morning']
+                afternoon_count = walker_capacity[walker.id]['Afternoon']
+                morning_assigned = [b for b in assigned_bookings if b.walker_id == walker.id and b.slot == 'Morning']
+                afternoon_assigned = [b for b in assigned_bookings if b.walker_id == walker.id and b.slot == 'Afternoon']
+                
+                html += f'''
+                <!-- Walker {walker.firstname} Column -->
+                <div class="col-md-3">
+                    <div class="card h-100">
+                        <div class="card-header bg-primary text-white">
+                            <h6 class="mb-0"><i class="bi bi-person-walking"></i> {walker.firstname}</h6>
+                        </div>
+                        <div class="card-body p-2">
+                            <!-- Morning Assignments -->
+                            <div class="drop-zone walker-zone {'bg-light' if morning_count < 6 else 'bg-danger bg-opacity-25'}" 
+                                data-slot="Morning" data-walker-id="{walker.id}">
+                                <h6 class="text-muted mb-2">Morning ({morning_count}/6)</h6>
+                                <div class="booking-cards">
                 '''
                 
-                for booking in pending_bookings:
-                    walker_options = ""
-                    for w in walkers:
-                        selected = "selected" if booking.walker_id == w.id else ""
-                        walker_options += f'<option value="{w.id}" {selected}>{w.firstname}</option>'
-                    
-                    disabled = "" if booking.walker_id else "disabled"
-                    
-                    table_html += f'''
-                    <tr id="booking-row-{booking.id}">
-                        <td>{booking.dog_name}</td>
-                        <td>{booking.slot}</td>
-                        <td>
-                            <select class="form-select assign-walker-select" data-booking-id="{booking.id}">
-                                {walker_options}
-                            </select>
-                        </td>
-                        <td>
-                            <button class="btn btn-success btn-sm confirm-booking-btn" 
-                                    data-booking-id="{booking.id}" {disabled}>
-                                <i class="bi bi-check-circle"></i> Confirm
-                            </button>
-                        </td>
-                    </tr>
+                # Add assigned morning bookings for this walker
+                for booking in morning_assigned:
+                    pic_src = f"/static/images/{booking.dog_pic}" if booking.dog_pic else "/static/images/default-dog.png"
+                    html += f'''
+                        <div class="card booking-card draggable bg-light border-success" 
+                            draggable="true" 
+                            data-booking-id="{booking.id}"
+                            data-current-slot="{booking.slot}"
+                            data-current-walker-id="{booking.walker_id}"
+                            data-dog-name="{booking.dog_name}"
+                            data-dog-pic="{booking.dog_pic or ''}">
+                            <div class="d-flex align-items-center gap-2 p-2">
+                                <div style="width: 30px; height: 30px; overflow: hidden;" class="rounded-circle flex-shrink-0">
+                                    <img src="{pic_src}" class="img-fluid" alt="{booking.dog_name}" 
+                                        style="width: 100%; height: 100%; object-fit: cover;"
+                                        onerror="this.src='/static/images/default-dog.png'">
+                                </div>
+                                <div>
+                                    <small>{booking.dog_name}</small>
+                                </div>
+                            </div>
+                        </div>
                     '''
                 
-                table_html += '''
-                    </tbody>
-                </table>
+                html += f'''
+                                </div>
+                            </div>
+                            
+                            <hr>
+                            
+                            <!-- Afternoon Assignments -->
+                            <div class="drop-zone walker-zone {'bg-light' if afternoon_count < 6 else 'bg-danger bg-opacity-25'}" 
+                                data-slot="Afternoon" data-walker-id="{walker.id}">
+                                <h6 class="text-muted mb-2">Afternoon ({afternoon_count}/6)</h6>
+                                <div class="booking-cards">
                 '''
-                return table_html
-            else:
-                return '<p class="card-text">No pending bookings for this date.</p>'
                 
+                # Add assigned afternoon bookings for this walker
+                for booking in afternoon_assigned:
+                    pic_src = f"/static/images/{booking.dog_pic}" if booking.dog_pic else "/static/images/default-dog.png"
+                    html += f'''
+                        <div class="card booking-card draggable bg-light border-success" 
+                            draggable="true" 
+                            data-booking-id="{booking.id}"
+                            data-current-slot="{booking.slot}"
+                            data-current-walker-id="{booking.walker_id}"
+                            data-dog-name="{booking.dog_name}"
+                            data-dog-pic="{booking.dog_pic or ''}">
+                            <div class="d-flex align-items-center gap-2 p-2">
+                                <div style="width: 30px; height: 30px; overflow: hidden;" class="rounded-circle flex-shrink-0">
+                                    <img src="{pic_src}" class="img-fluid" alt="{booking.dog_name}" 
+                                        style="width: 100%; height: 100%; object-fit: cover;"
+                                        onerror="this.src='/static/images/default-dog.png'">
+                                </div>
+                                <div>
+                                    <small>{booking.dog_name}</small>
+                                </div>
+                            </div>
+                        </div>
+                    '''
+                
+                html += '''
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                '''
+            
+            html += '''
+            </div>
+            
+            <style>
+            .drop-zone {
+                min-height: 120px;
+                border: 2px dashed transparent;
+                border-radius: 0.375rem;
+                padding: 0.5rem;
+                transition: all 0.3s ease;
+            }
+            
+            .drop-zone.drag-over {
+                border-color: #0d6efd;
+                background-color: rgba(13, 110, 253, 0.1) !important;
+            }
+            
+            .drop-zone.drag-over-invalid {
+                border-color: #dc3545;
+                background-color: rgba(220, 53, 69, 0.1) !important;
+            }
+            
+            .booking-card {
+                margin-bottom: 0.5rem;
+                border-radius: 0.375rem;
+                cursor: grab;
+                transition: all 0.3s ease;
+            }
+            
+            .booking-card:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            }
+            
+            .booking-card.dragging {
+                opacity: 0.5;
+                transform: rotate(5deg);
+            }
+            
+            .booking-card.snap-back {
+                animation: snapBack 0.5s ease-out;
+            }
+            
+            @keyframes snapBack {
+                0% { transform: scale(1.1) rotate(5deg); }
+                50% { transform: scale(0.95); }
+                100% { transform: scale(1) rotate(0deg); }
+            }
+            
+            .booking-cards {
+                min-height: 60px;
+            }
+            </style>
+            '''
+            
+            return html
+            
         except ValueError:
             return "Invalid date format", 400
         except Exception as e:
@@ -541,3 +756,14 @@ def register_routes(app):
             db.session.rollback()
             logging.error(f"Error cancelling booking {booking_id}: {e}")
             return jsonify(success=False, message="Server error"), 500
+    
+    @app.route("/walker_schedule", methods=["GET", "POST"])
+    @login_required
+    def walker_schedule():
+        """Show a walker their schedule for this week."""
+        if current_user.role != 'walker':
+            return "Forbidden", 403
+        
+        return render_template("walker_schedule.html", user=current_user)
+        
+        
