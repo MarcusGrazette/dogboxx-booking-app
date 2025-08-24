@@ -5,6 +5,8 @@ Flask-Session
 Flask-SQLAlchemy
 Flask-CORS
 Flask-WTF
+Flask-Limiter
 python-dotenv
 pytz
 requests
+Pillow

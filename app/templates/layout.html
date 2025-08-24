@@ -49,9 +49,9 @@
                 </ul>
                 <ul class="navbar-nav ms-auto mt-2">
                     <li class="nav-item">
-                        <a class="icon-link nav-link" href="/logout">
+                        <a class="icon-link nav-link" href="{{ url_for('logout') }}">
                             <svg class="bi" width="64" height="64" fill="currentColor">
-                                <use xlink:href="{{ url_for('static', filename='icons/bootstrap-icons-1.13.1/bootstrap-icons.svg') }}#box-arrow-left" />
+                                <use xlink:href="{{ url_for('static', filename='icons/bootstrap-icons.svg') }}#box-arrow-left" />
                             </svg>
                             Log Out ({{ current_user.firstname }})
                         </a>
@@ -60,17 +60,17 @@
                 {% else %}
                 <ul class="navbar-nav ms-auto mt-2">
                     <li class="nav-item">
-                        <a class="icon-link nav-link" href="/register">
+                        <a class="icon-link nav-link" href="{{ url_for('register') }}">
                             <svg class="bi" width="64" height="64" fill="currentColor">
-                                <use xlink:href="{{ url_for('static', filename='icons/bootstrap-icons-1.13.1/bootstrap-icons.svg') }}#person-add" />
+                                <use xlink:href="{{ url_for('static', filename='icons/bootstrap-icons.svg') }}#person-add" />
                             </svg>
                             Register
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="icon-link nav-link" href="/login">
+                        <a class="icon-link nav-link" href="{{ url_for('login') }}">
                             <svg class="bi" width="64" height="64" fill="currentColor">
-                                <use xlink:href="{{ url_for('static', filename='icons/bootstrap-icons-1.13.1/bootstrap-icons.svg') }}#door-open" />
+                                <use xlink:href="{{ url_for('static', filename='icons/bootstrap-icons.svg') }}#door-open" />
                             </svg>
                             Log In
                         </a>

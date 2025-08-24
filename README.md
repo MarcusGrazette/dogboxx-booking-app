@@ -1,11 +1,10 @@
 # Bermondsey Street Dog Walkers
-#### Video Demo:  https://youtu.be/0S2YE_XecjI
-#### Description: A booking site for a dog walking company.
+This is a web app for dog walking company. It uses Python, Flask, and an SQL database on the backend, and HTML styled with Bootstrap CSS for the front end.
 
+# Setup
 
-## This is...my CS50 Final Project
-
-I'm building a mobile-first web app for a local dog walking company. I'm using Python, Flask, and an SQL database on the backend, and HTML styled with Bootstrap CSS for the front end. I expect that most clients will prefer an 'app like' experience, so will explore options for eventually deploying this as a progressive web app - to avoid app store fees. Some pages (eg admin.html) use AJAX to handle client - server interactions without needing to reload the page.
+## Required environment variables
+SECRET_KEY is a required environment variable.
 
 ### Intended Users
 There are three user types: admin (the business owner), clients, and walkers (the staff). Accounts created via the 'register' UX default to 'client'. I'll create 'admin' and 'walker' accounts by editing the db manually (I'm using phpMyAdmin for a more GUI-type experience than SQLite).

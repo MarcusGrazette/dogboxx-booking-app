@@ -1,0 +1,32 @@
+{% extends "layout.html" %}
+
+{% block title %}
+Error {{ error_code }} - {{ error_message }}
+{% endblock %}
+
+{% block main %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-danger text-white">
+                    <h4 class="mb-0">Error {{ error_code }}</h4>
+                </div>
+                <div class="card-body">
+                    <div class="text-center mb-4">
+                        <i class="bi bi-exclamation-triangle-fill text-danger" style="font-size: 3rem;"></i>
+                    </div>
+                    
+                    <h5 class="card-title text-center mb-4">{{ error_message }}</h5>
+                    
+                    <p class="card-text text-muted">{{ error_description }}</p>
+                    
+                    <div class="text-center mt-4">
+                        <a href="{{ url_for('index') }}" class="btn btn-primary">Go Home</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

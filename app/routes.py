@@ -4,13 +4,13 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError
 from app.models import User, Client, Dog, Booking, Walker
-from app import db
+from app import db, limiter
 from email_validator import validate_email, EmailNotValidError
 import logging
 import os
+import uuid
 from datetime import datetime, timezone, timedelta
 from werkzeug.utils import secure_filename
-from uuid import uuid1
 from app.forms import LoginForm, RegisterForm, OnboardingForm, BookingForm
 from flask_wtf.csrf import generate_csrf
 
@@ -18,6 +18,15 @@ from flask_wtf.csrf import generate_csrf
 logging.basicConfig(level=logging.DEBUG)
 
 def register_routes(app):
+
+    # Custom error handler for rate limiting
+    @app.errorhandler(429)  # 429 Too Many Requests
+    def ratelimit_handler(e):
+        """Custom error handler for rate limit exceeded"""
+        return render_template('error.html',
+                              error_code=429,
+                              error_message="Too many attempts. Please try again later.",
+                              error_description="For security reasons, we limit the number of requests. Please wait a few minutes before trying again."), 429
 
     @app.context_processor
     def inject_csrf_token():
@@ -87,6 +96,7 @@ def register_routes(app):
         return render_template("index.html", user=user, client=user.client, dogs=user.dogs, bookings=upcoming_bookings, form=form) # type: ignore
 
     @app.route("/login", methods=["GET", "POST"])
+    @limiter.limit("5 per minute, 20 per hour")  # Limit login attempts
     def login():
         """Log user in"""
         # Redirect if user is already authenticated
@@ -103,8 +113,12 @@ def register_routes(app):
             # Query database for user
             user = User.query.filter_by(email=email).first()
 
-            # Check credentials
+            # Track failed login attempts with redis-based rate limiting
             if not user or not check_password_hash(user.hashed_password, password):
+                # Log the failed attempt (for security auditing)
+                logging.warning(f"Failed login attempt for email: {email} from IP: {request.remote_addr}")
+                
+                # Show generic error message (don't reveal if email exists)
                 flash("Invalid email or password", "error")
                 return render_template("login.html", form=form)
 
@@ -145,12 +159,12 @@ def register_routes(app):
         """Handle complete user onboarding process"""
         if current_user.role != 'client':
             flash("Onboarding is only required for clients.", "info")
-            return redirect("/")
+            return redirect(url_for('index'))
 
         client = Client.query.filter_by(user_id=current_user.id).first()
         if client and client.onboarding_completed:
             flash("You have already completed onboarding!", "info")
-            return redirect("/")
+            return redirect(url_for('index'))
 
         form = OnboardingForm()
         if form.validate_on_submit():
@@ -194,16 +208,63 @@ def register_routes(app):
                     birth_year -= 1
                     birth_month += 12
 
-                # Handle file upload
+                # Handle file upload with enhanced security
                 pic_filename = None
                 if 'file' in request.files:
                     dog_pic = request.files['file']
                     if dog_pic and dog_pic.filename:
-                        original_filename = secure_filename(dog_pic.filename)
-                        unique_filename = f"{uuid1()}_{original_filename}"
-                        upload_path = os.path.join(app.config["UPLOAD_FOLDER"], unique_filename)
-                        dog_pic.save(upload_path)
-                        pic_filename = unique_filename
+                        try:
+                            # Import required libraries
+                            from PIL import Image
+                            from pathlib import Path
+                            import uuid
+                            
+                            # 1. Verify it's a valid image by attempting to open it
+                            try:
+                                img = Image.open(dog_pic)
+                                img.verify()  # Verify it's a valid image
+                                dog_pic.seek(0)  # Reset file pointer after verification
+                            except Exception:
+                                raise ValueError("Invalid image file")
+                            
+                            # 2. Check allowed extensions using a whitelist approach
+                            file_extension = Path(secure_filename(dog_pic.filename)).suffix.lower()
+                            if file_extension not in ['.jpg', '.jpeg', '.png', '.gif']:
+                                raise ValueError("Unsupported file format")
+                                
+                            # 3. Process image to strip metadata and resize
+                            img = Image.open(dog_pic)
+                            
+                            # Create a new image without metadata
+                            img_without_exif = Image.new(img.mode, img.size)
+                            img_without_exif.putdata(list(img.getdata()))
+                            
+                            # Resize the image to a standard size
+                            max_size = (800, 800)
+                            img_without_exif.thumbnail(max_size, Image.LANCZOS)
+                            
+                            # 4. Generate completely new filename
+                            unique_filename = f"{uuid.uuid4()}{file_extension}"
+                            upload_path = os.path.join(app.config["UPLOAD_FOLDER"], unique_filename)
+                            
+                            # Save with appropriate format
+                            if file_extension == '.png':
+                                img_without_exif.save(upload_path, 'PNG')
+                            elif file_extension in ['.jpg', '.jpeg']:
+                                img_without_exif.save(upload_path, 'JPEG', quality=85)
+                            elif file_extension == '.gif':
+                                img_without_exif.save(upload_path, 'GIF')
+                            
+                            pic_filename = unique_filename
+                            
+                        except ValueError as e:
+                            logging.error(f"Invalid file upload: {e}")
+                            flash(f"Upload error: {str(e)}. Please try a different file.", "error")
+                            return render_template("onboarding.html", google_maps_api_key=os.environ.get('GOOGLE_MAPS_API_KEY'), form=form)
+                        except Exception as e:
+                            logging.error(f"Error processing uploaded file: {e}")
+                            flash("There was an error processing your image. Please try a different file.", "error")
+                            return render_template("onboarding.html", google_maps_api_key=os.environ.get('GOOGLE_MAPS_API_KEY'), form=form)
 
                 # Create dog record
                 new_dog = Dog(
@@ -221,7 +282,7 @@ def register_routes(app):
                 db.session.commit()
 
                 flash(f"Welcome to our platform, {current_user.firstname}! Your profile is now complete.", "success")
-                return redirect("/")
+                return redirect(url_for('index'))
 
             except Exception as e:
                 db.session.rollback()
@@ -231,6 +292,7 @@ def register_routes(app):
         return render_template("onboarding.html", google_maps_api_key=os.environ.get('GOOGLE_MAPS_API_KEY'), form=form)
 
     @app.route("/register", methods=["GET", "POST"])
+    @limiter.limit("3 per minute, 10 per hour, 20 per day")  # Strict limits on registration to prevent abuse
     def register():
         """Register a new user with improved validation and error handling"""
         # Redirect if user is already authenticated
@@ -266,7 +328,7 @@ def register_routes(app):
                 # Log the user in automatically, redirect to the onboarding page
                 login_user(new_user)
                 flash(f"Welcome to our platform, {firstname}!", "success")
-                return redirect("/onboard")
+                return redirect(url_for('onboard'))
 
             except IntegrityError:
                 db.session.rollback()
