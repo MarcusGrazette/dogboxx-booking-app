@@ -105,7 +105,7 @@ Complete Your Profile
                                 <span class="input-group-text">
                                     {{ form.dog_gender.label() }}
                                 </span>
-                                {{ form.dog_gender(class="form-control") }}
+                                {{ form.dog_gender(class="form-select") }}
                                 {% for error in form.dog_gender.errors %}
                                 <div class="text-danger small">{{ error }}</div>
                                 {% endfor %}

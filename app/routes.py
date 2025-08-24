@@ -117,9 +117,9 @@ def register_routes(app):
             login_user(user, remember=remember_me)
 
             # Handle next page parameter with role-based fallback
-            next_page = request.args.get('next')
-            if next_page and next_page.startswith('/'):
-                return redirect(next_page)
+            #next_page = request.args.get('next')
+            #if next_page and next_page.startswith('/'):
+            #    return redirect(next_page)
             
             # Redirect based on user role
             return _redirect_by_role(user)
@@ -279,9 +279,15 @@ def register_routes(app):
         return render_template("register.html", form=form)
 
     @app.route("/logout")
-    @login_required
     def logout():
-        """Log user out"""
+        """Log user out (accessible even if the session expired).
+
+        Removing the @login_required decorator prevents Flask-Login from
+        intercepting requests to /logout and redirecting to the login page
+        with a `next` parameter (and flashing the login message) when the
+        user is already unauthenticated.
+        """
+        # logout_user() is safe to call for anonymous users; it will no-op.
         logout_user()
         return redirect(url_for('login'))
         
