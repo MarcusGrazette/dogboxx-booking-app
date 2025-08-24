@@ -9,3 +9,5 @@ flask_session/
 /app/static/css
 /app/static/js
 /app/static/icons
+/app/seed_db
+/seed_data

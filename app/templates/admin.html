@@ -14,37 +14,413 @@ Admin
       Allocate booking requests
     </h5>
     <div class="card-body text-start">
-      <div class="row mb-3">
+      <div class="row">
+        <!-- Calendar Column -->
         <div class="col-md-4">
-          
-          <input type="date" id="booking-date-picker" class="form-control" value="{{ today_date }}">
+          <div class="card h-100">
+            <div class="card-header bg-light">
+              <div class="d-flex justify-content-between align-items-center">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="prev-month">
+                  <i class="bi bi-chevron-left"></i>
+                </button>
+                <h6 class="mb-0" id="calendar-title">August 2025</h6>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="next-month">
+                  <i class="bi bi-chevron-right"></i>
+                </button>
+              </div>
+            </div>
+            <div class="card-body p-2 position-relative">
+              <!-- Loading overlay -->
+              <div id="calendar-loading" class="position-absolute w-100 h-100 d-flex align-items-center justify-content-center bg-white bg-opacity-75" style="z-index: 10; display: none !important;">
+                <div class="text-center">
+                  <i class="bi bi-hourglass-split fs-4"></i>
+                  <div>Loading...</div>
+                </div>
+              </div>
+              
+              <!-- Calendar grid -->
+              <div id="calendar-container">
+                <!-- Calendar will be rendered here -->
+              </div>
+            </div>
+          </div>
         </div>
+        
+        <!-- Drag and Drop Interface Column -->
         <div class="col-md-8">
-          <p class="text-muted mb-0"><i class="bi bi-info-circle"></i> Select a date to see booking requests.</p>
+          <div id="selected-date-info" class="mb-3">
+            <p class="text-muted mb-0">
+              <i class="bi bi-info-circle"></i> 
+              <span id="selected-date-text">Select a date from the calendar to see booking requests.</span>
+            </p>
+          </div>
+          <div id="pending-bookings-container">
+            <!-- Drag and drop interface will be loaded here -->
+          </div>
         </div>
-      </div>
-      <div id="pending-bookings-container">
-        <!-- Drag and drop interface will be loaded here -->
       </div>
     </div>
   </div>
+</div>
 
+<style>
+/* Calendar Styles */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background-color: #dee2e6;
+  border: 1px solid #dee2e6;
+}
+
+.calendar-cell {
+  background-color: white;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+  border: 2px solid transparent;
+}
+
+.calendar-cell:hover {
+  background-color: #f8f9fa;
+  transform: translateY(-1px);
+}
+
+.calendar-cell.day-header {
+  background-color: #e9ecef;
+  font-weight: 600;
+  cursor: default;
+  font-size: 0.8rem;
+  color: #6c757d;
+  min-height: 30px;
+}
+
+.calendar-cell.day-header:hover {
+  background-color: #e9ecef;
+  transform: none;
+}
+
+.calendar-cell.other-month {
+  color: #adb5bd;
+  background-color: #f8f9fa;
+}
+
+.calendar-cell.pending {
+  background-color: #fff3cd !important;
+  border-color: #ffc107;
+  font-weight: 600;
+}
+
+.calendar-cell.selected {
+  background-color: #cff4fc !important;
+  border-color: #0dcaf0;
+  font-weight: 600;
+}
+
+.calendar-cell.pending.selected {
+  background-color: #fef3c7 !important;
+  border-color: #f59e0b;
+}
+
+.calendar-cell.today {
+  position: relative;
+}
+
+.calendar-cell.today::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  background-color: #dc3545;
+  border-radius: 50%;
+}
+
+/* Loading state */
+#calendar-loading.show {
+  display: flex !important;
+}
+
+/* Drag and drop styles - existing styles will be preserved */
+.drop-zone {
+  min-height: 120px;
+  border: 2px dashed transparent;
+  border-radius: 0.375rem;
+  padding: 0.5rem;
+  transition: all 0.3s ease;
+}
+
+.drop-zone.drag-over {
+  border-color: #0d6efd;
+  background-color: rgba(13, 110, 253, 0.1) !important;
+}
+
+.drop-zone.drag-over-invalid {
+  border-color: #dc3545;
+  background-color: rgba(220, 53, 69, 0.1) !important;
+}
+
+.booking-card {
+  margin-bottom: 0.5rem;
+  border-radius: 0.375rem;
+  cursor: grab;
+  transition: all 0.3s ease;
+}
+
+.booking-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.booking-card.dragging {
+  opacity: 0.5;
+  transform: rotate(5deg);
+}
+
+.booking-card.snap-back {
+  animation: snapBack 0.5s ease-out;
+}
+
+@keyframes snapBack {
+  0% { transform: scale(1.1) rotate(5deg); }
+  50% { transform: scale(0.95); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+.booking-cards {
+  min-height: 60px;
+}
+</style>
 {% endblock %}
 
 {% block scripts %}
 {{ super() }}
 <script>
-  // Based on "How To Build Sortable Drag & Drop With Vanilla Javascript" https://youtu.be/jfYWwQrtzzY
-  // Code generated with Claude.ai
+  // Calendar and Drag-and-Drop Administration Interface
   (function () {
-    console.log("Drag-and-drop admin script loading...");
+    console.log("Loading calendar and drag-and-drop admin interface...");
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
     console.log("CSRF Token found:", !!csrfToken);
 
+    // Calendar state
+    let currentYear = new Date().getFullYear();
+    let currentMonth = new Date().getMonth() + 1; // 1-based
+    let selectedDate = null;
+    let pendingDates = [];
+
+    // Drag and drop state
     let draggedCard = null;
     let originalParent = null;
 
+    // Calendar functionality
+    function renderCalendar(year, month) {
+      const container = document.getElementById('calendar-container');
+      if (!container) return;
+
+      // Create calendar grid
+      const grid = document.createElement('div');
+      grid.className = 'calendar-grid';
+
+      // Day headers (Mon-Sun)
+      const dayHeaders = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      dayHeaders.forEach(day => {
+        const cell = document.createElement('div');
+        cell.className = 'calendar-cell day-header';
+        cell.textContent = day;
+        grid.appendChild(cell);
+      });
+
+      // Calculate first day of month (0 = Sunday, 1 = Monday, etc.)
+      const firstDay = new Date(year, month - 1, 1);
+      let startDay = firstDay.getDay(); // 0 = Sunday
+      startDay = startDay === 0 ? 6 : startDay - 1; // Convert to Monday = 0
+
+      // Days in current month
+      const daysInMonth = new Date(year, month, 0).getDate();
+      
+      // Days in previous month
+      const prevMonth = month === 1 ? 12 : month - 1;
+      const prevYear = month === 1 ? year - 1 : year;
+      const daysInPrevMonth = new Date(prevYear, prevMonth, 0).getDate();
+
+      // Today's date for highlighting
+      const today = new Date();
+      const isCurrentMonth = today.getFullYear() === year && today.getMonth() + 1 === month;
+      const todayDate = today.getDate();
+
+      // Add previous month's trailing days
+      for (let i = startDay - 1; i >= 0; i--) {
+        const day = daysInPrevMonth - i;
+        const cell = createDateCell(day, prevYear, prevMonth, true);
+        grid.appendChild(cell);
+      }
+
+      // Add current month days
+      for (let day = 1; day <= daysInMonth; day++) {
+        const cell = createDateCell(day, year, month, false);
+        
+        // Add today indicator
+        if (isCurrentMonth && day === todayDate) {
+          cell.classList.add('today');
+        }
+        
+        // Add pending highlight
+        if (pendingDates.includes(day)) {
+          cell.classList.add('pending');
+        }
+        
+        // Add selected state
+        if (selectedDate && 
+            selectedDate.year === year && 
+            selectedDate.month === month && 
+            selectedDate.day === day) {
+          cell.classList.add('selected');
+        }
+        
+        grid.appendChild(cell);
+      }
+
+      // Add next month's leading days
+      const totalCells = grid.children.length;
+      const remainingCells = 42 - totalCells; // 6 rows × 7 days
+      const nextMonth = month === 12 ? 1 : month + 1;
+      const nextYear = month === 12 ? year + 1 : year;
+      
+      for (let day = 1; day <= remainingCells && day <= 14; day++) {
+        const cell = createDateCell(day, nextYear, nextMonth, true);
+        grid.appendChild(cell);
+      }
+
+      // Replace container content
+      container.innerHTML = '';
+      container.appendChild(grid);
+
+      // Update calendar title
+      const monthNames = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ];
+      document.getElementById('calendar-title').textContent = `${monthNames[month - 1]} ${year}`;
+    }
+
+    function createDateCell(day, year, month, isOtherMonth) {
+      const cell = document.createElement('div');
+      cell.className = 'calendar-cell';
+      cell.textContent = day;
+      
+      if (isOtherMonth) {
+        cell.classList.add('other-month');
+      }
+      
+      // Add click handler
+      cell.addEventListener('click', () => {
+        if (isOtherMonth) {
+          // Navigate to the other month and select the date
+          currentYear = year;
+          currentMonth = month;
+          selectDate(year, month, day);
+          loadCalendarData(year, month);
+        } else {
+          selectDate(year, month, day);
+        }
+      });
+      
+      return cell;
+    }
+
+    function selectDate(year, month, day) {
+      selectedDate = { year, month, day };
+      
+      // Update visual selection
+      document.querySelectorAll('.calendar-cell.selected').forEach(cell => {
+        cell.classList.remove('selected');
+      });
+      
+      // Find and highlight the selected cell
+      const cells = document.querySelectorAll('.calendar-cell:not(.day-header)');
+      cells.forEach(cell => {
+        if (parseInt(cell.textContent) === day && !cell.classList.contains('other-month')) {
+          cell.classList.add('selected');
+        }
+      });
+      
+      // Format date for API call
+      const formattedDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      
+      // Update selected date info
+      const dateText = document.getElementById('selected-date-text');
+      if (dateText) {
+        const monthNames = [
+          'January', 'February', 'March', 'April', 'May', 'June',
+          'July', 'August', 'September', 'October', 'November', 'December'
+        ];
+        dateText.textContent = `Showing bookings for ${day} ${monthNames[month - 1]} ${year}`;
+      }
+      
+      // Load bookings for selected date
+      loadBookingsForDate(formattedDate);
+    }
+
+    async function loadCalendarData(year, month) {
+      const loadingElement = document.getElementById('calendar-loading');
+      if (loadingElement) {
+        loadingElement.classList.add('show');
+      }
+
+      try {
+        const response = await fetch(`/admin/calendar_data/${year}/${month}`, {
+          method: 'GET',
+          credentials: 'same-origin'
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.success) {
+          pendingDates = data.pending_dates || [];
+          currentYear = year;
+          currentMonth = month;
+          renderCalendar(year, month);
+        } else {
+          throw new Error(data.error || 'Unknown error');
+        }
+      } catch (error) {
+        console.error('Error loading calendar data:', error);
+        pendingDates = [];
+        renderCalendar(year, month);
+        showNotification('Failed to load calendar data', 'error');
+      } finally {
+        if (loadingElement) {
+          loadingElement.classList.remove('show');
+        }
+      }
+    }
+
+    function navigateMonth(direction) {
+      let newMonth = currentMonth + direction;
+      let newYear = currentYear;
+
+      if (newMonth > 12) {
+        newMonth = 1;
+        newYear++;
+      } else if (newMonth < 1) {
+        newMonth = 12;
+        newYear--;
+      }
+
+      loadCalendarData(newYear, newMonth);
+    }
+
+    // Existing drag and drop functionality (unchanged)
     async function loadBookingsForDate(selectedDate) {
       console.log("Loading bookings for date:", selectedDate);
 
@@ -282,6 +658,11 @@ Admin
           // Update capacity counters
           updateCapacityCounters();
           
+          // Refresh calendar to update pending status
+          if (selectedDate) {
+            loadCalendarData(currentYear, currentMonth);
+          }
+          
           console.log("Booking assignment updated successfully");
           
         } else {
@@ -332,7 +713,6 @@ Admin
       card.style.pointerEvents = '';
       
       // Restore original content structure
-      card.style.pointerEvents = '';
       const dogName = card.dataset.dogName || '';
       
       card.innerHTML = `
@@ -389,8 +769,8 @@ Admin
             draggedCard.style.pointerEvents = '';
             
             // Restore original content if it was modified
-            const dogName = card.dataset.dogName || '';
-            const dogPic = card.dataset.dogPic || '';
+            const dogName = draggedCard.dataset.dogName || '';
+            const dogPic = draggedCard.dataset.dogPic || '';
             const imgSrc = dogPic ? `/static/images/${dogPic}` : '/static/images/default-dog.png';
             
             draggedCard.innerHTML = `
@@ -432,30 +812,24 @@ Admin
 
     // Initialize on DOM ready
     document.addEventListener('DOMContentLoaded', () => {
-      console.log("DOM loaded, setting up drag-and-drop admin interface...");
+      console.log("DOM loaded, setting up calendar and drag-and-drop admin interface...");
 
-      // Set up date picker event listener
-      const datePicker = document.getElementById('booking-date-picker');
-      if (datePicker) {
-        console.log("Date picker found, attaching change listener");
-        datePicker.addEventListener('change', (e) => {
-          const selectedDate = e.target.value;
-          console.log("Date picker changed to:", selectedDate);
-          if (selectedDate) {
-            loadBookingsForDate(selectedDate);
-          }
-        });
-
-        // Load bookings for initial date
-        const initialDate = datePicker.value;
-        if (initialDate) {
-          loadBookingsForDate(initialDate);
-        }
-      } else {
-        console.log("Date picker not found");
+      // Set up month navigation event listeners
+      const prevButton = document.getElementById('prev-month');
+      const nextButton = document.getElementById('next-month');
+      
+      if (prevButton) {
+        prevButton.addEventListener('click', () => navigateMonth(-1));
+      }
+      
+      if (nextButton) {
+        nextButton.addEventListener('click', () => navigateMonth(1));
       }
 
-      console.log("Drag-and-drop admin interface setup complete");
+      // Load initial calendar data for current month
+      loadCalendarData(currentYear, currentMonth);
+
+      console.log("Calendar and drag-and-drop admin interface setup complete");
     });
 
     // Clean up on page unload

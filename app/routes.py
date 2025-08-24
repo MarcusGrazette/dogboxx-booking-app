@@ -771,5 +771,46 @@ def register_routes(app):
             return "Forbidden", 403
         
         return render_template("walker_schedule.html", user=current_user)
+
+    @app.route("/admin/calendar_data/<int:year>/<int:month>")
+    @login_required
+    def admin_calendar_data(year, month):
+        """Return JSON with dates that have pending bookings for the specified month (admin only)."""
+        if current_user.role != 'admin':
+            return jsonify({"error": "Forbidden"}), 403
+
+        try:
+            # Validate month and year
+            if month < 1 or month > 12:
+                return jsonify({"error": "Invalid month"}), 400
+            if year < 1900 or year > 2100:
+                return jsonify({"error": "Invalid year"}), 400
+
+            # Query for distinct dates with pending bookings in the specified month
+            from sqlalchemy import extract, func
+            
+            pending_dates_query = (
+                db.session.query(func.distinct(func.extract('day', Booking.date)).label('day'))
+                .filter(
+                    Booking.status == 'Pending',
+                    extract('year', Booking.date) == year,
+                    extract('month', Booking.date) == month
+                )
+                .all()
+            )
+            
+            # Extract day numbers from query results
+            pending_dates = [int(row.day) for row in pending_dates_query if row.day is not None]
+            
+            return jsonify({
+                "success": True,
+                "year": year,
+                "month": month,
+                "pending_dates": pending_dates
+            })
+            
+        except Exception as e:
+            logging.error(f"Error loading calendar data for {year}-{month}: {e}")
+            return jsonify({"error": "Server error"}), 500
         
         
