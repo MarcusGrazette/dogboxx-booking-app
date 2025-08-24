@@ -158,17 +158,32 @@ class Walker(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    firstname = db.Column(db.String(80), nullable=False)
-    lastname = db.Column(db.String(80), nullable=False)
+    # Removed duplicate firstname and lastname fields
     
     def to_dict(self):
         return {
             'id': self.id,
-            'firstname': self.firstname,
-            'lastname': self.lastname,
+            'firstname': self.user.firstname,
+            'lastname': self.user.lastname,
+            'user_id': self.user_id
             }
     
     user = db.relationship('User', backref=db.backref('walker', uselist=False))
+    
+    @property
+    def firstname(self):
+        """Compatibility property that returns user's firstname"""
+        return self.user.firstname if self.user else None
+        
+    @property
+    def lastname(self):
+        """Compatibility property that returns user's lastname"""
+        return self.user.lastname if self.user else None
+        
+    @property
+    def full_name(self):
+        """Returns the walker's full name"""
+        return self.user.full_name if self.user else None
 
 class Booking(db.Model):
     __tablename__ = 'bookings'

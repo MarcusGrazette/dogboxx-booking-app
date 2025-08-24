@@ -467,7 +467,7 @@ def register_routes(app):
                 booking={
                     "id": booking.id, 
                     "walker_id": walker.id,
-                    "walker_name": walker.firstname,
+                    "walker_name": walker.firstname,  # Uses property method that accesses walker.user.firstname
                     "slot": booking.slot
                 }
             ), 200
@@ -512,7 +512,7 @@ def register_routes(app):
             for b in all_bookings:
                 b.dog_name = b.dog.name if b.dog else "Unknown"
                 b.dog_pic = b.dog.pic if b.dog and b.dog.pic else None
-                b.walker_name = b.walker.firstname if b.walker else None
+                b.walker_name = b.walker.firstname if b.walker else None  # Uses property method that accesses walker.user.firstname
 
             # Get all walkers
             walkers = Walker.query.all()

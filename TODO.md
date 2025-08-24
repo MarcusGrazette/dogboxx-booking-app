@@ -68,15 +68,15 @@ This document contains a comprehensive review of the codebase for the Bermondsey
 
 ## Database & Data Management
 
-### 1. Missing Database Migrations
+### 1. Missing Database Migrations - DONE
 
 **Issue**: The application creates tables directly without a migration system.
 
 **Description**: Without database migrations, schema changes can be difficult to track, apply, and roll back. This can lead to data loss or inconsistency when updating the database schema.
 
 **Suggested Fix**:
-- Implement Flask-Migrate (based on Alembic) for database migrations
-- Create an initial migration from the current schema
+- Implement Flask-Migrate (based on Alembic) for database migrations - done
+- Create an initial migration from the current schema - done
 - Document migration procedures in the README
 
 ### 2. Inadequate Error Handling in Database Operations
@@ -101,16 +101,16 @@ This document contains a comprehensive review of the codebase for the Bermondsey
 - Use libraries like bleach to sanitize text inputs
 - Add validation for edge cases (e.g., special characters, emoji, etc.)
 
-### 4. Walker - User Relationship Issues
+### 4. Walker - User Relationship Issues - DONE
 
 **Issue**: The Walker model has a duplicate of user information.
 
 **Description**: The Walker model contains firstname and lastname fields that duplicate what's in the User model, creating potential data inconsistency.
 
 **Suggested Fix**:
-- Remove the duplicate firstname and lastname fields from Walker
-- Use the relationship to User to access these fields
-- Update all references to use user.firstname instead of walker.firstname
+- Remove the duplicate firstname and lastname fields from Walker - done
+- Use the relationship to User to access these fields - done
+- Update all references to use user.firstname instead of walker.firstname - done
 
 ## Code Structure & Architecture
 

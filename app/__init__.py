@@ -2,6 +2,7 @@ from flask import Flask, request, redirect
 from flask_session import Session
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
+from flask_migrate import Migrate
 from dotenv import load_dotenv
 import os
 from flask_dropzone import Dropzone
@@ -14,6 +15,7 @@ load_dotenv()
 
 # Initialize extensions
 db = SQLAlchemy()
+migrate = Migrate()
 login_manager = LoginManager()
 dropzone = Dropzone()
 csrf = CSRFProtect()
@@ -46,6 +48,9 @@ def create_app(config_name=None):
 
     # Initialize SQLAlchemy
     db.init_app(app)
+    
+    # Initialize Flask-Migrate for database migrations
+    migrate.init_app(app, db)
     
     # Initialize Rate Limiter with default limits
     limiter.init_app(app)
@@ -107,10 +112,10 @@ def create_app(config_name=None):
         
         return response
 
-    # Create database tables
+    # Import models for Flask-Migrate
     with app.app_context():
-        from app.models import User, Client  # Import all models
-        db.create_all()  # Create tables if they don't exist
+        # Import all models so they're registered with SQLAlchemy
+        from app.models import User, Client, Dog, Walker, Booking
 
     # Import and register routes
     from app.routes import register_routes
