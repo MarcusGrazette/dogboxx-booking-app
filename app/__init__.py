@@ -5,6 +5,7 @@ from flask_login import LoginManager
 from flask_migrate import Migrate
 from dotenv import load_dotenv
 import os
+import logging
 from flask_dropzone import Dropzone
 from flask_wtf import CSRFProtect
 from flask_limiter import Limiter
@@ -31,6 +32,12 @@ def create_app(config_name=None):
     # Import and use configuration from config.py
     from config import config
     app.config.from_object(config[config_name])
+    
+    # Configure logging
+    from app.utils.logging_config import configure_logging
+    log_level = app.config.get('LOG_LEVEL', 'INFO')
+    log_file = app.config.get('LOG_FILE')
+    configure_logging(app_name=app.name, log_level=log_level, log_file=log_file)
     
     # Validate critical environment variables
     if not app.config.get('SECRET_KEY') and not app.debug:

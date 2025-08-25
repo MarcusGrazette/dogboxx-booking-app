@@ -1,0 +1,151 @@
+2025-08-25 10:26:55,431 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2025-08-25 10:26:55,509 - werkzeug - INFO - [_internal.py:97] - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2025-08-25 10:26:55,509 - werkzeug - INFO - [_internal.py:97] - [33mPress CTRL+C to quit[0m
+2025-08-25 10:26:55,510 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2025-08-25 10:26:55,748 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2025-08-25 10:26:55,796 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-08-25 10:26:55,803 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 918-171-985
+2025-08-25 10:28:24,547 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2025-08-25 10:28:24,605 - werkzeug - INFO - [_internal.py:97] - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2025-08-25 10:28:24,606 - werkzeug - INFO - [_internal.py:97] - [33mPress CTRL+C to quit[0m
+2025-08-25 10:28:24,606 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2025-08-25 10:28:24,838 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2025-08-25 10:28:24,885 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-08-25 10:28:24,890 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 918-171-985
+2025-08-25 10:28:37,003 - sqlalchemy.engine.Engine - INFO - [base.py:1096] - BEGIN (implicit)
+2025-08-25 10:28:37,006 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password 
+FROM users 
+WHERE users.id = ?
+2025-08-25 10:28:37,006 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [generated in 0.00024s] (1,)
+2025-08-25 10:28:37,012 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT bookings.id AS bookings_id, bookings.user_id AS bookings_user_id, bookings.dog_id AS bookings_dog_id, bookings.date AS bookings_date, bookings.slot AS bookings_slot, bookings.walker_id AS bookings_walker_id, bookings.status AS bookings_status, dogs_1.id AS dogs_1_id, dogs_1.user_id AS dogs_1_user_id, dogs_1.name AS dogs_1_name, dogs_1.birth_year_month AS dogs_1_birth_year_month, dogs_1.gender AS dogs_1_gender, dogs_1.breed AS dogs_1_breed, dogs_1.allergies AS dogs_1_allergies, dogs_1.other_info AS dogs_1_other_info, dogs_1.pic AS dogs_1_pic 
+FROM bookings LEFT OUTER JOIN dogs AS dogs_1 ON dogs_1.id = bookings.dog_id 
+WHERE bookings.status = ? AND bookings.date > ? ORDER BY bookings.date ASC
+ LIMIT ? OFFSET ?
+2025-08-25 10:28:37,012 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [generated in 0.00035s] ('Pending', '2025-08-25', 10, 0)
+2025-08-25 10:28:37,015 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT walkers.id AS walkers_id, walkers.user_id AS walkers_user_id 
+FROM walkers
+2025-08-25 10:28:37,015 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [generated in 0.00016s] ()
+2025-08-25 10:28:37,028 - sqlalchemy.engine.Engine - INFO - [base.py:1122] - ROLLBACK
+2025-08-25 10:28:37,028 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [25/Aug/2025 10:28:37] "GET /admin HTTP/1.1" 200 -
+2025-08-25 10:28:37,112 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [25/Aug/2025 10:28:37] "GET /static/apple-touch-icon.png HTTP/1.1" 200 -
+2025-08-25 10:28:37,137 - sqlalchemy.engine.Engine - INFO - [base.py:1096] - BEGIN (implicit)
+2025-08-25 10:28:37,138 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password 
+FROM users 
+WHERE users.id = ?
+2025-08-25 10:28:37,139 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [cached since 0.1331s ago] (1,)
+2025-08-25 10:28:37,141 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT distinct(CAST(STRFTIME('%d', bookings.date) AS INTEGER)) AS day 
+FROM bookings 
+WHERE bookings.status = ? AND CAST(STRFTIME('%Y', bookings.date) AS INTEGER) = ? AND CAST(STRFTIME('%m', bookings.date) AS INTEGER) = ?
+2025-08-25 10:28:37,141 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [generated in 0.00026s] ('Pending', 2025, 8)
+2025-08-25 10:28:37,143 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [25/Aug/2025 10:28:37] "GET /static/favicon.ico HTTP/1.1" 200 -
+2025-08-25 10:28:37,143 - sqlalchemy.engine.Engine - INFO - [base.py:1122] - ROLLBACK
+2025-08-25 10:28:37,143 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [25/Aug/2025 10:28:37] "GET /admin/calendar_data/2025/8 HTTP/1.1" 200 -
+2025-08-25 10:28:37,337 - sqlalchemy.engine.Engine - INFO - [base.py:1096] - BEGIN (implicit)
+2025-08-25 10:28:37,338 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password 
+FROM users 
+WHERE users.id = ?
+2025-08-25 10:28:37,338 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [cached since 0.3325s ago] (1,)
+2025-08-25 10:28:37,348 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT bookings.id AS bookings_id, bookings.user_id AS bookings_user_id, bookings.dog_id AS bookings_dog_id, bookings.date AS bookings_date, bookings.slot AS bookings_slot, bookings.walker_id AS bookings_walker_id, bookings.status AS bookings_status, dogs_1.id AS dogs_1_id, dogs_1.user_id AS dogs_1_user_id, dogs_1.name AS dogs_1_name, dogs_1.birth_year_month AS dogs_1_birth_year_month, dogs_1.gender AS dogs_1_gender, dogs_1.breed AS dogs_1_breed, dogs_1.allergies AS dogs_1_allergies, dogs_1.other_info AS dogs_1_other_info, dogs_1.pic AS dogs_1_pic, walkers_1.id AS walkers_1_id, walkers_1.user_id AS walkers_1_user_id 
+FROM bookings LEFT OUTER JOIN dogs AS dogs_1 ON dogs_1.id = bookings.dog_id LEFT OUTER JOIN walkers AS walkers_1 ON walkers_1.id = bookings.walker_id 
+WHERE bookings.date = ? AND bookings.status != ?
+2025-08-25 10:28:37,349 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [generated in 0.00109s] ('2025-08-25', 'Cancelled')
+2025-08-25 10:28:37,354 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password 
+FROM users 
+WHERE users.id = ?
+2025-08-25 10:28:37,354 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [generated in 0.00035s] (2,)
+2025-08-25 10:28:37,355 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password 
+FROM users 
+WHERE users.id = ?
+2025-08-25 10:28:37,355 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [cached since 0.001558s ago] (3,)
+2025-08-25 10:28:37,356 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password 
+FROM users 
+WHERE users.id = ?
+2025-08-25 10:28:37,356 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [cached since 0.002344s ago] (4,)
+2025-08-25 10:28:37,356 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT walkers.id AS walkers_id, walkers.user_id AS walkers_user_id 
+FROM walkers
+2025-08-25 10:28:37,356 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [cached since 0.3417s ago] ()
+2025-08-25 10:28:37,358 - sqlalchemy.engine.Engine - INFO - [base.py:1122] - ROLLBACK
+2025-08-25 10:28:37,359 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [25/Aug/2025 10:28:37] "GET /admin/bookings_by_date?date=2025-08-25 HTTP/1.1" 200 -
+2025-08-25 10:28:37,373 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [25/Aug/2025 10:28:37] "GET /static/images/3b50ba24-8050-11f0-9f0c-bad58d7282ea_pexels-cory-de-vega-230518-732456.jpg HTTP/1.1" 200 -
+2025-08-25 10:28:37,374 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [25/Aug/2025 10:28:37] "GET /static/images/default-dog.png HTTP/1.1" 200 -
+2025-08-25 10:28:37,374 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [25/Aug/2025 10:28:37] "GET /static/images/21f729a6-804f-11f0-9f0c-bad58d7282ea_pexels-cory-de-vega-230518-732456.jpg HTTP/1.1" 200 -
+2025-08-25 10:28:37,374 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [25/Aug/2025 10:28:37] "GET /static/images/4c24036e-8047-11f0-bb96-bad58d7282ea_pexels-utkukoylu-2655509.jpg HTTP/1.1" 200 -
+2025-08-25 10:28:44,663 - sqlalchemy.engine.Engine - INFO - [base.py:1096] - BEGIN (implicit)
+2025-08-25 10:28:44,664 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password 
+FROM users 
+WHERE users.id = ?
+2025-08-25 10:28:44,664 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [cached since 7.659s ago] (1,)
+2025-08-25 10:28:44,666 - sqlalchemy.engine.Engine - INFO - [base.py:1122] - ROLLBACK
+2025-08-25 10:28:44,667 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [25/Aug/2025 10:28:44] "[32mGET /logout HTTP/1.1[0m" 302 -
+2025-08-25 10:28:44,682 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [25/Aug/2025 10:28:44] "GET /login HTTP/1.1" 200 -
+2025-08-25 10:28:44,707 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [25/Aug/2025 10:28:44] "GET /static/apple-touch-icon.png HTTP/1.1" 200 -
+2025-08-25 10:29:14,369 - sqlalchemy.engine.Engine - INFO - [base.py:1096] - BEGIN (implicit)
+2025-08-25 10:29:14,372 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password 
+FROM users 
+WHERE users.email = ?
+ LIMIT ? OFFSET ?
+2025-08-25 10:29:14,373 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [generated in 0.00045s] ('michael.lee@yahoo.com', 1, 0)
+2025-08-25 10:29:14,468 - sqlalchemy.engine.Engine - INFO - [base.py:1122] - ROLLBACK
+2025-08-25 10:29:14,468 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [25/Aug/2025 10:29:14] "[32mPOST /login HTTP/1.1[0m" 302 -
+2025-08-25 10:29:14,470 - sqlalchemy.engine.Engine - INFO - [base.py:1096] - BEGIN (implicit)
+2025-08-25 10:29:14,470 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password 
+FROM users 
+WHERE users.id = ?
+2025-08-25 10:29:14,470 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [cached since 37.47s ago] (24,)
+2025-08-25 10:29:14,490 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT anon_1.users_id AS anon_1_users_id, anon_1.users_firstname AS anon_1_users_firstname, anon_1.users_lastname AS anon_1_users_lastname, anon_1.users_email AS anon_1_users_email, anon_1.users_role AS anon_1_users_role, anon_1.users_created_at AS anon_1_users_created_at, anon_1.users_active AS anon_1_users_active, anon_1.users_hashed_password AS anon_1_users_hashed_password, clients_1.id AS clients_1_id, clients_1.user_id AS clients_1_user_id, clients_1.place_id AS clients_1_place_id, clients_1.formatted_address AS clients_1_formatted_address, clients_1.display_name AS clients_1_display_name, clients_1.latitude AS clients_1_latitude, clients_1.longitude AS clients_1_longitude, clients_1.street_address AS clients_1_street_address, clients_1.city AS clients_1_city, clients_1.state AS clients_1_state, clients_1.postal_code AS clients_1_postal_code, clients_1.country AS clients_1_country, clients_1.onboarding_completed AS clients_1_onboarding_completed, clients_1.onboarding_completed_at AS clients_1_onboarding_completed_at, clients_1.created_at AS clients_1_created_at, clients_1.updated_at AS clients_1_updated_at, clients_1.pickup_instructions AS clients_1_pickup_instructions, dogs_1.id AS dogs_1_id, dogs_1.user_id AS dogs_1_user_id, dogs_1.name AS dogs_1_name, dogs_1.birth_year_month AS dogs_1_birth_year_month, dogs_1.gender AS dogs_1_gender, dogs_1.breed AS dogs_1_breed, dogs_1.allergies AS dogs_1_allergies, dogs_1.other_info AS dogs_1_other_info, dogs_1.pic AS dogs_1_pic 
+FROM (SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password 
+FROM users 
+WHERE users.id = ?
+ LIMIT ? OFFSET ?) AS anon_1 LEFT OUTER JOIN clients AS clients_1 ON anon_1.users_id = clients_1.user_id LEFT OUTER JOIN dogs AS dogs_1 ON anon_1.users_id = dogs_1.user_id
+2025-08-25 10:29:14,490 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [generated in 0.00034s] (24, 1, 0)
+2025-08-25 10:29:14,493 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT bookings.id AS bookings_id, bookings.user_id AS bookings_user_id, bookings.dog_id AS bookings_dog_id, bookings.date AS bookings_date, bookings.slot AS bookings_slot, bookings.walker_id AS bookings_walker_id, bookings.status AS bookings_status 
+FROM bookings 
+WHERE bookings.user_id = ? AND bookings.status != ? AND bookings.date > ? ORDER BY bookings.date ASC
+ LIMIT ? OFFSET ?
+2025-08-25 10:29:14,493 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [generated in 0.00010s] (24, 'Cancelled', '2025-08-25', 15, 0)
+2025-08-25 10:29:14,501 - sqlalchemy.engine.Engine - INFO - [base.py:1122] - ROLLBACK
+2025-08-25 10:29:14,501 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [25/Aug/2025 10:29:14] "GET / HTTP/1.1" 200 -
+2025-08-25 10:29:14,525 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [25/Aug/2025 10:29:14] "GET /static/apple-touch-icon.png HTTP/1.1" 200 -
+2025-08-25 10:29:14,525 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [25/Aug/2025 10:29:14] "GET /static/images/2fb94b1b-41ac-47d1-9694-ced5eadd1075.jpg HTTP/1.1" 200 -
+2025-08-25 10:29:30,824 - sqlalchemy.engine.Engine - INFO - [base.py:1096] - BEGIN (implicit)
+2025-08-25 10:29:30,825 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password 
+FROM users 
+WHERE users.id = ?
+2025-08-25 10:29:30,825 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [cached since 53.82s ago] (24,)
+2025-08-25 10:29:30,827 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT anon_1.users_id AS anon_1_users_id, anon_1.users_firstname AS anon_1_users_firstname, anon_1.users_lastname AS anon_1_users_lastname, anon_1.users_email AS anon_1_users_email, anon_1.users_role AS anon_1_users_role, anon_1.users_created_at AS anon_1_users_created_at, anon_1.users_active AS anon_1_users_active, anon_1.users_hashed_password AS anon_1_users_hashed_password, clients_1.id AS clients_1_id, clients_1.user_id AS clients_1_user_id, clients_1.place_id AS clients_1_place_id, clients_1.formatted_address AS clients_1_formatted_address, clients_1.display_name AS clients_1_display_name, clients_1.latitude AS clients_1_latitude, clients_1.longitude AS clients_1_longitude, clients_1.street_address AS clients_1_street_address, clients_1.city AS clients_1_city, clients_1.state AS clients_1_state, clients_1.postal_code AS clients_1_postal_code, clients_1.country AS clients_1_country, clients_1.onboarding_completed AS clients_1_onboarding_completed, clients_1.onboarding_completed_at AS clients_1_onboarding_completed_at, clients_1.created_at AS clients_1_created_at, clients_1.updated_at AS clients_1_updated_at, clients_1.pickup_instructions AS clients_1_pickup_instructions, dogs_1.id AS dogs_1_id, dogs_1.user_id AS dogs_1_user_id, dogs_1.name AS dogs_1_name, dogs_1.birth_year_month AS dogs_1_birth_year_month, dogs_1.gender AS dogs_1_gender, dogs_1.breed AS dogs_1_breed, dogs_1.allergies AS dogs_1_allergies, dogs_1.other_info AS dogs_1_other_info, dogs_1.pic AS dogs_1_pic 
+FROM (SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password 
+FROM users 
+WHERE users.id = ?
+ LIMIT ? OFFSET ?) AS anon_1 LEFT OUTER JOIN clients AS clients_1 ON anon_1.users_id = clients_1.user_id LEFT OUTER JOIN dogs AS dogs_1 ON anon_1.users_id = dogs_1.user_id
+2025-08-25 10:29:30,828 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [cached since 16.34s ago] (24, 1, 0)
+2025-08-25 10:29:30,829 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT bookings.id AS bookings_id, bookings.user_id AS bookings_user_id, bookings.dog_id AS bookings_dog_id, bookings.date AS bookings_date, bookings.slot AS bookings_slot, bookings.walker_id AS bookings_walker_id, bookings.status AS bookings_status 
+FROM bookings 
+WHERE bookings.user_id = ? AND bookings.status != ? AND bookings.date > ? ORDER BY bookings.date ASC
+ LIMIT ? OFFSET ?
+2025-08-25 10:29:30,830 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [cached since 16.34s ago] (24, 'Cancelled', '2025-08-25', 15, 0)
+2025-08-25 10:29:30,835 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - INSERT INTO bookings (user_id, dog_id, date, slot, walker_id, status) VALUES (?, ?, ?, ?, ?, ?)
+2025-08-25 10:29:30,835 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [generated in 0.00075s] (24, 16, '2025-08-29', 'Morning', '', 'Pending')
+2025-08-25 10:29:30,838 - sqlalchemy.engine.Engine - INFO - [base.py:1139] - COMMIT
+2025-08-25 10:29:30,841 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [25/Aug/2025 10:29:30] "[32mPOST / HTTP/1.1[0m" 302 -
+2025-08-25 10:29:30,845 - sqlalchemy.engine.Engine - INFO - [base.py:1096] - BEGIN (implicit)
+2025-08-25 10:29:30,845 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password 
+FROM users 
+WHERE users.id = ?
+2025-08-25 10:29:30,845 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [cached since 53.84s ago] (24,)
+2025-08-25 10:29:30,846 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT anon_1.users_id AS anon_1_users_id, anon_1.users_firstname AS anon_1_users_firstname, anon_1.users_lastname AS anon_1_users_lastname, anon_1.users_email AS anon_1_users_email, anon_1.users_role AS anon_1_users_role, anon_1.users_created_at AS anon_1_users_created_at, anon_1.users_active AS anon_1_users_active, anon_1.users_hashed_password AS anon_1_users_hashed_password, clients_1.id AS clients_1_id, clients_1.user_id AS clients_1_user_id, clients_1.place_id AS clients_1_place_id, clients_1.formatted_address AS clients_1_formatted_address, clients_1.display_name AS clients_1_display_name, clients_1.latitude AS clients_1_latitude, clients_1.longitude AS clients_1_longitude, clients_1.street_address AS clients_1_street_address, clients_1.city AS clients_1_city, clients_1.state AS clients_1_state, clients_1.postal_code AS clients_1_postal_code, clients_1.country AS clients_1_country, clients_1.onboarding_completed AS clients_1_onboarding_completed, clients_1.onboarding_completed_at AS clients_1_onboarding_completed_at, clients_1.created_at AS clients_1_created_at, clients_1.updated_at AS clients_1_updated_at, clients_1.pickup_instructions AS clients_1_pickup_instructions, dogs_1.id AS dogs_1_id, dogs_1.user_id AS dogs_1_user_id, dogs_1.name AS dogs_1_name, dogs_1.birth_year_month AS dogs_1_birth_year_month, dogs_1.gender AS dogs_1_gender, dogs_1.breed AS dogs_1_breed, dogs_1.allergies AS dogs_1_allergies, dogs_1.other_info AS dogs_1_other_info, dogs_1.pic AS dogs_1_pic 
+FROM (SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password 
+FROM users 
+WHERE users.id = ?
+ LIMIT ? OFFSET ?) AS anon_1 LEFT OUTER JOIN clients AS clients_1 ON anon_1.users_id = clients_1.user_id LEFT OUTER JOIN dogs AS dogs_1 ON anon_1.users_id = dogs_1.user_id
+2025-08-25 10:29:30,847 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [cached since 16.36s ago] (24, 1, 0)
+2025-08-25 10:29:30,850 - sqlalchemy.engine.Engine - INFO - [base.py:1895] - SELECT bookings.id AS bookings_id, bookings.user_id AS bookings_user_id, bookings.dog_id AS bookings_dog_id, bookings.date AS bookings_date, bookings.slot AS bookings_slot, bookings.walker_id AS bookings_walker_id, bookings.status AS bookings_status 
+FROM bookings 
+WHERE bookings.user_id = ? AND bookings.status != ? AND bookings.date > ? ORDER BY bookings.date ASC
+ LIMIT ? OFFSET ?
+2025-08-25 10:29:30,850 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [cached since 16.36s ago] (24, 'Cancelled', '2025-08-25', 15, 0)
+2025-08-25 10:29:30,853 - sqlalchemy.engine.Engine - INFO - [base.py:1122] - ROLLBACK
+2025-08-25 10:29:30,853 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [25/Aug/2025 10:29:30] "GET / HTTP/1.1" 200 -
+2025-08-25 10:29:30,877 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [25/Aug/2025 10:29:30] "GET /static/apple-touch-icon.png HTTP/1.1" 200 -
+2025-08-25 10:29:30,877 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [25/Aug/2025 10:29:30] "GET /static/images/2fb94b1b-41ac-47d1-9694-ced5eadd1075.jpg HTTP/1.1" 200 -

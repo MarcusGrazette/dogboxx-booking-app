@@ -2,13 +2,15 @@ from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from sqlalchemy.orm import joinedload
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from app.models import User, Client, Dog, Booking, Walker
 from app import db, limiter
+from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
 from email_validator import validate_email, EmailNotValidError
 import logging
 import os
 import uuid
+import traceback
 from datetime import datetime, timezone, timedelta
 from werkzeug.utils import secure_filename
 from app.forms import LoginForm, RegisterForm, OnboardingForm, BookingForm
@@ -81,17 +83,25 @@ def register_routes(app):
                 for e in errors:
                     flash(e, "danger")
             else:
-                dog_id = user.dogs[0].id  # This assumes a one to one user to dog relationship
-                new_booking = Booking(
-                    user_id=user.id,
-                    dog_id=dog_id,
-                    date=booking_date,
-                    slot=booking_slot
-            )
-            db.session.add(new_booking)
-            db.session.commit()
-            flash("Success - booking request submitted", "success")
-            return redirect(url_for("index"))
+                # Use context manager for error handling
+                with DBErrorHandler(
+                    flash_message=True, 
+                    custom_error_messages={
+                        IntegrityError: "Could not create booking due to a conflict. You might already have a booking at this time.",
+                        OperationalError: "Our booking system is temporarily unavailable. Please try again later."
+                    }
+                ):
+                    dog_id = user.dogs[0].id  # This assumes a one to one user to dog relationship
+                    new_booking = Booking(
+                        user_id=user.id,
+                        dog_id=dog_id,
+                        date=booking_date,
+                        slot=booking_slot
+                    )
+                    db.session.add(new_booking)
+                    db.session.commit()
+                    flash("Success - booking request submitted", "success")
+                    return redirect(url_for("index"))
         
         return render_template("index.html", user=user, client=user.client, dogs=user.dogs, bookings=upcoming_bookings, form=form) # type: ignore
 
@@ -287,7 +297,18 @@ def register_routes(app):
             except Exception as e:
                 db.session.rollback()
                 logging.error(f"Error during onboarding for user {current_user.email}: {e}")
-                flash("There was an error saving your information. Please try again.", "error")
+                logging.debug(f"Exception details: {traceback.format_exc()}")
+                
+                # Check for specific error types
+                if isinstance(e, SQLAlchemyError):
+                    if isinstance(e, IntegrityError):
+                        flash("There was a conflict with existing data. This might be because the information already exists in our system.", "error")
+                    elif isinstance(e, OperationalError):
+                        flash("The database is currently unavailable. Please try again later.", "error")
+                    else:
+                        flash("There was a database error. Please try again.", "error")
+                else:
+                    flash("There was an error saving your information. Please try again.", "error")
 
         return render_template("onboarding.html", google_maps_api_key=os.environ.get('GOOGLE_MAPS_API_KEY'), form=form)
 
@@ -330,12 +351,29 @@ def register_routes(app):
                 flash(f"Welcome to our platform, {firstname}!", "success")
                 return redirect(url_for('onboard'))
 
-            except IntegrityError:
+            except IntegrityError as e:
                 db.session.rollback()
-                flash("An error occurred. Please try again.", "error")
+                logging.error(f"IntegrityError during registration: {e}")
+                logging.debug(traceback.format_exc())
+                
+                # Check for duplicate email (specific constraint violation)
+                if "UNIQUE constraint failed: user.email" in str(e):
+                    flash("An account with this email already exists. Please log in instead.", "error")
+                else:
+                    flash("There was a problem creating your account due to a data conflict. Please try again.", "error")
+            except SQLAlchemyError as e:
+                db.session.rollback()
+                logging.error(f"SQLAlchemyError during registration: {e}")
+                logging.debug(traceback.format_exc())
+                
+                if isinstance(e, OperationalError):
+                    flash("The service is temporarily unavailable. Please try again later.", "error")
+                else:
+                    flash("A database error occurred while creating your account. Please try again.", "error")
             except Exception as e:
                 db.session.rollback()
-                logging.error(f"Error during registration: {e}")
+                logging.error(f"Unexpected error during registration: {e}")
+                logging.debug(traceback.format_exc())
                 flash("An unexpected error occurred. Please try again.", "error")
 
         return render_template("register.html", form=form)
@@ -394,6 +432,10 @@ def register_routes(app):
 
     @app.route("/admin/assign_walker", methods=["POST"])
     @login_required
+    @handle_db_errors(json_response=True, flash_message=False, custom_error_messages={
+        IntegrityError: "Could not assign walker due to a data conflict.",
+        OperationalError: "Database is temporarily unavailable. Please try again."
+    })
     def assign_walker():
         """Assign a walker and slot to a booking (admin only). Returns JSON for AJAX requests."""
         if current_user.role != 'admin':
@@ -473,8 +515,11 @@ def register_routes(app):
             ), 200
             
         except Exception as e:
+            # This will be handled by the @handle_db_errors decorator
+            # This code won't be reached for database errors, only for other types of exceptions
             db.session.rollback()
             logging.error(f"Error assigning/unassigning walker: {e}")
+            logging.debug(traceback.format_exc())
             return jsonify(success=False, message="Server error"), 500
          
     @app.route("/admin/bookings_by_date")

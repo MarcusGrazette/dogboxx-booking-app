@@ -8,6 +8,10 @@ class Config:
     SESSION_TYPE = "filesystem"
     SESSION_PERMANENT = False
     
+    # Logging configuration
+    LOG_LEVEL = "INFO"
+    LOG_FILE = None  # No file logging by default
+    
     # Dropzone configuration
     DROPZONE_UPLOAD_MULTIPLE = False  # Single file upload
     DROPZONE_ALLOWED_FILE_TYPE = 'image'  # Only allow images
@@ -38,6 +42,13 @@ class DevelopmentConfig(Config):
     """Development configuration."""
     DEBUG = True
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'sqlite:///app.db')
+    
+    # Enhanced logging for development
+    LOG_LEVEL = "DEBUG"
+    LOG_FILE = "logs/development.log"
+    
+    # SQL query logging for development
+    SQLALCHEMY_ECHO = True
     
     # No HTTPS enforcement in development
     SESSION_COOKIE_SECURE = False
