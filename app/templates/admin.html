@@ -366,7 +366,7 @@ Admin
       }
 
       try {
-        const response = await fetch(`/admin/calendar_data/${year}/${month}`, {
+        const response = await fetch(`{{ url_for('admin.calendar_data', year=0, month=0) }}`.replace('/0/0', `/${year}/${month}`), {
           method: 'GET',
           credentials: 'same-origin'
         });
@@ -422,7 +422,7 @@ Admin
       container.innerHTML = '<div class="text-center p-4"><i class="bi bi-hourglass-split"></i> Loading...</div>';
 
       try {
-        const res = await fetch(`{{ url_for('admin_bookings_by_date') }}?date=${selectedDate}`, {
+        const res = await fetch(`{{ url_for('admin.bookings_by_date') }}?date=${selectedDate}`, {
           method: "GET",
           credentials: "same-origin"
         });
@@ -618,7 +618,7 @@ Admin
 
         console.log("Sending API request:", payload);
 
-        const res = await fetch("{{ url_for('assign_walker') }}", {
+        const res = await fetch("{{ url_for('admin.assign_walker') }}", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

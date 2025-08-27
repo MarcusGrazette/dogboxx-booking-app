@@ -50,6 +50,11 @@ class User(db.Model):
     @property
     def full_name(self):
         return f"{self.firstname} {self.lastname}"
+        
+    @property
+    def is_admin(self):
+        """Return True if user is an admin"""
+        return self.role == 'admin'
 
     @staticmethod
     def validate_password(password):

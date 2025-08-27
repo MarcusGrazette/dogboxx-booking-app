@@ -25,8 +25,8 @@ class Config:
     # Content Security Policy
     CSP = {
         'default-src': "'self'",
-        'script-src': "'self' https://cdn.jsdelivr.net https://unpkg.com",
-        'style-src': "'self' https://cdn.jsdelivr.net https://unpkg.com",
+        'script-src': "'self' https://cdn.jsdelivr.net https://unpkg.com 'unsafe-inline'",
+        'style-src': "'self' https://cdn.jsdelivr.net https://unpkg.com 'unsafe-inline'",
         'img-src': "'self' data:",
         'font-src': "'self' https://cdn.jsdelivr.net",
     }

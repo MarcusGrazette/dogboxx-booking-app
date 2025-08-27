@@ -1,0 +1,155 @@
+<div class="row g-3" id="drag-drop-container">
+    <!-- Pending Bookings Column -->
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-header bg-warning text-dark">
+                <h6 class="mb-0"><i class="bi bi-hourglass"></i> Pending</h6>
+            </div>
+            <div class="card-body p-2">
+                <!-- Morning Pending -->
+                <div class="drop-zone pending-zone" data-slot="Morning" data-walker-id="">
+                    <h6 class="text-muted mb-2">Morning</h6>
+                    <div class="booking-cards">
+                    {% for booking in pending_bookings %}
+                        {% if booking.slot == 'Morning' %}
+                        <div class="card booking-card draggable bg-light border-dark" 
+                            draggable="true" 
+                            data-booking-id="{{ booking.id }}"
+                            data-current-slot="{{ booking.slot }}"
+                            data-current-walker-id="{{ booking.walker_id or '' }}"
+                            data-dog-name="{{ booking.dog_name }}"
+                            data-dog-pic="{{ booking.dog_pic or '' }}">
+                            <div class="d-flex align-items-center gap-2 p-2">
+                                <div style="width: 30px; height: 30px; overflow: hidden;" class="rounded-circle flex-shrink-0">
+                                    <img src="{{ '/static/images/' + booking.dog_pic if booking.dog_pic else '/static/images/default-dog.png' }}" 
+                                         class="img-fluid" alt="{{ booking.dog_name }}" 
+                                         style="width: 100%; height: 100%; object-fit: cover;"
+                                         onerror="this.onerror=null; this.src='/static/images/default-dog.png'">
+                                </div>
+                                <div>
+                                    <small>{{ booking.dog_name }}</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <!-- Afternoon Pending -->
+                <div class="drop-zone pending-zone" data-slot="Afternoon" data-walker-id="">
+                    <h6 class="text-muted mb-2">Afternoon</h6>
+                    <div class="booking-cards">
+                    {% for booking in pending_bookings %}
+                        {% if booking.slot == 'Afternoon' %}
+                        <div class="card booking-card draggable bg-light border-dark" 
+                            draggable="true" 
+                            data-booking-id="{{ booking.id }}"
+                            data-current-slot="{{ booking.slot }}"
+                            data-current-walker-id="{{ booking.walker_id or '' }}"
+                            data-dog-name="{{ booking.dog_name }}"
+                            data-dog-pic="{{ booking.dog_pic or '' }}">
+                            <div class="d-flex align-items-center gap-2 p-2">
+                                <div style="width: 30px; height: 30px; overflow: hidden;" class="rounded-circle flex-shrink-0">
+                                    <img src="{{ '/static/images/' + booking.dog_pic if booking.dog_pic else '/static/images/default-dog.png' }}" 
+                                         class="img-fluid" alt="{{ booking.dog_name }}" 
+                                         style="width: 100%; height: 100%; object-fit: cover;"
+                                         onerror="this.onerror=null; this.src='/static/images/default-dog.png'">
+                                </div>
+                                <div>
+                                    <small>{{ booking.dog_name }}</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Walkers Column -->
+    <div class="col-md-9">
+        <div class="row g-3">
+        {% for walker in walkers %}
+            <div class="col-md-4 mb-3">
+                <div class="card h-100">
+                    <div class="card-header bg-info bg-opacity-50">
+                        <h6 class="mb-0">{{ walker.user.first_name if walker.user else 'Walker' }}</h6>
+                    </div>
+                    <div class="card-body p-2">
+                        <!-- Morning Slot -->
+                        <div class="drop-zone walker-zone {{ '' if walker_capacity[walker.id]['Morning'] < 6 else 'bg-danger bg-opacity-25' }}" 
+                            data-slot="Morning" 
+                            data-walker-id="{{ walker.id }}">
+                            <h6 class="text-muted mb-2">Morning ({{ walker_capacity[walker.id]['Morning'] }}/6)</h6>
+                            <div class="booking-cards">
+                            {% for booking in assigned_bookings %}
+                                {% if booking.walker_id == walker.id and booking.slot == 'Morning' %}
+                                <div class="card booking-card draggable bg-light border-success" 
+                                    draggable="true" 
+                                    data-booking-id="{{ booking.id }}"
+                                    data-current-slot="{{ booking.slot }}"
+                                    data-current-walker-id="{{ booking.walker_id }}"
+                                    data-dog-name="{{ booking.dog_name }}"
+                                    data-dog-pic="{{ booking.dog_pic or '' }}">
+                                    <div class="d-flex align-items-center gap-2 p-2">
+                                        <div style="width: 30px; height: 30px; overflow: hidden;" class="rounded-circle flex-shrink-0">
+                                            <img src="{{ '/static/images/' + booking.dog_pic if booking.dog_pic else '/static/images/default-dog.png' }}" 
+                                                 class="img-fluid" alt="{{ booking.dog_name }}" 
+                                                 style="width: 100%; height: 100%; object-fit: cover;"
+                                                 onerror="this.onerror=null; this.src='/static/images/default-dog.png'">
+                                        </div>
+                                        <div>
+                                            <small>{{ booking.dog_name }}</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            {% endfor %}
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <!-- Afternoon Slot -->
+                        <div class="drop-zone walker-zone {{ '' if walker_capacity[walker.id]['Afternoon'] < 6 else 'bg-danger bg-opacity-25' }}" 
+                            data-slot="Afternoon" 
+                            data-walker-id="{{ walker.id }}">
+                            <h6 class="text-muted mb-2">Afternoon ({{ walker_capacity[walker.id]['Afternoon'] }}/6)</h6>
+                            <div class="booking-cards">
+                            {% for booking in assigned_bookings %}
+                                {% if booking.walker_id == walker.id and booking.slot == 'Afternoon' %}
+                                <div class="card booking-card draggable bg-light border-success" 
+                                    draggable="true" 
+                                    data-booking-id="{{ booking.id }}"
+                                    data-current-slot="{{ booking.slot }}"
+                                    data-current-walker-id="{{ booking.walker_id }}"
+                                    data-dog-name="{{ booking.dog_name }}"
+                                    data-dog-pic="{{ booking.dog_pic or '' }}">
+                                    <div class="d-flex align-items-center gap-2 p-2">
+                                        <div style="width: 30px; height: 30px; overflow: hidden;" class="rounded-circle flex-shrink-0">
+                                            <img src="{{ '/static/images/' + booking.dog_pic if booking.dog_pic else '/static/images/default-dog.png' }}" 
+                                                 class="img-fluid" alt="{{ booking.dog_name }}" 
+                                                 style="width: 100%; height: 100%; object-fit: cover;"
+                                                 onerror="this.onerror=null; this.src='/static/images/default-dog.png'">
+                                        </div>
+                                        <div>
+                                            <small>{{ booking.dog_name }}</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+        </div>
+    </div>
+</div>

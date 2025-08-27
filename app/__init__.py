@@ -65,8 +65,7 @@ def create_app(config_name=None):
     # Initialize Flask-Login
     login_manager.init_app(app)
     login_manager.login_view = "login"
-    login_manager.login_message = "Please log in to access this page."
-    login_manager.login_message_category = "info"
+    login_manager.login_message = None
 
     @login_manager.user_loader
     def load_user(user_id):
@@ -124,7 +123,11 @@ def create_app(config_name=None):
         # Import all models so they're registered with SQLAlchemy
         from app.models import User, Client, Dog, Walker, Booking
 
-    # Import and register routes
+    # Register blueprints for modular routing
+    from app.blueprints.register import register_blueprints
+    register_blueprints(app)
+    
+    # Register legacy routes (will be migrated to blueprints)
     from app.routes import register_routes
     register_routes(app)
 
