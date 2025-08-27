@@ -70,10 +70,10 @@ def bookings_by_date():
             b.dog_name = b.dog.name if b.dog else "Unknown"
             b.dog_pic = b.dog.pic if b.dog and b.dog.pic else None
             if b.walker and hasattr(b.walker, 'user'):
-                b.walker_name = f"{b.walker.user.first_name}" if b.walker.user else None
+                b.walker_name = f"{b.walker.user.firstname}" if b.walker.user else None
 
-        # Get all walkers
-        walkers = Walker.query.all()
+        # Get all walkers with their associated user data
+        walkers = Walker.query.options(joinedload(Walker.user)).all()
         
         # Create walker capacity tracking
         walker_capacity = {}
@@ -371,18 +371,29 @@ def calendar_data(year, month):
     
     # Group by date
     booking_counts = {}
+    pending_dates = set()  # Use a set to track unique dates with pending bookings
+    
     for booking in bookings:
         date_str = booking.date.strftime('%Y-%m-%d')
+        date_day = booking.date.day  # Extract just the day number
+        
         if date_str not in booking_counts:
             booking_counts[date_str] = {
                 'total': 0,
                 'assigned': 0
             }
         booking_counts[date_str]['total'] += 1
+        
         if booking.walker_id:
             booking_counts[date_str]['assigned'] += 1
+        elif booking.status == 'Pending':
+            # Track dates with pending bookings
+            pending_dates.add(date_day)
     
-    return jsonify(success=True, data=booking_counts)
+    # Convert the set to a list for JSON serialization
+    pending_dates_list = list(pending_dates)
+    
+    return jsonify(success=True, data=booking_counts, pending_dates=pending_dates_list)
 
 
 def _get_slot_color(slot):
