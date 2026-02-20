@@ -1,0 +1,67 @@
+{% extends "layout.html" %}
+
+{% block title %}
+{{ title }}
+{% endblock %}
+
+{% block main %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-8 col-lg-6">
+            <div class="py-4">
+                <div class="d-flex align-items-center mb-4">
+                    <a href="{{ url_for('admin.clients') }}" class="btn btn-outline-secondary me-3">
+                        <i class="bi bi-arrow-left"></i>
+                    </a>
+                    <h2 class="mb-0">{{ title }}</h2>
+                </div>
+
+                <div class="card">
+                    <div class="card-body">
+                        <form method="post" novalidate>
+                            {{ form.hidden_tag() }}
+
+                            <div class="mb-3">
+                                {{ form.email.label(class="form-label") }}
+                                {{ form.email(class="form-control", placeholder="Enter email address") }}
+                                {% for error in form.email.errors %}
+                                <div class="text-danger small">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    {{ form.firstname.label(class="form-label") }}
+                                    {{ form.firstname(class="form-control", placeholder="First name") }}
+                                    {% for error in form.firstname.errors %}
+                                    <div class="text-danger small">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                                
+                                <div class="col-md-6 mb-3">
+                                    {{ form.lastname.label(class="form-label") }}
+                                    {{ form.lastname(class="form-control", placeholder="Last name") }}
+                                    {% for error in form.lastname.errors %}
+                                    <div class="text-danger small">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                <a href="{{ url_for('admin.clients') }}" class="btn btn-outline-secondary me-md-2">Cancel</a>
+                                {{ form.submit(class="btn btn-primary") }}
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="alert alert-info mt-3">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Note:</strong> A temporary password will be generated and displayed after account creation.
+                    The client will be required to change their password on first login.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

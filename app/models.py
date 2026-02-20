@@ -282,7 +282,8 @@ class Booking(db.Model):
     walker_id = db.Column(db.Integer, db.ForeignKey('walkers.id'), nullable=True)
     pickup_order = db.Column(db.Integer, nullable=True)  # set by admin drag-drop; 1 = first pickup
     status = db.Column(db.Enum('requested', 'confirmed', 'modified', 'rejected',
-                               'cancelled', 'completed', name='booking_status'),
+                               'cancelled', 'completed', 'waitlisted',
+                               name='booking_status'),
                        nullable=False, default='requested')
     client_notes = db.Column(db.Text, nullable=True)
     admin_notes = db.Column(db.Text, nullable=True)

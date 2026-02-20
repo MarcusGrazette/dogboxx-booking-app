@@ -59,19 +59,19 @@ def get_daycare_capacity(date):
 
 def check_availability(service_type, date, slot=None):
     """Check if a booking can be made for the given service, date, and slot.
-    Returns (available: bool, message: str)."""
+    Returns (available: bool, can_waitlist: bool, message: str)."""
     if service_type.slug == 'group-walk':
         if not slot:
-            return False, "Slot is required for walk bookings."
+            return False, False, "Slot is required for walk bookings."
         total, booked, available = get_walk_capacity(date, slot)
         if available <= 0:
-            return False, f"No walk slots available for {date} {slot} (all {total} slots booked)."
-        return True, f"{available} of {total} slots available."
+            return False, True, f"No walk slots available for {date} {slot} (all {total} slots booked). You can join the waitlist."
+        return True, False, f"{available} of {total} slots available."
 
     elif service_type.slug == 'day-care':
         total, booked, available = get_daycare_capacity(date)
         if available <= 0:
-            return False, f"Day care is fully booked for {date} ({total} dogs max)."
-        return True, f"{available} of {total} spots available."
+            return False, True, f"Day care is fully booked for {date} ({total} dogs max). You can join the waitlist."
+        return True, False, f"{available} of {total} spots available."
 
-    return True, "Availability check not implemented for this service type."
+    return True, False, "Availability check not implemented for this service type."

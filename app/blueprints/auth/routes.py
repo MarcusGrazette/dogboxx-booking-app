@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from app.models import User, Client
 from app import db, limiter
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
-from app.forms import LoginForm, RegisterForm
+from app.forms import LoginForm, RegisterForm, PasswordChangeForm
 import logging
 import traceback
 from datetime import datetime, timezone
@@ -135,6 +135,38 @@ def logout():
     logout_user()
     flash("You have been logged out.", "info")
     return redirect(url_for("auth.login"))
+
+
+@auth_bp.route("/change-password", methods=["GET", "POST"])
+@login_required
+def change_password():
+    """Allow users to change their password"""
+    form = PasswordChangeForm()
+    
+    if form.validate_on_submit():
+        try:
+            # Check current password
+            if not check_password_hash(current_user.hashed_password, form.current_password.data):
+                flash("Current password is incorrect.", "error")
+                return render_template("change_password.html", form=form)
+            
+            # Update password
+            current_user.hashed_password = generate_password_hash(form.new_password.data)
+            current_user.must_change_password = False
+            
+            db.session.commit()
+            
+            flash("Your password has been changed successfully.", "success")
+            
+            # Redirect based on role
+            return _redirect_by_role(current_user)
+            
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            logging.error(f"Error changing password for user {current_user.id}: {e}")
+            flash("An error occurred while changing your password. Please try again.", "error")
+    
+    return render_template("change_password.html", form=form)
 
 
 def _redirect_by_role(user):

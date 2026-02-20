@@ -19,7 +19,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from app import create_app, db
-from app.models import User, Client, Dog, Walker, Booking
+from app.models import User, Client, Dog, Walker, Booking, ServiceType, DogOwner
 
 
 def load_json_data(filename):
@@ -120,7 +120,6 @@ def seed_dogs(dogs_data, users):
             continue
             
         dog = Dog(
-            user_id=user.id,
             name=dog_data['name'],
             birth_year_month=dog_data.get('birth_year_month'),
             gender=dog_data.get('gender'),
@@ -131,6 +130,16 @@ def seed_dogs(dogs_data, users):
         )
         
         db.session.add(dog)
+        db.session.flush()  # Get dog.id
+        
+        # Create DogOwner relationship (user is primary owner)
+        dog_owner = DogOwner(
+            dog_id=dog.id,
+            user_id=user.id,
+            role='primary'
+        )
+        db.session.add(dog_owner)
+        
         created_dogs.append(dog)
         print(f"  Created dog: {dog.name} (owner: {user.email})")
     
@@ -244,14 +253,56 @@ def seed_bookings(bookings_data, users, dogs, walkers):
         booking = Booking(
             user_id=user.id,
             dog_id=dog.id,
+            service_type_id=1,  # Assuming Group Walk is ID 1
             date=booking_date,
             slot=booking_data.get('slot', 'Morning'),
             walker_id=walker.id if walker else None,
-            status=booking_data.get('status', 'Pending')
+            status=booking_data.get('status', 'requested')
         )
         
         db.session.add(booking)
         print(f"  Created booking: {dog.name} on {booking_date} ({booking.slot})")
+
+
+def seed_service_types():
+    """Create default service types."""
+    print("Creating service types...")
+    
+    # Check if service types already exist
+    existing_count = ServiceType.query.count()
+    if existing_count > 0:
+        print(f"  Service types already exist ({existing_count}), skipping...")
+        return
+    
+    service_types = [
+        {
+            'name': 'Group Walk',
+            'slug': 'group-walk',
+            'description': 'Standard group dog walking service',
+            'capacity_model': 'walker_assigned',
+            'slot_type': 'morning_afternoon',
+            'requires_walker': True,
+            'requires_compatibility_check': True,
+            'default_max_capacity': 6,
+            'active': True
+        },
+        {
+            'name': 'Doggy Day Care',
+            'slug': 'day-care', 
+            'description': 'Full day care service for dogs',
+            'capacity_model': 'facility_capacity',
+            'slot_type': 'full_half_day',
+            'requires_walker': False,
+            'requires_compatibility_check': False,
+            'default_max_capacity': 20,
+            'active': True
+        }
+    ]
+    
+    for service_data in service_types:
+        service = ServiceType(**service_data)
+        db.session.add(service)
+        print(f"  Created service type: {service.name}")
 
 
 def main():
@@ -274,6 +325,10 @@ def main():
             return
         
         try:
+            # Create service types first
+            seed_service_types()
+            db.session.commit()
+            
             # Create all records
             users = seed_users(users_data)
             db.session.commit()

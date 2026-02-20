@@ -84,6 +84,29 @@ def create_app(config_name=None):
                 url = request.url.replace('http://', 'https://', 1)
                 return redirect(url, code=301)
 
+    @app.before_request
+    def check_password_change_required():
+        """Redirect users who must change their password"""
+        from flask_login import current_user
+        
+        # Skip for non-authenticated users
+        if not current_user.is_authenticated:
+            return
+            
+        # Skip for logout and change password routes
+        if request.endpoint in ['auth.logout', 'auth.change_password']:
+            return
+            
+        # Skip for static files and API endpoints
+        if (request.endpoint and 
+            (request.endpoint.startswith('static') or 
+             request.endpoint.startswith('api.'))):
+            return
+            
+        # Redirect if password change is required
+        if current_user.must_change_password:
+            return redirect('/auth/change-password')
+
     @app.after_request
     def add_security_headers(response):
         """Add security-related headers to response"""

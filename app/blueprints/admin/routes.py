@@ -9,13 +9,13 @@ from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError
-from app.models import User, Booking, Walker, Dog
+from app.models import User, Booking, Walker, Dog, Client, WalkerSchedule, DogOwner
 from app import db
 from app.utils.db_error_handler import handle_db_errors
+from app.forms import ClientCreateForm, WalkerCreateForm, WalkerScheduleForm
 from datetime import datetime, timezone, timedelta
-import logging
-import traceback
-import json
+from werkzeug.security import generate_password_hash
+import secrets
 import logging
 import traceback
 import json
@@ -53,17 +53,17 @@ def bookings_by_date():
         # Get all bookings for the selected date (pending and assigned)
         all_bookings = (
             Booking.query
-            .options(joinedload(Booking.dog), joinedload(Booking.walker))
+            .options(joinedload(Booking.dog), joinedload(Booking.walker), joinedload(Booking.user))
             .filter(
                 Booking.date == selected_date,
-                Booking.status != 'Cancelled'
+                Booking.status != 'cancelled'
             )
             .all()
         )
         
         # Separate pending and assigned bookings
-        pending_bookings = [b for b in all_bookings if b.status == 'Pending']
-        assigned_bookings = [b for b in all_bookings if b.walker_id is not None]
+        pending_bookings = [b for b in all_bookings if b.status == 'requested']
+        assigned_bookings = [b for b in all_bookings if b.walker_id is not None and b.status == 'confirmed']
         
         # Add display properties to all bookings
         for b in all_bookings:
@@ -138,7 +138,7 @@ def assign_walker():
         # If walker_id is None, this is an unassignment operation
         if walker_id is None:
             booking.walker_id = None
-            booking.status = "Pending"
+            booking.status = "requested"
             db.session.commit()
             
             return jsonify(
@@ -163,7 +163,7 @@ def assign_walker():
                 Booking.walker_id == walker.id,
                 Booking.date == booking.date,
                 Booking.slot == slot,
-                Booking.status != 'Cancelled',
+                Booking.status != 'cancelled',
                 Booking.id != booking.id  # Exclude current booking if reassigning
             ).count()
             
@@ -172,7 +172,7 @@ def assign_walker():
 
         # Update walker assignment and slot
         booking.walker_id = walker.id
-        booking.status = 'Confirmed'
+        booking.status = 'confirmed'
         if slot:
             booking.slot = slot
         db.session.commit()
@@ -366,7 +366,7 @@ def calendar_data(year, month):
     bookings = Booking.query.filter(
         Booking.date >= start_date,
         Booking.date < end_date,
-        Booking.status != 'Cancelled'
+        Booking.status != 'cancelled'
     ).all()
     
     # Group by date
@@ -386,7 +386,7 @@ def calendar_data(year, month):
         
         if booking.walker_id:
             booking_counts[date_str]['assigned'] += 1
-        elif booking.status == 'Pending':
+        elif booking.status == 'requested':
             # Track dates with pending bookings
             pending_dates.add(date_day)
     
@@ -406,3 +406,329 @@ def _get_slot_color(slot):
         return "danger"
     else:
         return "secondary"
+
+
+# === CLIENT MANAGEMENT ROUTES ===
+
+@admin_bp.route("/clients")
+@login_required
+def clients():
+    """List all clients (admin only)"""
+    if current_user.role != 'admin':
+        flash("Only admins can access this page.", "danger")
+        return redirect(url_for("client.index"))
+    
+    # Get all users with role='client' and their client records
+    clients = (
+        User.query
+        .options(joinedload(User.client))
+        .filter(User.role == 'client')
+        .order_by(User.lastname, User.firstname)
+        .all()
+    )
+    
+    return render_template("admin_clients.html", clients=clients)
+
+
+@admin_bp.route("/clients/new", methods=["GET", "POST"])
+@login_required
+def new_client():
+    """Form to add a new client (admin only)"""
+    if current_user.role != 'admin':
+        flash("Only admins can access this page.", "danger")
+        return redirect(url_for("client.index"))
+    
+    form = ClientCreateForm()
+    
+    if form.validate_on_submit():
+        try:
+            # Check if user already exists
+            existing_user = User.query.filter_by(email=form.email.data.lower()).first()
+            if existing_user:
+                flash("A user with this email already exists.", "error")
+                return render_template("admin_client_form.html", form=form, title="Add New Client")
+            
+            # Generate temporary password
+            temp_password = secrets.token_urlsafe(12)
+            
+            # Create User record
+            user = User(
+                firstname=form.firstname.data.strip().title(),
+                lastname=form.lastname.data.strip().title(),
+                email=form.email.data.strip().lower(),
+                role='client',
+                hashed_password=generate_password_hash(temp_password),
+                must_change_password=True
+            )
+            
+            db.session.add(user)
+            db.session.flush()  # Get user.id
+            
+            # Create Client record
+            client = Client(user_id=user.id)
+            db.session.add(client)
+            
+            db.session.commit()
+            
+            # TODO: Send welcome email with temp password
+            logging.info(f"Admin {current_user.id} created client account for {user.email}")
+            flash(f"Client account created successfully. Temporary password: {temp_password}", "success")
+            
+            return redirect(url_for('admin.clients'))
+            
+        except IntegrityError as e:
+            db.session.rollback()
+            logging.error(f"IntegrityError creating client: {e}")
+            flash("A client with this email already exists.", "error")
+        except Exception as e:
+            db.session.rollback()
+            logging.error(f"Error creating client: {e}")
+            flash("An error occurred while creating the client.", "error")
+    
+    return render_template("admin_client_form.html", form=form, title="Add New Client")
+
+
+@admin_bp.route("/clients/<int:client_id>/deactivate", methods=["POST"])
+@login_required
+def deactivate_client(client_id):
+    """Deactivate a client (soft delete)"""
+    if current_user.role != 'admin':
+        return jsonify(success=False, message="Forbidden"), 403
+    
+    try:
+        user = User.query.filter(User.role == 'client', User.id == client_id).first()
+        if not user:
+            return jsonify(success=False, message="Client not found"), 404
+        
+        user.active = False
+        db.session.commit()
+        
+        logging.info(f"Admin {current_user.id} deactivated client {user.id}")
+        return jsonify(success=True, message="Client deactivated successfully")
+        
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error deactivating client {client_id}: {e}")
+        return jsonify(success=False, message="Error deactivating client"), 500
+
+
+@admin_bp.route("/clients/<int:client_id>/activate", methods=["POST"])
+@login_required
+def activate_client(client_id):
+    """Reactivate a client"""
+    if current_user.role != 'admin':
+        return jsonify(success=False, message="Forbidden"), 403
+    
+    try:
+        user = User.query.filter(User.role == 'client', User.id == client_id).first()
+        if not user:
+            return jsonify(success=False, message="Client not found"), 404
+        
+        user.active = True
+        db.session.commit()
+        
+        logging.info(f"Admin {current_user.id} activated client {user.id}")
+        return jsonify(success=True, message="Client activated successfully")
+        
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error activating client {client_id}: {e}")
+        return jsonify(success=False, message="Error activating client"), 500
+
+
+# === WALKER MANAGEMENT ROUTES ===
+
+@admin_bp.route("/walkers")
+@login_required
+def walkers():
+    """List all walkers (admin only)"""
+    if current_user.role != 'admin':
+        flash("Only admins can access this page.", "danger")
+        return redirect(url_for("client.index"))
+    
+    # Get all users with role='walker' and their walker records
+    walkers = (
+        User.query
+        .options(joinedload(User.walker))
+        .filter(User.role == 'walker')
+        .order_by(User.lastname, User.firstname)
+        .all()
+    )
+    
+    return render_template("admin_walkers.html", walkers=walkers)
+
+
+@admin_bp.route("/walkers/new", methods=["GET", "POST"])
+@login_required
+def new_walker():
+    """Form to add a new walker (admin only)"""
+    if current_user.role != 'admin':
+        flash("Only admins can access this page.", "danger")
+        return redirect(url_for("client.index"))
+    
+    form = WalkerCreateForm()
+    
+    if form.validate_on_submit():
+        try:
+            # Check if user already exists
+            existing_user = User.query.filter_by(email=form.email.data.lower()).first()
+            if existing_user:
+                flash("A user with this email already exists.", "error")
+                return render_template("admin_walker_form.html", form=form, title="Add New Walker")
+            
+            # Generate temporary password
+            temp_password = secrets.token_urlsafe(12)
+            
+            # Create User record
+            user = User(
+                firstname=form.firstname.data.strip().title(),
+                lastname=form.lastname.data.strip().title(),
+                email=form.email.data.strip().lower(),
+                role='walker',
+                hashed_password=generate_password_hash(temp_password),
+                must_change_password=True
+            )
+            
+            db.session.add(user)
+            db.session.flush()  # Get user.id
+            
+            # Create Walker record
+            walker = Walker(user_id=user.id)
+            db.session.add(walker)
+            
+            db.session.commit()
+            
+            # TODO: Send welcome email with temp password
+            logging.info(f"Admin {current_user.id} created walker account for {user.email}")
+            flash(f"Walker account created successfully. Temporary password: {temp_password}", "success")
+            
+            return redirect(url_for('admin.walkers'))
+            
+        except IntegrityError as e:
+            db.session.rollback()
+            logging.error(f"IntegrityError creating walker: {e}")
+            flash("A walker with this email already exists.", "error")
+        except Exception as e:
+            db.session.rollback()
+            logging.error(f"Error creating walker: {e}")
+            flash("An error occurred while creating the walker.", "error")
+    
+    return render_template("admin_walker_form.html", form=form, title="Add New Walker")
+
+
+@admin_bp.route("/walkers/<int:walker_id>/deactivate", methods=["POST"])
+@login_required
+def deactivate_walker(walker_id):
+    """Deactivate a walker (soft delete)"""
+    if current_user.role != 'admin':
+        return jsonify(success=False, message="Forbidden"), 403
+    
+    try:
+        user = User.query.filter(User.role == 'walker', User.id == walker_id).first()
+        if not user:
+            return jsonify(success=False, message="Walker not found"), 404
+        
+        user.active = False
+        db.session.commit()
+        
+        logging.info(f"Admin {current_user.id} deactivated walker {user.id}")
+        return jsonify(success=True, message="Walker deactivated successfully")
+        
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error deactivating walker {walker_id}: {e}")
+        return jsonify(success=False, message="Error deactivating walker"), 500
+
+
+@admin_bp.route("/walkers/<int:walker_id>/activate", methods=["POST"])
+@login_required
+def activate_walker(walker_id):
+    """Reactivate a walker"""
+    if current_user.role != 'admin':
+        return jsonify(success=False, message="Forbidden"), 403
+    
+    try:
+        user = User.query.filter(User.role == 'walker', User.id == walker_id).first()
+        if not user:
+            return jsonify(success=False, message="Walker not found"), 404
+        
+        user.active = True
+        db.session.commit()
+        
+        logging.info(f"Admin {current_user.id} activated walker {user.id}")
+        return jsonify(success=True, message="Walker activated successfully")
+        
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error activating walker {walker_id}: {e}")
+        return jsonify(success=False, message="Error activating walker"), 500
+
+
+@admin_bp.route("/walkers/<int:walker_id>/schedule", methods=["GET", "POST"])
+@login_required
+def walker_schedule(walker_id):
+    """View/edit walker's weekly schedule"""
+    if current_user.role != 'admin':
+        flash("Only admins can access this page.", "danger")
+        return redirect(url_for("client.index"))
+    
+    # Get walker
+    walker = Walker.query.options(joinedload(Walker.user)).get_or_404(walker_id)
+    
+    form = WalkerScheduleForm()
+    
+    if form.validate_on_submit():
+        try:
+            # Clear existing schedules
+            WalkerSchedule.query.filter_by(walker_id=walker_id).delete()
+            
+            # Add new schedules based on form data
+            days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+            for day_index, day_name in enumerate(days):
+                day_form = getattr(form, day_name)
+                
+                if day_form.morning.data:
+                    schedule = WalkerSchedule(
+                        walker_id=walker_id,
+                        day_of_week=day_index,
+                        slot='Morning',
+                        active=True
+                    )
+                    db.session.add(schedule)
+                
+                if day_form.afternoon.data:
+                    schedule = WalkerSchedule(
+                        walker_id=walker_id,
+                        day_of_week=day_index,
+                        slot='Afternoon',
+                        active=True
+                    )
+                    db.session.add(schedule)
+            
+            db.session.commit()
+            
+            flash("Walker schedule updated successfully.", "success")
+            return redirect(url_for('admin.walkers'))
+            
+        except Exception as e:
+            db.session.rollback()
+            logging.error(f"Error updating walker schedule: {e}")
+            flash("An error occurred while updating the schedule.", "error")
+    
+    # Pre-populate form with existing schedule
+    existing_schedules = WalkerSchedule.query.filter_by(walker_id=walker_id, active=True).all()
+    schedule_dict = {}
+    for schedule in existing_schedules:
+        if schedule.day_of_week not in schedule_dict:
+            schedule_dict[schedule.day_of_week] = {'morning': False, 'afternoon': False}
+        schedule_dict[schedule.day_of_week][schedule.slot.lower()] = True
+    
+    # Set form values
+    days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+    for day_index, day_name in enumerate(days):
+        day_form = getattr(form, day_name)
+        if day_index in schedule_dict:
+            day_form.morning.data = schedule_dict[day_index].get('morning', False)
+            day_form.afternoon.data = schedule_dict[day_index].get('afternoon', False)
+    
+    return render_template("admin_walker_schedule.html", walker=walker, form=form)

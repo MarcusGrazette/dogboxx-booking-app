@@ -10,7 +10,7 @@ from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
-from app.models import User, Client, Dog, Booking
+from app.models import User, Client, Dog, Booking, DogOwner
 from app import db
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
 from app.forms import OnboardingForm, BookingForm
@@ -34,15 +34,17 @@ def index():
         return redirect(url_for(f'{current_user.role}.index'))
         
     user = User.query.options(
-    joinedload(User.client),  
-    joinedload(User.dogs)
+        joinedload(User.client)
     ).filter_by(id=current_user.id).first()
+    
+    # Get user's dogs through DogOwner relationship
+    user_dogs = Dog.query.join(DogOwner).filter(DogOwner.user_id == current_user.id).all()
 
     # Return upcoming bookings
     today = datetime.now(timezone.utc).date()
     upcoming_bookings_query = Booking.query.filter(
         Booking.user_id == current_user.id,
-        Booking.status != 'Cancelled',
+        Booking.status != 'cancelled',
         Booking.date > today
     ).order_by(Booking.date.asc()).limit(15)
 
@@ -69,7 +71,7 @@ def index():
             errors.append("Invalid booking slot selected.")
 
          # Ensure the user has at least one dog to book
-        if not user or not getattr(user, "dogs", None):
+        if not user or not user_dogs:
             errors.append("No dog found on your account. Please add a dog before booking.")
 
         if errors:
@@ -84,10 +86,13 @@ def index():
                     OperationalError: "Our booking system is temporarily unavailable. Please try again later."
                 }
             ):
-                dog_id = user.dogs[0].id  # This assumes a one to one user to dog relationship
+                dog_id = user_dogs[0].id  # Use first dog from DogOwner relationship
+                # Use the default service type (Group Walk) - ID 1
+                service_type_id = 1  # Assuming Group Walk is seeded with ID 1
                 new_booking = Booking(
                     user_id=user.id,
                     dog_id=dog_id,
+                    service_type_id=service_type_id,
                     date=booking_date,
                     slot=booking_slot
                 )
@@ -96,7 +101,7 @@ def index():
                 flash("Success - booking request submitted", "success")
                 return redirect(url_for("client.index"))
     
-    return render_template("index.html", user=user, client=user.client, dogs=user.dogs, bookings=upcoming_bookings, form=form) # type: ignore
+    return render_template("index.html", user=user, client=user.client, dogs=user_dogs, bookings=upcoming_bookings, form=form) # type: ignore
 
 
 @client_bp.route("/profile")
@@ -221,7 +226,6 @@ def onboard():
 
             # Create dog record
             new_dog = Dog(
-                user_id=current_user.id,
                 name=dog_name,
                 gender=dog_gender,
                 breed=dog_breed,
@@ -230,6 +234,15 @@ def onboard():
                 pic=pic_filename
             )
             db.session.add(new_dog)
+            db.session.flush()  # Get new_dog.id
+            
+            # Create DogOwner relationship (user is primary owner)
+            dog_owner = DogOwner(
+                dog_id=new_dog.id,
+                user_id=current_user.id,
+                role='primary'
+            )
+            db.session.add(dog_owner)
             
             # Commit all changes together
             db.session.commit()
@@ -276,7 +289,7 @@ def cancel_booking():
         if booking.user_id != current_user.id and current_user.role != 'admin':
             return jsonify(success=False, message="You are not authorized to cancel this booking"), 403
             
-        booking.status = "Cancelled"
+        booking.status = "cancelled"
         booking.walker_id = None  # Unassign walker
         db.session.commit()
         

@@ -1,0 +1,84 @@
+{% extends "layout.html" %}
+
+{% block title %}
+Walker Schedule - {{ walker.user.full_name }}
+{% endblock %}
+
+{% block main %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-8">
+            <div class="py-4">
+                <div class="d-flex align-items-center mb-4">
+                    <a href="{{ url_for('admin.walkers') }}" class="btn btn-outline-secondary me-3">
+                        <i class="bi bi-arrow-left"></i>
+                    </a>
+                    <div>
+                        <h2 class="mb-0">{{ walker.user.full_name }}</h2>
+                        <p class="text-muted mb-0">Weekly Schedule</p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-body">
+                        <form method="post" novalidate>
+                            {{ form.hidden_tag() }}
+                            
+                            <div class="table-responsive">
+                                <table class="table table-bordered">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Day</th>
+                                            <th class="text-center">Morning</th>
+                                            <th class="text-center">Afternoon</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% set days = [
+                                            ('monday', 'Monday'),
+                                            ('tuesday', 'Tuesday'), 
+                                            ('wednesday', 'Wednesday'),
+                                            ('thursday', 'Thursday'),
+                                            ('friday', 'Friday'),
+                                            ('saturday', 'Saturday'),
+                                            ('sunday', 'Sunday')
+                                        ] %}
+                                        
+                                        {% for day_field, day_label in days %}
+                                        {% set day_form = form[day_field] %}
+                                        <tr>
+                                            <td class="fw-semibold">{{ day_label }}</td>
+                                            <td class="text-center">
+                                                <div class="form-check d-inline-block">
+                                                    {{ day_form.morning(class="form-check-input") }}
+                                                </div>
+                                            </td>
+                                            <td class="text-center">
+                                                <div class="form-check d-inline-block">
+                                                    {{ day_form.afternoon(class="form-check-input") }}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                <a href="{{ url_for('admin.walkers') }}" class="btn btn-outline-secondary me-md-2">Cancel</a>
+                                {{ form.submit(class="btn btn-primary") }}
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="alert alert-info mt-3">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Schedule Note:</strong> This sets the walker's default weekly availability.
+                    They will be available to take bookings during checked time slots.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
