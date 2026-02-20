@@ -121,7 +121,9 @@ def create_app(config_name=None):
     # Import models for Flask-Migrate
     with app.app_context():
         # Import all models so they're registered with SQLAlchemy
-        from app.models import User, Client, Dog, Walker, Booking
+        from app.models import (User, Client, Dog, DogOwner, Walker,
+                                WalkerSchedule, ServiceType, Booking,
+                                BookingStatusChange, WalkEvent)
 
     # Register blueprints for modular routing
     from app.blueprints.register import register_blueprints

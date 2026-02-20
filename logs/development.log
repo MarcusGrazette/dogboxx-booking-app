@@ -4156,3 +4156,430 @@ WHERE bookings.date >= ? AND bookings.date < ? AND bookings.status != ?
 2025-08-28 19:23:50,073 - sqlalchemy.engine.Engine - INFO - [base.py:1900] - [cached since 387.8s ago] ('2025-08-01', '2025-09-01', 'Cancelled')
 2025-08-28 19:23:50,077 - sqlalchemy.engine.Engine - INFO - [base.py:1122] - ROLLBACK
 2025-08-28 19:23:50,077 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [28/Aug/2025 19:23:50] "GET /admin/calendar_data/2025/8 HTTP/1.1" 200 -
+2026-02-20 09:42:56,709 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:42:56,808 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-20 09:42:56,808 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - PRAGMA main.table_info("users")
+2026-02-20 09:42:56,808 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] ()
+2026-02-20 09:42:56,808 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - PRAGMA temp.table_info("users")
+2026-02-20 09:42:56,808 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] ()
+2026-02-20 09:42:56,809 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - PRAGMA main.table_info("clients")
+2026-02-20 09:42:56,809 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] ()
+2026-02-20 09:42:56,809 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - PRAGMA temp.table_info("clients")
+2026-02-20 09:42:56,809 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] ()
+2026-02-20 09:42:56,809 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - PRAGMA main.table_info("dogs")
+2026-02-20 09:42:56,809 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] ()
+2026-02-20 09:42:56,809 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - PRAGMA temp.table_info("dogs")
+2026-02-20 09:42:56,809 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] ()
+2026-02-20 09:42:56,809 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - PRAGMA main.table_info("walkers")
+2026-02-20 09:42:56,809 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] ()
+2026-02-20 09:42:56,810 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - PRAGMA temp.table_info("walkers")
+2026-02-20 09:42:56,810 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] ()
+2026-02-20 09:42:56,810 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - PRAGMA main.table_info("bookings")
+2026-02-20 09:42:56,810 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] ()
+2026-02-20 09:42:56,810 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - PRAGMA temp.table_info("bookings")
+2026-02-20 09:42:56,810 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] ()
+2026-02-20 09:42:56,811 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - 
+CREATE TABLE users (
+	id INTEGER NOT NULL, 
+	firstname VARCHAR(80) NOT NULL, 
+	lastname VARCHAR(80) NOT NULL, 
+	email VARCHAR(120) NOT NULL, 
+	role VARCHAR(6) NOT NULL, 
+	created_at DATETIME, 
+	active BOOLEAN NOT NULL, 
+	hashed_password VARCHAR(128) NOT NULL, 
+	PRIMARY KEY (id)
+)
+
+
+2026-02-20 09:42:56,811 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [no key 0.00010s] ()
+2026-02-20 09:42:56,816 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - CREATE UNIQUE INDEX ix_users_email ON users (email)
+2026-02-20 09:42:56,816 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [no key 0.00014s] ()
+2026-02-20 09:42:56,821 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - 
+CREATE TABLE clients (
+	id INTEGER NOT NULL, 
+	user_id INTEGER NOT NULL, 
+	place_id VARCHAR(200), 
+	formatted_address VARCHAR(300), 
+	display_name VARCHAR(200), 
+	latitude FLOAT, 
+	longitude FLOAT, 
+	street_address VARCHAR(200), 
+	city VARCHAR(100), 
+	state VARCHAR(50), 
+	postal_code VARCHAR(20), 
+	country VARCHAR(50), 
+	onboarding_completed BOOLEAN NOT NULL, 
+	onboarding_completed_at DATETIME, 
+	created_at DATETIME, 
+	updated_at DATETIME, 
+	pickup_instructions VARCHAR(500), 
+	PRIMARY KEY (id), 
+	UNIQUE (user_id), 
+	FOREIGN KEY(user_id) REFERENCES users (id)
+)
+
+
+2026-02-20 09:42:56,821 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [no key 0.00010s] ()
+2026-02-20 09:42:56,825 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - 
+CREATE TABLE dogs (
+	id INTEGER NOT NULL, 
+	user_id INTEGER NOT NULL, 
+	name VARCHAR NOT NULL, 
+	birth_year_month NUMERIC, 
+	gender VARCHAR(6), 
+	breed VARCHAR, 
+	allergies VARCHAR, 
+	other_info VARCHAR(500), 
+	pic VARCHAR, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id)
+)
+
+
+2026-02-20 09:42:56,825 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [no key 0.00010s] ()
+2026-02-20 09:42:56,829 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - 
+CREATE TABLE walkers (
+	id INTEGER NOT NULL, 
+	user_id INTEGER NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id)
+)
+
+
+2026-02-20 09:42:56,829 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [no key 0.00010s] ()
+2026-02-20 09:42:56,833 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - 
+CREATE TABLE bookings (
+	id INTEGER NOT NULL, 
+	user_id INTEGER NOT NULL, 
+	dog_id INTEGER NOT NULL, 
+	date DATE, 
+	slot VARCHAR(9) NOT NULL, 
+	walker_id INTEGER, 
+	status VARCHAR(9) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id), 
+	FOREIGN KEY(dog_id) REFERENCES dogs (id), 
+	FOREIGN KEY(walker_id) REFERENCES walkers (id)
+)
+
+
+2026-02-20 09:42:56,834 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [no key 0.00010s] ()
+2026-02-20 09:42:56,837 - sqlalchemy.engine.Engine - INFO - [base.py:2704] - COMMIT
+2026-02-20 09:43:01,134 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:43:01,221 - werkzeug - INFO - [_internal.py:97] - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.100.0.100:5000
+2026-02-20 09:43:01,221 - werkzeug - INFO - [_internal.py:97] - [33mPress CTRL+C to quit[0m
+2026-02-20 09:43:06,720 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [20/Feb/2026 09:43:06] "[32mGET / HTTP/1.1[0m" 301 -
+2026-02-20 09:43:29,956 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:43:30,060 - werkzeug - INFO - [_internal.py:97] - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.100.0.100:5000
+2026-02-20 09:43:30,060 - werkzeug - INFO - [_internal.py:97] - [33mPress CTRL+C to quit[0m
+2026-02-20 09:43:30,061 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-20 09:43:30,577 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:43:30,666 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-20 09:43:30,668 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 130-493-478
+2026-02-20 09:43:32,440 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [20/Feb/2026 09:43:32] "[32mGET / HTTP/1.1[0m" 302 -
+2026-02-20 09:44:07,464 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:44:07,560 - werkzeug - INFO - [_internal.py:97] - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.100.0.100:5000
+2026-02-20 09:44:07,560 - werkzeug - INFO - [_internal.py:97] - [33mPress CTRL+C to quit[0m
+2026-02-20 09:44:07,561 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-20 09:44:08,072 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:44:08,162 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-20 09:44:08,164 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 130-493-478
+2026-02-20 09:44:09,958 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [20/Feb/2026 09:44:09] "[32mGET / HTTP/1.1[0m" 302 -
+2026-02-20 09:44:42,864 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:44:42,960 - werkzeug - INFO - [_internal.py:97] - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.100.0.100:5000
+2026-02-20 09:44:42,960 - werkzeug - INFO - [_internal.py:97] - [33mPress CTRL+C to quit[0m
+2026-02-20 09:44:42,960 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-20 09:44:43,477 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:44:43,567 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-20 09:44:43,569 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 130-493-478
+2026-02-20 09:44:48,276 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [20/Feb/2026 09:44:48] "[32mGET / HTTP/1.1[0m" 302 -
+2026-02-20 09:44:51,788 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [20/Feb/2026 09:44:51] "[32mGET / HTTP/1.1[0m" 302 -
+2026-02-20 09:44:51,807 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [20/Feb/2026 09:44:51] "GET /login?next=/ HTTP/1.1" 200 -
+2026-02-20 09:44:51,822 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [20/Feb/2026 09:44:51] "[33mGET /static/css/reusable-calendar.css HTTP/1.1[0m" 404 -
+2026-02-20 09:44:51,975 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [20/Feb/2026 09:44:51] "GET /static/apple-touch-icon.png HTTP/1.1" 200 -
+2026-02-20 09:44:52,021 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [20/Feb/2026 09:44:52] "[33mGET /static/icons/bootstrap-icons.svg HTTP/1.1[0m" 404 -
+2026-02-20 09:44:52,063 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [20/Feb/2026 09:44:52] "GET /static/favicon.ico HTTP/1.1" 200 -
+2026-02-20 09:53:17,768 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [20/Feb/2026 09:53:17] "[32mGET / HTTP/1.1[0m" 302 -
+2026-02-20 09:53:17,991 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [20/Feb/2026 09:53:17] "GET /login?next=/ HTTP/1.1" 200 -
+2026-02-20 09:53:18,851 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [20/Feb/2026 09:53:18] "GET /static/apple-touch-icon.png HTTP/1.1" 200 -
+2026-02-20 09:53:18,852 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [20/Feb/2026 09:53:18] "[33mGET /static/css/reusable-calendar.css HTTP/1.1[0m" 404 -
+2026-02-20 09:53:19,601 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [20/Feb/2026 09:53:19] "[33mGET /static/icons/bootstrap-icons.svg HTTP/1.1[0m" 404 -
+2026-02-20 09:53:19,822 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [20/Feb/2026 09:53:19] "GET /static/favicon.ico HTTP/1.1" 200 -
+2026-02-20 09:53:20,232 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [20/Feb/2026 09:53:20] "[33mGET /apple-touch-icon-precomposed.png HTTP/1.1[0m" 404 -
+2026-02-20 09:53:20,512 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [20/Feb/2026 09:53:20] "[33mGET /apple-touch-icon.png HTTP/1.1[0m" 404 -
+2026-02-20 09:53:20,929 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [20/Feb/2026 09:53:20] "GET /static/favicon.ico HTTP/1.1" 200 -
+2026-02-20 09:58:21,649 - werkzeug - INFO - [_internal.py:97] -  * Detected change in '/home/marcus/.openclaw/workspace/cs50-final-project/app/models.py', reloading
+2026-02-20 09:58:21,747 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-20 09:58:22,258 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:58:22,363 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-20 09:58:22,364 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 130-493-478
+2026-02-20 09:58:25,415 - werkzeug - INFO - [_internal.py:97] -  * Detected change in '/home/marcus/.openclaw/workspace/cs50-final-project/app/__init__.py', reloading
+2026-02-20 09:58:25,517 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-20 09:58:26,031 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:58:26,135 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-20 09:58:26,137 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 130-493-478
+2026-02-20 09:58:53,324 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:58:53,420 - flask_migrate - ERROR - [__init__.py:113] - Error: Directory migrations already exists and is not empty
+2026-02-20 09:58:56,927 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:58:57,507 - werkzeug - INFO - [_internal.py:97] -  * Detected change in '/home/marcus/.openclaw/workspace/cs50-final-project/migrations/env.py', reloading
+2026-02-20 09:58:57,608 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-20 09:58:58,119 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:58:58,221 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-20 09:58:58,223 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 130-493-478
+2026-02-20 09:59:00,591 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:59:04,640 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:59:10,931 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:59:11,019 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - select pg_catalog.version()
+2026-02-20 09:59:11,019 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] {}
+2026-02-20 09:59:11,020 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - select current_schema()
+2026-02-20 09:59:11,020 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] {}
+2026-02-20 09:59:11,021 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - show standard_conforming_strings
+2026-02-20 09:59:11,021 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] {}
+2026-02-20 09:59:11,021 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-20 09:59:11,025 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s, %(param_2)s, %(param_3)s, %(param_4)s, %(param_5)s]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:11,025 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00018s] {'table_name': 'users', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:11,026 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s, %(param_2)s, %(param_3)s, %(param_4)s, %(param_5)s]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:11,026 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.001464s ago] {'table_name': 'clients', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:11,027 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s, %(param_2)s, %(param_3)s, %(param_4)s, %(param_5)s]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:11,027 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.002114s ago] {'table_name': 'dogs', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:11,027 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s, %(param_2)s, %(param_3)s, %(param_4)s, %(param_5)s]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:11,027 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.002738s ago] {'table_name': 'dog_owners', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:11,028 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s, %(param_2)s, %(param_3)s, %(param_4)s, %(param_5)s]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:11,028 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.003379s ago] {'table_name': 'walkers', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:11,028 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s, %(param_2)s, %(param_3)s, %(param_4)s, %(param_5)s]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:11,029 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.004027s ago] {'table_name': 'walker_schedules', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:11,029 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s, %(param_2)s, %(param_3)s, %(param_4)s, %(param_5)s]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:11,029 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.004645s ago] {'table_name': 'service_types', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:11,030 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s, %(param_2)s, %(param_3)s, %(param_4)s, %(param_5)s]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:11,030 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.005306s ago] {'table_name': 'bookings', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:11,030 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s, %(param_2)s, %(param_3)s, %(param_4)s, %(param_5)s]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:11,030 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.005953s ago] {'table_name': 'booking_status_changes', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:11,031 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s, %(param_2)s, %(param_3)s, %(param_4)s, %(param_5)s]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:11,031 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.006565s ago] {'table_name': 'walk_events', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:11,033 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_type.typname 
+FROM pg_catalog.pg_type JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_type.typnamespace 
+WHERE pg_catalog.pg_type.typname = %(typname_1)s AND pg_catalog.pg_type_is_visible(pg_catalog.pg_type.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:11,033 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00014s] {'typname_1': 'user_roles', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:11,034 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_type.typname 
+FROM pg_catalog.pg_type JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_type.typnamespace 
+WHERE pg_catalog.pg_type.typname = %(typname_1)s AND pg_catalog.pg_type_is_visible(pg_catalog.pg_type.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:11,034 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.001075s ago] {'typname_1': 'dog_gender', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:11,034 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_type.typname 
+FROM pg_catalog.pg_type JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_type.typnamespace 
+WHERE pg_catalog.pg_type.typname = %(typname_1)s AND pg_catalog.pg_type_is_visible(pg_catalog.pg_type.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:11,035 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.001897s ago] {'typname_1': 'dog_owner_role', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:11,035 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_type.typname 
+FROM pg_catalog.pg_type JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_type.typnamespace 
+WHERE pg_catalog.pg_type.typname = %(typname_1)s AND pg_catalog.pg_type_is_visible(pg_catalog.pg_type.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:11,035 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.002744s ago] {'typname_1': 'schedule_slot', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:11,036 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_type.typname 
+FROM pg_catalog.pg_type JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_type.typnamespace 
+WHERE pg_catalog.pg_type.typname = %(typname_1)s AND pg_catalog.pg_type_is_visible(pg_catalog.pg_type.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:11,036 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.003542s ago] {'typname_1': 'capacity_model_type', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:11,037 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_type.typname 
+FROM pg_catalog.pg_type JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_type.typnamespace 
+WHERE pg_catalog.pg_type.typname = %(typname_1)s AND pg_catalog.pg_type_is_visible(pg_catalog.pg_type.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:11,037 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.004368s ago] {'typname_1': 'slot_type_enum', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:11,038 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_type.typname 
+FROM pg_catalog.pg_type JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_type.typnamespace 
+WHERE pg_catalog.pg_type.typname = %(typname_1)s AND pg_catalog.pg_type_is_visible(pg_catalog.pg_type.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:11,038 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.005193s ago] {'typname_1': 'booking_slot', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:11,039 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_type.typname 
+FROM pg_catalog.pg_type JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_type.typnamespace 
+WHERE pg_catalog.pg_type.typname = %(typname_1)s AND pg_catalog.pg_type_is_visible(pg_catalog.pg_type.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:11,039 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.006031s ago] {'typname_1': 'booking_status', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:11,039 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_type.typname 
+FROM pg_catalog.pg_type JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_type.typnamespace 
+WHERE pg_catalog.pg_type.typname = %(typname_1)s AND pg_catalog.pg_type_is_visible(pg_catalog.pg_type.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:11,039 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.006859s ago] {'typname_1': 'cancelled_by_type', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:11,040 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_type.typname 
+FROM pg_catalog.pg_type JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_type.typnamespace 
+WHERE pg_catalog.pg_type.typname = %(typname_1)s AND pg_catalog.pg_type_is_visible(pg_catalog.pg_type.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:11,040 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.007651s ago] {'typname_1': 'walk_event_type', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:11,041 - sqlalchemy.engine.Engine - INFO - [base.py:2704] - COMMIT
+2026-02-20 09:59:11,068 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-20 09:59:11,070 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT service_types.id AS service_types_id, service_types.name AS service_types_name, service_types.slug AS service_types_slug, service_types.description AS service_types_description, service_types.capacity_model AS service_types_capacity_model, service_types.slot_type AS service_types_slot_type, service_types.requires_walker AS service_types_requires_walker, service_types.requires_compatibility_check AS service_types_requires_compatibility_check, service_types.default_max_capacity AS service_types_default_max_capacity, service_types.active AS service_types_active, service_types.settings AS service_types_settings, service_types.created_at AS service_types_created_at 
+FROM service_types 
+WHERE service_types.slug = %(slug_1)s 
+ LIMIT %(param_1)s
+2026-02-20 09:59:11,070 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00015s] {'slug_1': 'group-walk', 'param_1': 1}
+2026-02-20 09:59:11,072 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - INSERT INTO service_types (name, slug, description, capacity_model, slot_type, requires_walker, requires_compatibility_check, default_max_capacity, active, settings, created_at) VALUES (%(name)s, %(slug)s, %(description)s, %(capacity_model)s, %(slot_type)s, %(requires_walker)s, %(requires_compatibility_check)s, %(default_max_capacity)s, %(active)s, %(settings)s::JSON, %(created_at)s) RETURNING service_types.id
+2026-02-20 09:59:11,073 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00023s] {'name': 'Group Walk', 'slug': 'group-walk', 'description': 'Group dog walk with a professional walker. Morning or afternoon slots.', 'capacity_model': 'walker_assigned', 'slot_type': 'morning_afternoon', 'requires_walker': True, 'requires_compatibility_check': True, 'default_max_capacity': 6, 'active': True, 'settings': '{"cancellation_notice_days": 5, "max_booking_days_ahead": 90}', 'created_at': datetime.datetime(2026, 2, 20, 9, 59, 11, 72844, tzinfo=datetime.timezone.utc)}
+2026-02-20 09:59:11,074 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT service_types.id AS service_types_id, service_types.name AS service_types_name, service_types.slug AS service_types_slug, service_types.description AS service_types_description, service_types.capacity_model AS service_types_capacity_model, service_types.slot_type AS service_types_slot_type, service_types.requires_walker AS service_types_requires_walker, service_types.requires_compatibility_check AS service_types_requires_compatibility_check, service_types.default_max_capacity AS service_types_default_max_capacity, service_types.active AS service_types_active, service_types.settings AS service_types_settings, service_types.created_at AS service_types_created_at 
+FROM service_types 
+WHERE service_types.slug = %(slug_1)s 
+ LIMIT %(param_1)s
+2026-02-20 09:59:11,074 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.004147s ago] {'slug_1': 'day-care', 'param_1': 1}
+2026-02-20 09:59:11,075 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - INSERT INTO service_types (name, slug, description, capacity_model, slot_type, requires_walker, requires_compatibility_check, default_max_capacity, active, settings, created_at) VALUES (%(name)s, %(slug)s, %(description)s, %(capacity_model)s, %(slot_type)s, %(requires_walker)s, %(requires_compatibility_check)s, %(default_max_capacity)s, %(active)s, %(settings)s::JSON, %(created_at)s) RETURNING service_types.id
+2026-02-20 09:59:11,075 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.002426s ago] {'name': 'Doggy Day Care', 'slug': 'day-care', 'description': 'Full or half day care at our facility.', 'capacity_model': 'facility_capacity', 'slot_type': 'full_half_day', 'requires_walker': False, 'requires_compatibility_check': False, 'default_max_capacity': 20, 'active': True, 'settings': '{"cancellation_notice_days": 5, "max_booking_days_ahead": 90}', 'created_at': datetime.datetime(2026, 2, 20, 9, 59, 11, 75104, tzinfo=datetime.timezone.utc)}
+2026-02-20 09:59:11,076 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.role = %(role_1)s 
+ LIMIT %(param_1)s
+2026-02-20 09:59:11,077 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00014s] {'role_1': 'admin', 'param_1': 1}
+2026-02-20 09:59:11,173 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - INSERT INTO users (firstname, lastname, email, role, created_at, active, hashed_password, must_change_password) VALUES (%(firstname)s, %(lastname)s, %(email)s, %(role)s, %(created_at)s, %(active)s, %(hashed_password)s, %(must_change_password)s) RETURNING users.id
+2026-02-20 09:59:11,173 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00023s] {'firstname': 'Admin', 'lastname': 'DogBoxx', 'email': 'admin@dogboxx.org', 'role': 'admin', 'created_at': datetime.datetime(2026, 2, 20, 9, 59, 11, 173682, tzinfo=datetime.timezone.utc), 'active': True, 'hashed_password': 'scrypt:32768:8:1$xWIeJsNiBPoIkq4G$4472af68d7693582583de61075a12a4834e723650b7a27b49f75af31d61ce1117160bdf11dd2543eafc6d72033589a641abb9946c3be85922d2f493cc6b2a70b', 'must_change_password': True}
+2026-02-20 09:59:11,174 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-20 09:59:16,503 - werkzeug - INFO - [_internal.py:97] -  * Detected change in '/home/marcus/.openclaw/workspace/cs50-final-project/app/models.py', reloading
+2026-02-20 09:59:16,606 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-20 09:59:17,117 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:59:17,222 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-20 09:59:17,224 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 130-493-478
+2026-02-20 09:59:20,405 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:59:25,887 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:59:29,974 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:59:30,063 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - select pg_catalog.version()
+2026-02-20 09:59:30,063 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] {}
+2026-02-20 09:59:30,064 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - select current_schema()
+2026-02-20 09:59:30,064 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] {}
+2026-02-20 09:59:30,065 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - show standard_conforming_strings
+2026-02-20 09:59:30,065 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] {}
+2026-02-20 09:59:30,065 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-20 09:59:30,069 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s, %(param_2)s, %(param_3)s, %(param_4)s, %(param_5)s]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:30,069 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00018s] {'table_name': 'users', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:30,070 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s, %(param_2)s, %(param_3)s, %(param_4)s, %(param_5)s]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:30,070 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.001462s ago] {'table_name': 'clients', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:30,071 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s, %(param_2)s, %(param_3)s, %(param_4)s, %(param_5)s]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:30,071 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.002173s ago] {'table_name': 'dogs', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:30,071 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s, %(param_2)s, %(param_3)s, %(param_4)s, %(param_5)s]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:30,072 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.002884s ago] {'table_name': 'dog_owners', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:30,072 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s, %(param_2)s, %(param_3)s, %(param_4)s, %(param_5)s]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:30,072 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.00356s ago] {'table_name': 'walkers', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:30,073 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s, %(param_2)s, %(param_3)s, %(param_4)s, %(param_5)s]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:30,073 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.004246s ago] {'table_name': 'walker_schedules', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:30,073 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s, %(param_2)s, %(param_3)s, %(param_4)s, %(param_5)s]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:30,074 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.004996s ago] {'table_name': 'service_types', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:30,074 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s, %(param_2)s, %(param_3)s, %(param_4)s, %(param_5)s]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:30,074 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.005664s ago] {'table_name': 'bookings', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:30,075 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s, %(param_2)s, %(param_3)s, %(param_4)s, %(param_5)s]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:30,075 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.006367s ago] {'table_name': 'booking_status_changes', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:30,076 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s, %(param_2)s, %(param_3)s, %(param_4)s, %(param_5)s]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:30,076 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.007052s ago] {'table_name': 'walk_events', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:30,077 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_type.typname 
+FROM pg_catalog.pg_type JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_type.typnamespace 
+WHERE pg_catalog.pg_type.typname = %(typname_1)s AND pg_catalog.pg_type_is_visible(pg_catalog.pg_type.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:30,077 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00013s] {'typname_1': 'user_roles', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:30,078 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_type.typname 
+FROM pg_catalog.pg_type JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_type.typnamespace 
+WHERE pg_catalog.pg_type.typname = %(typname_1)s AND pg_catalog.pg_type_is_visible(pg_catalog.pg_type.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:30,078 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.00105s ago] {'typname_1': 'dog_gender', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:30,079 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_type.typname 
+FROM pg_catalog.pg_type JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_type.typnamespace 
+WHERE pg_catalog.pg_type.typname = %(typname_1)s AND pg_catalog.pg_type_is_visible(pg_catalog.pg_type.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:30,079 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.001888s ago] {'typname_1': 'dog_owner_role', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:30,080 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_type.typname 
+FROM pg_catalog.pg_type JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_type.typnamespace 
+WHERE pg_catalog.pg_type.typname = %(typname_1)s AND pg_catalog.pg_type_is_visible(pg_catalog.pg_type.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:30,080 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.002746s ago] {'typname_1': 'schedule_slot', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:30,081 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_type.typname 
+FROM pg_catalog.pg_type JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_type.typnamespace 
+WHERE pg_catalog.pg_type.typname = %(typname_1)s AND pg_catalog.pg_type_is_visible(pg_catalog.pg_type.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:30,081 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.003585s ago] {'typname_1': 'capacity_model_type', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:30,081 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_type.typname 
+FROM pg_catalog.pg_type JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_type.typnamespace 
+WHERE pg_catalog.pg_type.typname = %(typname_1)s AND pg_catalog.pg_type_is_visible(pg_catalog.pg_type.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:30,082 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.00442s ago] {'typname_1': 'slot_type_enum', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:30,082 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_type.typname 
+FROM pg_catalog.pg_type JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_type.typnamespace 
+WHERE pg_catalog.pg_type.typname = %(typname_1)s AND pg_catalog.pg_type_is_visible(pg_catalog.pg_type.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:30,082 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.005252s ago] {'typname_1': 'booking_slot', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:30,083 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_type.typname 
+FROM pg_catalog.pg_type JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_type.typnamespace 
+WHERE pg_catalog.pg_type.typname = %(typname_1)s AND pg_catalog.pg_type_is_visible(pg_catalog.pg_type.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:30,083 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.006045s ago] {'typname_1': 'booking_status', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:30,084 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_type.typname 
+FROM pg_catalog.pg_type JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_type.typnamespace 
+WHERE pg_catalog.pg_type.typname = %(typname_1)s AND pg_catalog.pg_type_is_visible(pg_catalog.pg_type.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:30,084 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.006852s ago] {'typname_1': 'cancelled_by_type', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:30,085 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT pg_catalog.pg_type.typname 
+FROM pg_catalog.pg_type JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_type.typnamespace 
+WHERE pg_catalog.pg_type.typname = %(typname_1)s AND pg_catalog.pg_type_is_visible(pg_catalog.pg_type.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s
+2026-02-20 09:59:30,085 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.00769s ago] {'typname_1': 'walk_event_type', 'nspname_1': 'pg_catalog'}
+2026-02-20 09:59:30,085 - sqlalchemy.engine.Engine - INFO - [base.py:2704] - COMMIT
+2026-02-20 09:59:30,112 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-20 09:59:30,114 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT service_types.id AS service_types_id, service_types.name AS service_types_name, service_types.slug AS service_types_slug, service_types.description AS service_types_description, service_types.capacity_model AS service_types_capacity_model, service_types.slot_type AS service_types_slot_type, service_types.requires_walker AS service_types_requires_walker, service_types.requires_compatibility_check AS service_types_requires_compatibility_check, service_types.default_max_capacity AS service_types_default_max_capacity, service_types.active AS service_types_active, service_types.settings AS service_types_settings, service_types.created_at AS service_types_created_at 
+FROM service_types 
+WHERE service_types.slug = %(slug_1)s 
+ LIMIT %(param_1)s
+2026-02-20 09:59:30,114 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00015s] {'slug_1': 'group-walk', 'param_1': 1}
+2026-02-20 09:59:30,117 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - INSERT INTO service_types (name, slug, description, capacity_model, slot_type, requires_walker, requires_compatibility_check, default_max_capacity, active, settings, created_at) VALUES (%(name)s, %(slug)s, %(description)s, %(capacity_model)s, %(slot_type)s, %(requires_walker)s, %(requires_compatibility_check)s, %(default_max_capacity)s, %(active)s, %(settings)s::JSON, %(created_at)s) RETURNING service_types.id
+2026-02-20 09:59:30,117 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00021s] {'name': 'Group Walk', 'slug': 'group-walk', 'description': 'Group dog walk with a professional walker. Morning or afternoon slots.', 'capacity_model': 'walker_assigned', 'slot_type': 'morning_afternoon', 'requires_walker': True, 'requires_compatibility_check': True, 'default_max_capacity': 6, 'active': True, 'settings': '{"cancellation_notice_days": 5, "max_booking_days_ahead": 90}', 'created_at': datetime.datetime(2026, 2, 20, 9, 59, 30, 117091, tzinfo=datetime.timezone.utc)}
+2026-02-20 09:59:30,118 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT service_types.id AS service_types_id, service_types.name AS service_types_name, service_types.slug AS service_types_slug, service_types.description AS service_types_description, service_types.capacity_model AS service_types_capacity_model, service_types.slot_type AS service_types_slot_type, service_types.requires_walker AS service_types_requires_walker, service_types.requires_compatibility_check AS service_types_requires_compatibility_check, service_types.default_max_capacity AS service_types_default_max_capacity, service_types.active AS service_types_active, service_types.settings AS service_types_settings, service_types.created_at AS service_types_created_at 
+FROM service_types 
+WHERE service_types.slug = %(slug_1)s 
+ LIMIT %(param_1)s
+2026-02-20 09:59:30,118 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.003857s ago] {'slug_1': 'day-care', 'param_1': 1}
+2026-02-20 09:59:30,119 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - INSERT INTO service_types (name, slug, description, capacity_model, slot_type, requires_walker, requires_compatibility_check, default_max_capacity, active, settings, created_at) VALUES (%(name)s, %(slug)s, %(description)s, %(capacity_model)s, %(slot_type)s, %(requires_walker)s, %(requires_compatibility_check)s, %(default_max_capacity)s, %(active)s, %(settings)s::JSON, %(created_at)s) RETURNING service_types.id
+2026-02-20 09:59:30,119 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.002228s ago] {'name': 'Doggy Day Care', 'slug': 'day-care', 'description': 'Full or half day care at our facility.', 'capacity_model': 'facility_capacity', 'slot_type': 'full_half_day', 'requires_walker': False, 'requires_compatibility_check': False, 'default_max_capacity': 20, 'active': True, 'settings': '{"cancellation_notice_days": 5, "max_booking_days_ahead": 90}', 'created_at': datetime.datetime(2026, 2, 20, 9, 59, 30, 119164, tzinfo=datetime.timezone.utc)}
+2026-02-20 09:59:30,120 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.role = %(role_1)s 
+ LIMIT %(param_1)s
+2026-02-20 09:59:30,121 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00013s] {'role_1': 'admin', 'param_1': 1}
+2026-02-20 09:59:30,217 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - INSERT INTO users (firstname, lastname, email, role, created_at, active, hashed_password, must_change_password) VALUES (%(firstname)s, %(lastname)s, %(email)s, %(role)s, %(created_at)s, %(active)s, %(hashed_password)s, %(must_change_password)s) RETURNING users.id
+2026-02-20 09:59:30,217 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00021s] {'firstname': 'Admin', 'lastname': 'DogBoxx', 'email': 'admin@dogboxx.org', 'role': 'admin', 'created_at': datetime.datetime(2026, 2, 20, 9, 59, 30, 217381, tzinfo=datetime.timezone.utc), 'active': True, 'hashed_password': 'scrypt:32768:8:1$UoDWVRYnhTSknWs3$64bd8b81c3ae3ca38f641c66b2fd2cdbe991baffb1b367094b9b8921c467e1ccf232ce758841010ca0a75b42c266280734c33d8aba843bbcceea7f4f05e09dd2', 'must_change_password': True}
+2026-02-20 09:59:30,218 - sqlalchemy.engine.Engine - INFO - [base.py:2704] - COMMIT
+2026-02-20 09:59:41,657 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:59:41,765 - werkzeug - INFO - [_internal.py:97] - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.100.0.100:5000
+2026-02-20 09:59:41,765 - werkzeug - INFO - [_internal.py:97] - [33mPress CTRL+C to quit[0m
+2026-02-20 09:59:41,765 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-20 09:59:42,278 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-20 09:59:42,380 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-20 09:59:42,382 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 130-493-478
+2026-02-20 09:59:47,381 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [20/Feb/2026 09:59:47] "[32mGET / HTTP/1.1[0m" 302 -
