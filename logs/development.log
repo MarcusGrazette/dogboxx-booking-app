@@ -4739,3 +4739,280 @@ FROM service_types) AS anon_1
 2026-02-20 18:35:06,730 - sqlalchemy.engine.Engine - INFO - [base.py:1840] - [generated in 0.00018s (insertmanyvalues) 1/1 (ordered)] {'lastname__0': 'User', 'must_change_password__0': False, 'created_at__0': datetime.datetime(2026, 2, 20, 18, 35, 6, 730352, tzinfo=datetime.timezone.utc), 'role__0': 'admin', 'hashed_password__0': 'scrypt:32768:8:1$VhE6GugMMAQJ5kP6$3510c41dbcd637074e5a8a784250b5c2f021496d4280f1a738362e870fd298e80cce63feee2f1a6e99e466aed8adc007ef23b94252c1e52b961ff91cd6711418', 'active__0': True, 'email__0': 'admin@example.com', 'firstname__0': 'Admin', 'lastname__1': 'Walker', 'must_change_password__1': False, 'created_at__1': datetime.datetime(2026, 2, 20, 18, 35, 6, 730356, tzinfo=datetime.timezone.utc), 'role__1': 'walker', 'hashed_password__1': 'scrypt:32768:8:1$BgYwHUqwuziAp7dB$9aec89a57c5919f16972251dd43d318c5721afb16d54b41b5b843fd9104087a831ddb93a1ae426b40e0a176d8f9bd2f5f2de4ba4cc8c02e116d02e3570c885d8', 'active__1': True, 'email__1': 'alice.walker@example.com', 'firstname__1': 'Alice', 'lastname__2': 'Walker', 'must_change_password__2': False, 'created_at__2': datetime.datetime(2026, 2, 20, 18, 35, 6, 730358, tzinfo=datetime.timezone.utc), 'role__2': 'walker', 'hashed_password__2': 'scrypt:32768:8:1$XbFwqVdF8oZiuUWQ$ee7c779ecc46c0fa4a32e9603779571676cc8857427d83156ee173f8a192a436b92fd3ca5cf7f930f4c8454fec741077acda1ebb2c2f50f5af17296782533a36', 'active__2': True, 'email__2': 'bob.walker@example.com', 'firstname__2': 'Bob', 'lastname__3': 'Walker', 'must_change_password__3': False, 'created_at__3': datetime.datetime(2026, 2, 20, 18, 35, 6, 730358, tzinfo=datetime.timezone.utc), 'role__3': 'walker', 'hashed_password__3': 'scrypt:32768:8:1$5dO72ujgBh0nZbPr$e3d3c11694222340f6b0a8ab0c4a30e36c2227de4c520a7134f8085a4bff8b1ecd784f038455f45342b95758968a28e1562341050728aa127b53e93bfe1a586b', 'active__3': True, 'email__3': 'carol.walker@example.com', 'firstname__3': 'Carol', 'lastname__4': 'Doe', 'must_change_password__4': False, 'created_at__4': datetime.datetime(2026, 2, 20, 18, 35, 6, 730359, tzinfo=datetime.timezone.utc), 'role__4': 'client', 'hashed_password__4': 'scrypt:32768:8:1$LTY5ZXPYYg3v7FA3$f6b91d5e33025a31b0fd0938a3139e25a3444c5440860e2507e4b3cee70830e98c75cf75c3b9735e84c301e3a80db346558b07d05946d10f64c4de0fd3d1f10e', 'active__4': True, 'email__4': 'john.doe@example.com', 'firstname__4': 'John', 'lastname__5': 'Smith', 'must_change_password__5': False, 'created_at__5': datetime.datetime(2026, 2, 20, 18, 35, 6, 730360, tzinfo=datetime.timezone.utc), 'role__5': 'client', 'hashed_password__5': 'scrypt:32768:8:1$dM17O9SlQKygI4qL$2af52bb5f736337feedd7eee494f78cb4b5b4b62d74ea0f4f1ca136a320c112ba3f5cec15ef18bc6ee9f62b2e3bfddaf0d837b478745862c093025bdf3ad5a21', 'active__5': True, 'email__5': 'jane.smith@example.com', 'firstname__5': 'Jane', 'lastname__6': 'Brown', 'must_change_password__6': False ... 12 parameters truncated ... 'email__7': 'lucy.green@example.com', 'firstname__7': 'Lucy', 'lastname__8': 'Ruiz', 'must_change_password__8': False, 'created_at__8': datetime.datetime(2026, 2, 20, 18, 35, 6, 730362, tzinfo=datetime.timezone.utc), 'role__8': 'client', 'hashed_password__8': 'scrypt:32768:8:1$leCRLftR8AxwtsfN$4408954b117af9794637a1233495f9d3c357cfb716dd4b3975a69aa346de3663ef0b000e6c9ac2c33e59192b82d13067c062e5d01570fdcc32fb019d34c0c345', 'active__8': True, 'email__8': 'carlos.ruiz@example.com', 'firstname__8': 'Carlos', 'lastname__9': 'Patel', 'must_change_password__9': False, 'created_at__9': datetime.datetime(2026, 2, 20, 18, 35, 6, 730363, tzinfo=datetime.timezone.utc), 'role__9': 'client', 'hashed_password__9': 'scrypt:32768:8:1$woRpt8pcCk9oCpDm$61d8d9a96ead3ff06f0abc6525008cfa2169f04be3fbc5808f8e0f4a1ee50eaba8d281e8c81b888e5fecbb943ac296cd9ecf1676ce4ed632c33572c2cb0a17ea', 'active__9': True, 'email__9': 'priya.patel@example.com', 'firstname__9': 'Priya', 'lastname__10': 'Khan', 'must_change_password__10': False, 'created_at__10': datetime.datetime(2026, 2, 20, 18, 35, 6, 730363, tzinfo=datetime.timezone.utc), 'role__10': 'client', 'hashed_password__10': 'scrypt:32768:8:1$qQMLr4TTtJeQIXKX$2aaa694df13b9bd8dfc9c5f4c3ad213c6f000db54c0e507292c3fb5b17d2732d43f0bc980b6a5454a56b95e30aef8ec4a53d1010d2d02fe8feba1c041c5c503d', 'active__10': True, 'email__10': 'ahmed.khan@example.com', 'firstname__10': 'Ahmed', 'lastname__11': 'Lee', 'must_change_password__11': False, 'created_at__11': datetime.datetime(2026, 2, 20, 18, 35, 6, 730364, tzinfo=datetime.timezone.utc), 'role__11': 'client', 'hashed_password__11': 'scrypt:32768:8:1$GoPFYYiYIovGbbrQ$556c3586b7081b4f58524f6397f28df1034122a09bcd214e37cf6dbc322a99c847a25488a69881ea5edb1426d1b1bfbcabce7aa9445f49beee831084b48646eb', 'active__11': True, 'email__11': 'sara.lee@example.com', 'firstname__11': 'Sara', 'lastname__12': 'Clark', 'must_change_password__12': False, 'created_at__12': datetime.datetime(2026, 2, 20, 18, 35, 6, 730365, tzinfo=datetime.timezone.utc), 'role__12': 'client', 'hashed_password__12': 'scrypt:32768:8:1$1o0Jx8MPbi0Go31b$d637e0797c157efccf5b23f81ac0d98f04eb6f25a93e0fce9f28c20b275e5c2f5501b6682e28a458eaa08c68caee354d45a9b6c0b734b48b73032bdeddb883e8', 'active__12': True, 'email__12': 'tom.clark@example.com', 'firstname__12': 'Tom', 'lastname__13': 'Gomez', 'must_change_password__13': False, 'created_at__13': datetime.datetime(2026, 2, 20, 18, 35, 6, 730365, tzinfo=datetime.timezone.utc), 'role__13': 'client', 'hashed_password__13': 'scrypt:32768:8:1$Wl6tLE5xjnPCp0my$9f99431a408d7642be63baeb67ecd49ca090f70ef723f44ff3b78b23be7a4f5e85494c7d0e2ac643ebf9c8120ef62e1664636d5ea03330bd608e4c3260c7876b', 'active__13': True, 'email__13': 'nina.gomez@example.com', 'firstname__13': 'Nina'}
 2026-02-20 18:35:06,732 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
 2026-02-20 18:35:14,765 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-21 08:07:26,019 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-21 08:07:33,115 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-21 08:07:33,227 - werkzeug - INFO - [_internal.py:97] - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.100.0.100:5000
+2026-02-21 08:07:33,227 - werkzeug - INFO - [_internal.py:97] - [33mPress CTRL+C to quit[0m
+2026-02-21 08:07:33,228 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-21 08:07:33,738 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-21 08:07:33,843 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-21 08:07:33,845 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 130-493-478
+2026-02-21 08:07:38,613 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:07:38] "[32mGET / HTTP/1.1[0m" 302 -
+2026-02-21 08:07:42,546 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:07:42] "GET /login HTTP/1.1" 200 -
+2026-02-21 08:07:47,205 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:07:47] "[32mGET / HTTP/1.1[0m" 302 -
+2026-02-21 08:07:47,210 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:07:47] "GET /login?next=/ HTTP/1.1" 200 -
+2026-02-21 08:07:47,220 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:07:47] "[33mGET /static/css/reusable-calendar.css HTTP/1.1[0m" 404 -
+2026-02-21 08:07:47,267 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:07:47] "GET /static/apple-touch-icon.png HTTP/1.1" 200 -
+2026-02-21 08:07:47,281 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:07:47] "[33mGET /static/icons/bootstrap-icons.svg HTTP/1.1[0m" 404 -
+2026-02-21 08:08:20,359 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - select pg_catalog.version()
+2026-02-21 08:08:20,359 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] {}
+2026-02-21 08:08:20,360 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - select current_schema()
+2026-02-21 08:08:20,360 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] {}
+2026-02-21 08:08:20,361 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - show standard_conforming_strings
+2026-02-21 08:08:20,361 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] {}
+2026-02-21 08:08:20,361 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:08:20,364 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.email = %(email_1)s 
+ LIMIT %(param_1)s
+2026-02-21 08:08:20,364 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00016s] {'email_1': 'admin@dogboxx.org', 'param_1': 1}
+2026-02-21 08:08:20,464 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:08:20,464 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:08:20] "[32mPOST /login?next=/ HTTP/1.1[0m" 302 -
+2026-02-21 08:08:20,468 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:08:20,469 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:08:20,469 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00016s] {'pk_1': 1}
+2026-02-21 08:08:20,472 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:08:20,472 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:08:20] "[32mGET /admin HTTP/1.1[0m" 302 -
+2026-02-21 08:08:20,475 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:08:20,476 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:08:20,476 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.007401s ago] {'pk_1': 1}
+2026-02-21 08:08:20,482 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:08:20,483 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:08:20] "GET /auth/change-password HTTP/1.1" 200 -
+2026-02-21 08:08:20,494 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:08:20,495 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:08:20,495 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.02615s ago] {'pk_1': 1}
+2026-02-21 08:08:20,496 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:08:20,496 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:08:20] "[33mGET /static/css/reusable-calendar.css HTTP/1.1[0m" 404 -
+2026-02-21 08:08:20,510 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:08:20,511 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:08:20,511 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.04213s ago] {'pk_1': 1}
+2026-02-21 08:08:20,512 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:08:20,512 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:08:20] "GET /static/apple-touch-icon.png HTTP/1.1" 200 -
+2026-02-21 08:08:20,517 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:08:20,517 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:08:20,517 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.04841s ago] {'pk_1': 1}
+2026-02-21 08:08:20,518 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:08:20,519 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:08:20] "[33mGET /static/icons/bootstrap-icons.svg HTTP/1.1[0m" 404 -
+2026-02-21 08:08:40,008 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:08:40,008 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:08:40,008 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 19.54s ago] {'pk_1': 1}
+2026-02-21 08:08:40,206 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - UPDATE users SET hashed_password=%(hashed_password)s, must_change_password=%(must_change_password)s WHERE users.id = %(users_id)s
+2026-02-21 08:08:40,206 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00021s] {'hashed_password': 'scrypt:32768:8:1$8iVR9xlQVgEkNE3m$cc5a6c871df8e3f1f7c16b78875c0a4903997946418232262b0abac9cfe12dfdadb3b7363013d901a0858610272b6945cc77c46d9125de8eb56d9c821fbe0c98', 'must_change_password': False, 'users_id': 1}
+2026-02-21 08:08:40,207 - sqlalchemy.engine.Engine - INFO - [base.py:2704] - COMMIT
+2026-02-21 08:08:40,208 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:08:40,209 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:08:40,209 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00013s] {'pk_1': 1}
+2026-02-21 08:08:40,210 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:08:40,211 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:08:40] "[32mPOST /auth/change-password HTTP/1.1[0m" 302 -
+2026-02-21 08:08:40,214 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:08:40,214 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:08:40,214 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 19.75s ago] {'pk_1': 1}
+2026-02-21 08:08:40,226 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:08:40,233 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:08:40] "[35m[1mGET /admin/ HTTP/1.1[0m" 500 -
+2026-02-21 08:08:40,241 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:08:40] "GET /admin/?__debugger__=yes&cmd=resource&f=style.css HTTP/1.1" 200 -
+2026-02-21 08:08:40,242 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:08:40] "GET /admin/?__debugger__=yes&cmd=resource&f=debugger.js HTTP/1.1" 200 -
+2026-02-21 08:08:40,269 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:08:40] "GET /admin/?__debugger__=yes&cmd=resource&f=console.png&s=CaiIj4onESv5SGRsaYJ4 HTTP/1.1" 200 -
+2026-02-21 08:08:40,279 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:08:40] "GET /admin/?__debugger__=yes&cmd=resource&f=console.png HTTP/1.1" 200 -
+2026-02-21 08:09:21,714 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:09:21,714 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:09:21,714 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 61.25s ago] {'pk_1': 1}
+2026-02-21 08:09:21,724 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:09:21,724 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:09:21] "GET /admin/ HTTP/1.1" 200 -
+2026-02-21 08:09:21,735 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:09:21,737 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:09:21,737 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 61.27s ago] {'pk_1': 1}
+2026-02-21 08:09:21,739 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:09:21,739 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:09:21] "[33mGET /static/css/admin-bookings.css HTTP/1.1[0m" 404 -
+2026-02-21 08:09:21,750 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:09:21,751 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:09:21,751 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 61.28s ago] {'pk_1': 1}
+2026-02-21 08:09:21,752 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:09:21,752 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:09:21,752 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 61.28s ago] {'pk_1': 1}
+2026-02-21 08:09:21,753 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:09:21,754 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:09:21] "[33mGET /static/js/reusable-calendar.js HTTP/1.1[0m" 404 -
+2026-02-21 08:09:21,755 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:09:21,756 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:09:21] "[33mGET /static/css/reusable-calendar.css HTTP/1.1[0m" 404 -
+2026-02-21 08:09:21,767 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:09:21,768 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:09:21,768 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 61.3s ago] {'pk_1': 1}
+2026-02-21 08:09:21,769 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:09:21,769 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:09:21] "GET /static/apple-touch-icon.png HTTP/1.1" 200 -
+2026-02-21 08:09:21,780 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:09:21,780 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:09:21,780 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 61.31s ago] {'pk_1': 1}
+2026-02-21 08:09:21,782 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:09:21,782 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:09:21,783 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:09:21,783 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 61.31s ago] {'pk_1': 1}
+2026-02-21 08:09:21,783 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:09:21] "[33mGET /static/css/reusable-calendar.css HTTP/1.1[0m" 404 -
+2026-02-21 08:09:21,784 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:09:21,785 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:09:21] "[33mGET /static/icons/bootstrap-icons.svg HTTP/1.1[0m" 404 -
+2026-02-21 08:09:30,749 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:09:30,749 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:09:30,749 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 70.28s ago] {'pk_1': 1}
+2026-02-21 08:09:30,757 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, clients_1.id AS clients_1_id, clients_1.user_id AS clients_1_user_id, clients_1.place_id AS clients_1_place_id, clients_1.formatted_address AS clients_1_formatted_address, clients_1.display_name AS clients_1_display_name, clients_1.latitude AS clients_1_latitude, clients_1.longitude AS clients_1_longitude, clients_1.street_address AS clients_1_street_address, clients_1.city AS clients_1_city, clients_1.state AS clients_1_state, clients_1.postal_code AS clients_1_postal_code, clients_1.country AS clients_1_country, clients_1.onboarding_completed AS clients_1_onboarding_completed, clients_1.onboarding_completed_at AS clients_1_onboarding_completed_at, clients_1.created_at AS clients_1_created_at, clients_1.updated_at AS clients_1_updated_at, clients_1.pickup_instructions AS clients_1_pickup_instructions 
+FROM users LEFT OUTER JOIN clients AS clients_1 ON users.id = clients_1.user_id 
+WHERE users.role = %(role_1)s ORDER BY users.lastname, users.firstname
+2026-02-21 08:09:30,761 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00335s] {'role_1': 'client'}
+2026-02-21 08:09:30,775 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:09:30,775 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:09:30] "GET /admin/clients HTTP/1.1" 200 -
+2026-02-21 08:09:30,796 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:09:30,796 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:09:30,796 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 70.33s ago] {'pk_1': 1}
+2026-02-21 08:09:30,798 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:09:30,798 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:09:30] "[33mGET /static/css/reusable-calendar.css HTTP/1.1[0m" 404 -
+2026-02-21 08:09:30,813 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:09:30,814 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:09:30,814 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 70.35s ago] {'pk_1': 1}
+2026-02-21 08:09:30,815 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:09:30,816 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:09:30] "GET /static/apple-touch-icon.png HTTP/1.1" 200 -
+2026-02-21 08:09:30,824 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:09:30,825 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:09:30,825 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 70.36s ago] {'pk_1': 1}
+2026-02-21 08:09:30,829 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:09:30,829 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:09:30] "[33mGET /static/icons/bootstrap-icons.svg HTTP/1.1[0m" 404 -
+2026-02-21 08:09:41,481 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:09:41,481 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:09:41,482 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 81.01s ago] {'pk_1': 1}
+2026-02-21 08:09:41,484 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, walkers_1.id AS walkers_1_id, walkers_1.user_id AS walkers_1_user_id 
+FROM users LEFT OUTER JOIN walkers AS walkers_1 ON users.id = walkers_1.user_id 
+WHERE users.role = %(role_1)s ORDER BY users.lastname, users.firstname
+2026-02-21 08:09:41,485 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00023s] {'role_1': 'walker'}
+2026-02-21 08:09:41,492 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:09:41,500 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:09:41] "[35m[1mGET /admin/walkers HTTP/1.1[0m" 500 -
+2026-02-21 08:09:41,512 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:09:41] "GET /admin/walkers?__debugger__=yes&cmd=resource&f=style.css HTTP/1.1" 200 -
+2026-02-21 08:09:41,515 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:09:41] "GET /admin/walkers?__debugger__=yes&cmd=resource&f=debugger.js HTTP/1.1" 200 -
+2026-02-21 08:09:41,530 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:09:41] "GET /admin/walkers?__debugger__=yes&cmd=resource&f=console.png&s=CaiIj4onESv5SGRsaYJ4 HTTP/1.1" 200 -
+2026-02-21 08:09:41,539 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:09:41] "GET /admin/walkers?__debugger__=yes&cmd=resource&f=console.png HTTP/1.1" 200 -
+2026-02-21 08:10:20,428 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-21 08:10:20,548 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - select pg_catalog.version()
+2026-02-21 08:10:20,548 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] {}
+2026-02-21 08:10:20,549 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - select current_schema()
+2026-02-21 08:10:20,549 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] {}
+2026-02-21 08:10:20,549 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - show standard_conforming_strings
+2026-02-21 08:10:20,549 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] {}
+2026-02-21 08:10:20,550 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:10:20,552 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.role = %(role_1)s
+2026-02-21 08:10:20,552 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00015s] {'role_1': 'walker'}
+2026-02-21 08:10:20,555 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT walkers.id AS walkers_id, walkers.user_id AS walkers_user_id 
+FROM walkers 
+WHERE %(param_1)s = walkers.user_id
+2026-02-21 08:10:20,555 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00014s] {'param_1': 3}
+2026-02-21 08:10:20,556 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT walkers.id AS walkers_id, walkers.user_id AS walkers_user_id 
+FROM walkers 
+WHERE %(param_1)s = walkers.user_id
+2026-02-21 08:10:20,556 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.001004s ago] {'param_1': 4}
+2026-02-21 08:10:20,557 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT walkers.id AS walkers_id, walkers.user_id AS walkers_user_id 
+FROM walkers 
+WHERE %(param_1)s = walkers.user_id
+2026-02-21 08:10:20,557 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.001764s ago] {'param_1': 5}
+2026-02-21 08:10:20,557 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:10:27,132 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-21 08:10:27,251 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - select pg_catalog.version()
+2026-02-21 08:10:27,251 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] {}
+2026-02-21 08:10:27,252 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - select current_schema()
+2026-02-21 08:10:27,252 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] {}
+2026-02-21 08:10:27,253 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - show standard_conforming_strings
+2026-02-21 08:10:27,253 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] {}
+2026-02-21 08:10:27,253 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:10:27,256 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.role = %(role_1)s
+2026-02-21 08:10:27,256 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00014s] {'role_1': 'walker'}
+2026-02-21 08:10:27,259 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT walkers.id AS walkers_id, walkers.user_id AS walkers_user_id 
+FROM walkers 
+WHERE %(param_1)s = walkers.user_id
+2026-02-21 08:10:27,259 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00014s] {'param_1': 3}
+2026-02-21 08:10:27,261 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - INSERT INTO walkers (user_id) VALUES (%(user_id)s) RETURNING walkers.id
+2026-02-21 08:10:27,261 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00013s] {'user_id': 3}
+2026-02-21 08:10:27,262 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT walkers.id AS walkers_id, walkers.user_id AS walkers_user_id 
+FROM walkers 
+WHERE %(param_1)s = walkers.user_id
+2026-02-21 08:10:27,262 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.003251s ago] {'param_1': 4}
+2026-02-21 08:10:27,263 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - INSERT INTO walkers (user_id) VALUES (%(user_id)s) RETURNING walkers.id
+2026-02-21 08:10:27,263 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.002238s ago] {'user_id': 4}
+2026-02-21 08:10:27,263 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT walkers.id AS walkers_id, walkers.user_id AS walkers_user_id 
+FROM walkers 
+WHERE %(param_1)s = walkers.user_id
+2026-02-21 08:10:27,263 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.004804s ago] {'param_1': 5}
+2026-02-21 08:10:27,264 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - INSERT INTO walkers (user_id) VALUES (%(user_id)s) RETURNING walkers.id
+2026-02-21 08:10:27,264 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.003603s ago] {'user_id': 5}
+2026-02-21 08:10:27,265 - sqlalchemy.engine.Engine - INFO - [base.py:2704] - COMMIT
+2026-02-21 08:10:49,053 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:10:49,053 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:10:49,053 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 148.6s ago] {'pk_1': 1}
+2026-02-21 08:10:49,054 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, walkers_1.id AS walkers_1_id, walkers_1.user_id AS walkers_1_user_id 
+FROM users LEFT OUTER JOIN walkers AS walkers_1 ON users.id = walkers_1.user_id 
+WHERE users.role = %(role_1)s ORDER BY users.lastname, users.firstname
+2026-02-21 08:10:49,055 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 67.57s ago] {'role_1': 'walker'}
+2026-02-21 08:10:49,063 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:10:49,063 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:10:49] "GET /admin/walkers HTTP/1.1" 200 -
+2026-02-21 08:10:49,070 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:10:49,070 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:10:49,070 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 148.6s ago] {'pk_1': 1}
+2026-02-21 08:10:49,072 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:10:49,072 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:10:49] "[33mGET /static/css/reusable-calendar.css HTTP/1.1[0m" 404 -
+2026-02-21 08:10:49,130 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:10:49,131 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:10:49,132 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 148.7s ago] {'pk_1': 1}
+2026-02-21 08:10:49,136 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:10:49,137 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:10:49] "GET /static/apple-touch-icon.png HTTP/1.1" 200 -
+2026-02-21 08:10:49,152 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-21 08:10:49,152 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-21 08:10:49,153 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 148.7s ago] {'pk_1': 1}
+2026-02-21 08:10:49,156 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-21 08:10:49,157 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [21/Feb/2026 08:10:49] "[33mGET /static/icons/bootstrap-icons.svg HTTP/1.1[0m" 404 -

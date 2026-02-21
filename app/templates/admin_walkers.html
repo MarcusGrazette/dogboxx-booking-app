@@ -46,10 +46,12 @@ Admin - Manage Walkers
                             </td>
                             <td>{{ walker.created_at.strftime('%Y-%m-%d') if walker.created_at }}</td>
                             <td>
+                                {% if walker.walker %}
                                 <a href="{{ url_for('admin.walker_schedule', walker_id=walker.walker.id) }}" 
                                    class="btn btn-sm btn-outline-primary me-2">
                                     <i class="bi bi-calendar3"></i> Schedule
                                 </a>
+                                {% endif %}
                                 {% if walker.active %}
                                 <button class="btn btn-sm btn-outline-danger" 
                                         onclick="toggleWalkerStatus({{ walker.id }}, 'deactivate')">
