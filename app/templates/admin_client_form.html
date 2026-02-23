@@ -21,31 +21,29 @@
                         <form method="post" novalidate>
                             {{ form.hidden_tag() }}
 
-                            <div class="mb-3">
-                                {{ form.email.label(class="form-label") }}
-                                {{ form.email(class="form-control", placeholder="Enter email address") }}
-                                {% for error in form.email.errors %}
-                                <div class="text-danger small">{{ error }}</div>
-                                {% endfor %}
+                            <div class="input-group mb-4">
+                                <span class="input-group-text">
+                                    <i class="bi bi-person fs-5 text-secondary"></i>
+                                </span>
+                                {{ form.firstname(autocomplete="given-name", class="form-control", placeholder="First name") }}
+                                {{ form.lastname(autocomplete="family-name", class="form-control", placeholder="Last name") }}
                             </div>
+                            {% for error in form.firstname.errors %}
+                            <div class="text-danger small mt-n3 mb-3">{{ error }}</div>
+                            {% endfor %}
+                            {% for error in form.lastname.errors %}
+                            <div class="text-danger small mt-n3 mb-3">{{ error }}</div>
+                            {% endfor %}
 
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    {{ form.firstname.label(class="form-label") }}
-                                    {{ form.firstname(class="form-control", placeholder="First name") }}
-                                    {% for error in form.firstname.errors %}
-                                    <div class="text-danger small">{{ error }}</div>
-                                    {% endfor %}
-                                </div>
-                                
-                                <div class="col-md-6 mb-3">
-                                    {{ form.lastname.label(class="form-label") }}
-                                    {{ form.lastname(class="form-control", placeholder="Last name") }}
-                                    {% for error in form.lastname.errors %}
-                                    <div class="text-danger small">{{ error }}</div>
-                                    {% endfor %}
-                                </div>
+                            <div class="input-group mb-4">
+                                <span class="input-group-text">
+                                    <i class="bi bi-envelope-at-fill fs-5 text-secondary"></i>
+                                </span>
+                                {{ form.email(autocomplete="email", class="form-control", placeholder="Email") }}
                             </div>
+                            {% for error in form.email.errors %}
+                            <div class="text-danger small mt-n3 mb-3">{{ error }}</div>
+                            {% endfor %}
 
                             <div class="d-grid gap-2 d-md-flex justify-content-md-end">
                                 <a href="{{ url_for('admin.clients') }}" class="btn btn-outline-secondary me-md-2">Cancel</a>

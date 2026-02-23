@@ -6,7 +6,6 @@ from flask_migrate import Migrate
 from dotenv import load_dotenv
 import os
 import logging
-from flask_dropzone import Dropzone
 from flask_wtf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -18,7 +17,6 @@ load_dotenv()
 db = SQLAlchemy()
 migrate = Migrate()
 login_manager = LoginManager()
-dropzone = Dropzone()
 csrf = CSRFProtect()
 limiter = Limiter(key_func=get_remote_address)
 
@@ -44,11 +42,13 @@ def create_app(config_name=None):
         raise RuntimeError("SECRET_KEY environment variable is not set. "
                           "This is required for application security.")
 
+    # Configure upload folder
+    upload_folder = os.path.join(app.static_folder, 'uploads', 'dogs')
+    app.config['UPLOAD_FOLDER'] = upload_folder
+    os.makedirs(upload_folder, exist_ok=True)
+
     # Initialize Flask-Session
     Session(app)
-
-    # Initialize Dropzone
-    dropzone.init_app(app)
 
     # Initialize CSRF protection
     csrf.init_app(app)
@@ -94,7 +94,7 @@ def create_app(config_name=None):
             return
             
         # Skip for logout and change password routes
-        if request.endpoint in ['auth.logout', 'auth.change_password']:
+        if request.endpoint in ['auth.logout', 'auth.change_password', 'logout']:
             return
             
         # Skip for static files and API endpoints
@@ -106,6 +106,15 @@ def create_app(config_name=None):
         # Redirect if password change is required
         if current_user.must_change_password:
             return redirect('/auth/change-password')
+
+        # Redirect clients who haven't completed onboarding
+        if current_user.role == 'client':
+            if request.endpoint not in ['client.onboard', 'auth.logout', 'auth.change_password', 'logout', 'static']:
+                from app.models import Client
+                client = Client.query.filter_by(user_id=current_user.id).first()
+                if not client or not client.onboarding_completed:
+                    from flask import url_for
+                    return redirect(url_for('client.onboard'))
 
     @app.after_request
     def add_security_headers(response):

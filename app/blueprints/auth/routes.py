@@ -62,70 +62,10 @@ def login():
 
 
 @auth_bp.route("/register", methods=["GET", "POST"])
-@limiter.limit("3 per minute, 10 per hour, 20 per day")  # Strict limits on registration to prevent abuse
 def register():
-    """Register a new user with improved validation and error handling"""
-    # Redirect if user is already authenticated
-    if current_user.is_authenticated:
-        return _redirect_by_role(current_user)
-
-    form = RegisterForm()
-    if form.validate_on_submit():
-        try:
-            firstname = form.firstname.data.strip().title()
-            lastname = form.lastname.data.strip().title()
-            email = form.email.data.strip().lower()
-            password = form.password.data
-
-            # Check if user already exists
-            if User.query.filter_by(email=email).first():
-                flash("An account with this email already exists.", "error")
-                return render_template("register.html", form=form)
-
-            # Create new user
-            hashed_password = generate_password_hash(password)
-            new_user = User(
-                firstname=firstname,
-                lastname=lastname,
-                email=email,
-                hashed_password=hashed_password,
-                role="client"
-            )
-
-            db.session.add(new_user)
-            db.session.commit()
-
-            # Log the user in automatically, redirect to the onboarding page
-            login_user(new_user)
-            flash(f"Welcome to our platform, {firstname}!", "success")
-            return redirect(url_for('client.onboard'))
-
-        except IntegrityError as e:
-            db.session.rollback()
-            logging.error(f"IntegrityError during registration: {e}")
-            logging.debug(traceback.format_exc())
-            
-            # Check for duplicate email (specific constraint violation)
-            if "UNIQUE constraint failed: user.email" in str(e):
-                flash("An account with this email already exists. Please log in instead.", "error")
-            else:
-                flash("There was a problem creating your account due to a data conflict. Please try again.", "error")
-        except SQLAlchemyError as e:
-            db.session.rollback()
-            logging.error(f"SQLAlchemyError during registration: {e}")
-            logging.debug(traceback.format_exc())
-            
-            if isinstance(e, OperationalError):
-                flash("The service is temporarily unavailable. Please try again later.", "error")
-            else:
-                flash("A database error occurred while creating your account. Please try again.", "error")
-        except Exception as e:
-            db.session.rollback()
-            logging.error(f"Unexpected error during registration: {e}")
-            logging.debug(traceback.format_exc())
-            flash("An unexpected error occurred. Please try again.", "error")
-
-    return render_template("register.html", form=form)
+    """Public registration is disabled. Clients are created by admin."""
+    from flask import abort
+    abort(404)
 
 
 @auth_bp.route("/logout")

@@ -9,6 +9,15 @@ Admin
 
   <h1> Hello, {{ current_user.firstname }}</h1>
 
+  <div class="mb-4">
+    <a href="{{ url_for('admin.clients') }}" class="btn btn-outline-primary me-2">
+      <i class="bi bi-people"></i> Manage Clients
+    </a>
+    <a href="{{ url_for('admin.walkers') }}" class="btn btn-outline-primary">
+      <i class="bi bi-person-walking"></i> Manage Walkers
+    </a>
+  </div>
+
   <div class="row">
     <!-- Calendar Column -->
     <div class="col-3">
@@ -20,6 +29,7 @@ Admin
               'allow_other_month_nav': true,
               'autoSelectToday': true
           },
+          show_loading=false,
           footer_text='Days with pending bookings are highlighted in yellow.'
       ) }}
     </div>
@@ -70,23 +80,11 @@ Admin
 
     // Initialize calendar when DOM is ready
     document.addEventListener('DOMContentLoaded', () => {
-        console.log("Initializing admin calendar...");
-        
         adminCalendar = createCalendar('admin-calendar', {
             onDateClick: handleDateClick,
             onMonthChange: handleMonthChange,
             onDateSelect: handleDateSelect
         });
-
-        console.log("Admin calendar initialized");
-        
-        // Load initial calendar data after a brief delay to ensure calendar is ready
-        setTimeout(() => {
-            if (adminCalendar) {
-                console.log("Loading initial calendar data...");
-                handleMonthChange(adminCalendar.year, adminCalendar.month);
-            }
-        }, 200);
     });
 
     function handleDateClick(year, month, day, dateStr) {
@@ -368,10 +366,23 @@ Admin
       }
 
       try {
+        // After the card is moved, collect pickup order from the drop zone
+        // (We move the card first so the order reflects the new state)
+        moveCardToDropZone(draggedCard, dropZone);
+
+        const pickupOrder = [];
+        if (walkerId) {
+          const cardsContainer = dropZone.querySelector('.booking-cards') || dropZone;
+          cardsContainer.querySelectorAll('.booking-card').forEach(card => {
+            pickupOrder.push(card.dataset.bookingId);
+          });
+        }
+
         const payload = {
           booking_id: bookingId,
           walker_id: walkerId || null,
-          slot: slot
+          slot: slot,
+          pickup_order: pickupOrder.length ? pickupOrder : null
         };
 
         console.log("Sending API request:", payload);
@@ -398,10 +409,7 @@ Admin
         console.log("API response:", data);
 
         if (data.success) {
-          // Move card to new location
-          moveCardToDropZone(draggedCard, dropZone);
-
-          // Update card styling and data
+          // Card already moved before API call (for pickup order); update styling
           updateCardAfterSuccess(draggedCard, walkerId, slot);
 
           // Update capacity counters

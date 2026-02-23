@@ -1,0 +1,16 @@
+2026-02-23 06:55:33,154 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+/home/marcus/.openclaw/workspace/cs50-final-project/venv/lib/python3.12/site-packages/flask_limiter/extension.py:324: UserWarning: Using the in-memory storage for tracking rate limits as no storage was explicitly specified. This is not recommended for production use. See: https://flask-limiter.readthedocs.io#configuring-a-storage-backend for documentation about configuring the storage backend.
+  warnings.warn(
+ * Debug mode: on
+2026-02-23 06:55:33,266 - werkzeug - INFO - [_internal.py:97] - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.100.0.100:5000
+2026-02-23 06:55:33,266 - werkzeug - INFO - [_internal.py:97] - [33mPress CTRL+C to quit[0m
+2026-02-23 06:55:33,266 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-23 06:55:33,775 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+/home/marcus/.openclaw/workspace/cs50-final-project/venv/lib/python3.12/site-packages/flask_limiter/extension.py:324: UserWarning: Using the in-memory storage for tracking rate limits as no storage was explicitly specified. This is not recommended for production use. See: https://flask-limiter.readthedocs.io#configuring-a-storage-backend for documentation about configuring the storage backend.
+  warnings.warn(
+2026-02-23 06:55:33,881 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-23 06:55:33,883 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 130-493-478
+2026-02-23 06:55:37,576 - werkzeug - INFO - [_internal.py:97] - 127.0.0.1 - - [23/Feb/2026 06:55:37] "GET /login HTTP/1.1" 200 -

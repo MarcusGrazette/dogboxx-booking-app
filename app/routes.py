@@ -3,7 +3,7 @@ from flask_login import login_required, current_user, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
-from app.models import User, Client, Dog, Booking, Walker
+from app.models import User, Client, Dog, DogOwner, Booking, Walker, ServiceType
 from app import db, limiter
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
 from email_validator import validate_email, EmailNotValidError
@@ -34,22 +34,25 @@ def register_routes(app):
     def inject_csrf_token():
         return dict(csrf_token=generate_csrf)
     
-    app.config["UPLOAD_FOLDER"] = os.path.join(os.getcwd(), "app", "static", "images")
+    app.config["UPLOAD_FOLDER"] = os.path.join(os.getcwd(), "app", "static", "uploads", "dogs")
+    os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     
     @app.route("/", methods=["GET", "POST"])
     @login_required
     def index():
         """Render the home page."""
         user = User.query.options(
-        joinedload(User.client),  
-        joinedload(User.dogs)
+        joinedload(User.client),
         ).filter_by(id=current_user.id).first()
+
+        # Get user's dogs through DogOwner relationship
+        user_dogs = Dog.query.join(DogOwner).filter(DogOwner.user_id == current_user.id).all()
 
         # Return upcoming bookings
         today = datetime.now(timezone.utc).date()
         upcoming_bookings_query = Booking.query.filter(
             Booking.user_id == current_user.id,
-            Booking.status != 'Cancelled',
+            Booking.status != 'cancelled',
             Booking.date > today
         ).order_by(Booking.date.asc()).limit(15)
 
@@ -76,7 +79,7 @@ def register_routes(app):
                 errors.append("Invalid booking slot selected.")
 
              # Ensure the user has at least one dog to book
-            if not user or not getattr(user, "dogs", None):
+            if not user or not user_dogs:
                 errors.append("No dog found on your account. Please add a dog before booking.")
 
             if errors:
@@ -91,10 +94,16 @@ def register_routes(app):
                         OperationalError: "Our booking system is temporarily unavailable. Please try again later."
                     }
                 ):
-                    dog_id = user.dogs[0].id  # This assumes a one to one user to dog relationship
+                    dog_id = user_dogs[0].id
+                    # Look up default service type by slug
+                    default_service = ServiceType.query.filter_by(slug='group-walk', active=True).first()
+                    if not default_service:
+                        flash("No service type available. Please contact support.", "danger")
+                        return redirect(url_for("index"))
                     new_booking = Booking(
                         user_id=user.id,
                         dog_id=dog_id,
+                        service_type_id=default_service.id,
                         date=booking_date,
                         slot=booking_slot
                     )
@@ -103,7 +112,7 @@ def register_routes(app):
                     flash("Success - booking request submitted", "success")
                     return redirect(url_for("index"))
         
-        return render_template("index.html", user=user, client=user.client, dogs=user.dogs, bookings=upcoming_bookings, form=form) # type: ignore
+        return render_template("index.html", user=user, client=user.client, dogs=user_dogs, bookings=upcoming_bookings, form=form) # type: ignore
 
     @app.route("/login", methods=["GET", "POST"])
     @limiter.limit("5 per minute, 20 per hour")  # Limit login attempts
@@ -278,7 +287,6 @@ def register_routes(app):
 
                 # Create dog record
                 new_dog = Dog(
-                    user_id=current_user.id,
                     name=dog_name,
                     gender=dog_gender,
                     breed=dog_breed,
@@ -287,6 +295,15 @@ def register_routes(app):
                     pic=pic_filename
                 )
                 db.session.add(new_dog)
+                db.session.flush()  # Get new_dog.id
+
+                # Create DogOwner relationship (user is primary owner)
+                dog_owner = DogOwner(
+                    dog_id=new_dog.id,
+                    user_id=current_user.id,
+                    role='primary'
+                )
+                db.session.add(dog_owner)
                 
                 # Commit all changes together
                 db.session.commit()
@@ -409,7 +426,7 @@ def register_routes(app):
             pending_bookings = (
                 Booking.query
                 .options(joinedload(Booking.dog))
-                .filter(Booking.status == 'Pending', Booking.date > today)
+                .filter(Booking.status == 'requested', Booking.date > today)
                 .order_by(Booking.date.asc())
                 .limit(10)
                 .all()
@@ -462,12 +479,12 @@ def register_routes(app):
                 return jsonify(success=False, message="Booking not found or not authorized"), 404
                 
             # Check if booking can be cancelled (not already cancelled)
-            if booking.status == 'Cancelled':
+            if booking.status == 'cancelled':
                 logging.warning(f"Booking {booking_id} is already cancelled")
                 return jsonify(success=False, message="Booking is already cancelled"), 400
 
-            # Update booking status to Cancelled
-            booking.status = "Cancelled"
+            # Update booking status
+            booking.status = "cancelled"
             db.session.commit()
             
             logging.info(f"Booking {booking_id} successfully cancelled by user {current_user.id}")

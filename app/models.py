@@ -16,6 +16,11 @@ class User(db.Model):
     active = db.Column(db.Boolean, default=True, nullable=False)
     hashed_password = db.Column(db.String(256), nullable=False)
     must_change_password = db.Column(db.Boolean, default=False, nullable=False)
+    phone = db.Column(db.String(20), nullable=True)
+    notification_preference = db.Column(
+        db.Enum('email', 'whatsapp', 'both', name='notification_pref'),
+        nullable=False, default='email'
+    )
 
     # Flask-Login required methods
     def get_id(self):

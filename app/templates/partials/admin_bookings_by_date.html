@@ -61,6 +61,8 @@
     <div class="col-md-9">
         <div class="row g-3">
             {% for walker in walkers %}
+            {% set available = walker_available_slots[walker.id] if walker_available_slots is defined and walker.id in walker_available_slots else slots %}
+            {% if available %}
             <div class="col-md-{{ walker_col_width }}">
                 <div class="card h-100">
                     <div class="card-header bg-info">
@@ -71,12 +73,15 @@
                     </div>
                     <div class="card-body p-2">
                         {% for slot in slots %}
+                        {% if slot in available %}
                         {{ slot_section(slot, assigned_bookings, walker.id, walker_capacity[walker.id][slot]) }}
                         {% if not loop.last %}<hr>{% endif %}
+                        {% endif %}
                         {% endfor %}
                     </div>
                 </div>
             </div>
+            {% endif %}
             {% endfor %}
         </div>
     </div>

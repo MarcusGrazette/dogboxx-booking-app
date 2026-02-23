@@ -10,7 +10,7 @@ from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
-from app.models import User, Client, Dog, Booking, DogOwner
+from app.models import User, Client, Dog, Booking, DogOwner, ServiceType
 from app import db
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
 from app.forms import OnboardingForm, BookingForm
@@ -87,12 +87,15 @@ def index():
                 }
             ):
                 dog_id = user_dogs[0].id  # Use first dog from DogOwner relationship
-                # Use the default service type (Group Walk) - ID 1
-                service_type_id = 1  # Assuming Group Walk is seeded with ID 1
+                # Look up default service type by slug
+                default_service = ServiceType.query.filter_by(slug='group-walk', active=True).first()
+                if not default_service:
+                    flash("No service type available. Please contact support.", "danger")
+                    return redirect(url_for("client.index"))
                 new_booking = Booking(
                     user_id=user.id,
                     dog_id=dog_id,
-                    service_type_id=service_type_id,
+                    service_type_id=default_service.id,
                     date=booking_date,
                     slot=booking_slot
                 )
@@ -132,26 +135,31 @@ def onboard():
     if form.validate_on_submit():
         try:
             # Step 1: Address information
-            place_id = form.place_id.data.strip() # type: ignore
-            formatted_address = form.formatted_address.data.strip() # type: ignore
-            display_name = form.display_name.data.strip()
-            latitude = float(form.latitude.data) if form.latitude.data else None
-            longitude = float(form.longitude.data) if form.longitude.data else None
-            pickup_instructions = form.pickup_instructions.data.strip()
-
-            # Create or update client record
             if not client:
                 client = Client(user_id=current_user.id)
                 db.session.add(client)
 
-            client.place_id = place_id
-            client.formatted_address = formatted_address
-            client.display_name = display_name
-            client.latitude = latitude
-            client.longitude = longitude
+            # Address
+            client.street_address = form.address_line_1.data.strip()
+            if form.address_line_2.data:
+                client.street_address += '\n' + form.address_line_2.data.strip()
+            if form.address_line_3.data:
+                client.street_address += '\n' + form.address_line_3.data.strip()
+            client.postal_code = form.postcode.data.strip()
+
+            pickup_instructions = form.pickup_instructions.data.strip()
             client.pickup_instructions = pickup_instructions
             client.onboarding_completed = True
             client.onboarding_completed_at = datetime.now(timezone.utc)
+
+            # Notification preferences
+            current_user.phone = form.phone.data.strip() if form.phone.data else None
+            if form.notify_email.data and form.notify_whatsapp.data:
+                current_user.notification_preference = 'both'
+            elif form.notify_whatsapp.data:
+                current_user.notification_preference = 'whatsapp'
+            else:
+                current_user.notification_preference = 'email'
 
             # Step 2: Dog information
             dog_name = form.dog_name.data.strip()
@@ -218,11 +226,11 @@ def onboard():
                     except ValueError as e:
                         logging.error(f"Invalid file upload: {e}")
                         flash(f"Upload error: {str(e)}. Please try a different file.", "error")
-                        return render_template("onboarding.html", google_maps_api_key=os.environ.get('GOOGLE_MAPS_API_KEY'), form=form)
+                        return render_template("onboarding.html", form=form)
                     except Exception as e:
                         logging.error(f"Error processing uploaded file: {e}")
                         flash("There was an error processing your image. Please try a different file.", "error")
-                        return render_template("onboarding.html", google_maps_api_key=os.environ.get('GOOGLE_MAPS_API_KEY'), form=form)
+                        return render_template("onboarding.html", form=form)
 
             # Create dog record
             new_dog = Dog(
@@ -266,7 +274,7 @@ def onboard():
             else:
                 flash("There was an error saving your information. Please try again.", "error")
 
-    return render_template("onboarding.html", google_maps_api_key=os.environ.get('GOOGLE_MAPS_API_KEY'), form=form)
+    return render_template("onboarding.html", form=form)
 
 
 @client_bp.route("/cancel_booking", methods=["POST"])

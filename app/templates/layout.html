@@ -19,9 +19,14 @@
     <!-- Reusable Calendar Component CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/reusable-calendar.css') }}">
     
-    <!-- Dropzone -->
-    <script src="https://unpkg.com/dropzone@5/dist/min/dropzone.min.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/dropzone@5/dist/min/dropzone.min.css" type="text/css" />
+    <!-- FilePond plugins CSS -->
+    <link href="https://unpkg.com/filepond-plugin-image-preview/dist/filepond-plugin-image-preview.css" rel="stylesheet" />
+    <link href="https://unpkg.com/filepond/dist/filepond.css" rel="stylesheet" />
+    <!-- FilePond plugins JS -->
+    <script src="https://unpkg.com/filepond-plugin-image-preview/dist/filepond-plugin-image-preview.js"></script>
+    <script src="https://unpkg.com/filepond-plugin-file-validate-type/dist/filepond-plugin-file-validate-type.js"></script>
+    <script src="https://unpkg.com/filepond-plugin-image-crop/dist/filepond-plugin-image-crop.js"></script>
+    <script src="https://unpkg.com/filepond/dist/filepond.js"></script>
     
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
@@ -52,9 +57,7 @@
                 <ul class="navbar-nav ms-auto mt-2">
                     <li class="nav-item">
                         <a class="icon-link nav-link" href="{{ url_for('logout') }}">
-                            <svg class="bi" width="64" height="64" fill="currentColor">
-                                <use xlink:href="{{ url_for('static', filename='icons/bootstrap-icons.svg') }}#box-arrow-left" />
-                            </svg>
+                            <i class="bi bi-box-arrow-left"></i>
                             Log Out ({{ current_user.firstname }})
                         </a>
                     </li>
@@ -62,18 +65,8 @@
                 {% else %}
                 <ul class="navbar-nav ms-auto mt-2">
                     <li class="nav-item">
-                        <a class="icon-link nav-link" href="{{ url_for('register') }}">
-                            <svg class="bi" width="64" height="64" fill="currentColor">
-                                <use xlink:href="{{ url_for('static', filename='icons/bootstrap-icons.svg') }}#person-add" />
-                            </svg>
-                            Register
-                        </a>
-                    </li>
-                    <li class="nav-item">
                         <a class="icon-link nav-link" href="{{ url_for('login') }}">
-                            <svg class="bi" width="64" height="64" fill="currentColor">
-                                <use xlink:href="{{ url_for('static', filename='icons/bootstrap-icons.svg') }}#door-open" />
-                            </svg>
+                            <i class="bi bi-door-open"></i>
                             Log In
                         </a>
                     </li>
@@ -84,6 +77,16 @@
     </nav>
 
     <main class="container py-3 text-center">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
         {% block main %}{% endblock %}
     </main>
 

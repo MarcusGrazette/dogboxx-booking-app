@@ -72,21 +72,41 @@ def bookings_by_date():
             if b.walker and hasattr(b.walker, 'user'):
                 b.walker_name = f"{b.walker.user.firstname}" if b.walker.user else None
 
-        # Get all walkers with their associated user data
-        walkers = Walker.query.options(joinedload(Walker.user)).all()
+        # Determine which walkers are available for this date based on their schedule
+        day_of_week = selected_date.weekday()  # 0=Monday, 6=Sunday
         
-        # Create walker capacity tracking
+        schedules = WalkerSchedule.query.filter_by(
+            day_of_week=day_of_week, active=True
+        ).all()
+        
+        # Build a map of walker_id → set of available slots
+        walker_available_slots = {}
+        for sched in schedules:
+            if sched.walker_id not in walker_available_slots:
+                walker_available_slots[sched.walker_id] = set()
+            walker_available_slots[sched.walker_id].add(sched.slot)
+        
+        # Only show walkers who have at least one slot on this day
+        available_walker_ids = set(walker_available_slots.keys())
+        walkers = (
+            Walker.query
+            .options(joinedload(Walker.user))
+            .filter(Walker.id.in_(available_walker_ids))
+            .all()
+        ) if available_walker_ids else []
+        
+        # Create walker capacity tracking (only for available slots)
         walker_capacity = {}
         for walker in walkers:
-            walker_capacity[walker.id] = {
-                'Morning': 0,
-                'Afternoon': 0
-            }
+            walker_capacity[walker.id] = {}
+            for slot in walker_available_slots.get(walker.id, set()):
+                walker_capacity[walker.id][slot] = 0
         
         # Count assigned bookings per walker per slot
         for booking in assigned_bookings:
             if booking.walker_id and booking.slot:
-                walker_capacity[booking.walker_id][booking.slot] += 1
+                if booking.walker_id in walker_capacity and booking.slot in walker_capacity[booking.walker_id]:
+                    walker_capacity[booking.walker_id][booking.slot] += 1
         
         # Generate the drag-and-drop HTML interface
         if not pending_bookings and not assigned_bookings:
@@ -98,7 +118,8 @@ def bookings_by_date():
             pending_bookings=pending_bookings,
             assigned_bookings=assigned_bookings,
             walkers=walkers,
-            walker_capacity=walker_capacity
+            walker_capacity=walker_capacity,
+            walker_available_slots={wid: list(slots) for wid, slots in walker_available_slots.items()}
         )
     except Exception as e:
         logging.error(f"Error in admin_bookings_by_date: {str(e)}")
@@ -157,6 +178,18 @@ def assign_walker():
         if not walker:
             return jsonify(success=False, message="Walker not found"), 404
 
+        # Check walker is scheduled for this date+slot
+        assign_slot = slot or booking.slot
+        day_of_week = booking.date.weekday()
+        schedule_exists = WalkerSchedule.query.filter_by(
+            walker_id=walker.id,
+            day_of_week=day_of_week,
+            slot=assign_slot,
+            active=True
+        ).first()
+        if not schedule_exists:
+            return jsonify(success=False, message=f"{walker.user.firstname} is not scheduled for {assign_slot} on this day"), 400
+
         # Check walker capacity for the given slot and date
         if slot:
             same_slot_bookings = Booking.query.filter(
@@ -175,6 +208,15 @@ def assign_walker():
         booking.status = 'confirmed'
         if slot:
             booking.slot = slot
+
+        # Update pickup order for all bookings in this walker's slot
+        pickup_order = data.get("pickup_order")  # list of booking IDs in order
+        if pickup_order and isinstance(pickup_order, list):
+            for idx, bid in enumerate(pickup_order, start=1):
+                b = Booking.query.get(int(bid))
+                if b and b.walker_id == walker.id and b.date == booking.date and b.slot == booking.slot:
+                    b.pickup_order = idx
+
         db.session.commit()
 
         return jsonify(

@@ -10,9 +10,6 @@ Home
         <h1>Hello, {{ current_user.firstname }}.</h1>
     </div>
 
-    <!-- Show flash messages. -->
-    {% include '_flashes.html' %}
-
     <div class="card mb-3 w-75" style="margin: auto;">
         <h5 class="card-header text-start text-bg-secondary">
             <i class="bi bi-plus-square"></i>
@@ -52,9 +49,9 @@ Home
     </div>
     <!-- Dog icons created by Freepik - Flaticon -->
 
-    {% if user.dogs %}
+    {% if dogs %}
 
-    {% for dog in user.dogs %}
+    {% for dog in dogs %}
     <div class="card mb-3 w-75" style="margin: auto; min-height: 250px;">
         <h5 class="card-header text-start text-bg-primary">
             <i class="bi bi-calendar-event"></i>
@@ -62,8 +59,14 @@ Home
         </h5>
         <div class="row g-0">
             <div class="col-md-4">
-                <img src="{{ url_for('static', filename='images/' + dog.pic) }}" class="img-fluid rounded-circle mt-3"
+                {% if dog.pic %}
+                <img src="{{ url_for('static', filename='uploads/dogs/' + dog.pic) }}" class="img-fluid rounded-circle mt-3"
                     alt="{{ dog.name }}" style="width: 150px; height: 150px; object-fit: cover; max-width: 100%;">
+                {% else %}
+                <div class="rounded-circle mt-3 d-flex align-items-center justify-content-center bg-light" style="width: 150px; height: 150px;">
+                    <i class="bi bi-piggy-bank fs-1 text-muted"></i>
+                </div>
+                {% endif %}
             </div>
             <div class="col-md-8">
                 <div class="card-body text-start">
@@ -82,13 +85,13 @@ Home
                     <table class="table">
                         <tbody>
                             {% for booking in bookings %}
-                            <tr{% if booking.status=='Pending' %} class="table-warning" {% endif %}>
+                            <tr{% if booking.status=='requested' %} class="table-warning" {% endif %}>
                                 <td>{{ booking.date_display }}</td>
                                 <td>{{ booking.slot }}</td>
                                 <td>
-                                    {% if booking.status == 'Confirmed' %}
+                                    {% if booking.status == 'confirmed' %}
                                     <i class="bi bi-check2-circle"></i>
-                                    {% elif booking.status == 'Pending' %}
+                                    {% elif booking.status == 'requested' %}
                                     <i class="bi bi-hourglass"></i>
                                     {% endif %}
                                 </td>

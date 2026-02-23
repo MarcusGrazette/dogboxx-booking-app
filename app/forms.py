@@ -65,11 +65,26 @@ class RegisterForm(FlaskForm):
     submit = SubmitField('Create Account')
 
 class OnboardingForm(FlaskForm):
-    place_id = HiddenField("Place ID")
-    formatted_address = HiddenField("Formatted Address")
-    display_name = HiddenField("Display Name")
-    latitude = HiddenField("Latitude")
-    longitude = HiddenField("Longitude")
+    address_line_1 = StringField(
+        'Address Line 1',
+        validators=[DataRequired(), Length(max=200)],
+        render_kw={"placeholder": "Street address"}
+    )
+    address_line_2 = StringField(
+        'Address Line 2',
+        validators=[Optional(), Length(max=200)],
+        render_kw={"placeholder": "Flat, floor, etc. (optional)"}
+    )
+    address_line_3 = StringField(
+        'Address Line 3',
+        validators=[Optional(), Length(max=200)],
+        render_kw={"placeholder": "Area / neighbourhood (optional)"}
+    )
+    postcode = StringField(
+        'Postcode',
+        validators=[DataRequired(), Length(max=20)],
+        render_kw={"placeholder": "e.g. SE1 3QJ"}
+    )
     pickup_instructions = TextAreaField(
         "Access instructions (optional)",
         validators=[Length(max=500)],
@@ -77,6 +92,14 @@ class OnboardingForm(FlaskForm):
             "rows": 5,
             "placeholder": "Anything we need to know when accessing your home? Eg, door codes, notes on the concierge, fiddly keys... Or any special instructions for pickup and drop off?"},
     )
+    notify_email = BooleanField('Email', default=True)
+    notify_whatsapp = BooleanField('WhatsApp')
+    phone = StringField(
+        'Phone Number',
+        validators=[Optional(), Length(max=20)],
+        render_kw={"placeholder": "e.g. +44 7700 900000"}
+    )
+
     dog_name = StringField(
         "Dog's Name",
         validators=[DataRequired(), Length(max=50)]
