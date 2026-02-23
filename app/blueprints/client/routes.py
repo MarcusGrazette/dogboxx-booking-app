@@ -30,8 +30,10 @@ from app.blueprints.client import client_bp
 def index():
     """Render the home page for clients."""
     # Check if user is a client
-    if current_user.role != 'client':
-        return redirect(url_for(f'{current_user.role}.index'))
+    if current_user.role == 'admin':
+        return redirect(url_for('admin.dashboard'))
+    elif current_user.role == 'walker':
+        return redirect(url_for('walker.schedule'))
         
     user = User.query.options(
         joinedload(User.client)
@@ -112,7 +114,7 @@ def index():
 def profile():
     """Display and manage user profile"""
     if current_user.role != 'client':
-        return redirect(url_for(f'{current_user.role}.profile'))
+        return redirect(url_for('client.index'))
         
     # Add client profile functionality here
     return "Client Profile Page - Coming Soon"
