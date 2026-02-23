@@ -58,8 +58,6 @@ Admin
 
 {% block scripts %}
 {{ super() }}
-<!-- Include reusable calendar component -->
-<link rel="stylesheet" href="{{ url_for('static', filename='css/reusable-calendar.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin-bookings.css') }}">
 <script src="{{ url_for('static', filename='js/reusable-calendar.js') }}"></script>
 <script>
@@ -453,7 +451,7 @@ Admin
 
       // Determine img src from data attribute (prefer original filename)
       const dogPic = card.dataset.dogPic || '';
-      const imgSrc = dogPic ? `/static/images/${dogPic}` : '/static/images/default-dog.png';
+      const imgSrc = dogPic ? `/static/uploads/dogs/${dogPic}` : '/static/uploads/dogs/default-dog.png';
 
       // Update styling
       if (walkerId) {
@@ -476,7 +474,7 @@ Admin
         <div class="d-flex align-items-center gap-2 p-2">
           <div class="dog-avatar rounded-circle flex-shrink-0">
             <img src="${imgSrc}" class="img-fluid" alt="${dogName}" 
-                 onerror="this.src='/static/images/default-dog.png'">
+                 onerror="this.src='/static/uploads/dogs/default-dog.png'">
           </div>
           <div>
             <small>${dogName}</small>
@@ -527,13 +525,13 @@ Admin
             // Restore original content if it was modified
             const dogName = draggedCard.dataset.dogName || '';
             const dogPic = draggedCard.dataset.dogPic || '';
-            const imgSrc = dogPic ? `/static/images/${dogPic}` : '/static/images/default-dog.png';
+            const imgSrc = dogPic ? `/static/uploads/dogs/${dogPic}` : '/static/uploads/dogs/default-dog.png';
 
             draggedCard.innerHTML = `
               <div class="d-flex align-items-center gap-2 p-2">
                 <div class="dog-avatar rounded-circle flex-shrink-0">
                   <img src="${imgSrc}" class="img-fluid" alt="${dogName}" 
-                       onerror="this.src='/static/images/default-dog.png'">
+                       onerror="this.src='/static/uploads/dogs/default-dog.png'">
                 </div>
                 <div>
                   <small>${dogName}</small>

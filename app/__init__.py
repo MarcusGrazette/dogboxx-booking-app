@@ -1,4 +1,4 @@
-from flask import Flask, request, redirect
+from flask import Flask, request, redirect, render_template
 from flask_session import Session
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
@@ -64,7 +64,7 @@ def create_app(config_name=None):
 
     # Initialize Flask-Login
     login_manager.init_app(app)
-    login_manager.login_view = "login"
+    login_manager.login_view = "auth.login"
     login_manager.login_message = None
 
     @login_manager.user_loader
@@ -94,7 +94,7 @@ def create_app(config_name=None):
             return
             
         # Skip for logout and change password routes
-        if request.endpoint in ['auth.logout', 'auth.change_password', 'logout']:
+        if request.endpoint in ['auth.logout', 'auth.change_password']:
             return
             
         # Skip for static files and API endpoints
@@ -109,7 +109,7 @@ def create_app(config_name=None):
 
         # Redirect clients who haven't completed onboarding
         if current_user.role == 'client':
-            if request.endpoint not in ['client.onboard', 'auth.logout', 'auth.change_password', 'logout', 'static']:
+            if request.endpoint not in ['client.onboard', 'auth.logout', 'auth.change_password', 'static']:
                 from app.models import Client
                 client = Client.query.filter_by(user_id=current_user.id).first()
                 if not client or not client.onboarding_completed:
@@ -157,12 +157,21 @@ def create_app(config_name=None):
                                 WalkerSchedule, ServiceType, Booking,
                                 BookingStatusChange, WalkEvent)
 
+    # Custom error handler for rate limiting
+    @app.errorhandler(429)
+    def ratelimit_handler(e):
+        return render_template('error.html',
+                              error_code=429,
+                              error_message="Too many attempts. Please try again later.",
+                              error_description="For security reasons, we limit the number of requests. Please wait a few minutes before trying again."), 429
+
+    @app.context_processor
+    def inject_csrf_token():
+        from flask_wtf.csrf import generate_csrf
+        return dict(csrf_token=generate_csrf)
+
     # Register blueprints for modular routing
     from app.blueprints.register import register_blueprints
     register_blueprints(app)
-    
-    # Register legacy routes (will be migrated to blueprints)
-    from app.routes import register_routes
-    register_routes(app)
 
     return app

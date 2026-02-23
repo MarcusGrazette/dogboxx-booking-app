@@ -12,11 +12,8 @@ class Config:
     LOG_LEVEL = "INFO"
     LOG_FILE = None  # No file logging by default
     
-    # Dropzone configuration
-    DROPZONE_UPLOAD_MULTIPLE = False  # Single file upload
-    DROPZONE_ALLOWED_FILE_TYPE = 'image'  # Only allow images
-    DROPZONE_MAX_FILE_SIZE = 3  # Max file size in MB
-    UPLOAD_FOLDER = os.path.join(os.getcwd(), "app", "static", "images")  # Upload folder
+    # Upload folder (overridden in create_app to use static/uploads/dogs/)
+    UPLOAD_FOLDER = os.path.join(os.getcwd(), "app", "static", "uploads", "dogs")
     
     # Security settings
     SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access to session cookie

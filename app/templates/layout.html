@@ -19,14 +19,7 @@
     <!-- Reusable Calendar Component CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/reusable-calendar.css') }}">
     
-    <!-- FilePond plugins CSS -->
-    <link href="https://unpkg.com/filepond-plugin-image-preview/dist/filepond-plugin-image-preview.css" rel="stylesheet" />
-    <link href="https://unpkg.com/filepond/dist/filepond.css" rel="stylesheet" />
-    <!-- FilePond plugins JS -->
-    <script src="https://unpkg.com/filepond-plugin-image-preview/dist/filepond-plugin-image-preview.js"></script>
-    <script src="https://unpkg.com/filepond-plugin-file-validate-type/dist/filepond-plugin-file-validate-type.js"></script>
-    <script src="https://unpkg.com/filepond-plugin-image-crop/dist/filepond-plugin-image-crop.js"></script>
-    <script src="https://unpkg.com/filepond/dist/filepond.js"></script>
+    {% block head_extra %}{% endblock %}
     
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
@@ -38,7 +31,7 @@
 
     <nav class="bg-light border navbar navbar-expand-md navbar-light">
         <div class="container-fluid">
-            <a class="navbar-brand" href="{{ url_for('index')}} ">
+            <a class="navbar-brand" href="{{ url_for('client.index')}} ">
                 <img src="{{ url_for('static', filename='apple-touch-icon.png') }}" alt="Logo" width="30" height="24"
                     class="d-inline-block align-text-top">
                 Bermondsey St Dog Walkers
@@ -56,7 +49,7 @@
                 </ul>
                 <ul class="navbar-nav ms-auto mt-2">
                     <li class="nav-item">
-                        <a class="icon-link nav-link" href="{{ url_for('logout') }}">
+                        <a class="icon-link nav-link" href="{{ url_for('auth.logout') }}">
                             <i class="bi bi-box-arrow-left"></i>
                             Log Out ({{ current_user.firstname }})
                         </a>
@@ -65,7 +58,7 @@
                 {% else %}
                 <ul class="navbar-nav ms-auto mt-2">
                     <li class="nav-item">
-                        <a class="icon-link nav-link" href="{{ url_for('login') }}">
+                        <a class="icon-link nav-link" href="{{ url_for('auth.login') }}">
                             <i class="bi bi-door-open"></i>
                             Log In
                         </a>

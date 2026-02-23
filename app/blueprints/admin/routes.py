@@ -21,26 +21,22 @@ import traceback
 import json
 
 from app.blueprints.admin import admin_bp
+from app.utils.decorators import admin_required
 
 
 @admin_bp.route("/")
 @login_required
+@admin_required
 def dashboard():
     """Admin dashboard page"""
-    if current_user.role != 'admin':
-        flash("Only admins can access.", "danger")
-        return redirect(url_for("client.index"))
-        
     return render_template("admin.html")
 
 
 @admin_bp.route("/bookings_by_date")
 @login_required
+@admin_required
 def bookings_by_date():
     """Return HTML fragment of drag-and-drop booking allocation interface (admin only)."""
-    if not current_user.is_admin:
-        return "Forbidden", 403
-
     # Get date from query parameter
     date_str = request.args.get('date')
     if not date_str:
@@ -125,23 +121,17 @@ def bookings_by_date():
         logging.error(f"Error in admin_bookings_by_date: {str(e)}")
         logging.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
-        return "Server error", 500
-    
-    # Admin dashboard logic
-    return render_template("admin.html")
 
 
 @admin_bp.route("/assign_walker", methods=["POST"])
 @login_required
+@admin_required
 @handle_db_errors(json_response=True, flash_message=False, custom_error_messages={
     IntegrityError: "Could not assign walker due to a data conflict.",
     OperationalError: "Database is temporarily unavailable. Please try again."
 })
 def assign_walker():
     """Assign a walker and slot to a booking (admin only). Returns JSON for AJAX requests."""
-    if current_user.role != 'admin':
-        return jsonify(success=False, message="Forbidden"), 403
-
     # Accept JSON or form-encoded
     data = request.get_json(silent=True) or request.form
     booking_id = data.get("booking_id")
@@ -237,164 +227,14 @@ def assign_walker():
         logging.error(f"Error assigning/unassigning walker: {e}")
         logging.debug(traceback.format_exc())
         return jsonify(success=False, message="Server error"), 500
-    
-    # Generate drag-and-drop UI HTML
-    html = f'<div class="booking-date"><h2>Bookings for {selected_date.strftime("%A, %d %B %Y")}</h2></div>'
-    
-    # Create a container for all columns
-    html += '<div class="row g-4 mb-4">'
-    
-    # First column: Unassigned bookings
-    html += '''
-    <div class="col-md-3">
-        <div class="card h-100">
-            <div class="card-header bg-warning text-white">
-                <h6 class="mb-0"><i class="bi bi-clock"></i> Unassigned</h6>
-            </div>
-            <div class="card-body p-2">
-                <div class="booking-list" id="unassigned-list">
-    '''
-    
-    # Add unassigned bookings
-    for booking in [b for b in bookings if not b.walker_id]:
-        html += f'''
-        <div class="booking-card" 
-             data-id="{booking.id}" 
-             data-slot="{booking.slot if booking.slot else 'Unspecified'}"
-             data-user="{booking.user.firstname} {booking.user.lastname}"
-             data-dog="{booking.dog.name if booking.dog else 'Unknown'}"
-             data-address="{booking.user.client.display_name if booking.user.client else 'No address'}"
-             draggable="true">
-            <div class="booking-header">
-                <span class="badge rounded-pill bg-{_get_slot_color(booking.slot)}">{booking.slot if booking.slot else "Unspecified"}</span>
-                <span class="fw-bold">{booking.user.firstname} {booking.user.lastname}</span>
-            </div>
-            <div class="booking-details">
-                <div><i class="bi bi-house"></i> {booking.user.client.display_name if booking.user.client else "No address"}</div>
-                <div><i class="bi bi-heart"></i> {booking.dog.name if booking.dog else "No dog"}</div>
-            </div>
-        </div>
-        '''
-    
-    html += '''
-                </div>
-            </div>
-        </div>
-    </div>
-    '''
-    
-    # Generate a column for each walker
-    for walker in walkers:
-        # Get assigned bookings for this walker
-        assigned_bookings = [b for b in bookings if b.walker_id == walker.id]
-        
-        # Calculate capacity
-        morning_count = walker_capacity[walker.id]['Morning']
-        afternoon_count = walker_capacity[walker.id]['Afternoon']
-        morning_assigned = [b for b in assigned_bookings if b.walker_id == walker.id and b.slot == 'Morning']
-        afternoon_assigned = [b for b in assigned_bookings if b.walker_id == walker.id and b.slot == 'Afternoon']
-        
-        html += f'''
-        <!-- Walker {walker.firstname} Column -->
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-header bg-primary text-white">
-                    <h6 class="mb-0"><i class="bi bi-person-walking"></i> {walker.firstname}</h6>
-                </div>
-                <div class="card-body p-2">
-                    <!-- Morning slot -->
-                    <div class="booking-slot">
-                        <div class="slot-header">
-                            <span class="badge rounded-pill bg-success">Morning</span>
-                            <span class="capacity-badge">{morning_count}/6</span>
-                        </div>
-                        <div class="booking-list" id="walker-{walker.id}-morning" 
-                             data-walker-id="{walker.id}" 
-                             data-slot="Morning">
-        '''
-        
-        # Add morning bookings
-        for booking in morning_assigned:
-            html += f'''
-            <div class="booking-card" 
-                 data-id="{booking.id}" 
-                 data-slot="{booking.slot}"
-                 data-user="{booking.user.firstname} {booking.user.lastname}"
-                 data-dog="{booking.dog.name if booking.dog else 'Unknown'}"
-                 data-address="{booking.user.client.display_name if booking.user.client else 'No address'}"
-                 draggable="true">
-                <div class="booking-header">
-                    <span class="badge rounded-pill bg-success">Morning</span>
-                    <span class="fw-bold">{booking.user.firstname} {booking.user.lastname}</span>
-                </div>
-                <div class="booking-details">
-                    <div><i class="bi bi-house"></i> {booking.user.client.display_name if booking.user.client else "No address"}</div>
-                    <div><i class="bi bi-heart"></i> {booking.dog.name if booking.dog else "No dog"}</div>
-                </div>
-            </div>
-            '''
-            
-        html += '''
-                        </div>
-                    </div>
-                    
-                    <!-- Afternoon slot -->
-                    <div class="booking-slot mt-3">
-                        <div class="slot-header">
-                            <span class="badge rounded-pill bg-danger">Afternoon</span>
-        '''
-        
-        html += f'''
-                            <span class="capacity-badge">{afternoon_count}/6</span>
-                        </div>
-                        <div class="booking-list" id="walker-{walker.id}-afternoon" 
-                             data-walker-id="{walker.id}" 
-                             data-slot="Afternoon">
-        '''
-        
-        # Add afternoon bookings
-        for booking in afternoon_assigned:
-            html += f'''
-            <div class="booking-card" 
-                 data-id="{booking.id}" 
-                 data-slot="{booking.slot}"
-                 data-user="{booking.user.firstname} {booking.user.lastname}"
-                 data-dog="{booking.dog.name if booking.dog else 'Unknown'}"
-                 data-address="{booking.user.client.display_name if booking.user.client else 'No address'}"
-                 draggable="true">
-                <div class="booking-header">
-                    <span class="badge rounded-pill bg-danger">Afternoon</span>
-                    <span class="fw-bold">{booking.user.firstname} {booking.user.lastname}</span>
-                </div>
-                <div class="booking-details">
-                    <div><i class="bi bi-house"></i> {booking.user.client.display_name if booking.user.client else "No address"}</div>
-                    <div><i class="bi bi-heart"></i> {booking.dog.name if booking.dog else "No dog"}</div>
-                </div>
-            </div>
-            '''
-            
-        html += '''
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        '''
-    
-    # Close the container
-    html += '</div>'
-    
-    return html
 
 
 @admin_bp.route("/calendar_data/<int:year>/<int:month>")
 @login_required
+@admin_required
 def calendar_data(year, month):
     """Return calendar data for the admin booking view"""
-    if current_user.role != 'admin':
-        return jsonify(success=False, message="Forbidden"), 403
-        
-    # Validate input
+# Validate input
     try:
         start_date = datetime(year, month, 1).date()
         if month == 12:
@@ -454,13 +294,10 @@ def _get_slot_color(slot):
 
 @admin_bp.route("/clients")
 @login_required
+@admin_required
 def clients():
     """List all clients (admin only)"""
-    if current_user.role != 'admin':
-        flash("Only admins can access this page.", "danger")
-        return redirect(url_for("client.index"))
-    
-    # Get all users with role='client' and their client records
+# Get all users with role='client' and their client records
     clients = (
         User.query
         .options(joinedload(User.client))
@@ -474,12 +311,9 @@ def clients():
 
 @admin_bp.route("/clients/new", methods=["GET", "POST"])
 @login_required
+@admin_required
 def new_client():
     """Form to add a new client (admin only)"""
-    if current_user.role != 'admin':
-        flash("Only admins can access this page.", "danger")
-        return redirect(url_for("client.index"))
-    
     form = ClientCreateForm()
     
     if form.validate_on_submit():
@@ -532,11 +366,9 @@ def new_client():
 
 @admin_bp.route("/clients/<int:client_id>/deactivate", methods=["POST"])
 @login_required
+@admin_required
 def deactivate_client(client_id):
     """Deactivate a client (soft delete)"""
-    if current_user.role != 'admin':
-        return jsonify(success=False, message="Forbidden"), 403
-    
     try:
         user = User.query.filter(User.role == 'client', User.id == client_id).first()
         if not user:
@@ -556,11 +388,9 @@ def deactivate_client(client_id):
 
 @admin_bp.route("/clients/<int:client_id>/activate", methods=["POST"])
 @login_required
+@admin_required
 def activate_client(client_id):
     """Reactivate a client"""
-    if current_user.role != 'admin':
-        return jsonify(success=False, message="Forbidden"), 403
-    
     try:
         user = User.query.filter(User.role == 'client', User.id == client_id).first()
         if not user:
@@ -582,13 +412,10 @@ def activate_client(client_id):
 
 @admin_bp.route("/walkers")
 @login_required
+@admin_required
 def walkers():
     """List all walkers (admin only)"""
-    if current_user.role != 'admin':
-        flash("Only admins can access this page.", "danger")
-        return redirect(url_for("client.index"))
-    
-    # Get all users with role='walker' and their walker records
+# Get all users with role='walker' and their walker records
     walkers = (
         User.query
         .options(joinedload(User.walker))
@@ -602,12 +429,9 @@ def walkers():
 
 @admin_bp.route("/walkers/new", methods=["GET", "POST"])
 @login_required
+@admin_required
 def new_walker():
     """Form to add a new walker (admin only)"""
-    if current_user.role != 'admin':
-        flash("Only admins can access this page.", "danger")
-        return redirect(url_for("client.index"))
-    
     form = WalkerCreateForm()
     
     if form.validate_on_submit():
@@ -660,11 +484,9 @@ def new_walker():
 
 @admin_bp.route("/walkers/<int:walker_id>/deactivate", methods=["POST"])
 @login_required
+@admin_required
 def deactivate_walker(walker_id):
     """Deactivate a walker (soft delete)"""
-    if current_user.role != 'admin':
-        return jsonify(success=False, message="Forbidden"), 403
-    
     try:
         user = User.query.filter(User.role == 'walker', User.id == walker_id).first()
         if not user:
@@ -684,11 +506,9 @@ def deactivate_walker(walker_id):
 
 @admin_bp.route("/walkers/<int:walker_id>/activate", methods=["POST"])
 @login_required
+@admin_required
 def activate_walker(walker_id):
     """Reactivate a walker"""
-    if current_user.role != 'admin':
-        return jsonify(success=False, message="Forbidden"), 403
-    
     try:
         user = User.query.filter(User.role == 'walker', User.id == walker_id).first()
         if not user:
@@ -710,11 +530,7 @@ def activate_walker(walker_id):
 @login_required
 def walker_schedule(walker_id):
     """View/edit walker's weekly schedule"""
-    if current_user.role != 'admin':
-        flash("Only admins can access this page.", "danger")
-        return redirect(url_for("client.index"))
-    
-    # Get walker
+# Get walker
     walker = Walker.query.options(joinedload(Walker.user)).get_or_404(walker_id)
     
     form = WalkerScheduleForm()

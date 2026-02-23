@@ -6,6 +6,6 @@ management, profile management, and dog information.
 """
 from flask import Blueprint
 
-client_bp = Blueprint('client', __name__, url_prefix='/client')
+client_bp = Blueprint('client', __name__, url_prefix='/')
 
 from app.blueprints.client import routes

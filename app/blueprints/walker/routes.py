@@ -8,7 +8,7 @@ and walk history.
 from flask import request, redirect, render_template, flash, url_for
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
-from app.models import Walker, Booking
+from app.models import Walker, Booking, User
 from app import db
 from datetime import datetime, timezone, timedelta
 
@@ -45,14 +45,13 @@ def schedule():
     end_date = today + timedelta(days=7)
     
     bookings = Booking.query.options(
-        joinedload(Booking.user),
+        joinedload(Booking.user).joinedload(User.client),
         joinedload(Booking.dog),
-        joinedload(Booking.client)
     ).filter(
         Booking.walker_id == walker.id,
         Booking.date >= today,
         Booking.date <= end_date,
-        Booking.status != 'Cancelled'
+        Booking.status != 'cancelled'
     ).order_by(Booking.date.asc(), Booking.slot.asc()).all()
     
     # Group bookings by date and slot

@@ -4,6 +4,17 @@
 Complete Your Profile
 {% endblock %}
 
+{% block head_extra %}
+<!-- FilePond plugins CSS -->
+<link href="https://unpkg.com/filepond-plugin-image-preview/dist/filepond-plugin-image-preview.css" rel="stylesheet" />
+<link href="https://unpkg.com/filepond/dist/filepond.css" rel="stylesheet" />
+<!-- FilePond plugins JS -->
+<script src="https://unpkg.com/filepond-plugin-image-preview/dist/filepond-plugin-image-preview.js"></script>
+<script src="https://unpkg.com/filepond-plugin-file-validate-type/dist/filepond-plugin-file-validate-type.js"></script>
+<script src="https://unpkg.com/filepond-plugin-image-crop/dist/filepond-plugin-image-crop.js"></script>
+<script src="https://unpkg.com/filepond/dist/filepond.js"></script>
+{% endblock %}
+
 {% block main %}
 <div class="container">
     <div class="row justify-content-center">

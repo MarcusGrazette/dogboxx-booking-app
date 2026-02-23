@@ -20,7 +20,7 @@ Home
             <div class="card-body text-start">
                 <p class="card-text">Select a date and slot (morning or afternnon) to request a new booking. We manually
                     review booking requests to make sure your dog only walks with others they get on well with.</p>
-                <form action="/" method="post" id="BookingForm" novalidate>
+                <form action="{{ url_for('client.index') }}" method="post" id="BookingForm" novalidate>
                     {{ form.hidden_tag() }}
                     <div class="row g-3">
                         <div class="col-md-5">
@@ -157,7 +157,7 @@ function cancelBooking(bookingId, buttonElement) {
                      document.querySelector('input[name=csrf_token]')?.value;
     
     
-    fetch('/cancel_booking', {
+    fetch('{{ url_for("client.cancel_booking") }}', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
