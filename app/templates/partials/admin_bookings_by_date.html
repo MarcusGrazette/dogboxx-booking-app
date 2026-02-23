@@ -9,9 +9,9 @@
      data-dog-pic="{{ booking.dog_pic or '' }}">
     <div class="d-flex align-items-center gap-2 p-2">
         <div class="dog-avatar rounded-circle flex-shrink-0">
-            <img src="{{ '/static/images/' + booking.dog_pic if booking.dog_pic else '/static/images/default-dog.png' }}"
+            <img src="{{ '/static/uploads/dogs/' + booking.dog_pic if booking.dog_pic else '/static/uploads/dogs/default-dog.png' }}"
                  class="img-fluid" alt="{{ booking.dog_name }}"
-                 onerror="this.onerror=null; this.src='/static/images/default-dog.png'">
+                 onerror="this.onerror=null; this.src='/static/uploads/dogs/default-dog.png'">
         </div>
         <div>
             <small>{{ booking.dog_name }}</small>
