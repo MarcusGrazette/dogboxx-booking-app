@@ -193,8 +193,6 @@ def seed_walkers(walkers_data, users):
         # Create walker record linked to the user
         walker = Walker(
             user_id=user.id,
-            firstname=firstname or user.firstname,
-            lastname=lastname or user.lastname
         )
 
         db.session.add(walker)
@@ -210,26 +208,24 @@ def seed_bookings(bookings_data, users, dogs, walkers):
     
     # Create mappings for easy lookup
     user_map = {user.email: user for user in users}
-    # dog_map: key is "{dog_name}_{owner_email}" but dog.user may not be populated until commit/flush,
-    # so map by dog.name + user_id and translate using user_map
-    user_id_by_email = {email: u.id for email, u in user_map.items()}
+    # Build dog_map using DogOwner relationship (dogs no longer have user_id)
     dog_map = {}
     for dog in dogs:
-        try:
-            owner_email = None
-            # Find owner email by matching user list for the dog.user_id
-            for u in users:
-                if u.id == dog.user_id:
-                    owner_email = u.email
-                    break
-        except Exception:
-            owner_email = None
-
-        if owner_email:
-            dog_map[f"{dog.name.lower()}_{owner_email}"] = dog
+        # Find primary owner via DogOwner join table
+        dog_owner = DogOwner.query.filter_by(dog_id=dog.id, role='primary').first()
+        if dog_owner:
+            owner = User.query.get(dog_owner.user_id)
+            if owner:
+                dog_map[f"{dog.name.lower()}_{owner.email}"] = dog
 
     walker_map = {f"{walker.firstname.lower()}_{walker.lastname.lower()}": walker for walker in walkers}
     
+    # Look up service type once before the loop
+    group_walk = ServiceType.query.filter_by(slug='group-walk').first()
+    if not group_walk:
+        print("  Error: 'group-walk' service type not found. Run seed_service_types() first.")
+        return
+
     for booking_data in bookings_data:
         user_email = booking_data.get('user_email')
         dog_name = booking_data.get('dog_name', '').lower()
@@ -253,7 +249,7 @@ def seed_bookings(bookings_data, users, dogs, walkers):
         booking = Booking(
             user_id=user.id,
             dog_id=dog.id,
-            service_type_id=1,  # Assuming Group Walk is ID 1
+            service_type_id=group_walk.id,
             date=booking_date,
             slot=booking_data.get('slot', 'Morning'),
             walker_id=walker.id if walker else None,

@@ -21442,3 +21442,31 @@ WHERE users.id = %(pk_1)s
 2026-02-23 18:54:51,179 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 130-493-478
 2026-02-23 18:54:53,752 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
 2026-02-23 18:54:57,840 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-23 19:12:51,975 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 19:12:51] "GET /auth/login HTTP/1.1" 200 -
+2026-02-23 19:12:52,079 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 19:12:52] "GET /static/apple-touch-icon.png HTTP/1.1" 200 -
+2026-02-23 19:12:52,080 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 19:12:52] "GET /static/css/reusable-calendar.css HTTP/1.1" 200 -
+2026-02-23 20:27:56,063 - werkzeug - INFO - [_internal.py:97] -  * Detected change in '/home/marcus/.openclaw/workspace/cs50-final-project/app/seed_db/seeder.py', reloading
+2026-02-23 20:27:56,164 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-23 20:27:56,679 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-23 20:27:56,752 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-23 20:27:56,754 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 130-493-478
+2026-02-23 20:28:01,832 - werkzeug - INFO - [_internal.py:97] -  * Detected change in '/home/marcus/.openclaw/workspace/cs50-final-project/app/seed_db/seeder.py', reloading
+2026-02-23 20:28:01,943 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-23 20:28:02,451 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-23 20:28:02,524 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-23 20:28:02,526 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 130-493-478
+2026-02-23 20:28:07,603 - werkzeug - INFO - [_internal.py:97] -  * Detected change in '/home/marcus/.openclaw/workspace/cs50-final-project/app/seed_db/seeder.py', reloading
+2026-02-23 20:28:07,705 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-23 20:28:08,215 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-23 20:28:08,289 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-23 20:28:08,290 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 130-493-478
+2026-02-23 20:28:12,365 - werkzeug - INFO - [_internal.py:97] -  * Detected change in '/home/marcus/.openclaw/workspace/cs50-final-project/app/seed_db/seeder.py', reloading
+2026-02-23 20:28:12,485 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-23 20:28:12,996 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-23 20:28:13,068 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-23 20:28:13,070 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 130-493-478
+2026-02-23 20:28:17,147 - werkzeug - INFO - [_internal.py:97] -  * Detected change in '/home/marcus/.openclaw/workspace/cs50-final-project/app/seed_db/seeder.py', reloading
+2026-02-23 20:28:17,249 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-23 20:28:17,761 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-23 20:28:17,834 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-23 20:28:17,836 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 130-493-478
