@@ -20707,3 +20707,52 @@ WHERE users.id = %(pk_1)s
 2026-02-23 18:35:58,301 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 718.8s ago] {'pk_1': 21}
 2026-02-23 18:35:58,306 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
 2026-02-23 18:35:58,307 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 18:35:58] "GET /static/css/reusable-calendar.css HTTP/1.1" 200 -
+2026-02-23 18:39:57,246 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-23 18:39:57,247 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, users.phone AS users_phone, users.notification_preference AS users_notification_preference 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-23 18:39:57,247 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 957.7s ago] {'pk_1': 21}
+2026-02-23 18:39:57,259 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-23 18:39:57,259 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 18:39:57] "GET /auth/change-password HTTP/1.1" 200 -
+2026-02-23 18:39:57,284 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-23 18:39:57,286 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-23 18:39:57,287 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, users.phone AS users_phone, users.notification_preference AS users_notification_preference 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-23 18:39:57,288 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, users.phone AS users_phone, users.notification_preference AS users_notification_preference 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-23 18:39:57,288 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 957.8s ago] {'pk_1': 21}
+2026-02-23 18:39:57,288 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 957.8s ago] {'pk_1': 21}
+2026-02-23 18:39:57,296 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-23 18:39:57,296 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-23 18:39:57,297 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 18:39:57] "GET /static/apple-touch-icon.png HTTP/1.1" 200 -
+2026-02-23 18:39:57,298 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 18:39:57] "GET /static/css/reusable-calendar.css HTTP/1.1" 200 -
+2026-02-23 18:39:57,317 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-23 18:39:57,318 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, users.phone AS users_phone, users.notification_preference AS users_notification_preference 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-23 18:39:57,318 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 957.8s ago] {'pk_1': 21}
+2026-02-23 18:39:57,322 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-23 18:39:57,323 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 18:39:57] "GET /static/favicon.ico HTTP/1.1" 200 -
+2026-02-23 18:40:14,135 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-23 18:40:14,135 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, users.phone AS users_phone, users.notification_preference AS users_notification_preference 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-23 18:40:14,136 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 974.6s ago] {'pk_1': 21}
+2026-02-23 18:40:14,143 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-23 18:40:14,143 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 18:40:14] "POST /auth/change-password HTTP/1.1" 200 -
+2026-02-23 18:40:14,163 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-23 18:40:14,164 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, users.phone AS users_phone, users.notification_preference AS users_notification_preference 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-23 18:40:14,164 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 974.6s ago] {'pk_1': 21}
+2026-02-23 18:40:14,165 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-23 18:40:14,165 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, users.phone AS users_phone, users.notification_preference AS users_notification_preference 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-23 18:40:14,165 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 974.6s ago] {'pk_1': 21}
+2026-02-23 18:40:14,168 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-23 18:40:14,169 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-23 18:40:14,169 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 18:40:14] "GET /static/apple-touch-icon.png HTTP/1.1" 200 -
+2026-02-23 18:40:14,169 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 18:40:14] "GET /static/css/reusable-calendar.css HTTP/1.1" 200 -
