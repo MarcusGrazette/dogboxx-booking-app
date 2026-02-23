@@ -169,8 +169,8 @@ class DogOwner(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
-    dog_id = db.Column(db.Integer, db.ForeignKey('dogs.id'), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    dog_id = db.Column(db.Integer, db.ForeignKey('dogs.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     role = db.Column(db.Enum('primary', 'secondary', name='dog_owner_role'),
                      nullable=False, default='primary')
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
@@ -218,7 +218,7 @@ class WalkerSchedule(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
-    walker_id = db.Column(db.Integer, db.ForeignKey('walkers.id'), nullable=False)
+    walker_id = db.Column(db.Integer, db.ForeignKey('walkers.id'), nullable=False, index=True)
     day_of_week = db.Column(db.Integer, nullable=False)  # 0=Mon, 6=Sun
     slot = db.Column(db.Enum('Morning', 'Afternoon', name='schedule_slot'), nullable=False)
     active = db.Column(db.Boolean, default=True, nullable=False)
@@ -278,18 +278,18 @@ class Booking(db.Model):
     __tablename__ = 'bookings'
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     dog_id = db.Column(db.Integer, db.ForeignKey('dogs.id'), nullable=False)
     service_type_id = db.Column(db.Integer, db.ForeignKey('service_types.id'), nullable=False)
-    date = db.Column(db.Date, nullable=False)
+    date = db.Column(db.Date, nullable=False, index=True)
     slot = db.Column(db.Enum('Morning', 'Afternoon', 'Full Day', 'Half Day AM', 'Half Day PM',
                              name='booking_slot'), nullable=False)
-    walker_id = db.Column(db.Integer, db.ForeignKey('walkers.id'), nullable=True)
+    walker_id = db.Column(db.Integer, db.ForeignKey('walkers.id'), nullable=True, index=True)
     pickup_order = db.Column(db.Integer, nullable=True)  # set by admin drag-drop; 1 = first pickup
     status = db.Column(db.Enum('requested', 'confirmed', 'modified', 'rejected',
                                'cancelled', 'completed', 'waitlisted',
                                name='booking_status'),
-                       nullable=False, default='requested')
+                       nullable=False, default='requested', index=True)
     client_notes = db.Column(db.Text, nullable=True)
     admin_notes = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
