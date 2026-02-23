@@ -27,7 +27,7 @@ from app.utils.decorators import admin_required
 @admin_bp.route("/")
 @login_required
 @admin_required
-def dashboard():
+def index():
     """Admin dashboard page"""
     return render_template("admin.html")
 

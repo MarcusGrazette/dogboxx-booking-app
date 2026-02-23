@@ -31,7 +31,7 @@ def index():
     """Render the home page for clients."""
     # Check if user is a client
     if current_user.role == 'admin':
-        return redirect(url_for('admin.dashboard'))
+        return redirect(url_for('admin.index'))
     elif current_user.role == 'walker':
         return redirect(url_for('walker.schedule'))
         

@@ -18897,3 +18897,120 @@ WHERE users.id = %(pk_1)s
 2026-02-23 17:36:12,040 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
 2026-02-23 17:36:12,115 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
 2026-02-23 17:36:12,116 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 130-493-478
+2026-02-23 17:36:35,941 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - select pg_catalog.version()
+2026-02-23 17:36:35,941 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] {}
+2026-02-23 17:36:35,942 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - select current_schema()
+2026-02-23 17:36:35,943 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] {}
+2026-02-23 17:36:35,943 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - show standard_conforming_strings
+2026-02-23 17:36:35,943 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [raw sql] {}
+2026-02-23 17:36:35,943 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-23 17:36:35,946 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, users.phone AS users_phone, users.notification_preference AS users_notification_preference 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-23 17:36:35,946 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00015s] {'pk_1': 1}
+2026-02-23 17:36:35,948 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-23 17:36:35,948 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 17:36:35] "[32mGET / HTTP/1.1[0m" 302 -
+2026-02-23 17:36:36,128 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-23 17:36:36,129 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, users.phone AS users_phone, users.notification_preference AS users_notification_preference 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-23 17:36:36,129 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.183s ago] {'pk_1': 1}
+2026-02-23 17:36:36,176 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-23 17:36:36,176 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 17:36:36] "GET /admin/ HTTP/1.1" 200 -
+2026-02-23 17:36:36,797 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-23 17:36:36,799 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, users.phone AS users_phone, users.notification_preference AS users_notification_preference 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-23 17:36:36,799 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.8532s ago] {'pk_1': 1}
+2026-02-23 17:36:36,807 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-23 17:36:36,808 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 17:36:36] "GET /static/css/reusable-calendar.css HTTP/1.1" 200 -
+2026-02-23 17:36:36,815 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-23 17:36:36,815 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, users.phone AS users_phone, users.notification_preference AS users_notification_preference 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-23 17:36:36,815 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.8692s ago] {'pk_1': 1}
+2026-02-23 17:36:36,816 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-23 17:36:36,816 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, users.phone AS users_phone, users.notification_preference AS users_notification_preference 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-23 17:36:36,817 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.8712s ago] {'pk_1': 1}
+2026-02-23 17:36:36,817 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-23 17:36:36,818 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 17:36:36] "GET /static/css/admin-bookings.css HTTP/1.1" 200 -
+2026-02-23 17:36:36,819 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-23 17:36:36,819 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, users.phone AS users_phone, users.notification_preference AS users_notification_preference 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-23 17:36:36,820 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-23 17:36:36,820 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.8739s ago] {'pk_1': 1}
+2026-02-23 17:36:36,820 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 17:36:36] "GET /static/js/reusable-calendar.js HTTP/1.1" 200 -
+2026-02-23 17:36:36,822 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-23 17:36:36,822 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 17:36:36] "GET /static/apple-touch-icon.png HTTP/1.1" 200 -
+2026-02-23 17:36:37,388 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-23 17:36:37,391 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-23 17:36:37,392 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, users.phone AS users_phone, users.notification_preference AS users_notification_preference 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-23 17:36:37,393 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, users.phone AS users_phone, users.notification_preference AS users_notification_preference 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-23 17:36:37,394 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 1.448s ago] {'pk_1': 1}
+2026-02-23 17:36:37,394 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 1.448s ago] {'pk_1': 1}
+2026-02-23 17:36:37,404 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT bookings.id AS bookings_id, bookings.user_id AS bookings_user_id, bookings.dog_id AS bookings_dog_id, bookings.service_type_id AS bookings_service_type_id, bookings.date AS bookings_date, bookings.slot AS bookings_slot, bookings.walker_id AS bookings_walker_id, bookings.pickup_order AS bookings_pickup_order, bookings.status AS bookings_status, bookings.client_notes AS bookings_client_notes, bookings.admin_notes AS bookings_admin_notes, bookings.created_at AS bookings_created_at, bookings.updated_at AS bookings_updated_at, bookings.confirmed_at AS bookings_confirmed_at, bookings.cancelled_at AS bookings_cancelled_at, bookings.cancelled_by AS bookings_cancelled_by 
+FROM bookings 
+WHERE bookings.date >= %(date_1)s AND bookings.date < %(date_2)s AND bookings.status != %(status_1)s
+2026-02-23 17:36:37,404 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00031s] {'date_1': datetime.date(2026, 2, 1), 'date_2': datetime.date(2026, 3, 1), 'status_1': 'cancelled'}
+2026-02-23 17:36:37,413 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT bookings.id AS bookings_id, bookings.user_id AS bookings_user_id, bookings.dog_id AS bookings_dog_id, bookings.service_type_id AS bookings_service_type_id, bookings.date AS bookings_date, bookings.slot AS bookings_slot, bookings.walker_id AS bookings_walker_id, bookings.pickup_order AS bookings_pickup_order, bookings.status AS bookings_status, bookings.client_notes AS bookings_client_notes, bookings.admin_notes AS bookings_admin_notes, bookings.created_at AS bookings_created_at, bookings.updated_at AS bookings_updated_at, bookings.confirmed_at AS bookings_confirmed_at, bookings.cancelled_at AS bookings_cancelled_at, bookings.cancelled_by AS bookings_cancelled_by, users_1.id AS users_1_id, users_1.firstname AS users_1_firstname, users_1.lastname AS users_1_lastname, users_1.email AS users_1_email, users_1.role AS users_1_role, users_1.created_at AS users_1_created_at, users_1.active AS users_1_active, users_1.hashed_password AS users_1_hashed_password, users_1.must_change_password AS users_1_must_change_password, users_1.phone AS users_1_phone, users_1.notification_preference AS users_1_notification_preference, dogs_1.id AS dogs_1_id, dogs_1.name AS dogs_1_name, dogs_1.birth_year_month AS dogs_1_birth_year_month, dogs_1.gender AS dogs_1_gender, dogs_1.breed AS dogs_1_breed, dogs_1.allergies AS dogs_1_allergies, dogs_1.other_info AS dogs_1_other_info, dogs_1.pic AS dogs_1_pic, dogs_1.created_at AS dogs_1_created_at, walkers_1.id AS walkers_1_id, walkers_1.user_id AS walkers_1_user_id 
+FROM bookings LEFT OUTER JOIN users AS users_1 ON users_1.id = bookings.user_id LEFT OUTER JOIN dogs AS dogs_1 ON dogs_1.id = bookings.dog_id LEFT OUTER JOIN walkers AS walkers_1 ON walkers_1.id = bookings.walker_id 
+WHERE bookings.date = %(date_1)s AND bookings.status != %(status_1)s
+2026-02-23 17:36:37,413 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00039s] {'date_1': datetime.date(2026, 2, 23), 'status_1': 'cancelled'}
+2026-02-23 17:36:37,413 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-23 17:36:37,414 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 17:36:37] "GET /admin/calendar_data/2026/2 HTTP/1.1" 200 -
+2026-02-23 17:36:37,417 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, users.phone AS users_phone, users.notification_preference AS users_notification_preference 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-23 17:36:37,417 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00021s] {'pk_1': 3}
+2026-02-23 17:36:37,418 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, users.phone AS users_phone, users.notification_preference AS users_notification_preference 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-23 17:36:37,418 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.001384s ago] {'pk_1': 5}
+2026-02-23 17:36:37,419 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, users.phone AS users_phone, users.notification_preference AS users_notification_preference 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-23 17:36:37,419 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.0023s ago] {'pk_1': 4}
+2026-02-23 17:36:37,421 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT walker_schedules.id AS walker_schedules_id, walker_schedules.walker_id AS walker_schedules_walker_id, walker_schedules.day_of_week AS walker_schedules_day_of_week, walker_schedules.slot AS walker_schedules_slot, walker_schedules.active AS walker_schedules_active 
+FROM walker_schedules 
+WHERE walker_schedules.day_of_week = %(day_of_week_1)s AND walker_schedules.active = true
+2026-02-23 17:36:37,421 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00018s] {'day_of_week_1': 0}
+2026-02-23 17:36:37,424 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT walkers.id AS walkers_id, walkers.user_id AS walkers_user_id, users_1.id AS users_1_id, users_1.firstname AS users_1_firstname, users_1.lastname AS users_1_lastname, users_1.email AS users_1_email, users_1.role AS users_1_role, users_1.created_at AS users_1_created_at, users_1.active AS users_1_active, users_1.hashed_password AS users_1_hashed_password, users_1.must_change_password AS users_1_must_change_password, users_1.phone AS users_1_phone, users_1.notification_preference AS users_1_notification_preference 
+FROM walkers LEFT OUTER JOIN users AS users_1 ON users_1.id = walkers.user_id 
+WHERE walkers.id IN (%(id_1_1)s, %(id_1_2)s, %(id_1_3)s)
+2026-02-23 17:36:37,424 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [generated in 0.00024s] {'id_1_1': 1, 'id_1_2': 2, 'id_1_3': 3}
+2026-02-23 17:36:37,438 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-23 17:36:37,438 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 17:36:37] "GET /admin/bookings_by_date?date=2026-02-23 HTTP/1.1" 200 -
+2026-02-23 17:36:40,533 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-23 17:36:40,533 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, users.phone AS users_phone, users.notification_preference AS users_notification_preference 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-23 17:36:40,533 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 4.587s ago] {'pk_1': 1}
+2026-02-23 17:36:40,536 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-23 17:36:40,536 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 17:36:40] "[33mGET /static/images/default-dog.png HTTP/1.1[0m" 404 -
+2026-02-23 17:36:51,429 - sqlalchemy.engine.Engine - INFO - [base.py:2698] - BEGIN (implicit)
+2026-02-23 17:36:51,430 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - SELECT users.id AS users_id, users.firstname AS users_firstname, users.lastname AS users_lastname, users.email AS users_email, users.role AS users_role, users.created_at AS users_created_at, users.active AS users_active, users.hashed_password AS users_hashed_password, users.must_change_password AS users_must_change_password, users.phone AS users_phone, users.notification_preference AS users_notification_preference 
+FROM users 
+WHERE users.id = %(pk_1)s
+2026-02-23 17:36:51,431 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 15.48s ago] {'pk_1': 1}
+2026-02-23 17:36:51,436 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
+2026-02-23 17:36:51,437 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 17:36:51] "[32mGET /auth/logout HTTP/1.1[0m" 302 -
+2026-02-23 17:36:51,701 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 17:36:51] "GET /auth/login HTTP/1.1" 200 -
+2026-02-23 17:36:52,440 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 17:36:52] "GET /static/apple-touch-icon.png HTTP/1.1" 200 -
+2026-02-23 17:36:52,442 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [23/Feb/2026 17:36:52] "GET /static/css/reusable-calendar.css HTTP/1.1" 200 -
+2026-02-23 17:37:59,450 - werkzeug - INFO - [_internal.py:97] -  * Detected change in '/home/marcus/.openclaw/workspace/cs50-final-project/app/blueprints/admin/routes.py', reloading
+2026-02-23 17:37:59,565 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-23 17:38:00,076 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-23 17:38:00,152 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-23 17:38:00,154 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 130-493-478
+2026-02-23 17:38:06,240 - werkzeug - INFO - [_internal.py:97] -  * Detected change in '/home/marcus/.openclaw/workspace/cs50-final-project/app/blueprints/client/routes.py', reloading
+2026-02-23 17:38:06,342 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-23 17:38:06,854 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-23 17:38:06,930 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-23 17:38:06,932 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 130-493-478
