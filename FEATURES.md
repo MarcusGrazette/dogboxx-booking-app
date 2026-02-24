@@ -16,6 +16,7 @@
 | 8 | P3 | S | 🔲 | **Admin dashboard stats** | Booking counts, utilisation, revenue summary |
 | 9 | P1 | M | 🔲 | **Client profile & dog edit** | Pre-fill from onboarding data; edit address, notification prefs, dog details + photo. Single unified "My Profile" page |
 | 10 | P1 | M | 🔲 | **Password reset (forgot password)** | Email-based reset flow: "Forgot password?" link on login → enter email → token email → set new password |
+| 11 | P3 | L | 🔲 | **Firebase Auth migration** | Replace Flask-Login auth with Firebase Auth. Handles MFA, social login, OTP. Plan as a full auth layer swap post-launch |
 
 ---
 
