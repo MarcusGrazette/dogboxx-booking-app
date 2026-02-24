@@ -82,32 +82,10 @@ Admin - Manage Clients
 
 {% block scripts %}
 {{ super() }}
+<script src="{{ url_for('static', filename='js/admin-toggle-status.js') }}"></script>
 <script>
-async function toggleClientStatus(clientId, action) {
-    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
-    
-    try {
-        const response = await fetch(`/admin/clients/${clientId}/${action}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
-            },
-            credentials: 'same-origin'
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            // Reload page to show updated status
-            location.reload();
-        } else {
-            alert('Error: ' + data.message);
-        }
-    } catch (error) {
-        console.error('Error:', error);
-        alert('An error occurred. Please try again.');
-    }
+function toggleClientStatus(clientId, action) {
+    return toggleStatus('clients', clientId, action);
 }
 </script>
 {% endblock %}

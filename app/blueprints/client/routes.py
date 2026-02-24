@@ -7,20 +7,16 @@ management, onboarding, and booking management.
 
 from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user
-from werkzeug.utils import secure_filename
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from app.models import User, Client, Dog, Booking, DogOwner, ServiceType
 from app import db
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
+from app.utils.uploads import process_dog_photo
 from app.forms import OnboardingForm, BookingForm
 import logging
-import os
 import traceback
 from datetime import datetime, timezone, timedelta
-from PIL import Image
-from pathlib import Path
-import uuid
 
 from app.blueprints.client import client_bp
 
@@ -180,59 +176,19 @@ def onboard():
                 birth_year -= 1
                 birth_month += 12
 
-            # Handle file upload with enhanced security
+            # Handle file upload
             pic_filename = None
             if 'file' in request.files:
-                dog_pic = request.files['file']
-                if dog_pic and dog_pic.filename:
-                    try:
-                        # 1. Verify it's a valid image by attempting to open it
-                        try:
-                            img = Image.open(dog_pic)
-                            img.verify()  # Verify it's a valid image
-                            dog_pic.seek(0)  # Reset file pointer after verification
-                        except Exception:
-                            raise ValueError("Invalid image file")
-                        
-                        # 2. Check allowed extensions using a whitelist approach
-                        file_extension = Path(secure_filename(dog_pic.filename)).suffix.lower()
-                        if file_extension not in ['.jpg', '.jpeg', '.png', '.gif']:
-                            raise ValueError("Unsupported file format")
-                            
-                        # 3. Process image to strip metadata and resize
-                        img = Image.open(dog_pic)
-                        
-                        # Create a new image without metadata
-                        img_without_exif = Image.new(img.mode, img.size)
-                        img_without_exif.putdata(list(img.getdata()))
-                        
-                        # Resize the image to a standard size
-                        max_size = (800, 800)
-                        img_without_exif.thumbnail(max_size, Image.LANCZOS)
-                        
-                        # 4. Generate completely new filename
-                        unique_filename = f"{uuid.uuid4()}{file_extension}"
-                        from flask import current_app
-                        upload_path = os.path.join(current_app.config["UPLOAD_FOLDER"], unique_filename)
-                        
-                        # Save with appropriate format
-                        if file_extension == '.png':
-                            img_without_exif.save(upload_path, 'PNG')
-                        elif file_extension in ['.jpg', '.jpeg']:
-                            img_without_exif.save(upload_path, 'JPEG', quality=85)
-                        elif file_extension == '.gif':
-                            img_without_exif.save(upload_path, 'GIF')
-                        
-                        pic_filename = unique_filename
-                        
-                    except ValueError as e:
-                        logging.error(f"Invalid file upload: {e}")
-                        flash(f"Upload error: {str(e)}. Please try a different file.", "error")
-                        return render_template("onboarding.html", form=form)
-                    except Exception as e:
-                        logging.error(f"Error processing uploaded file: {e}")
-                        flash("There was an error processing your image. Please try a different file.", "error")
-                        return render_template("onboarding.html", form=form)
+                try:
+                    pic_filename = process_dog_photo(request.files['file'])
+                except ValueError as e:
+                    logging.error(f"Invalid file upload: {e}")
+                    flash(f"Upload error: {str(e)}. Please try a different file.", "error")
+                    return render_template("onboarding.html", form=form)
+                except Exception as e:
+                    logging.error(f"Error processing uploaded file: {e}")
+                    flash("There was an error processing your image. Please try a different file.", "error")
+                    return render_template("onboarding.html", form=form)
 
             # Create dog record
             new_dog = Dog(
