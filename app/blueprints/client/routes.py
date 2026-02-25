@@ -162,19 +162,9 @@ def onboard():
             # Step 2: Dog information
             dog_name = form.dog_name.data.strip()
             dog_gender = form.dog_gender.data.strip()
-            dog_years = int(form.dog_years.data)
-            dog_months = int(form.dog_months.data)
+            dog_dob = form.dog_dob.data
             dog_breed = form.dog_breed.data.strip() if form.dog_breed.data else ""
             dog_allergies = form.dog_allergies.data.strip() if form.dog_allergies.data else ""
-        
-
-            # Calculate birth year and month
-            today = datetime.now()
-            birth_year = today.year - dog_years
-            birth_month = today.month - dog_months
-            if birth_month <= 0:
-                birth_year -= 1
-                birth_month += 12
 
             # Handle file upload
             pic_filename = None
@@ -184,11 +174,11 @@ def onboard():
                 except ValueError as e:
                     logging.error(f"Invalid file upload: {e}")
                     flash(f"Upload error: {str(e)}. Please try a different file.", "error")
-                    return render_template("onboarding.html", form=form)
+                    return render_template("onboarding.html", form=form, today=datetime.now().strftime('%Y-%m-%d'))
                 except Exception as e:
                     logging.error(f"Error processing uploaded file: {e}")
                     flash("There was an error processing your image. Please try a different file.", "error")
-                    return render_template("onboarding.html", form=form)
+                    return render_template("onboarding.html", form=form, today=datetime.now().strftime('%Y-%m-%d'))
 
             # Create dog record
             new_dog = Dog(
@@ -196,7 +186,7 @@ def onboard():
                 gender=dog_gender,
                 breed=dog_breed,
                 allergies=dog_allergies,
-                birth_year_month=birth_year * 100 + birth_month,
+                date_of_birth=dog_dob,
                 pic=pic_filename
             )
             db.session.add(new_dog)
@@ -232,7 +222,7 @@ def onboard():
             else:
                 flash("There was an error saving your information. Please try again.", "error")
 
-    return render_template("onboarding.html", form=form)
+    return render_template("onboarding.html", form=form, today=datetime.now().strftime('%Y-%m-%d'))
 
 
 @client_bp.route("/cancel_booking", methods=["POST"])

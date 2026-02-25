@@ -121,16 +121,9 @@ class OnboardingForm(FlaskForm):
         validators=[Optional()]
     )
 
-    dog_years = SelectField(
-        'Years',
-        choices=[('', 'Years')] + [(str(i), str(i)) for i in range(10)],
-        validators=[DataRequired()]
-    )   
-
-    dog_months = SelectField(
-        'Months',
-        choices=[('', 'Months')] + [(str(i), str(i)) for i in range(13)],
-        validators=[DataRequired()]
+    dog_dob = DateField(
+        'Date of Birth',
+        validators=[DataRequired(message="Please enter your dog's date of birth")]
     )
     
     submit = SubmitField("Next")

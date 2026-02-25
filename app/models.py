@@ -124,7 +124,7 @@ class Dog(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), nullable=False)
-    birth_year_month = db.Column(db.Numeric, nullable=True)
+    date_of_birth = db.Column(db.Date, nullable=True)
     gender = db.Column(db.Enum('male', 'female', name='dog_gender'), nullable=True)
     breed = db.Column(db.String(100), nullable=True)
     allergies = db.Column(db.String(200), nullable=True)
@@ -142,7 +142,7 @@ class Dog(db.Model):
         return {
             'id': self.id,
             'name': self.name,
-            'birth_year_month': float(self.birth_year_month) if self.birth_year_month else None,
+            'date_of_birth': self.date_of_birth.isoformat() if self.date_of_birth else None,
             'gender': self.gender,
             'breed': self.breed,
             'allergies': self.allergies,
