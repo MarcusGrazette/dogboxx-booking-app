@@ -21613,3 +21613,49 @@ WHERE users.id = %(pk_1)s
 2026-02-25 14:28:21,056 - sqlalchemy.engine.Engine - INFO - [base.py:1842] - [cached since 0.6257s ago] {'pk_1': 1}
 2026-02-25 14:28:21,058 - sqlalchemy.engine.Engine - INFO - [base.py:2701] - ROLLBACK
 2026-02-25 14:28:21,058 - werkzeug - INFO - [_internal.py:97] - 10.100.0.1 - - [25/Feb/2026 14:28:21] "[33mGET /static/uploads/dogs/default-dog.png HTTP/1.1[0m" 404 -
+2026-02-25 15:03:03,740 - werkzeug - INFO - [_internal.py:97] -  * Detected change in '/home/marcus/.openclaw/workspace/dogboxx-booking-app/app/models.py', reloading
+2026-02-25 15:03:03,857 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-25 15:03:04,364 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-25 15:03:04,442 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-25 15:03:04,444 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 113-281-994
+2026-02-25 15:03:08,592 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-25 15:03:18,094 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-25 15:03:30,755 - werkzeug - INFO - [_internal.py:97] -  * Detected change in '/home/marcus/.openclaw/workspace/dogboxx-booking-app/migrations/versions/2a8c1ecbb7c8_add_walkerunavailability_model.py', reloading
+2026-02-25 15:03:30,867 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-25 15:03:31,378 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-25 15:03:31,453 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-25 15:03:31,455 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 113-281-994
+2026-02-25 15:03:37,245 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-25 15:03:42,486 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-25 15:03:49,687 - werkzeug - INFO - [_internal.py:97] -  * Detected change in '/home/marcus/.openclaw/workspace/dogboxx-booking-app/migrations/versions/2a8c1ecbb7c8_add_walkerunavailability_model.py', reloading
+2026-02-25 15:03:49,789 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-25 15:03:50,301 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-25 15:03:50,376 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-25 15:03:50,378 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 113-281-994
+2026-02-25 15:03:59,518 - werkzeug - INFO - [_internal.py:97] -  * Detected change in '/home/marcus/.openclaw/workspace/dogboxx-booking-app/migrations/versions/2a8c1ecbb7c8_add_walkerunavailability_model.py', reloading
+2026-02-25 15:03:59,619 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-25 15:04:00,129 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-25 15:04:00,204 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-25 15:04:00,206 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 113-281-994
+2026-02-25 15:04:02,349 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-25 15:04:32,618 - werkzeug - INFO - [_internal.py:97] -  * Detected change in '/home/marcus/.openclaw/workspace/dogboxx-booking-app/app/blueprints/walker/routes.py', reloading
+2026-02-25 15:04:32,719 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-25 15:04:33,232 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-25 15:04:33,310 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-25 15:04:33,312 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 113-281-994
+2026-02-25 15:05:21,887 - werkzeug - INFO - [_internal.py:97] -  * Detected change in '/home/marcus/.openclaw/workspace/dogboxx-booking-app/app/blueprints/admin/routes.py', reloading
+2026-02-25 15:05:21,989 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-25 15:05:22,496 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-25 15:05:22,577 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-25 15:05:22,579 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 113-281-994
+2026-02-25 15:05:31,703 - werkzeug - INFO - [_internal.py:97] -  * Detected change in '/home/marcus/.openclaw/workspace/dogboxx-booking-app/app/blueprints/admin/routes.py', reloading
+2026-02-25 15:05:31,804 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-25 15:05:32,319 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-25 15:05:32,400 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-25 15:05:32,402 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 113-281-994
+2026-02-25 15:05:36,466 - werkzeug - INFO - [_internal.py:97] -  * Detected change in '/home/marcus/.openclaw/workspace/dogboxx-booking-app/app/blueprints/admin/routes.py', reloading
+2026-02-25 15:05:36,569 - werkzeug - INFO - [_internal.py:97] -  * Restarting with stat
+2026-02-25 15:05:37,082 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG
+2026-02-25 15:05:37,163 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-02-25 15:05:37,165 - werkzeug - INFO - [_internal.py:97] -  * Debugger PIN: 113-281-994
+2026-02-25 15:05:53,609 - root - INFO - [logging_config.py:69] - Logging configured with level: DEBUG

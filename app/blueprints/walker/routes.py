@@ -1,84 +1,212 @@
 """
 Walker routes.
 
-This module defines routes for walker functionality, including schedule management
-and walk history.
+This module defines routes for walker functionality, including schedule management,
+unavailability exceptions, and pickup lists.
 """
 
-from flask import request, redirect, render_template, flash, url_for
+from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
-from app.models import Walker, Booking, User
+from sqlalchemy import case
+from app.models import Walker, Booking, User, WalkerUnavailability, WalkerSchedule, Client, Dog
 from app import db
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 
 from app.blueprints.walker import walker_bp
+from app.utils.decorators import walker_required
 
 
 @walker_bp.route("/")
 @login_required
+@walker_required
 def index():
     """Walker dashboard page"""
-    if current_user.role != 'walker':
-        return redirect(url_for(f'{current_user.role}.index'))
-        
-    # Redirect to schedule page for now
     return redirect(url_for('walker.schedule'))
 
 
-@walker_bp.route("/schedule", methods=["GET", "POST"])
+@walker_bp.route("/schedule")
 @login_required
+@walker_required
 def schedule():
-    """Display the walker's schedule"""
-    if current_user.role != 'walker':
-        flash("Only walkers can access this page.", "danger")
-        return redirect(url_for('client.index'))
-        
-    # Get the walker record
+    """Display the walker's default weekly schedule and upcoming unavailability."""
     walker = Walker.query.filter_by(user_id=current_user.id).first()
     if not walker:
         flash("Walker profile not found. Please contact support.", "danger")
         return redirect(url_for('client.index'))
-        
-    # Get bookings for the next 7 days
+
+    # Get default weekly schedule
+    schedules = WalkerSchedule.query.filter_by(walker_id=walker.id, active=True).order_by(
+        WalkerSchedule.day_of_week, WalkerSchedule.slot
+    ).all()
+
+    # Build schedule grid: {day_of_week: {slot: True/False}}
+    day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    schedule_grid = {}
+    for i, name in enumerate(day_names):
+        schedule_grid[i] = {'name': name, 'Morning': False, 'Afternoon': False}
+    for s in schedules:
+        schedule_grid[s.day_of_week][s.slot] = True
+
+    # Get upcoming unavailabilities (next 30 days)
     today = datetime.now(timezone.utc).date()
-    end_date = today + timedelta(days=7)
-    
-    bookings = Booking.query.options(
-        joinedload(Booking.user).joinedload(User.client),
-        joinedload(Booking.dog),
-    ).filter(
-        Booking.walker_id == walker.id,
-        Booking.date >= today,
-        Booking.date <= end_date,
-        Booking.status != 'cancelled'
-    ).order_by(Booking.date.asc(), Booking.slot.asc()).all()
-    
-    # Group bookings by date and slot
-    schedule = {}
-    for booking in bookings:
-        date_str = booking.date.strftime('%Y-%m-%d')
-        if date_str not in schedule:
-            schedule[date_str] = {
-                'display_date': booking.date.strftime('%A, %d %B'),
-                'morning': [],
-                'afternoon': []
-            }
-        
-        if booking.slot == 'Morning':
-            schedule[date_str]['morning'].append(booking)
-        else:
-            schedule[date_str]['afternoon'].append(booking)
-    
-    return render_template("walker_schedule.html", schedule=schedule, walker=walker)
+    end_date = today + timedelta(days=30)
+    unavailabilities = WalkerUnavailability.query.filter(
+        WalkerUnavailability.walker_id == walker.id,
+        WalkerUnavailability.date >= today,
+        WalkerUnavailability.date <= end_date
+    ).order_by(WalkerUnavailability.date, WalkerUnavailability.slot).all()
+
+    return render_template("walker_schedule.html",
+                           walker=walker,
+                           schedule_grid=schedule_grid,
+                           unavailabilities=unavailabilities,
+                           today=today)
+
+
+@walker_bp.route("/unavailability", methods=["POST"])
+@login_required
+@walker_required
+def add_unavailability():
+    """Add an unavailability exception. JSON endpoint."""
+    walker = Walker.query.filter_by(user_id=current_user.id).first()
+    if not walker:
+        return jsonify(success=False, message="Walker profile not found"), 404
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify(success=False, message="Invalid JSON"), 400
+
+    date_str = data.get('date')
+    slot = data.get('slot')
+    reason = data.get('reason', '').strip() or None
+
+    if not date_str or not slot:
+        return jsonify(success=False, message="Date and slot are required"), 400
+
+    if slot not in ('Morning', 'Afternoon'):
+        return jsonify(success=False, message="Invalid slot"), 400
+
+    try:
+        unavail_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify(success=False, message="Invalid date format (use YYYY-MM-DD)"), 400
+
+    if unavail_date < datetime.now(timezone.utc).date():
+        return jsonify(success=False, message="Cannot mark past dates as unavailable"), 400
+
+    # Validate walker actually works this slot on this day
+    day_of_week = unavail_date.weekday()
+    has_slot = WalkerSchedule.query.filter_by(
+        walker_id=walker.id, day_of_week=day_of_week, slot=slot, active=True
+    ).first()
+    if not has_slot:
+        return jsonify(success=False, message=f"You are not scheduled for {slot} on {unavail_date.strftime('%A')}s"), 400
+
+    # Check for duplicate
+    existing = WalkerUnavailability.query.filter_by(
+        walker_id=walker.id, date=unavail_date, slot=slot
+    ).first()
+    if existing:
+        return jsonify(success=False, message="Already marked as unavailable for this date/slot"), 400
+
+    unavail = WalkerUnavailability(
+        walker_id=walker.id,
+        date=unavail_date,
+        slot=slot,
+        reason=reason
+    )
+    db.session.add(unavail)
+    db.session.commit()
+
+    return jsonify(success=True, message="Unavailability added", unavailability=unavail.to_dict()), 201
+
+
+@walker_bp.route("/unavailability/<int:id>", methods=["DELETE"])
+@login_required
+@walker_required
+def delete_unavailability(id):
+    """Remove an unavailability exception. Walker can only delete their own."""
+    walker = Walker.query.filter_by(user_id=current_user.id).first()
+    if not walker:
+        return jsonify(success=False, message="Walker profile not found"), 404
+
+    unavail = WalkerUnavailability.query.get(id)
+    if not unavail:
+        return jsonify(success=False, message="Not found"), 404
+
+    if unavail.walker_id != walker.id:
+        return jsonify(success=False, message="Forbidden"), 403
+
+    db.session.delete(unavail)
+    db.session.commit()
+
+    return jsonify(success=True, message="Unavailability removed")
+
+
+@walker_bp.route("/pickups")
+@walker_bp.route("/pickups/<date_str>")
+@login_required
+@walker_required
+def pickups(date_str=None):
+    """Show today's pickup list (or a specific date)."""
+    walker = Walker.query.filter_by(user_id=current_user.id).first()
+    if not walker:
+        flash("Walker profile not found. Please contact support.", "danger")
+        return redirect(url_for('client.index'))
+
+    today = datetime.now(timezone.utc).date()
+
+    if date_str:
+        try:
+            selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            flash("Invalid date format.", "danger")
+            return redirect(url_for('walker.pickups'))
+    else:
+        selected_date = today
+
+    prev_date = selected_date - timedelta(days=1)
+    next_date = selected_date + timedelta(days=1)
+
+    # Query confirmed bookings for this walker on this date
+    bookings = (
+        Booking.query
+        .options(
+            joinedload(Booking.dog),
+            joinedload(Booking.user).joinedload(User.client),
+        )
+        .filter(
+            Booking.walker_id == walker.id,
+            Booking.date == selected_date,
+            Booking.status.in_(['confirmed', 'completed']),
+        )
+        .order_by(
+            Booking.slot,
+            case((Booking.pickup_order.is_(None), 1), else_=0),
+            Booking.pickup_order,
+        )
+        .all()
+    )
+
+    # Group by slot
+    morning_pickups = [b for b in bookings if b.slot == 'Morning']
+    afternoon_pickups = [b for b in bookings if b.slot == 'Afternoon']
+
+    return render_template("walker_pickups.html",
+                           walker=walker,
+                           selected_date=selected_date,
+                           today=today,
+                           prev_date=prev_date,
+                           next_date=next_date,
+                           morning_pickups=morning_pickups,
+                           afternoon_pickups=afternoon_pickups,
+                           has_pickups=len(bookings) > 0)
 
 
 @walker_bp.route("/profile")
 @login_required
+@walker_required
 def profile():
     """Display and manage walker profile"""
-    if current_user.role != 'walker':
-        return redirect(url_for(f'{current_user.role}.profile'))
-        
-    # Add walker profile functionality here
     return "Walker Profile Page - Coming Soon"

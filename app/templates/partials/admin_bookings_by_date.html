@@ -69,6 +69,15 @@
                         <h6 class="mb-0">
                             <i class="bi bi-person-walking"></i>
                             {{ walker.user.firstname if walker.user else 'Walker' }}
+                            {% if unavail_set is defined %}
+                                {% for s in slots %}
+                                    {% if (walker.id, s) in unavail_set %}
+                                    <span class="badge bg-warning text-dark ms-1" title="Marked unavailable for {{ s }}">
+                                        <i class="bi bi-exclamation-triangle"></i> {{ s }}
+                                    </span>
+                                    {% endif %}
+                                {% endfor %}
+                            {% endif %}
                         </h6>
                     </div>
                     <div class="card-body p-2">

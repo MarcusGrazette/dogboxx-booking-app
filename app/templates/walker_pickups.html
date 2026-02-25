@@ -1,0 +1,110 @@
+{% extends "layout.html" %}
+
+{% block title %}Pickup List — {{ selected_date.strftime('%d %b %Y') }}{% endblock %}
+
+{% block main %}
+<div class="container" style="max-width: 700px;">
+    <h2 class="mb-3"><i class="bi bi-geo-alt"></i> Pickup List</h2>
+
+    <!-- Date Navigation -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <a href="{{ url_for('walker.pickups', date_str=prev_date.strftime('%Y-%m-%d')) }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-chevron-left"></i> Prev
+        </a>
+        <div class="text-center">
+            <h5 class="mb-0">{{ selected_date.strftime('%A, %d %B %Y') }}</h5>
+            {% if selected_date == today %}
+            <span class="badge bg-primary">Today</span>
+            {% endif %}
+        </div>
+        <a href="{{ url_for('walker.pickups', date_str=next_date.strftime('%Y-%m-%d')) }}" class="btn btn-outline-secondary btn-sm">
+            Next <i class="bi bi-chevron-right"></i>
+        </a>
+    </div>
+
+    {% if selected_date != today %}
+    <div class="text-center mb-3">
+        <a href="{{ url_for('walker.pickups') }}" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-calendar-check"></i> Go to Today
+        </a>
+    </div>
+    {% endif %}
+
+    {% if not has_pickups %}
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-emoji-smile display-4 text-muted"></i>
+            <p class="mt-3 text-muted fs-5">No walks scheduled for this day.</p>
+        </div>
+    </div>
+    {% else %}
+
+    {% macro pickup_card(bookings, slot_name, slot_icon, slot_color) %}
+    {% if bookings %}
+    <div class="card mb-3">
+        <div class="card-header bg-{{ slot_color }} text-white">
+            <h6 class="mb-0"><i class="bi bi-{{ slot_icon }}"></i> {{ slot_name }} ({{ bookings|length }})</h6>
+        </div>
+        <div class="list-group list-group-flush">
+            {% for b in bookings %}
+            <div class="list-group-item">
+                <div class="d-flex align-items-start gap-3">
+                    <!-- Pickup order -->
+                    <div class="text-center flex-shrink-0" style="width: 32px;">
+                        {% if b.pickup_order %}
+                        <span class="badge bg-dark rounded-circle fs-6">{{ b.pickup_order }}</span>
+                        {% else %}
+                        <span class="badge bg-secondary rounded-circle fs-6">—</span>
+                        {% endif %}
+                    </div>
+
+                    <!-- Dog photo -->
+                    <div class="flex-shrink-0">
+                        <img src="{{ '/static/uploads/dogs/' + b.dog.pic if b.dog and b.dog.pic else '/static/uploads/dogs/default-dog.png' }}"
+                             class="rounded-circle" width="48" height="48" style="object-fit: cover;"
+                             alt="{{ b.dog.name if b.dog else 'Dog' }}"
+                             onerror="this.onerror=null; this.src='/static/uploads/dogs/default-dog.png'">
+                    </div>
+
+                    <!-- Details -->
+                    <div class="flex-grow-1">
+                        <div class="fw-bold">{{ b.dog.name if b.dog else 'Unknown' }}
+                            {% if b.dog and b.dog.breed %}
+                            <small class="text-muted fw-normal">· {{ b.dog.breed }}</small>
+                            {% endif %}
+                        </div>
+                        <div class="small">
+                            <i class="bi bi-person"></i> {{ b.user.full_name if b.user else 'Unknown client' }}
+                        </div>
+                        {% if b.user and b.user.client and b.user.client.formatted_address %}
+                        <div class="small text-muted">
+                            <i class="bi bi-geo-alt"></i> {{ b.user.client.formatted_address }}
+                        </div>
+                        {% endif %}
+                        {% if b.user and b.user.client and b.user.client.pickup_instructions %}
+                        <div class="small text-info">
+                            <i class="bi bi-info-circle"></i> {{ b.user.client.pickup_instructions }}
+                        </div>
+                        {% endif %}
+                        {% if b.user and b.user.phone %}
+                        <div class="small">
+                            <a href="tel:{{ b.user.phone }}" class="text-decoration-none">
+                                <i class="bi bi-telephone"></i> {{ b.user.phone }}
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    {% endmacro %}
+
+    {{ pickup_card(morning_pickups, 'Morning', 'sunrise', 'success') }}
+    {{ pickup_card(afternoon_pickups, 'Afternoon', 'sunset', 'danger') }}
+
+    {% endif %}
+</div>
+{% endblock %}

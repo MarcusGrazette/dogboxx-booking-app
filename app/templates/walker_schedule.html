@@ -1,35 +1,198 @@
 {% extends "layout.html" %}
 
-{% block title %}
-Home
-{% endblock %}
+{% block title %}My Schedule{% endblock %}
 
 {% block main %}
 <div class="container">
-    <div class="row justify-content-center mb-3">
-        <h1>Hello, {{ current_user.firstname }}.</h1>
-    </div>
+    <h2 class="mb-4"><i class="bi bi-calendar-week"></i> My Schedule</h2>
 
-    <div class="card mb-3 w-75" style="margin: auto;">
-        <h5 class="card-header text-start text-bg-primary">
-            <i class="bi bi-calendar-week"></i>
-            Weekly schedule
-        </h5>
-
-        <div class="col-md-12">
-            <div class="card-body text-start">
-                <p class="card-text">
-                    
-                </p>
+    <!-- Default Weekly Schedule (read-only) -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-clock"></i> Default Weekly Schedule</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-bordered mb-0 text-center">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Day</th>
+                            <th><i class="bi bi-sunrise"></i> Morning</th>
+                            <th><i class="bi bi-sunset"></i> Afternoon</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for day_num in range(7) %}
+                        <tr>
+                            <td class="fw-bold text-start">{{ schedule_grid[day_num].name }}</td>
+                            <td>
+                                {% if schedule_grid[day_num]['Morning'] %}
+                                <span class="badge bg-success"><i class="bi bi-check-lg"></i></span>
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if schedule_grid[day_num]['Afternoon'] %}
+                                <span class="badge bg-success"><i class="bi bi-check-lg"></i></span>
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer text-muted small">
+                <i class="bi bi-info-circle"></i> Your default schedule is set by the admin. Contact them to make changes.
             </div>
         </div>
-
     </div>
 
+    <!-- Unavailability Section -->
+    <div class="card mb-4">
+        <div class="card-header bg-warning text-dark">
+            <h5 class="mb-0"><i class="bi bi-calendar-x"></i> Upcoming Unavailability</h5>
+        </div>
+        <div class="card-body">
+            <!-- Add Form -->
+            <div class="row g-2 mb-3 align-items-end">
+                <div class="col-auto">
+                    <label for="unavail-date" class="form-label small">Date</label>
+                    <input type="date" id="unavail-date" class="form-control" min="{{ today.isoformat() }}">
+                </div>
+                <div class="col-auto">
+                    <label for="unavail-slot" class="form-label small">Slot</label>
+                    <select id="unavail-slot" class="form-select">
+                        <option value="Morning">Morning</option>
+                        <option value="Afternoon">Afternoon</option>
+                    </select>
+                </div>
+                <div class="col">
+                    <label for="unavail-reason" class="form-label small">Reason (optional)</label>
+                    <input type="text" id="unavail-reason" class="form-control" maxlength="200" placeholder="e.g. Doctor appointment">
+                </div>
+                <div class="col-auto">
+                    <button id="btn-add-unavail" class="btn btn-warning" onclick="addUnavailability()">
+                        <i class="bi bi-plus-lg"></i> Add
+                    </button>
+                </div>
+            </div>
 
+            <!-- List -->
+            <div id="unavail-list">
+                {% if unavailabilities %}
+                {% for u in unavailabilities %}
+                <div class="d-flex justify-content-between align-items-center border-bottom py-2" id="unavail-{{ u.id }}">
+                    <div>
+                        <strong>{{ u.date.strftime('%A, %d %b %Y') }}</strong>
+                        <span class="badge bg-{{ 'success' if u.slot == 'Morning' else 'danger' }}">{{ u.slot }}</span>
+                        {% if u.reason %}
+                        <span class="text-muted ms-2">— {{ u.reason }}</span>
+                        {% endif %}
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteUnavailability({{ u.id }})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+                {% endfor %}
+                {% else %}
+                <p class="text-muted mb-0" id="no-unavail-msg"><i class="bi bi-check-circle"></i> No upcoming unavailability set.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
+<script>
+const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 
+async function addUnavailability() {
+    const dateVal = document.getElementById('unavail-date').value;
+    const slot = document.getElementById('unavail-slot').value;
+    const reason = document.getElementById('unavail-reason').value;
+
+    if (!dateVal) {
+        alert('Please select a date.');
+        return;
+    }
+
+    try {
+        const resp = await fetch('{{ url_for("walker.add_unavailability") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({ date: dateVal, slot, reason })
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            // Remove "no unavailability" message if present
+            const noMsg = document.getElementById('no-unavail-msg');
+            if (noMsg) noMsg.remove();
+
+            // Add to list
+            const u = data.unavailability;
+            const dateObj = new Date(u.date + 'T00:00:00');
+            const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' });
+            const badgeClass = u.slot === 'Morning' ? 'success' : 'danger';
+
+            const div = document.createElement('div');
+            div.className = 'd-flex justify-content-between align-items-center border-bottom py-2';
+            div.id = `unavail-${u.id}`;
+            div.innerHTML = `
+                <div>
+                    <strong>${dateStr}</strong>
+                    <span class="badge bg-${badgeClass}">${u.slot}</span>
+                    ${u.reason ? `<span class="text-muted ms-2">— ${u.reason}</span>` : ''}
+                </div>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteUnavailability(${u.id})">
+                    <i class="bi bi-trash"></i>
+                </button>
+            `;
+            document.getElementById('unavail-list').appendChild(div);
+
+            // Clear form
+            document.getElementById('unavail-date').value = '';
+            document.getElementById('unavail-reason').value = '';
+        } else {
+            alert(data.message || 'Error adding unavailability');
+        }
+    } catch (err) {
+        alert('Network error');
+    }
+}
+
+async function deleteUnavailability(id) {
+    if (!confirm('Remove this unavailability?')) return;
+
+    try {
+        const resp = await fetch(`/walker/unavailability/${id}`, {
+            method: 'DELETE',
+            headers: { 'X-CSRFToken': csrfToken }
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            const el = document.getElementById(`unavail-${id}`);
+            if (el) el.remove();
+
+            // Show empty message if none left
+            const list = document.getElementById('unavail-list');
+            if (!list.querySelector('.d-flex')) {
+                list.innerHTML = '<p class="text-muted mb-0" id="no-unavail-msg"><i class="bi bi-check-circle"></i> No upcoming unavailability set.</p>';
+            }
+        } else {
+            alert(data.message || 'Error removing unavailability');
+        }
+    } catch (err) {
+        alert('Network error');
+    }
+}
+</script>
 {% endblock %}

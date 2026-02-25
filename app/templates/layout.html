@@ -44,8 +44,18 @@
             <div class="collapse navbar-collapse" id="navbar">
                 {% if current_user.is_authenticated %}
                 <ul class="navbar-nav me-auto mt-2">
-                    <!-- Left aligned menu items go here. -->
-                    <!-- <li class="nav-item"><a class="nav-link" href="">TODO</a></li> -->
+                    {% if current_user.role == 'walker' %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('walker.schedule') }}">
+                            <i class="bi bi-calendar-week"></i> Schedule
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('walker.pickups') }}">
+                            <i class="bi bi-geo-alt"></i> Pickups
+                        </a>
+                    </li>
+                    {% endif %}
                 </ul>
                 <ul class="navbar-nav ms-auto mt-2">
                     <li class="nav-item">

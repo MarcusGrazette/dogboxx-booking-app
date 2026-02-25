@@ -9,7 +9,7 @@ from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError
-from app.models import User, Booking, Walker, Dog, Client, WalkerSchedule, DogOwner
+from app.models import User, Booking, Walker, Dog, Client, WalkerSchedule, DogOwner, WalkerUnavailability
 from app import db
 from app.utils.db_error_handler import handle_db_errors
 from app.forms import ClientCreateForm, WalkerCreateForm, WalkerScheduleForm
@@ -81,7 +81,18 @@ def bookings_by_date():
             if sched.walker_id not in walker_available_slots:
                 walker_available_slots[sched.walker_id] = set()
             walker_available_slots[sched.walker_id].add(sched.slot)
-        
+
+        # Query unavailabilities for this date and remove from available slots
+        unavailabilities = WalkerUnavailability.query.filter_by(date=selected_date).all()
+        unavail_set = set()  # set of (walker_id, slot) tuples
+        for u in unavailabilities:
+            unavail_set.add((u.walker_id, u.slot))
+            if u.walker_id in walker_available_slots:
+                walker_available_slots[u.walker_id].discard(u.slot)
+
+        # Remove walkers with no remaining slots
+        walker_available_slots = {wid: slots for wid, slots in walker_available_slots.items() if slots}
+
         # Only show walkers who have at least one slot on this day
         available_walker_ids = set(walker_available_slots.keys())
         walkers = (
@@ -115,7 +126,8 @@ def bookings_by_date():
             assigned_bookings=assigned_bookings,
             walkers=walkers,
             walker_capacity=walker_capacity,
-            walker_available_slots={wid: list(slots) for wid, slots in walker_available_slots.items()}
+            walker_available_slots={wid: list(slots) for wid, slots in walker_available_slots.items()},
+            unavail_set=unavail_set
         )
     except Exception as e:
         logging.error(f"Error in admin_bookings_by_date: {str(e)}")
