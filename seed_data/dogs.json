@@ -1,12 +1,12 @@
 [
-  {"user_email": "john.doe@example.com", "name": "Buddy", "gender": "male", "breed": "Labrador"},
-  {"user_email": "jane.smith@example.com", "name": "Daisy", "gender": "female", "breed": "Beagle"},
-  {"user_email": "mike.brown@example.com", "name": "Rex", "gender": "male", "breed": "German Shepherd"},
-  {"user_email": "lucy.green@example.com", "name": "Molly", "gender": "female", "breed": "Poodle"},
-  {"user_email": "carlos.ruiz@example.com", "name": "Rocky", "gender": "male", "breed": "Bulldog"},
-  {"user_email": "priya.patel@example.com", "name": "Luna", "gender": "female", "breed": "Golden Retriever"},
-  {"user_email": "ahmed.khan@example.com", "name": "Zeus", "gender": "male", "breed": "Boxer"},
-  {"user_email": "sara.lee@example.com", "name": "Bella", "gender": "female", "breed": "Cocker Spaniel"},
-  {"user_email": "tom.clark@example.com", "name": "Max", "gender": "male", "breed": "Terrier"},
-  {"user_email": "nina.gomez@example.com", "name": "Sadie", "gender": "female", "breed": "Shih Tzu"}
+  {"user_email": "john.doe@example.com", "name": "Buddy", "gender": "male", "breed": "Labrador", "date_of_birth": "2022-03-15"},
+  {"user_email": "jane.smith@example.com", "name": "Daisy", "gender": "female", "breed": "Beagle", "date_of_birth": "2021-07-22"},
+  {"user_email": "mike.brown@example.com", "name": "Rex", "gender": "male", "breed": "German Shepherd", "date_of_birth": "2020-11-01"},
+  {"user_email": "lucy.green@example.com", "name": "Molly", "gender": "female", "breed": "Poodle", "date_of_birth": "2023-01-10"},
+  {"user_email": "carlos.ruiz@example.com", "name": "Rocky", "gender": "male", "breed": "Bulldog", "date_of_birth": "2021-05-30"},
+  {"user_email": "priya.patel@example.com", "name": "Luna", "gender": "female", "breed": "Golden Retriever", "date_of_birth": "2022-09-18"},
+  {"user_email": "ahmed.khan@example.com", "name": "Zeus", "gender": "male", "breed": "Boxer", "date_of_birth": "2020-06-12"},
+  {"user_email": "sara.lee@example.com", "name": "Bella", "gender": "female", "breed": "Cocker Spaniel", "date_of_birth": "2023-04-05"},
+  {"user_email": "tom.clark@example.com", "name": "Max", "gender": "male", "breed": "Terrier", "date_of_birth": "2021-12-25"},
+  {"user_email": "nina.gomez@example.com", "name": "Sadie", "gender": "female", "breed": "Shih Tzu", "date_of_birth": "2022-08-08"}
 ]

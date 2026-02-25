@@ -1,5 +1,7 @@
 [
-  {"firstname": "Alice", "lastname": "Walker", "user_email": "alice.walker@example.com"},
-  {"firstname": "Bob", "lastname": "Walker", "user_email": "bob.walker@example.com"},
-  {"firstname": "Carol", "lastname": "Walker", "user_email": "carol.walker@example.com"}
+  {"firstname": "Admin", "lastname": "User", "user_email": "admin@dogboxx.org"},
+  {"firstname": "Alice", "lastname": "Walker", "user_email": "alice@dogboxx.org"},
+  {"firstname": "Bob", "lastname": "Walker", "user_email": "bob@dogboxx.org"},
+  {"firstname": "Carol", "lastname": "Walker", "user_email": "carol@dogboxx.org"},
+  {"firstname": "Test", "lastname": "Walker", "user_email": "testwalker@dogboxx.org"}
 ]

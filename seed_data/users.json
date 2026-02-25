@@ -1,9 +1,10 @@
 [
-  {"firstname": "Admin", "lastname": "User", "email": "admin@example.com", "role": "walker", "is_admin": true, "password": "adminpass"},
+  {"firstname": "Admin", "lastname": "User", "email": "admin@dogboxx.org", "role": "walker", "is_admin": true, "password": "adminpass"},
 
-  {"firstname": "Alice", "lastname": "Walker", "email": "alice.walker@example.com", "role": "walker", "password": "walkerpass1"},
-  {"firstname": "Bob", "lastname": "Walker", "email": "bob.walker@example.com", "role": "walker", "password": "walkerpass2"},
-  {"firstname": "Carol", "lastname": "Walker", "email": "carol.walker@example.com", "role": "walker", "password": "walkerpass3"},
+  {"firstname": "Alice", "lastname": "Walker", "email": "alice@dogboxx.org", "role": "walker", "password": "walkerpass1"},
+  {"firstname": "Bob", "lastname": "Walker", "email": "bob@dogboxx.org", "role": "walker", "password": "walkerpass2"},
+  {"firstname": "Carol", "lastname": "Walker", "email": "carol@dogboxx.org", "role": "walker", "password": "walkerpass3"},
+  {"firstname": "Test", "lastname": "Walker", "email": "testwalker@dogboxx.org", "role": "walker", "password": "walkies123"},
 
   {"firstname": "John", "lastname": "Doe", "email": "john.doe@example.com", "role": "client", "password": "clientpass"},
   {"firstname": "Jane", "lastname": "Smith", "email": "jane.smith@example.com", "role": "client", "password": "clientpass"},

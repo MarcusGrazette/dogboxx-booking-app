@@ -122,7 +122,7 @@ def seed_dogs(dogs_data, users):
             
         dog = Dog(
             name=dog_data['name'],
-            birth_year_month=dog_data.get('birth_year_month'),
+            date_of_birth=datetime.strptime(dog_data['date_of_birth'], '%Y-%m-%d').date() if dog_data.get('date_of_birth') else None,
             gender=dog_data.get('gender'),
             breed=dog_data.get('breed'),
             allergies=dog_data.get('allergies'),
