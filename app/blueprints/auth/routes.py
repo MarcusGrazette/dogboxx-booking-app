@@ -111,7 +111,7 @@ def change_password():
 
 def _redirect_by_role(user):
     """Helper function to redirect users based on their role"""
-    if user.role == 'admin':
+    if user.is_admin:
         return redirect(url_for('admin.index'))
     elif user.role == 'walker':
         return redirect(url_for('walker.schedule'))

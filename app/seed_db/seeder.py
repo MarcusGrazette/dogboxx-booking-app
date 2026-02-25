@@ -49,6 +49,7 @@ def seed_users(users_data):
             lastname=user_data['lastname'],
             email=user_data['email'],
             role=user_data.get('role', 'client'),
+            is_admin=user_data.get('is_admin', False),
             hashed_password=hashed_password,
             active=user_data.get('active', True)
         )

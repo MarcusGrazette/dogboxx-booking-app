@@ -26,7 +26,7 @@ from app.blueprints.client import client_bp
 def index():
     """Render the home page for clients."""
     # Check if user is a client
-    if current_user.role == 'admin':
+    if current_user.is_admin:
         return redirect(url_for('admin.index'))
     elif current_user.role == 'walker':
         return redirect(url_for('walker.schedule'))
@@ -239,7 +239,7 @@ def onboard():
 @login_required
 def cancel_booking():
     """Cancel a booking"""
-    if current_user.role != 'client' and current_user.role != 'admin':
+    if current_user.role != 'client' and not current_user.is_admin:
         return jsonify(success=False, message="Unauthorized"), 403
         
     try:
@@ -252,7 +252,7 @@ def cancel_booking():
             return jsonify(success=False, message="Booking not found"), 404
             
         # Check authorization - only allow users to cancel their own bookings or admins to cancel any
-        if booking.user_id != current_user.id and current_user.role != 'admin':
+        if booking.user_id != current_user.id and not current_user.is_admin:
             return jsonify(success=False, message="You are not authorized to cancel this booking"), 403
             
         booking.status = "cancelled"

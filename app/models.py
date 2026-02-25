@@ -10,8 +10,9 @@ class User(db.Model):
     firstname = db.Column(db.String(80), nullable=False)
     lastname = db.Column(db.String(80), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
-    role = db.Column(db.Enum('client', 'walker', 'admin', name='user_roles'),
+    role = db.Column(db.Enum('client', 'walker', name='user_roles'),
                      nullable=False, default='client')
+    is_admin = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     active = db.Column(db.Boolean, default=True, nullable=False)
     hashed_password = db.Column(db.String(256), nullable=False)
@@ -53,10 +54,6 @@ class User(db.Model):
     @property
     def full_name(self):
         return f"{self.firstname} {self.lastname}"
-
-    @property
-    def is_admin(self):
-        return self.role == 'admin'
 
     @staticmethod
     def validate_password(password):

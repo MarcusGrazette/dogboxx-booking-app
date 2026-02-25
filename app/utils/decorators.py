@@ -11,8 +11,7 @@ def admin_required(f):
     """Decorator that restricts access to admin users only."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if current_user.role != 'admin':
-            # Return JSON for AJAX requests, redirect otherwise
+        if not current_user.is_admin:
             if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return jsonify(success=False, message="Forbidden"), 403
             flash("Only admins can access this page.", "danger")
@@ -25,7 +24,7 @@ def walker_required(f):
     """Decorator that restricts access to walker users only."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if current_user.role != 'walker':
+        if current_user.role != 'walker' and not current_user.is_admin:
             if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return jsonify(success=False, message="Forbidden"), 403
             flash("Only walkers can access this page.", "danger")

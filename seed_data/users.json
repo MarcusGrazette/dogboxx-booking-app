@@ -1,5 +1,5 @@
 [
-  {"firstname": "Admin", "lastname": "User", "email": "admin@example.com", "role": "admin", "password": "adminpass"},
+  {"firstname": "Admin", "lastname": "User", "email": "admin@example.com", "role": "walker", "is_admin": true, "password": "adminpass"},
 
   {"firstname": "Alice", "lastname": "Walker", "email": "alice.walker@example.com", "role": "walker", "password": "walkerpass1"},
   {"firstname": "Bob", "lastname": "Walker", "email": "bob.walker@example.com", "role": "walker", "password": "walkerpass2"},
