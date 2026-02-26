@@ -13,7 +13,7 @@ from app.models import User, Client, Dog, Booking, DogOwner, ServiceType
 from app import db
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
 from app.utils.uploads import process_dog_photo
-from app.forms import OnboardingForm, BookingForm
+from app.forms import OnboardingForm, BookingForm, ProfileForm
 import logging
 import traceback
 from datetime import datetime, timezone, timedelta
@@ -108,12 +108,103 @@ def index():
 @client_bp.route("/profile")
 @login_required
 def profile():
-    """Display and manage user profile"""
+    """Display and manage client profile, address, notifications and dog info."""
     if current_user.role != 'client':
         return redirect(url_for('client.index'))
-        
-    # Add client profile functionality here
-    return "Client Profile Page - Coming Soon"
+
+    client = Client.query.filter_by(user_id=current_user.id).first()
+    if not client or not client.onboarding_completed:
+        return redirect(url_for('client.onboard'))
+
+    # Get primary dog
+    dog_owner = DogOwner.query.filter_by(user_id=current_user.id, role='primary').first()
+    dog = Dog.query.get(dog_owner.dog_id) if dog_owner else None
+
+    form = ProfileForm()
+
+    if form.validate_on_submit():
+        try:
+            # Personal info
+            current_user.firstname = form.firstname.data.strip()
+            current_user.lastname = form.lastname.data.strip()
+
+            # Address
+            client.street_address = form.address_line_1.data.strip()
+            if form.address_line_2.data:
+                client.street_address += '\n' + form.address_line_2.data.strip()
+            if form.address_line_3.data:
+                client.street_address += '\n' + form.address_line_3.data.strip()
+            client.postal_code = form.postcode.data.strip()
+            client.pickup_instructions = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
+
+            # Notifications
+            current_user.phone = form.phone.data.strip() if form.phone.data else None
+            if form.notify_email.data and form.notify_whatsapp.data:
+                current_user.notification_preference = 'both'
+            elif form.notify_whatsapp.data:
+                current_user.notification_preference = 'whatsapp'
+            else:
+                current_user.notification_preference = 'email'
+
+            # Dog info
+            if dog:
+                dog.name = form.dog_name.data.strip()
+                dog.gender = form.dog_gender.data.strip()
+                dog.breed = form.dog_breed.data.strip() if form.dog_breed.data else ""
+                dog.date_of_birth = form.dog_dob.data
+                dog.allergies = form.dog_allergies.data.strip() if form.dog_allergies.data else ""
+
+                # Handle photo upload
+                if 'file' in request.files and request.files['file'].filename:
+                    try:
+                        pic_filename = process_dog_photo(request.files['file'])
+                        if pic_filename:
+                            dog.pic = pic_filename
+                    except ValueError as e:
+                        flash(f"Upload error: {str(e)}", "error")
+                        return render_template("profile.html", form=form, dog=dog, today=datetime.now().strftime('%Y-%m-%d'))
+                    except Exception as e:
+                        logging.error(f"Error processing uploaded file: {e}")
+                        flash("Error processing your image. Please try a different file.", "error")
+                        return render_template("profile.html", form=form, dog=dog, today=datetime.now().strftime('%Y-%m-%d'))
+
+            db.session.commit()
+            flash("Profile updated successfully!", "success")
+            return redirect(url_for('client.profile'))
+
+        except Exception as e:
+            db.session.rollback()
+            logging.error(f"Error updating profile for user {current_user.email}: {e}")
+            flash("There was an error saving your changes. Please try again.", "error")
+
+    elif request.method == 'GET':
+        # Pre-fill form with existing data
+        form.firstname.data = current_user.firstname
+        form.lastname.data = current_user.lastname
+
+        # Split street_address back into lines
+        if client.street_address:
+            address_lines = client.street_address.split('\n')
+            form.address_line_1.data = address_lines[0] if len(address_lines) > 0 else ''
+            form.address_line_2.data = address_lines[1] if len(address_lines) > 1 else ''
+            form.address_line_3.data = address_lines[2] if len(address_lines) > 2 else ''
+        form.postcode.data = client.postal_code
+        form.pickup_instructions.data = client.pickup_instructions
+
+        # Notifications
+        form.phone.data = current_user.phone
+        form.notify_email.data = current_user.notification_preference in ('email', 'both')
+        form.notify_whatsapp.data = current_user.notification_preference in ('whatsapp', 'both')
+
+        # Dog info
+        if dog:
+            form.dog_name.data = dog.name
+            form.dog_gender.data = dog.gender
+            form.dog_breed.data = dog.breed
+            form.dog_dob.data = dog.date_of_birth
+            form.dog_allergies.data = dog.allergies
+
+    return render_template("profile.html", form=form, dog=dog, today=datetime.now().strftime('%Y-%m-%d'))
 
 
 @client_bp.route("/onboard", methods=["GET", "POST"])

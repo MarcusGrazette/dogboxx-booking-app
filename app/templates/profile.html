@@ -1,0 +1,210 @@
+{% extends "layout.html" %}
+
+{% block title %}My Profile{% endblock %}
+
+{% block head_extra %}
+<link href="https://unpkg.com/filepond-plugin-image-preview/dist/filepond-plugin-image-preview.css" rel="stylesheet" />
+<link href="https://unpkg.com/filepond/dist/filepond.css" rel="stylesheet" />
+<script src="https://unpkg.com/filepond-plugin-image-preview/dist/filepond-plugin-image-preview.js"></script>
+<script src="https://unpkg.com/filepond-plugin-file-validate-type/dist/filepond-plugin-file-validate-type.js"></script>
+<script src="https://unpkg.com/filepond/dist/filepond.js"></script>
+{% endblock %}
+
+{% block main %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-10 col-lg-8">
+            <div class="py-4">
+                <h2 class="mb-4"><i class="bi bi-person-circle"></i> My Profile</h2>
+
+                <form method="post" enctype="multipart/form-data" novalidate>
+                    {{ form.hidden_tag() }}
+
+                    {# ── Personal Info ── #}
+                    <div class="card mb-4">
+                        <div class="card-header"><h5 class="mb-0"><i class="bi bi-person"></i> Personal Info</h5></div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-person fs-5 text-secondary"></i></span>
+                                    {{ form.firstname(class="form-control", placeholder="First name") }}
+                                    {{ form.lastname(class="form-control", placeholder="Last name") }}
+                                </div>
+                                {% for error in form.firstname.errors %}
+                                <div class="text-danger small mt-1">{{ error }}</div>
+                                {% endfor %}
+                                {% for error in form.lastname.errors %}
+                                <div class="text-danger small mt-1">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="mb-3">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-envelope fs-5 text-secondary"></i></span>
+                                    <input type="email" class="form-control" value="{{ current_user.email }}" disabled>
+                                </div>
+                                <div class="form-text">Contact support to change your email address.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {# ── Address ── #}
+                    <div class="card mb-4">
+                        <div class="card-header"><h5 class="mb-0"><i class="bi bi-house-door"></i> Address</h5></div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-house-door fs-5 text-secondary"></i></span>
+                                    {{ form.address_line_1(class="form-control") }}
+                                </div>
+                                {% for error in form.address_line_1.errors %}
+                                <div class="text-danger small mt-1">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {{ form.address_line_2(class="form-control mb-3") }}
+                            {{ form.address_line_3(class="form-control mb-3") }}
+                            <div class="mb-3">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-mailbox fs-5 text-secondary"></i></span>
+                                    {{ form.postcode(class="form-control") }}
+                                </div>
+                                {% for error in form.postcode.errors %}
+                                <div class="text-danger small mt-1">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            <div class="mb-0">
+                                <label class="form-label text-muted small">Access / pickup instructions</label>
+                                {{ form.pickup_instructions(class="form-control") }}
+                            </div>
+                        </div>
+                    </div>
+
+                    {# ── Notifications ── #}
+                    <div class="card mb-4">
+                        <div class="card-header"><h5 class="mb-0"><i class="bi bi-bell"></i> Notifications</h5></div>
+                        <div class="card-body">
+                            <div class="form-check mb-2">
+                                {{ form.notify_email(class="form-check-input") }}
+                                <label class="form-check-label" for="notify_email">
+                                    <i class="bi bi-envelope me-1"></i> Email to {{ current_user.email }}
+                                </label>
+                            </div>
+                            <div class="form-check mb-3">
+                                {{ form.notify_whatsapp(class="form-check-input", id="notify_whatsapp") }}
+                                <label class="form-check-label" for="notify_whatsapp">
+                                    <i class="bi bi-whatsapp me-1"></i> WhatsApp
+                                </label>
+                            </div>
+                            <div id="phone-field" style="{% if not form.notify_whatsapp.data %}display: none;{% endif %}">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-phone fs-5 text-secondary"></i></span>
+                                    {{ form.phone(class="form-control") }}
+                                </div>
+                                {% for error in form.phone.errors %}
+                                <div class="text-danger small mt-1">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                    {# ── Dog Info ── #}
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-heart-fill"></i> 
+                                {% if dog %}{{ dog.name }}{% else %}Your Dog{% endif %}
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            {% if dog and dog.pic %}
+                            <div class="text-center mb-3">
+                                <img src="{{ url_for('static', filename='uploads/dogs/' + dog.pic) }}" 
+                                     alt="{{ dog.name }}" class="rounded-circle" 
+                                     style="width: 100px; height: 100px; object-fit: cover;">
+                            </div>
+                            {% endif %}
+
+                            <div class="mb-3">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-tag fs-5 text-secondary"></i></span>
+                                    {{ form.dog_name(class="form-control", placeholder="Dog's name") }}
+                                </div>
+                                {% for error in form.dog_name.errors %}
+                                <div class="text-danger small mt-1">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="mb-3">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-gender-ambiguous fs-5 text-secondary"></i></span>
+                                    {{ form.dog_gender(class="form-select") }}
+                                </div>
+                                {% for error in form.dog_gender.errors %}
+                                <div class="text-danger small mt-1">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="mb-3">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-heart fs-5 text-secondary"></i></span>
+                                    {{ form.dog_breed(class="form-control", placeholder="Breed") }}
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label text-muted small">Date of Birth</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-calendar fs-5 text-secondary"></i></span>
+                                    {{ form.dog_dob(class="form-control", type="date", max=today) }}
+                                </div>
+                                {% for error in form.dog_dob.errors %}
+                                <div class="text-danger small mt-1">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="mb-3">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-bandaid fs-5 text-secondary"></i></span>
+                                    {{ form.dog_allergies(class="form-control", placeholder="Allergies (if any)") }}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="form-label text-muted small">Update photo</label>
+                                <input type="file" class="filepond" name="file" accept="image/png, image/jpeg, image/gif" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2 mb-4">
+                        {{ form.submit(class="btn btn-primary btn-lg fw-semibold") }}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // WhatsApp phone toggle
+    const whatsappCheckbox = document.getElementById('notify_whatsapp');
+    const phoneField = document.getElementById('phone-field');
+    if (whatsappCheckbox) {
+        whatsappCheckbox.addEventListener('change', function() {
+            phoneField.style.display = this.checked ? 'block' : 'none';
+        });
+    }
+
+    // FilePond
+    FilePond.registerPlugin(FilePondPluginImagePreview, FilePondPluginFileValidateType);
+    FilePond.create(document.querySelector('.filepond'), {
+        acceptedFileTypes: ['image/png', 'image/jpeg', 'image/gif'],
+        labelIdle: 'Drag & drop a photo or <span class="filepond--label-action">Browse</span>',
+        imagePreviewHeight: 150,
+        stylePanelAspectRatio: 1,
+        stylePanelLayout: 'compact circle',
+    });
+</script>
+{% endblock %}

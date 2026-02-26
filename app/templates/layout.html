@@ -55,6 +55,12 @@
                             <i class="bi bi-geo-alt"></i> Pickups
                         </a>
                     </li>
+                    {% elif current_user.role == 'client' %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('client.profile') }}">
+                            <i class="bi bi-person-circle"></i> My Profile
+                        </a>
+                    </li>
                     {% endif %}
                 </ul>
                 <ul class="navbar-nav ms-auto mt-2">

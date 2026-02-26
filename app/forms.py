@@ -153,6 +153,74 @@ class BookingForm(FlaskForm):
                 raise ValidationError('Booking date cannot be more than 3 months in the future.')
 
 
+class ProfileForm(FlaskForm):
+    """Form for clients to edit their profile, address, notification prefs and dog info."""
+    # Personal info
+    firstname = StringField(
+        'First Name',
+        validators=[DataRequired(), Length(min=2, max=80)]
+    )
+    lastname = StringField(
+        'Last Name',
+        validators=[DataRequired(), Length(min=2, max=80)]
+    )
+
+    # Address
+    address_line_1 = StringField(
+        'Address Line 1',
+        validators=[DataRequired(), Length(max=200)],
+        render_kw={"placeholder": "Street address"}
+    )
+    address_line_2 = StringField(
+        'Address Line 2',
+        validators=[Optional(), Length(max=200)],
+        render_kw={"placeholder": "Flat, floor, etc. (optional)"}
+    )
+    address_line_3 = StringField(
+        'Address Line 3',
+        validators=[Optional(), Length(max=200)],
+        render_kw={"placeholder": "Area / neighbourhood (optional)"}
+    )
+    postcode = StringField(
+        'Postcode',
+        validators=[DataRequired(), Length(max=20)],
+        render_kw={"placeholder": "e.g. SE1 3QJ"}
+    )
+    pickup_instructions = TextAreaField(
+        "Access instructions (optional)",
+        validators=[Length(max=500)],
+        render_kw={"rows": 3, "placeholder": "Door codes, concierge notes, special instructions..."}
+    )
+
+    # Notifications
+    notify_email = BooleanField('Email', default=True)
+    notify_whatsapp = BooleanField('WhatsApp')
+    phone = StringField(
+        'Phone Number',
+        validators=[Optional(), Length(max=20)],
+        render_kw={"placeholder": "e.g. +44 7700 900000"}
+    )
+
+    # Dog info
+    dog_name = StringField(
+        "Dog's Name",
+        validators=[DataRequired(), Length(max=50)]
+    )
+    dog_gender = SelectField(
+        'Gender',
+        choices=[('', 'Select Gender'), ('male', 'Male'), ('female', 'Female')],
+        validators=[DataRequired()]
+    )
+    dog_breed = StringField('Breed', validators=[Optional()])
+    dog_dob = DateField(
+        'Date of Birth',
+        validators=[DataRequired(message="Please enter your dog's date of birth")]
+    )
+    dog_allergies = StringField('Allergies', validators=[Optional()])
+
+    submit = SubmitField("Save Changes")
+
+
 class ClientCreateForm(FlaskForm):
     """Form for admin to create a new client account"""
     email = StringField(
