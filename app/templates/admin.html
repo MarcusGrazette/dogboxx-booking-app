@@ -219,6 +219,9 @@ Admin
         zone.addEventListener('drop', handleDrop);
       });
 
+      // Update pickup badges to reflect current order
+      updateAllPickupBadges();
+
       console.log("Drag and drop initialized successfully");
     }
 
@@ -244,31 +247,68 @@ Admin
     function handleDragEnd(e) {
       console.log("Drag ended");
 
-      // Remove visual feedback
       if (draggedCard) {
         draggedCard.classList.remove('dragging');
       }
 
-      // Clear drop zone highlights
+      // Clear all visual indicators
       document.querySelectorAll('.drop-zone').forEach(zone => {
         zone.classList.remove('drag-over', 'drag-over-invalid');
       });
+      clearInsertionIndicators();
     }
 
     function handleDragOver(e) {
-      e.preventDefault(); // Allow drop
+      e.preventDefault();
 
       const dropZone = e.currentTarget;
       const walkerId = dropZone.dataset.walkerId;
-      const slot = dropZone.dataset.slot;
 
-      // Check capacity for walker zones
-      if (walkerId && !canAcceptDrop(dropZone)) {
+      // Check capacity for walker zones (but allow reorder within same zone)
+      const isFromSameZone = draggedCard && draggedCard.closest('.drop-zone') === dropZone;
+      if (walkerId && !isFromSameZone && !canAcceptDrop(dropZone)) {
         e.dataTransfer.dropEffect = 'none';
         return;
       }
 
       e.dataTransfer.dropEffect = 'move';
+
+      // Show insertion indicator between cards
+      const cardsContainer = dropZone.querySelector('.booking-cards') || dropZone;
+      clearInsertionIndicators();
+
+      const closestCard = getClosestCard(cardsContainer, e.clientY);
+      if (closestCard && closestCard !== draggedCard) {
+        const rect = closestCard.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (e.clientY < midY) {
+          closestCard.classList.add('insert-before');
+        } else {
+          closestCard.classList.add('insert-after');
+        }
+      }
+    }
+
+    function getClosestCard(container, y) {
+      const cards = [...container.querySelectorAll('.booking-card:not(.dragging)')];
+      let closest = null;
+      let closestDist = Infinity;
+      for (const card of cards) {
+        const rect = card.getBoundingClientRect();
+        const mid = rect.top + rect.height / 2;
+        const dist = Math.abs(y - mid);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closest = card;
+        }
+      }
+      return closest;
+    }
+
+    function clearInsertionIndicators() {
+      document.querySelectorAll('.insert-before, .insert-after').forEach(el => {
+        el.classList.remove('insert-before', 'insert-after');
+      });
     }
 
     function handleDragEnter(e) {
@@ -317,38 +357,115 @@ Admin
 
       // Remove highlight classes
       dropZone.classList.remove('drag-over', 'drag-over-invalid');
+      clearInsertionIndicators();
 
       // Check if drop is valid
-      if (!canAcceptDrop(dropZone)) {
+      const isFromSameZone = draggedCard && draggedCard.closest('.drop-zone') === dropZone;
+      if (!isFromSameZone && !canAcceptDrop(dropZone)) {
         console.log("Drop rejected - zone at capacity");
         animateSnapBack();
         return;
       }
 
       try {
-        // Get booking data
         const bookingData = JSON.parse(e.dataTransfer.getData('text/plain'));
         console.log("Processing drop for booking:", bookingData);
 
-        // Check if this is actually a change
         const currentWalkerId = bookingData.currentWalkerId || '';
         const currentSlot = bookingData.currentSlot;
 
-        if (walkerId === currentWalkerId && newSlot === currentSlot) {
-          console.log("No change needed - same position");
-          return;
-        }
+        // Determine insertion position
+        const cardsContainer = dropZone.querySelector('.booking-cards') || dropZone;
+        const closestCard = getClosestCard(cardsContainer, e.clientY);
 
-        // Make API call to update booking
-        await updateBookingAssignment(
-          bookingData.bookingId,
-          walkerId,
-          newSlot,
-          dropZone
-        );
+        if (walkerId === currentWalkerId && newSlot === currentSlot) {
+          // Same zone — this is a reorder operation
+          if (!walkerId) {
+            console.log("Reorder in pending zone - no action needed");
+            return;
+          }
+
+          // Insert at the right position
+          if (closestCard && closestCard !== draggedCard) {
+            const rect = closestCard.getBoundingClientRect();
+            const midY = rect.top + rect.height / 2;
+            if (e.clientY < midY) {
+              cardsContainer.insertBefore(draggedCard, closestCard);
+            } else {
+              cardsContainer.insertBefore(draggedCard, closestCard.nextSibling);
+            }
+          }
+
+          // Send reorder to backend
+          await reorderPickups(dropZone);
+
+        } else {
+          // Different zone — this is an assignment/reassignment
+          // Insert at position rather than appending to end
+          if (closestCard) {
+            const rect = closestCard.getBoundingClientRect();
+            const midY = rect.top + rect.height / 2;
+            if (e.clientY < midY) {
+              cardsContainer.insertBefore(draggedCard, closestCard);
+            } else {
+              cardsContainer.insertBefore(draggedCard, closestCard.nextSibling);
+            }
+          }
+
+          await updateBookingAssignment(
+            bookingData.bookingId,
+            walkerId,
+            newSlot,
+            dropZone
+          );
+        }
 
       } catch (error) {
         console.error("Error processing drop:", error);
+        animateSnapBack();
+      }
+    }
+
+    async function reorderPickups(dropZone) {
+      const walkerId = dropZone.dataset.walkerId;
+      const slot = dropZone.dataset.slot;
+      const cardsContainer = dropZone.querySelector('.booking-cards') || dropZone;
+
+      const pickupOrder = [];
+      cardsContainer.querySelectorAll('.booking-card').forEach(card => {
+        pickupOrder.push(card.dataset.bookingId);
+      });
+
+      console.log("Reordering pickups:", { walkerId, slot, pickupOrder });
+
+      try {
+        const res = await fetch("{{ url_for('admin.reorder_pickups') }}", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(csrfToken ? { "X-CSRFToken": csrfToken } : {})
+          },
+          body: JSON.stringify({
+            walker_id: walkerId,
+            date: selectedDate,
+            slot: slot,
+            pickup_order: pickupOrder
+          }),
+          credentials: "same-origin"
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          updatePickupBadges(dropZone);
+          console.log("Pickup order updated successfully");
+        } else {
+          console.error("Reorder failed:", data.message);
+          showNotification("Failed to update pickup order.", "error");
+          animateSnapBack();
+        }
+      } catch (error) {
+        console.error("Error reordering:", error);
+        showNotification("Failed to update pickup order.", "error");
         animateSnapBack();
       }
     }
@@ -449,17 +566,11 @@ Admin
       card.dataset.currentWalkerId = walkerId || '';
       card.dataset.currentSlot = slot;
 
-      // Determine img src from data attribute (prefer original filename)
-      const dogPic = card.dataset.dogPic || '';
-      const imgSrc = dogPic ? `/static/uploads/dogs/${dogPic}` : '/static/uploads/dogs/default-dog.png';
-
       // Update styling
       if (walkerId) {
-        // Card is now assigned to a walker
         card.classList.remove('border-dark');
         card.classList.add('border-success');
       } else {
-        // Card is back to pending
         card.classList.remove('border-success');
         card.classList.add('border-dark');
       }
@@ -467,11 +578,22 @@ Admin
       // Restore interactivity
       card.style.pointerEvents = '';
 
-      // Restore original content structure
+      // Rebuild card content
+      rebuildCardContent(card, !!walkerId);
+
+      // Update pickup badges for the zone this card is now in
+      const zone = card.closest('.drop-zone');
+      if (zone) updatePickupBadges(zone);
+    }
+
+    function rebuildCardContent(card, showBadge) {
       const dogName = card.dataset.dogName || '';
+      const dogPic = card.dataset.dogPic || '';
+      const imgSrc = dogPic ? `/static/uploads/dogs/${dogPic}` : '/static/uploads/dogs/default-dog.png';
 
       card.innerHTML = `
         <div class="d-flex align-items-center gap-2 p-2">
+          ${showBadge ? '<span class="badge bg-secondary pickup-badge flex-shrink-0"></span>' : ''}
           <div class="dog-avatar rounded-circle flex-shrink-0">
             <img src="${imgSrc}" class="img-fluid" alt="${dogName}" 
                  onerror="this.src='/static/uploads/dogs/default-dog.png'">
@@ -481,6 +603,32 @@ Admin
           </div>
         </div>
       `;
+    }
+
+    function updatePickupBadges(zone) {
+      const walkerId = zone.dataset.walkerId;
+      if (!walkerId) return; // No badges for pending zone
+
+      const cards = zone.querySelectorAll('.booking-card');
+      cards.forEach((card, idx) => {
+        let badge = card.querySelector('.pickup-badge');
+        if (!badge) {
+          // Create badge if it doesn't exist
+          const inner = card.querySelector('.d-flex');
+          if (inner) {
+            badge = document.createElement('span');
+            badge.className = 'badge bg-secondary pickup-badge flex-shrink-0';
+            inner.insertBefore(badge, inner.firstChild);
+          }
+        }
+        if (badge) badge.textContent = idx + 1;
+      });
+    }
+
+    function updateAllPickupBadges() {
+      document.querySelectorAll('.drop-zone.walker-zone').forEach(zone => {
+        updatePickupBadges(zone);
+      });
     }
 
     function updateCapacityCounters() {
@@ -521,23 +669,10 @@ Admin
           if (draggedCard) {
             draggedCard.classList.remove('snap-back');
             draggedCard.style.pointerEvents = '';
-
-            // Restore original content if it was modified
-            const dogName = draggedCard.dataset.dogName || '';
-            const dogPic = draggedCard.dataset.dogPic || '';
-            const imgSrc = dogPic ? `/static/uploads/dogs/${dogPic}` : '/static/uploads/dogs/default-dog.png';
-
-            draggedCard.innerHTML = `
-              <div class="d-flex align-items-center gap-2 p-2">
-                <div class="dog-avatar rounded-circle flex-shrink-0">
-                  <img src="${imgSrc}" class="img-fluid" alt="${dogName}" 
-                       onerror="this.src='/static/uploads/dogs/default-dog.png'">
-                </div>
-                <div>
-                  <small>${dogName}</small>
-                </div>
-              </div>
-            `;
+            const isAssigned = !!draggedCard.dataset.currentWalkerId;
+            rebuildCardContent(draggedCard, isAssigned);
+            const zone = draggedCard.closest('.drop-zone');
+            if (zone) updatePickupBadges(zone);
           }
         }, 500);
       }

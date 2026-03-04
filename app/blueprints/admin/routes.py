@@ -241,6 +241,44 @@ def assign_walker():
         return jsonify(success=False, message="Server error"), 500
 
 
+@admin_bp.route("/reorder_pickups", methods=["POST"])
+@login_required
+@admin_required
+def reorder_pickups():
+    """Reorder pickup order for bookings within a walker's slot. Returns JSON."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify(success=False, message="Invalid request"), 400
+
+    pickup_order = data.get("pickup_order")  # list of booking IDs in desired order
+    walker_id = data.get("walker_id")
+    date_str = data.get("date")
+    slot = data.get("slot")
+
+    if not all([pickup_order, walker_id, date_str, slot]):
+        return jsonify(success=False, message="Missing required fields"), 400
+
+    if not isinstance(pickup_order, list) or len(pickup_order) == 0:
+        return jsonify(success=False, message="Invalid pickup order"), 400
+
+    try:
+        from datetime import datetime
+        selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+
+        for idx, bid in enumerate(pickup_order, start=1):
+            b = Booking.query.get(int(bid))
+            if b and b.walker_id == int(walker_id) and b.date == selected_date and b.slot == slot:
+                b.pickup_order = idx
+
+        db.session.commit()
+        return jsonify(success=True, message="Pickup order updated"), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error reordering pickups: {e}")
+        return jsonify(success=False, message="Server error"), 500
+
+
 @admin_bp.route("/calendar_data/<int:year>/<int:month>")
 @login_required
 @admin_required

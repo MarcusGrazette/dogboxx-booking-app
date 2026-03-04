@@ -6,8 +6,12 @@
      data-current-slot="{{ booking.slot }}"
      data-current-walker-id="{{ booking.walker_id or '' }}"
      data-dog-name="{{ booking.dog_name }}" 
-     data-dog-pic="{{ booking.dog_pic or '' }}">
+     data-dog-pic="{{ booking.dog_pic or '' }}"
+     data-pickup-order="{{ booking.pickup_order or '' }}">
     <div class="d-flex align-items-center gap-2 p-2">
+        {% if not is_pending and booking.pickup_order %}
+        <span class="badge bg-secondary pickup-badge flex-shrink-0">{{ booking.pickup_order }}</span>
+        {% endif %}
         <div class="dog-avatar rounded-circle flex-shrink-0">
             <img src="{{ '/static/uploads/dogs/' + booking.dog_pic if booking.dog_pic else '/static/uploads/dogs/default-dog.png' }}"
                  class="img-fluid" alt="{{ booking.dog_name }}"
