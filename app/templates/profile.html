@@ -200,11 +200,12 @@
     // FilePond
     FilePond.registerPlugin(FilePondPluginImagePreview, FilePondPluginFileValidateType);
     FilePond.create(document.querySelector('.filepond'), {
+        allowMultiple: false,
         acceptedFileTypes: ['image/png', 'image/jpeg', 'image/gif'],
-        labelIdle: 'Drag & drop a photo or <span class="filepond--label-action">Browse</span>',
-        imagePreviewHeight: 150,
-        stylePanelAspectRatio: 1,
-        stylePanelLayout: 'compact circle',
+        styleItemPanelAspectRatio: 1,
+        storeAsFile: true,
+        credits: false,
+        labelIdle: '<i class="bi bi-cloud-upload fs-3"></i><br>Drag & drop or <span class="filepond--label-action">Browse</span>',
     });
 </script>
 {% endblock %}

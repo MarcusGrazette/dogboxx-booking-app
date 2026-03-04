@@ -105,7 +105,7 @@ def index():
     return render_template("index.html", user=user, client=user.client, dogs=user_dogs, bookings=upcoming_bookings, form=form) # type: ignore
 
 
-@client_bp.route("/profile")
+@client_bp.route("/profile", methods=["GET", "POST"])
 @login_required
 def profile():
     """Display and manage client profile, address, notifications and dog info."""
