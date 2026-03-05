@@ -22,7 +22,7 @@
 | 14 | P1 | M | ✅ | **is_admin role model** | Admins can also be walkers. Walkers promotable via is_admin flag |
 | 15 | P1 | S | ✅ | **Fix profile photo upload** | Fixed: route missing POST method; FilePond config matched to onboarding layout |
 | 16 | P1 | S | ✅ | **Prevent duplicate bookings** | Block same dog+date+slot. Allow max 2 bookings per dog per day (one per slot) |
-| 17 | P1 | S | 🔲 | **Fix admin reorder 500 error** | /admin/reorder_pickups returning 500. Debug and fix |
+| 17 | P1 | S | ✅ | **Fix admin reorder 500 error** | /admin/reorder_pickups returning 500. Debug and fix |
 | 18 | P2 | S | 🔲 | **Default dog image** | Create a default-dog.png placeholder (dog emoji or simple icon). Fix 404 |
 | 19 | P2 | S | 🔲 | **Flash message layout shift** | Match admin's no-shift flash behaviour across all pages. Use fixed/overlay positioning |
 

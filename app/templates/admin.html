@@ -91,8 +91,8 @@ Admin
     }
 
     function handleDateSelect(year, month, day) {
-        selectedDate = { year, month, day };
         const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        selectedDate = dateStr;
         
         // Update selected date info
         const dateText = document.getElementById('selected-date-text');
