@@ -1,15 +1,19 @@
 <!-- Macro for booking card to eliminate duplication -->
 {% macro booking_card(booking, is_pending=false) %}
-<div class="card booking-card draggable bg-light {{ 'border-dark' if is_pending else 'border-success' }}" 
+{% set is_waitlisted = (booking.status == 'waitlisted') %}
+<div class="card booking-card draggable bg-light {{ 'border-info' if is_waitlisted else ('border-dark' if is_pending else 'border-success') }}" 
      draggable="true"
      data-booking-id="{{ booking.id }}" 
      data-current-slot="{{ booking.slot }}"
      data-current-walker-id="{{ booking.walker_id or '' }}"
      data-dog-name="{{ booking.dog_name }}" 
      data-dog-pic="{{ booking.dog_pic or '' }}"
-     data-pickup-order="{{ booking.pickup_order or '' }}">
+     data-pickup-order="{{ booking.pickup_order or '' }}"
+     data-status="{{ booking.status }}">
     <div class="d-flex align-items-center gap-2 p-2">
-        {% if not is_pending and booking.pickup_order %}
+        {% if is_waitlisted %}
+        <span class="badge bg-info flex-shrink-0" title="Waitlisted"><i class="bi bi-clock-history"></i></span>
+        {% elif not is_pending and booking.pickup_order %}
         <span class="badge bg-secondary pickup-badge flex-shrink-0">{{ booking.pickup_order }}</span>
         {% endif %}
         <div class="dog-avatar rounded-circle flex-shrink-0">
@@ -25,12 +29,12 @@
 {% endmacro %}
 
 <!-- Macro for slot section to eliminate duplication -->
-{% macro slot_section(slot_name, bookings, walker_id=none, capacity=none) %}
-<div class="drop-zone {{ 'pending-zone' if not walker_id else 'walker-zone' }} {{ 'bg-danger bg-opacity-25' if capacity and capacity >= 6 else '' }}"
-     data-slot="{{ slot_name }}" data-walker-id="{{ walker_id or '' }}">
+{% macro slot_section(slot_name, bookings, walker_id=none, capacity=none, max_cap=6) %}
+<div class="drop-zone {{ 'pending-zone' if not walker_id else 'walker-zone' }} {{ 'bg-danger bg-opacity-25' if capacity is not none and capacity >= max_cap else '' }}"
+     data-slot="{{ slot_name }}" data-walker-id="{{ walker_id or '' }}" data-max-capacity="{{ max_cap }}">
     <h6 class="text-muted mb-2">
         {{ slot_name }}
-        {% if capacity is not none %}({{ capacity }}/6){% endif %}
+        {% if capacity is not none %}({{ capacity }}/{{ max_cap }}){% endif %}
     </h6>
     <div class="booking-cards">
         {% for booking in bookings %}
@@ -87,7 +91,7 @@
                     <div class="card-body p-2">
                         {% for slot in slots %}
                         {% if slot in available %}
-                        {{ slot_section(slot, assigned_bookings, walker.id, walker_capacity[walker.id][slot]) }}
+                        {{ slot_section(slot, assigned_bookings, walker.id, walker_capacity[walker.id][slot], max_capacity|default(6)) }}
                         {% if not loop.last %}<hr>{% endif %}
                         {% endif %}
                         {% endfor %}

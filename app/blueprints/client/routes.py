@@ -13,6 +13,7 @@ from app.models import User, Client, Dog, Booking, DogOwner, ServiceType
 from app import db
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
 from app.utils.uploads import process_dog_photo
+from app.capacity import check_availability, get_slot_availability_summary
 from app.forms import OnboardingForm, BookingForm, ProfileForm
 import logging
 import traceback
@@ -111,16 +112,38 @@ def index():
                 if not default_service:
                     flash("No service type available. Please contact support.", "danger")
                     return redirect(url_for("client.index"))
+
+                # Check capacity before creating booking
+                available, can_waitlist, capacity_msg = check_availability(
+                    default_service, booking_date, booking_slot
+                )
+
+                if not available and not can_waitlist:
+                    # No walkers scheduled at all — hard reject
+                    flash(capacity_msg, "warning")
+                    return redirect(url_for("client.index"))
+
+                # Determine booking status based on capacity
+                booking_status = 'requested'
+                if not available and can_waitlist:
+                    booking_status = 'waitlisted'
+
                 new_booking = Booking(
                     user_id=user.id,
                     dog_id=dog_id,
                     service_type_id=default_service.id,
                     date=booking_date,
-                    slot=booking_slot
+                    slot=booking_slot,
+                    status=booking_status
                 )
                 db.session.add(new_booking)
                 db.session.commit()
-                flash("Success - booking request submitted", "success")
+
+                if booking_status == 'waitlisted':
+                    flash(f"All slots are currently full for {booking_slot} on {booking_date.strftime('%d %b')}. "
+                          f"You've been added to the waitlist — we'll let you know if a spot opens up.", "info")
+                else:
+                    flash("Success - booking request submitted", "success")
                 return redirect(url_for("client.index"))
     
     return render_template("index.html", user=user, client=user.client, dogs=user_dogs, bookings=upcoming_bookings, form=form) # type: ignore

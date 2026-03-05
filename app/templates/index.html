@@ -18,26 +18,27 @@ Home
 
         <div class="col-md-12">
             <div class="card-body text-start">
-                <p class="card-text">Select a date and slot (morning or afternnon) to request a new booking. We manually
+                <p class="card-text">Select a date and slot (morning or afternoon) to request a new booking. We manually
                     review booking requests to make sure your dog only walks with others they get on well with.</p>
                 <form action="{{ url_for('client.index') }}" method="post" id="BookingForm" novalidate>
                     {{ form.hidden_tag() }}
                     <div class="row g-3">
                         <div class="col-md-5">
-                            {{ form.date(class="form-control") }}
+                            {{ form.date(class="form-control", id="booking-date") }}
                             {% for error in form.date.errors %}
                             <div class="text-danger small">{{ error }}</div>
                             {% endfor %}
                         </div>
 
                         <div class="col-md-5">
-                            {{ form.slot(class="form-select") }}
+                            {{ form.slot(class="form-select", id="booking-slot") }}
                             {% for error in form.slot.errors %}
                             <div class="text-danger small">{{ error }}</div>
                             {% endfor %}
+                            <div id="slot-availability" class="small mt-1"></div>
                         </div>
                         <div class="col-md-2">
-                            {{ form.submit(class="btn btn-secondary") }}
+                            {{ form.submit(class="btn btn-secondary", id="booking-submit") }}
                         </div>
                     </div>
 
@@ -79,13 +80,14 @@ Home
                     <p>
                         <i class="bi bi-check2-circle"></i> = confirmed.<br />
                         <i class="bi bi-hourglass"></i> = requested, pending confirmation.<br />
+                        <i class="bi bi-clock-history"></i> = waitlisted (full, you'll be notified if a spot opens).<br />
                         Click <i class="bi bi-x-square"></i> to cancel.<br />
                     </p>
 
                     <table class="table">
                         <tbody>
                             {% for booking in bookings %}
-                            <tr{% if booking.status=='requested' %} class="table-warning" {% endif %}>
+                            <tr{% if booking.status=='requested' %} class="table-warning"{% elif booking.status=='waitlisted' %} class="table-info"{% endif %}>
                                 <td>{{ booking.date_display }}</td>
                                 <td>{{ booking.slot }}</td>
                                 <td>
@@ -93,6 +95,8 @@ Home
                                     <i class="bi bi-check2-circle"></i>
                                     {% elif booking.status == 'requested' %}
                                     <i class="bi bi-hourglass"></i>
+                                    {% elif booking.status == 'waitlisted' %}
+                                    <i class="bi bi-clock-history text-info"></i>
                                     {% endif %}
                                 </td>
                                 <td>
@@ -126,7 +130,57 @@ Home
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    
+
+    // --- Slot availability checker ---
+    const dateInput = document.getElementById('booking-date');
+    const slotSelect = document.getElementById('booking-slot');
+    const availabilityHint = document.getElementById('slot-availability');
+    const submitBtn = document.getElementById('booking-submit');
+    let slotData = null; // cached per selected date
+
+    function updateAvailabilityHint() {
+        if (!slotData || !slotSelect.value) {
+            availabilityHint.textContent = '';
+            submitBtn.disabled = false;
+            return;
+        }
+        const info = slotData[slotSelect.value];
+        if (!info) {
+            availabilityHint.textContent = '';
+            submitBtn.disabled = false;
+            return;
+        }
+        if (info.total === 0) {
+            availabilityHint.innerHTML = '<span class="text-muted">No walkers scheduled for this slot</span>';
+            submitBtn.disabled = true;
+        } else if (info.available <= 0) {
+            availabilityHint.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Full — you\'ll be added to the waitlist</span>';
+            submitBtn.disabled = false;
+        } else if (info.available <= 2) {
+            availabilityHint.innerHTML = `<span class="text-warning">${info.available} spot${info.available === 1 ? '' : 's'} left</span>`;
+            submitBtn.disabled = false;
+        } else {
+            availabilityHint.innerHTML = `<span class="text-success">${info.available} spots available</span>`;
+            submitBtn.disabled = false;
+        }
+    }
+
+    function fetchAvailability() {
+        const dateVal = dateInput.value;
+        if (!dateVal) { slotData = null; updateAvailabilityHint(); return; }
+        fetch(`{{ url_for('api.slot_availability') }}?date=${dateVal}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) { slotData = null; }
+                else { slotData = data; }
+                updateAvailabilityHint();
+            })
+            .catch(() => { slotData = null; updateAvailabilityHint(); });
+    }
+
+    if (dateInput) dateInput.addEventListener('change', fetchAvailability);
+    if (slotSelect) slotSelect.addEventListener('change', updateAvailabilityHint);
+
     // Add click event listeners to all cancel buttons
     document.querySelectorAll('.cancel-booking-btn').forEach(button => {
         button.addEventListener('click', function(e) {

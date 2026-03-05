@@ -9,8 +9,9 @@ from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError
-from app.models import User, Booking, Walker, Dog, Client, WalkerSchedule, DogOwner, WalkerUnavailability
+from app.models import User, Booking, Walker, Dog, Client, WalkerSchedule, DogOwner, WalkerUnavailability, ServiceType
 from app import db
+from app.capacity import get_max_per_walker, get_walker_slot_count
 from app.utils.db_error_handler import handle_db_errors
 from app.forms import ClientCreateForm, WalkerCreateForm, WalkerScheduleForm
 from datetime import datetime, timezone, timedelta
@@ -57,8 +58,8 @@ def bookings_by_date():
             .all()
         )
         
-        # Separate pending and assigned bookings
-        pending_bookings = [b for b in all_bookings if b.status == 'requested']
+        # Separate pending, waitlisted, and assigned bookings
+        pending_bookings = [b for b in all_bookings if b.status in ('requested', 'waitlisted')]
         assigned_bookings = [b for b in all_bookings if b.walker_id is not None and b.status == 'confirmed']
         
         # Add display properties to all bookings
@@ -115,6 +116,8 @@ def bookings_by_date():
                 if booking.walker_id in walker_capacity and booking.slot in walker_capacity[booking.walker_id]:
                     walker_capacity[booking.walker_id][booking.slot] += 1
         
+        max_capacity = get_max_per_walker('group-walk')
+
         # Generate the drag-and-drop HTML interface
         if not pending_bookings and not assigned_bookings:
             return '<p class="card-text"><i class="bi bi-info-circle"></i> No booking requests for the selected date. </p>'
@@ -127,7 +130,8 @@ def bookings_by_date():
             walkers=walkers,
             walker_capacity=walker_capacity,
             walker_available_slots={wid: list(slots) for wid, slots in walker_available_slots.items()},
-            unavail_set=unavail_set
+            unavail_set=unavail_set,
+            max_capacity=max_capacity
         )
     except Exception as e:
         logging.error(f"Error in admin_bookings_by_date: {str(e)}")
@@ -194,6 +198,7 @@ def assign_walker():
 
         # Check walker capacity for the given slot and date
         if slot:
+            max_capacity = get_max_per_walker('group-walk')
             same_slot_bookings = Booking.query.filter(
                 Booking.walker_id == walker.id,
                 Booking.date == booking.date,
@@ -202,8 +207,8 @@ def assign_walker():
                 Booking.id != booking.id  # Exclude current booking if reassigning
             ).count()
             
-            if same_slot_bookings >= 6:
-                return jsonify(success=False, message=f"Walker already has maximum bookings (6) for {slot} slot"), 400
+            if same_slot_bookings >= max_capacity:
+                return jsonify(success=False, message=f"Walker already has maximum bookings ({max_capacity}) for {slot} slot"), 400
 
         # Update walker assignment and slot
         booking.walker_id = walker.id
