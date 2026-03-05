@@ -273,6 +273,14 @@ class ServiceType(db.Model):
 
 class Booking(db.Model):
     __tablename__ = 'bookings'
+    __table_args__ = (
+        db.Index(
+            'ix_booking_dog_date_slot_active',
+            'dog_id', 'date', 'slot',
+            unique=True,
+            postgresql_where=db.text("status NOT IN ('cancelled', 'rejected', 'completed')")
+        ),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)

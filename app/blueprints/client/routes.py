@@ -72,6 +72,28 @@ def index():
         if not user or not user_dogs:
             errors.append("No dog found on your account. Please add a dog before booking.")
 
+        if not errors:
+            dog_id = user_dogs[0].id  # Use first dog from DogOwner relationship
+            # Prevent duplicate booking: same dog + date + slot (only active bookings)
+            active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
+            existing = Booking.query.filter(
+                Booking.dog_id == dog_id,
+                Booking.date == booking_date,
+                Booking.slot == booking_slot,
+                Booking.status.in_(active_statuses)
+            ).first()
+            if existing:
+                errors.append("This dog already has a booking for that slot on that date.")
+
+            # Cap at 2 bookings per dog per day (one per slot)
+            day_count = Booking.query.filter(
+                Booking.dog_id == dog_id,
+                Booking.date == booking_date,
+                Booking.status.in_(active_statuses)
+            ).count()
+            if day_count >= 2:
+                errors.append("This dog already has two bookings on that date (one per slot is the maximum).")
+
         if errors:
             for e in errors:
                 flash(e, "danger")
@@ -84,7 +106,6 @@ def index():
                     OperationalError: "Our booking system is temporarily unavailable. Please try again later."
                 }
             ):
-                dog_id = user_dogs[0].id  # Use first dog from DogOwner relationship
                 # Look up default service type by slug
                 default_service = ServiceType.query.filter_by(slug='group-walk', active=True).first()
                 if not default_service:
