@@ -85,17 +85,20 @@
         </div>
     </nav>
 
-    <main class="container py-3 text-center">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div id="flash-container" style="position: fixed; top: 20px; right: 20px; z-index: 1050; max-width: 400px;">
         {% for category, message in messages %}
-        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show shadow-sm" role="alert">
             {{ message }}
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
         {% endfor %}
-        {% endif %}
-        {% endwith %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <main class="container py-3 text-center">
         {% block main %}{% endblock %}
     </main>
 
