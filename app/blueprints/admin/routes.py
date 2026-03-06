@@ -130,6 +130,14 @@ def index():
     )
 
 
+@admin_bp.route("/bookings")
+@login_required
+@admin_required
+def bookings():
+    """Booking allocation page — calendar + drag/drop."""
+    return render_template("admin_bookings.html")
+
+
 @admin_bp.route("/bookings_by_date")
 @login_required
 @admin_required
