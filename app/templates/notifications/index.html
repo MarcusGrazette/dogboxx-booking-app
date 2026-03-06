@@ -1,0 +1,124 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}Notifications{% endblock %}
+{% block page_title %}Notifications{% endblock %}
+{% block page_subtitle %}Your activity feed{% endblock %}
+
+{% block page_actions %}
+{% if unread_notification_count > 0 %}
+<form method="post" action="{{ url_for('notifications.mark_all') }}" class="d-inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-check2-all"></i> Mark all read
+    </button>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block main %}
+<div class="card">
+    <div class="card-body p-0">
+        {% if notifications.items %}
+        <ul class="list-group list-group-flush">
+            {% for n in notifications.items %}
+            {% set icon, colour = notification_meta(n.notification_type) %}
+            <li class="list-group-item px-4 py-3 {{ 'notif-unread' if n.is_unread else '' }}"
+                data-notif-id="{{ n.id }}">
+                <div class="d-flex align-items-start gap-3">
+                    <div class="notif-icon flex-shrink-0 mt-1"
+                         style="color:{{ colour }}; font-size:1.2rem;">
+                        <i class="bi {{ icon }}"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <strong class="notif-title">{{ n.title }}</strong>
+                            <small class="text-muted ms-3 flex-shrink-0 notif-time"
+                                   data-ts="{{ n.created_at.isoformat() }}">
+                                {{ n.created_at.strftime('%d %b %Y %H:%M') }}
+                            </small>
+                        </div>
+                        {% if n.body %}
+                        <div class="text-muted small mt-1">{{ n.body }}</div>
+                        {% endif %}
+                        <div class="mt-1 d-flex align-items-center gap-3">
+                            {% if n.link %}
+                            <a href="{{ n.link }}" class="small text-primary notif-link"
+                               data-notif-id="{{ n.id }}">View →</a>
+                            {% endif %}
+                            {% if n.is_unread %}
+                            <span class="badge" style="background:#E02FAC; font-size:0.65rem;">Unread</span>
+                            {% else %}
+                            <small class="text-muted" style="font-size:0.72rem;">
+                                Read {{ n.read_at.strftime('%d %b %H:%M') }}
+                            </small>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+
+        {% if notifications.pages > 1 %}
+        <div class="p-3 d-flex justify-content-center gap-2">
+            {% if notifications.has_prev %}
+            <a href="{{ url_for('notifications.index', page=notifications.prev_num) }}"
+               class="btn btn-outline-secondary btn-sm">← Newer</a>
+            {% endif %}
+            <span class="btn btn-sm disabled">Page {{ notifications.page }} / {{ notifications.pages }}</span>
+            {% if notifications.has_next %}
+            <a href="{{ url_for('notifications.index', page=notifications.next_num) }}"
+               class="btn btn-outline-secondary btn-sm">Older →</a>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="text-center py-5 text-muted">
+            <i class="bi bi-bell-slash" style="font-size:2.5rem; opacity:0.3;"></i>
+            <p class="mt-3">No notifications yet.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block head_extra %}
+<style>
+.notif-unread {
+    background-color: #fce8f6;
+    border-left: 3px solid #E02FAC;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Mark notification read on link click (AJAX)
+document.querySelectorAll('.notif-link').forEach(function(link) {
+    link.addEventListener('click', function() {
+        const id = this.dataset.notifId;
+        fetch('/notifications/' + id + '/read', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content,
+                'X-Requested-With': 'XMLHttpRequest',
+            }
+        });
+    });
+});
+
+// Relative timestamps
+document.querySelectorAll('.notif-time[data-ts]').forEach(function(el) {
+    const ts = new Date(el.dataset.ts);
+    const diff = Date.now() - ts;
+    const mins = Math.floor(diff / 60000);
+    const hours = Math.floor(mins / 60);
+    const days = Math.floor(hours / 24);
+    if (mins < 1) el.textContent = 'Just now';
+    else if (mins < 60) el.textContent = mins + 'm ago';
+    else if (hours < 24) el.textContent = hours + 'h ago';
+    else if (days < 7) el.textContent = days + 'd ago';
+});
+</script>
+{% endblock %}

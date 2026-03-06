@@ -1,0 +1,169 @@
+{# Bell icon dropdown — include in any navbar.
+   Requires: unread_notification_count, recent_notifications, notification_meta (from context processor) #}
+<li class="nav-item dropdown" id="notification-bell">
+    <a class="nav-link position-relative px-3" href="#"
+       role="button" data-bs-toggle="dropdown" aria-expanded="false"
+       aria-label="Notifications">
+        <i class="bi bi-bell-fill fs-5"></i>
+        {% if unread_notification_count > 0 %}
+        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill"
+              style="background:#E02FAC; font-size:0.6rem; margin-top:4px; margin-left:-12px;"
+              id="notif-badge">
+            {{ unread_notification_count if unread_notification_count < 100 else '99+' }}
+        </span>
+        {% else %}
+        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill d-none"
+              style="background:#E02FAC; font-size:0.6rem; margin-top:4px; margin-left:-12px;"
+              id="notif-badge">0</span>
+        {% endif %}
+    </a>
+
+    <div class="dropdown-menu dropdown-menu-end shadow p-0"
+         style="width:360px; max-height:480px; overflow-y:auto; border:1px solid #e8e0e6;">
+
+        {# Header #}
+        <div class="d-flex align-items-center justify-content-between px-3 py-2"
+             style="border-bottom:2px solid #E02FAC; background:#1B1B1B;">
+            <span class="fw-bold text-white small">
+                <i class="bi bi-bell-fill me-1" style="color:#E02FAC;"></i>
+                Notifications
+                {% if unread_notification_count > 0 %}
+                <span class="badge ms-1" style="background:#E02FAC;">{{ unread_notification_count }}</span>
+                {% endif %}
+            </span>
+            {% if unread_notification_count > 0 %}
+            <button class="btn btn-link btn-sm text-white p-0 text-decoration-none"
+                    style="font-size:0.72rem; opacity:0.7;"
+                    id="mark-all-read-btn" type="button">
+                Mark all read
+            </button>
+            {% endif %}
+        </div>
+
+        {# Notification list #}
+        {% if recent_notifications %}
+        {% for n in recent_notifications %}
+        {% set icon, colour = notification_meta(n.notification_type) %}
+        <a href="{{ n.link or url_for('notifications.index') }}"
+           class="d-flex align-items-start gap-2 px-3 py-2 text-decoration-none notif-item
+                  {{ 'notif-dropdown-unread' if n.is_unread else '' }}"
+           data-notif-id="{{ n.id }}"
+           style="border-bottom:1px solid #f0e8ee; color:#1B1B1B;">
+            <div class="flex-shrink-0 mt-1" style="color:{{ colour }};">
+                <i class="bi {{ icon }}"></i>
+            </div>
+            <div class="flex-grow-1 overflow-hidden">
+                <div class="fw-semibold text-truncate" style="font-size:0.82rem;">{{ n.title }}</div>
+                {% if n.body %}
+                <div class="text-muted text-truncate" style="font-size:0.75rem;">{{ n.body }}</div>
+                {% endif %}
+                <div class="text-muted notif-time" style="font-size:0.7rem;"
+                     data-ts="{{ n.created_at.isoformat() }}">
+                    {{ n.created_at.strftime('%d %b %H:%M') }}
+                </div>
+            </div>
+            {% if n.is_unread %}
+            <div class="flex-shrink-0 mt-2">
+                <span class="rounded-circle d-inline-block"
+                      style="width:8px;height:8px;background:#E02FAC;"></span>
+            </div>
+            {% endif %}
+        </a>
+        {% endfor %}
+        {% else %}
+        <div class="text-center py-4 text-muted small">
+            <i class="bi bi-bell-slash d-block mb-1" style="font-size:1.5rem; opacity:0.3;"></i>
+            No notifications yet
+        </div>
+        {% endif %}
+
+        {# Footer #}
+        <div class="px-3 py-2 text-center" style="border-top:1px solid #e8e0e6; background:#fafafa;">
+            <a href="{{ url_for('notifications.index') }}"
+               class="small text-decoration-none fw-semibold" style="color:#E02FAC;">
+                View all notifications →
+            </a>
+        </div>
+    </div>
+</li>
+
+<style>
+.notif-dropdown-unread {
+    background-color: #fce8f6 !important;
+}
+.notif-item:hover {
+    background-color: #f9f0f7 !important;
+}
+</style>
+
+<script>
+(function() {
+    // Relative timestamps in dropdown
+    document.querySelectorAll('#notification-bell .notif-time[data-ts]').forEach(function(el) {
+        const ts = new Date(el.dataset.ts + 'Z');
+        const diff = Date.now() - ts;
+        const mins = Math.floor(diff / 60000);
+        const hours = Math.floor(mins / 60);
+        const days = Math.floor(hours / 24);
+        if (mins < 1) el.textContent = 'Just now';
+        else if (mins < 60) el.textContent = mins + 'm ago';
+        else if (hours < 24) el.textContent = hours + 'h ago';
+        else if (days < 7) el.textContent = days + 'd ago';
+        else el.textContent = el.textContent; // keep formatted date
+    });
+
+    // Mark notification read on click (AJAX, non-blocking)
+    document.querySelectorAll('#notification-bell .notif-item').forEach(function(item) {
+        item.addEventListener('click', function() {
+            const id = this.dataset.notifId;
+            if (!id) return;
+            fetch('/notifications/' + id + '/read', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content,
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
+            }).then(function() {
+                // Remove unread dot + highlight
+                const dot = item.querySelector('.rounded-circle');
+                if (dot) dot.remove();
+                item.classList.remove('notif-dropdown-unread');
+                // Decrement badge
+                const badge = document.getElementById('notif-badge');
+                if (badge) {
+                    let count = parseInt(badge.textContent) - 1;
+                    if (count <= 0) { badge.classList.add('d-none'); }
+                    else { badge.textContent = count; }
+                }
+            });
+        });
+    });
+
+    // Mark all read
+    const markAllBtn = document.getElementById('mark-all-read-btn');
+    if (markAllBtn) {
+        markAllBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            fetch('/notifications/read-all', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content,
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
+            }).then(function() {
+                document.querySelectorAll('.notif-dropdown-unread').forEach(function(el) {
+                    el.classList.remove('notif-dropdown-unread');
+                });
+                document.querySelectorAll('#notification-bell .rounded-circle').forEach(function(el) {
+                    el.remove();
+                });
+                const badge = document.getElementById('notif-badge');
+                if (badge) badge.classList.add('d-none');
+                markAllBtn.closest('.d-flex').querySelector('.badge')?.remove();
+                markAllBtn.remove();
+            });
+        });
+    }
+})();
+</script>

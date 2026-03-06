@@ -45,7 +45,7 @@
             </button>
             <div class="collapse navbar-collapse" id="navbar">
                 {% if current_user.is_authenticated %}
-                <ul class="navbar-nav me-auto mt-2">
+                <ul class="navbar-nav me-auto mt-2 align-items-center">
                     {% if current_user.role == 'walker' %}
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('walker.schedule') }}">
@@ -65,7 +65,8 @@
                     </li>
                     {% endif %}
                 </ul>
-                <ul class="navbar-nav ms-auto mt-2">
+                <ul class="navbar-nav ms-auto mt-2 align-items-center">
+                    {% include 'partials/notification_bell.html' %}
                     <li class="nav-item">
                         <a class="icon-link nav-link" href="{{ url_for('auth.logout') }}">
                             <i class="bi bi-box-arrow-left"></i>

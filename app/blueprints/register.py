@@ -30,3 +30,7 @@ def register_blueprints(app):
     # Import and register Walker blueprint
     from app.blueprints.walker import walker_bp
     app.register_blueprint(walker_bp)
+
+    # Import and register Notifications blueprint
+    from app.blueprints.notifications import notifications_bp
+    app.register_blueprint(notifications_bp)

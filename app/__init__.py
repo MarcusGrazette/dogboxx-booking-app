@@ -155,7 +155,7 @@ def create_app(config_name=None):
         # Import all models so they're registered with SQLAlchemy
         from app.models import (User, Client, Dog, DogOwner, Walker,
                                 WalkerSchedule, ServiceType, Booking,
-                                BookingStatusChange, WalkEvent)
+                                BookingStatusChange, WalkEvent, Notification)
 
     # Custom error handler for rate limiting
     @app.errorhandler(429)
@@ -169,6 +169,25 @@ def create_app(config_name=None):
     def inject_csrf_token():
         from flask_wtf.csrf import generate_csrf
         return dict(csrf_token=generate_csrf)
+
+    @app.context_processor
+    def inject_notifications():
+        """Inject unread notification count + recent notifications into all templates."""
+        from flask_login import current_user
+        from app.utils.notifications import get_unread_count, get_recent, get_meta
+        if current_user.is_authenticated:
+            unread_count = get_unread_count(current_user.id)
+            recent_notifications = get_recent(current_user.id, limit=8)
+            return dict(
+                unread_notification_count=unread_count,
+                recent_notifications=recent_notifications,
+                notification_meta=get_meta,
+            )
+        return dict(
+            unread_notification_count=0,
+            recent_notifications=[],
+            notification_meta=get_meta,
+        )
 
     # Register blueprints for modular routing
     from app.blueprints.register import register_blueprints

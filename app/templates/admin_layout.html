@@ -81,10 +81,11 @@
                 Dogboxx Admin
             </a>
             <!-- Right side -->
-            <ul class="navbar-nav ms-auto">
+            <ul class="navbar-nav ms-auto align-items-center">
                 {% if current_user.is_authenticated %}
+                {% include 'partials/notification_bell.html' %}
                 <li class="nav-item">
-                    <a class="nav-link text-white-50" href="{{ url_for('auth.logout') }}">
+                    <a class="nav-link text-white-50 ms-1" href="{{ url_for('auth.logout') }}">
                         <i class="bi bi-box-arrow-left me-1"></i>
                         Log Out ({{ current_user.firstname }})
                     </a>

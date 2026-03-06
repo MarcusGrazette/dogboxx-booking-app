@@ -390,6 +390,57 @@ class WalkerUnavailability(db.Model):
         }
 
 
+class Notification(db.Model):
+    """Persistent notification system — stores cross-user events with read audit trail."""
+    __tablename__ = 'notifications'
+
+    id = db.Column(db.Integer, primary_key=True)
+    recipient_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    sender_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # None = system
+
+    # Type drives icon/colour in UI. Keep as string for flexibility.
+    # Expected values: booking_confirmed, booking_cancelled, booking_requested,
+    #                  walker_assigned, dental_confirmed, dental_available, system
+    notification_type = db.Column(db.String(50), nullable=False, index=True)
+
+    title = db.Column(db.String(200), nullable=False)
+    body = db.Column(db.Text, nullable=True)
+    link = db.Column(db.String(500), nullable=True)   # URL to navigate to on click
+
+    read_at = db.Column(db.DateTime, nullable=True, index=True)  # None = unread
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+    recipient = db.relationship('User', foreign_keys=[recipient_id],
+                                backref=db.backref('notifications', lazy='dynamic',
+                                                   order_by='Notification.created_at.desc()'))
+    sender = db.relationship('User', foreign_keys=[sender_id])
+
+    @property
+    def is_unread(self):
+        return self.read_at is None
+
+    def mark_read(self):
+        if self.read_at is None:
+            self.read_at = datetime.now(timezone.utc)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'recipient_id': self.recipient_id,
+            'sender_id': self.sender_id,
+            'notification_type': self.notification_type,
+            'title': self.title,
+            'body': self.body,
+            'link': self.link,
+            'read_at': self.read_at.isoformat() if self.read_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'is_unread': self.is_unread,
+        }
+
+    def __repr__(self):
+        return f'<Notification {self.id} → user:{self.recipient_id} [{self.notification_type}]>'
+
+
 class WalkEvent(db.Model):
     """Tracks pickup/dropoff events during walks."""
     __tablename__ = 'walk_events'
