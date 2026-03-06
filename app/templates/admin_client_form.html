@@ -1,69 +1,65 @@
-{% extends "layout.html" %}
+{% extends "admin_layout.html" %}
 
-{% block title %}
-{{ title }}
+{% block title %}{{ title }}{% endblock %}
+
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}{% endblock %}
+
+{% block page_actions %}
+    <a href="{{ url_for('admin.clients') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Clients
+    </a>
 {% endblock %}
 
 {% block main %}
-<div class="container">
     <div class="row justify-content-center">
         <div class="col-12 col-md-8 col-lg-6">
-            <div class="py-4">
-                <div class="d-flex align-items-center mb-4">
-                    <a href="{{ url_for('admin.clients') }}" class="btn btn-outline-secondary me-3">
-                        <i class="bi bi-arrow-left"></i>
-                    </a>
-                    <h2 class="mb-0">{{ title }}</h2>
-                </div>
+            <div class="card">
+                <div class="card-body">
+                    <form method="post" novalidate>
+                        {{ form.hidden_tag() }}
 
-                <div class="card">
-                    <div class="card-body">
-                        <form method="post" novalidate>
-                            {{ form.hidden_tag() }}
-
-                            <div class="mb-4">
-                                <div class="input-group">
-                                    <span class="input-group-text">
-                                        <i class="bi bi-person fs-5 text-secondary"></i>
-                                    </span>
-                                    {{ form.firstname(autocomplete="given-name", class="form-control", placeholder="First name") }}
-                                    {{ form.lastname(autocomplete="family-name", class="form-control", placeholder="Last name") }}
-                                </div>
-                                {% for error in form.firstname.errors %}
-                                <div class="text-danger small mt-1">{{ error }}</div>
-                                {% endfor %}
-                                {% for error in form.lastname.errors %}
-                                <div class="text-danger small mt-1">{{ error }}</div>
-                                {% endfor %}
+                        <div class="mb-4">
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="bi bi-person fs-5 text-secondary"></i>
+                                </span>
+                                {{ form.firstname(autocomplete="given-name", class="form-control", placeholder="First name") }}
+                                {{ form.lastname(autocomplete="family-name", class="form-control", placeholder="Last name") }}
                             </div>
+                            {% for error in form.firstname.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                            {% endfor %}
+                            {% for error in form.lastname.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                            {% endfor %}
+                        </div>
 
-                            <div class="mb-4">
-                                <div class="input-group">
-                                    <span class="input-group-text">
-                                        <i class="bi bi-envelope-at-fill fs-5 text-secondary"></i>
-                                    </span>
-                                    {{ form.email(autocomplete="email", class="form-control", placeholder="Email") }}
-                                </div>
-                                {% for error in form.email.errors %}
-                                <div class="text-danger small mt-1">{{ error }}</div>
-                                {% endfor %}
+                        <div class="mb-4">
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="bi bi-envelope-at-fill fs-5 text-secondary"></i>
+                                </span>
+                                {{ form.email(autocomplete="email", class="form-control", placeholder="Email") }}
                             </div>
+                            {% for error in form.email.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                            {% endfor %}
+                        </div>
 
-                            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                                <a href="{{ url_for('admin.clients') }}" class="btn btn-outline-secondary me-md-2">Cancel</a>
-                                {{ form.submit(class="btn btn-primary") }}
-                            </div>
-                        </form>
-                    </div>
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{{ url_for('admin.clients') }}" class="btn btn-outline-secondary me-md-2">Cancel</a>
+                            {{ form.submit(class="btn btn-primary") }}
+                        </div>
+                    </form>
                 </div>
+            </div>
 
-                <div class="alert alert-info mt-3">
-                    <i class="bi bi-info-circle"></i>
-                    <strong>Note:</strong> A temporary password will be generated and displayed after account creation.
-                    The client will be required to change their password on first login.
-                </div>
+            <div class="alert alert-info mt-3">
+                <i class="bi bi-info-circle"></i>
+                <strong>Note:</strong> A temporary password will be generated and displayed after account creation.
+                The client will be required to change their password on first login.
             </div>
         </div>
     </div>
-</div>
 {% endblock %}

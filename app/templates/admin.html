@@ -1,15 +1,12 @@
-{% extends "layout.html" %}
+{% extends "admin_layout.html" %}
 {% from "partials/calendar_component.html" import calendar_widget %}
 
-{% block title %}
-Admin
-{% endblock %}
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block page_title %}Hello, {{ current_user.firstname }}{% endblock %}
+{% block page_subtitle %}Here's what's happening today{% endblock %}
 
 {% block main %}
-
-  <div class="page-header">
-    <h1><i class="bi bi-speedometer2 me-2"></i>Hello, {{ current_user.firstname }}</h1>
-  </div>
 
   <div class="mb-4">
     <a href="{{ url_for('admin.clients') }}" class="btn btn-outline-primary me-2">
