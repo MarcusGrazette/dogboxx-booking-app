@@ -3,20 +3,160 @@
 
 {% block title %}Admin Dashboard{% endblock %}
 
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin-bookings.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
 {% block page_title %}Hello, {{ current_user.firstname }}{% endblock %}
 {% block page_subtitle %}Here's what's happening today{% endblock %}
 
 {% block main %}
 
-  <div class="mb-4">
-    <a href="{{ url_for('admin.clients') }}" class="btn btn-outline-primary me-2">
-      <i class="bi bi-people"></i> Manage Clients
-    </a>
-    <a href="{{ url_for('admin.walkers') }}" class="btn btn-outline-primary">
-      <i class="bi bi-person-walking"></i> Manage Walkers
-    </a>
-  </div>
+  {# ── Dashboard section ── #}
 
+  {# Row 1: Stat cards #}
+  <div class="row mb-2">
+
+    <div class="col-md-3 mb-3">
+      <div class="card h-100">
+        <div class="card-body d-flex align-items-center gap-3 py-3">
+          <div style="font-size:2rem; color:#C0258F;"><i class="bi bi-hourglass-split"></i></div>
+          <div>
+            <div style="font-size:1.75rem; font-weight:700; line-height:1; color:#1B1B1B;">{{ pending_count }}</div>
+            <div class="text-muted small">Pending bookings</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3 mb-3">
+      <div class="card h-100">
+        <div class="card-body d-flex align-items-center gap-3 py-3">
+          <div style="font-size:2rem; color:#E02FAC;"><i class="bi bi-people-fill"></i></div>
+          <div>
+            <div style="font-size:1.75rem; font-weight:700; line-height:1; color:#1B1B1B;">{{ active_clients }}</div>
+            <div class="text-muted small">Active clients</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3 mb-3">
+      <div class="card h-100">
+        <div class="card-body d-flex align-items-center gap-3 py-3">
+          <div style="font-size:2rem; color:#E02FAC;"><i class="bi bi-house-heart-fill"></i></div>
+          <div>
+            <div style="font-size:1.75rem; font-weight:700; line-height:1; color:#1B1B1B;">{{ active_dogs }}</div>
+            <div class="text-muted small">Dogs on roster</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3 mb-3">
+      <div class="card h-100">
+        <div class="card-body d-flex align-items-center gap-3 py-3">
+          <div style="font-size:2rem; color:#5E5E5E;"><i class="bi bi-person-walking"></i></div>
+          <div>
+            <div style="font-size:1.75rem; font-weight:700; line-height:1; color:#1B1B1B;">{{ active_walkers }}</div>
+            <div class="text-muted small">Active walkers</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>{# /Row 1 #}
+
+  {# Row 2: Bookings chart + Quick actions #}
+  <div class="row mb-2">
+
+    <div class="col-md-8 mb-3">
+      <div class="card h-100">
+        <div class="card-header">
+          <strong>Bookings — next 4 weeks</strong>
+          <small class="text-muted ms-2">weekdays only · confirmed + pending</small>
+        </div>
+        <div class="card-body">
+          <canvas id="bookingsChart" height="120"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4 mb-3">
+      <div class="card h-100">
+        <div class="card-header"><strong>Quick actions</strong></div>
+        <div class="card-body d-flex flex-column gap-2">
+          <a href="{{ url_for('admin.clients') }}" class="btn btn-outline-primary btn-sm text-start">
+            <i class="bi bi-people me-2"></i>Manage clients
+          </a>
+          <a href="{{ url_for('admin.walkers') }}" class="btn btn-outline-primary btn-sm text-start">
+            <i class="bi bi-person-walking me-2"></i>Manage walkers
+          </a>
+          <a href="{{ url_for('notifications.index') }}" class="btn btn-outline-primary btn-sm text-start">
+            <i class="bi bi-bell me-2"></i>Notifications
+            {% if pending_count > 0 %}
+            <span class="badge ms-1" style="background:#E02FAC;">{{ pending_count }}</span>
+            {% endif %}
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </div>{# /Row 2 #}
+
+  {# Row 3: Walker availability grid #}
+  <div class="row mb-2">
+    <div class="col-12 mb-3">
+      <div class="card">
+        <div class="card-header"><strong>Walker availability — next 4 weeks</strong></div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-0" style="font-size:0.78rem;">
+              <thead style="background:#1B1B1B; color:#fff;">
+                <tr>
+                  <th style="min-width:100px;">Walker</th>
+                  {% for d in weekdays %}
+                  <th class="text-center {% if loop.index0 % 5 == 0 and loop.index0 > 0 %}week-sep{% endif %}"
+                      style="white-space:nowrap; font-weight:400; {% if loop.index0 % 5 == 0 and loop.index0 > 0 %}border-left: 2px solid #555 !important;{% endif %}">
+                    <div style="font-weight:600;">{{ d.strftime('%a') }}</div>
+                    <div>{{ d.strftime('%-d') }}</div>
+                  </th>
+                  {% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in walker_grid %}
+                <tr>
+                  <td class="fw-bold" style="white-space:nowrap;">{{ row.walker.user.firstname }}</td>
+                  {% for day in row.days %}
+                  {% set sep_style = 'border-left: 2px solid #dee2e6 !important;' if loop.index0 % 5 == 0 and loop.index0 > 0 else '' %}
+                  {% if day.slots | length == 2 %}
+                    <td class="text-center" style="background:rgba(224,47,172,0.14); color:#C0258F; font-weight:600; {{ sep_style }}">M · A</td>
+                  {% elif day.slots | length == 1 %}
+                    <td class="text-center" style="background:rgba(224,47,172,0.07); color:#C0258F; {{ sep_style }}">{{ day.slots[0][0] }}</td>
+                  {% else %}
+                    <td class="text-center text-muted" style="background:#f8f9fa; color:#ccc !important; {{ sep_style }}">—</td>
+                  {% endif %}
+                  {% endfor %}
+                </tr>
+                {% endfor %}
+                {% if walker_grid | length == 0 %}
+                <tr>
+                  <td colspan="{{ weekdays | length + 1 }}" class="text-center text-muted py-3">No active walkers found.</td>
+                </tr>
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>{# /Row 3 #}
+
+  <hr class="my-3">
+
+  {# ── Booking section (existing, unchanged) ── #}
   <div class="row">
     <!-- Calendar Column -->
     <div class="col-3">
@@ -57,8 +197,59 @@
 
 {% block scripts %}
 {{ super() }}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin-bookings.css') }}">
 <script src="{{ url_for('static', filename='js/reusable-calendar.js') }}"></script>
+<script>
+// Bookings chart
+(function() {
+  const labels = {{ chart_labels | tojson }};
+  const morning = {{ chart_morning | tojson }};
+  const afternoon = {{ chart_afternoon | tojson }};
+
+  const ctx = document.getElementById('bookingsChart');
+  if (!ctx) return;
+
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Morning',
+          data: morning,
+          backgroundColor: '#E02FAC',
+          borderRadius: 3,
+        },
+        {
+          label: 'Afternoon',
+          data: afternoon,
+          backgroundColor: '#1B1B1B',
+          borderRadius: 3,
+        },
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'top' },
+        tooltip: { mode: 'index', intersect: false },
+      },
+      scales: {
+        x: {
+          stacked: true,
+          grid: { display: false },
+          ticks: { font: { size: 10 } },
+        },
+        y: {
+          stacked: true,
+          beginAtZero: true,
+          ticks: { stepSize: 1 },
+          grid: { color: 'rgba(0,0,0,0.06)' },
+        }
+      }
+    }
+  });
+})();
+</script>
 <script>
   // Admin Calendar and Drag-and-Drop Interface
   (function () {

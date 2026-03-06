@@ -30,7 +30,104 @@ from app.utils.decorators import admin_required
 @admin_required
 def index():
     """Admin dashboard page"""
-    return render_template("admin.html")
+    from datetime import date, timedelta
+    from sqlalchemy import func
+
+    today = date.today()
+
+    # ── Stat cards ──────────────────────────────────────────────────────────
+    pending_count = Booking.query.filter(
+        Booking.status.in_(['requested', 'waitlisted'])
+    ).count()
+
+    active_clients = Client.query.join(User).filter(User.active == True).count()
+
+    # Count distinct dogs with at least one active owner
+    active_dogs = db.session.query(func.count(func.distinct(DogOwner.dog_id))).scalar()
+
+    active_walkers = Walker.query.join(User).filter(User.active == True).count()
+
+    # ── Next 4 weeks weekdays (Mon–Fri only) ────────────────────────────────
+    weekdays = []
+    d = today
+    while len(weekdays) < 20:  # 4 weeks × 5 days
+        if d.weekday() < 5:  # 0=Mon, 4=Fri
+            weekdays.append(d)
+        d += timedelta(days=1)
+
+    end_date = weekdays[-1]
+
+    # ── Booking chart data ───────────────────────────────────────────────────
+    chart_bookings = (
+        Booking.query
+        .filter(
+            Booking.date >= today,
+            Booking.date <= end_date,
+            Booking.status.in_(['confirmed', 'requested', 'waitlisted']),
+            Booking.slot.in_(['Morning', 'Afternoon']),
+        )
+        .with_entities(Booking.date, Booking.slot, func.count(Booking.id).label('cnt'))
+        .group_by(Booking.date, Booking.slot)
+        .all()
+    )
+
+    # Build lookup: {date: {slot: count}}
+    booking_lookup = {}
+    for row in chart_bookings:
+        booking_lookup.setdefault(row.date, {})
+        booking_lookup[row.date][row.slot] = row.cnt
+
+    chart_labels = [d.strftime('%a %-d %b') for d in weekdays]
+    chart_morning = [booking_lookup.get(d, {}).get('Morning', 0) for d in weekdays]
+    chart_afternoon = [booking_lookup.get(d, {}).get('Afternoon', 0) for d in weekdays]
+
+    # ── Walker availability grid ─────────────────────────────────────────────
+    all_walkers = Walker.query.join(User).filter(User.active == True).options(
+        joinedload(Walker.user)
+    ).all()
+
+    schedules = WalkerSchedule.query.filter_by(active=True).all()
+    # Build: {walker_id: {day_of_week: set of slots}}
+    schedule_map = {}
+    for s in schedules:
+        schedule_map.setdefault(s.walker_id, {}).setdefault(s.day_of_week, set()).add(s.slot)
+
+    unavails = WalkerUnavailability.query.filter(
+        WalkerUnavailability.date >= today,
+        WalkerUnavailability.date <= end_date,
+    ).all()
+    # Build: {walker_id: {date: set of unavailable slots}}
+    unavail_map = {}
+    for u in unavails:
+        unavail_map.setdefault(u.walker_id, {}).setdefault(u.date, set()).add(u.slot)
+
+    # Build grid: list of {walker, days: [{date, slots: ['Morning','Afternoon']}]}
+    walker_grid = []
+    for walker in all_walkers:
+        days = []
+        for d in weekdays:
+            dow = d.weekday()
+            scheduled = schedule_map.get(walker.id, {}).get(dow, set())
+            blocked = unavail_map.get(walker.id, {}).get(d, set())
+            available = scheduled - blocked
+            days.append({'date': d, 'slots': sorted(available)})
+        walker_grid.append({'walker': walker, 'days': days})
+
+    return render_template(
+        "admin.html",
+        # Stats
+        pending_count=pending_count,
+        active_clients=active_clients,
+        active_dogs=active_dogs,
+        active_walkers=active_walkers,
+        # Chart
+        chart_labels=chart_labels,
+        chart_morning=chart_morning,
+        chart_afternoon=chart_afternoon,
+        # Availability grid
+        weekdays=weekdays,
+        walker_grid=walker_grid,
+    )
 
 
 @admin_bp.route("/bookings_by_date")
