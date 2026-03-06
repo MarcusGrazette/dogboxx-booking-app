@@ -7,7 +7,9 @@ Admin
 
 {% block main %}
 
-  <h1> Hello, {{ current_user.firstname }}</h1>
+  <div class="page-header">
+    <h1><i class="bi bi-speedometer2 me-2"></i>Hello, {{ current_user.firstname }}</h1>
+  </div>
 
   <div class="mb-4">
     <a href="{{ url_for('admin.clients') }}" class="btn btn-outline-primary me-2">
