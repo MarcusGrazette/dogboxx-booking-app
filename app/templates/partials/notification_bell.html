@@ -1,9 +1,9 @@
 {# Bell icon dropdown — include in any navbar.
    Requires: unread_notification_count, recent_notifications, notification_meta (from context processor) #}
 <li class="nav-item dropdown" id="notification-bell">
-    <a class="nav-link position-relative px-3" href="#"
+    <a class="nav-link lh-1 position-relative px-3" href="#"
        role="button" data-bs-toggle="dropdown" aria-expanded="false"
-       aria-label="Notifications">
+       aria-label="Notifications" style="outline:none;">
         <i class="bi bi-bell-fill fs-5"></i>
         {% if unread_notification_count > 0 %}
         <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill"
