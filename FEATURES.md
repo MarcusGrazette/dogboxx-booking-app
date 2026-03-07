@@ -47,3 +47,6 @@
 - **L (large):** New subsystem, multiple routes/templates, external integrations — half a day+
 
 **Reassessing:** Update priority/effort as we learn more. Move notes into the Notes column.
+
+## Backlog (Low Priority)
+- [ ] Client profile photo upload — show photo in navbar avatar instead of initials; collect during onboarding alongside dog photo
