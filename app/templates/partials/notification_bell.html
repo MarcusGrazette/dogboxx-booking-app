@@ -1,6 +1,6 @@
 {# Bell icon dropdown — include in any navbar.
    Requires: unread_notification_count, recent_notifications, notification_meta (from context processor) #}
-<li class="nav-item dropdown" id="notification-bell">
+<div class="dropdown" id="notification-bell">
     <a class="nav-link lh-1 position-relative px-3" href="#"
        role="button" data-bs-toggle="dropdown" aria-expanded="false"
        aria-label="Notifications" style="outline:none;">
@@ -85,7 +85,7 @@
             </a>
         </div>
     </div>
-</li>
+</div>
 
 <style>
 .notif-dropdown-unread {

@@ -51,10 +51,8 @@
                 </a>
                 {% endif %}
 
-                <!-- Notification bell (outputs a <li>, wrap in minimal <ul>) -->
-                <ul class="navbar-nav flex-row lh-1">
-                    {% include 'partials/notification_bell.html' %}
-                </ul>
+                <!-- Notification bell -->
+                {% include 'partials/notification_bell.html' %}
 
                 <!-- Avatar dropdown: plain div, not ul/li, Tabler-style -->
                 <div class="dropdown ms-2">
