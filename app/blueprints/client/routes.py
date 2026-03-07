@@ -20,6 +20,7 @@ import traceback
 from datetime import datetime, timezone, timedelta
 
 from app.blueprints.client import client_bp
+from app.utils.notifications import create_notification
 
 
 @client_bp.route("/", methods=["GET", "POST"])
@@ -138,6 +139,21 @@ def index():
                 )
                 db.session.add(new_booking)
                 db.session.commit()
+
+                # 22b: notify all admins of the new booking request
+                admins = User.query.filter_by(is_admin=True).all()
+                date_str_fmt = booking_date.strftime('%a %-d %b')
+                dog = Dog.query.get(dog_id)
+                dog_name = dog.name if dog else 'a dog'
+                for admin in admins:
+                    create_notification(
+                        recipient_id=admin.id,
+                        notification_type='booking_requested',
+                        title=f'New booking request for {date_str_fmt}',
+                        body=f'{current_user.firstname} requested {booking_slot} for {dog_name}',
+                        link=f'/admin',
+                        sender_id=current_user.id,
+                    )
 
                 if booking_status == 'waitlisted':
                     flash(f"All slots are currently full for {booking_slot} on {booking_date.strftime('%d %b')}. "
