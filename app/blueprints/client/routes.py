@@ -9,7 +9,7 @@ from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
-from app.models import User, Client, Dog, Booking, DogOwner, ServiceType
+from app.models import User, Client, Dog, Booking, DogOwner, ServiceType, Walker
 from app import db
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
 from app.utils.uploads import process_dog_photo
@@ -42,7 +42,9 @@ def index():
 
     # Return upcoming bookings
     today = datetime.now(timezone.utc).date()
-    upcoming_bookings_query = Booking.query.filter(
+    upcoming_bookings_query = Booking.query.options(
+        joinedload(Booking.walker).joinedload(Walker.user)
+    ).filter(
         Booking.user_id == current_user.id,
         Booking.status != 'cancelled',
         Booking.date > today

@@ -97,7 +97,12 @@
                                 <!-- Date + slot -->
                                 <div>
                                     <div class="fw-semibold small">{{ booking.date_display }}</div>
-                                    <div class="text-muted" style="font-size: 0.78rem;">{{ booking.slot | capitalize }}</div>
+                                    <div class="text-muted" style="font-size: 0.78rem;">
+                                        {{ booking.slot | capitalize }}
+                                        {% if booking.status == 'confirmed' and booking.walker %}
+                                        <span class="text-muted">({{ booking.walker.user.firstname }})</span>
+                                        {% endif %}
+                                    </div>
                                 </div>
                             </div>
                             <!-- Cancel button -->
