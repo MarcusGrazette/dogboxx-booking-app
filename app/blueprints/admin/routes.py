@@ -23,6 +23,7 @@ import json
 
 from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
+from app.utils.notifications import create_notification
 
 
 @admin_bp.route("/")
@@ -320,6 +321,17 @@ def assign_walker():
         booking.status = 'confirmed'
         if slot:
             booking.slot = slot
+
+        # 22a: notify client that their booking has been confirmed
+        date_str_fmt = booking.date.strftime('%a %-d %b')
+        create_notification(
+            recipient_id=booking.user_id,
+            notification_type='booking_confirmed',
+            title=f'Your walk on {date_str_fmt} has been confirmed',
+            body=f'Slot: {booking.slot}',
+            link=f'/bookings/{booking.id}',
+            sender_id=current_user.id,
+        )
 
         # Update pickup order for all bookings in this walker's slot
         pickup_order = data.get("pickup_order")  # list of booking IDs in order
