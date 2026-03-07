@@ -1,134 +1,162 @@
 {% extends "layout.html" %}
 
-{% block title %}
-Home
-{% endblock %}
+{% block title %}Home{% endblock %}
 
 {% block main %}
-<div class="container">
-    <div class="row justify-content-center mb-3">
-        <h1>Hello, {{ current_user.firstname }}.</h1>
-    </div>
 
-    <div class="card mb-3 w-75" style="margin: auto;">
-        <h5 class="card-header text-start text-bg-secondary">
-            <i class="bi bi-plus-square"></i>
-            New booking request
-        </h5>
+<!-- Greeting -->
+<div class="text-start mb-4 px-1">
+    <h2 class="fw-bold mb-0" id="greeting">Hello, {{ current_user.firstname }}.</h2>
+    <p class="text-muted mb-0 small">Here's what's going on with your dog{% if dogs|length > 1 %}s{% endif %}.</p>
+</div>
 
-        <div class="col-md-12">
-            <div class="card-body text-start">
-                <p class="card-text">Select a date and slot (morning or afternoon) to request a new booking. We manually
-                    review booking requests to make sure your dog only walks with others they get on well with.</p>
+<div class="row g-4 text-start">
+
+    <!-- LEFT: Booking form -->
+    <div class="col-12 col-md-4">
+        <div class="card shadow-sm border-0 h-auto" style="border-radius: 1rem;">
+            <div class="card-body p-4">
+                <h6 class="fw-bold text-uppercase text-muted small mb-3 letter-spacing-1">
+                    <i class="bi bi-plus-circle-fill me-1" style="color: var(--bs-primary);"></i>
+                    Request a walk
+                </h6>
+
                 <form action="{{ url_for('client.index') }}" method="post" id="BookingForm" novalidate>
                     {{ form.hidden_tag() }}
-                    <div class="row g-3">
-                        <div class="col-md-5">
-                            {{ form.date(class="form-control", id="booking-date") }}
-                            {% for error in form.date.errors %}
-                            <div class="text-danger small">{{ error }}</div>
-                            {% endfor %}
-                        </div>
 
-                        <div class="col-md-5">
-                            {{ form.slot(class="form-select", id="booking-slot") }}
-                            {% for error in form.slot.errors %}
-                            <div class="text-danger small">{{ error }}</div>
-                            {% endfor %}
-                            <div id="slot-availability" class="small mt-1"></div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Date</label>
+                        {{ form.date(class="form-control", id="booking-date") }}
+                        {% for error in form.date.errors %}
+                        <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Slot</label>
+                        {{ form.slot(class="form-select", id="booking-slot") }}
+                        {% for error in form.slot.errors %}
+                        <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
+                        <div id="slot-availability" class="small mt-2"></div>
+                    </div>
+
+                    {{ form.submit(class="btn btn-primary w-100 fw-semibold", id="booking-submit") }}
+                </form>
+
+                <p class="text-muted small mt-3 mb-0">
+                    <i class="bi bi-info-circle me-1"></i>
+                    We review all requests to make sure your dog walks with friends they get on with.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT: Dog diaries -->
+    <div class="col-12 col-md-8">
+
+        {% if dogs %}
+            {% for dog in dogs %}
+            <div class="card shadow-sm border-0 mb-4" style="border-radius: 1rem; overflow: hidden;">
+
+                <!-- Dog header -->
+                <div class="card-body pb-2">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        {% if dog.pic %}
+                        <img src="{{ url_for('static', filename='uploads/dogs/' + dog.pic) }}"
+                             class="rounded-circle flex-shrink-0"
+                             alt="{{ dog.name }}"
+                             style="width: 64px; height: 64px; object-fit: cover; border: 3px solid var(--db-primary-subtle);">
+                        {% else %}
+                        <div class="rounded-circle flex-shrink-0 d-flex align-items-center justify-content-center"
+                             style="width: 64px; height: 64px; background: var(--db-primary-subtle); border: 3px solid var(--db-primary-subtle);">
+                            <i class="bi bi-heart-fill fs-4" style="color: var(--bs-primary);"></i>
                         </div>
-                        <div class="col-md-2">
-                            {{ form.submit(class="btn btn-secondary", id="booking-submit") }}
+                        {% endif %}
+                        <div>
+                            <h5 class="fw-bold mb-0">{{ dog.name }}</h5>
+                            <span class="text-muted small">Upcoming walks</span>
                         </div>
                     </div>
 
+                    {% set dog_bookings = bookings | selectattr('dog_id', 'equalto', dog.id) | list if bookings else [] %}
 
-                </form>
-            </div>
-        </div>
+                    {% if dog_bookings %}
+                    <ul class="list-group list-group-flush">
+                        {% for booking in dog_bookings %}
+                        <li class="list-group-item px-0 py-3 border-bottom d-flex align-items-center justify-content-between gap-2">
+                            <div class="d-flex align-items-center gap-3">
+                                <!-- Status pill -->
+                                {% if booking.status == 'confirmed' %}
+                                <span class="badge rounded-pill text-bg-success px-3 py-2">Confirmed</span>
+                                {% elif booking.status == 'requested' %}
+                                <span class="badge rounded-pill px-3 py-2" style="background-color: #fff3cd; color: #856404;">Pending</span>
+                                {% elif booking.status == 'waitlisted' %}
+                                <span class="badge rounded-pill text-bg-info px-3 py-2">Waitlisted</span>
+                                {% endif %}
+                                <!-- Date + slot -->
+                                <div>
+                                    <div class="fw-semibold small">{{ booking.date_display }}</div>
+                                    <div class="text-muted" style="font-size: 0.78rem;">{{ booking.slot | capitalize }}</div>
+                                </div>
+                            </div>
+                            <!-- Cancel button -->
+                            <button class="btn btn-link p-0 cancel-booking-btn text-danger"
+                                    data-booking-id="{{ booking.id }}"
+                                    data-booking-slot="{{ booking.slot }}"
+                                    data-booking-date="{{ booking.date_display }}"
+                                    title="Cancel booking"
+                                    style="line-height: 1;">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </li>
+                        {% endfor %}
+                    </ul>
 
-    </div>
-    <!-- Dog icons created by Freepik - Flaticon -->
-
-    {% if dogs %}
-
-    {% for dog in dogs %}
-    <div class="card mb-3 w-75" style="margin: auto; min-height: 250px;">
-        <h5 class="card-header text-start text-bg-primary">
-            <i class="bi bi-calendar-event"></i>
-            {{ dog.name }}'s diary
-        </h5>
-        <div class="row g-0">
-            <div class="col-md-4">
-                {% if dog.pic %}
-                <img src="{{ url_for('static', filename='uploads/dogs/' + dog.pic) }}" class="img-fluid rounded-circle mt-3"
-                    alt="{{ dog.name }}" style="width: 150px; height: 150px; object-fit: cover; max-width: 100%;">
-                {% else %}
-                <div class="rounded-circle mt-3 d-flex align-items-center justify-content-center bg-light" style="width: 150px; height: 150px;">
-                    <i class="bi bi-piggy-bank fs-1 text-muted"></i>
-                </div>
-                {% endif %}
-            </div>
-            <div class="col-md-8">
-                <div class="card-body text-start">
-                    <p class="card-text">
-                        {% if bookings %}
-
-                    <p>
-                        Here are {{ dog.name }}'s upcoming walks and booking requests.
+                    {% if bookings %}
+                    <p class="text-muted mt-3 mb-0" style="font-size: 0.75rem;">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Our cancellation policy applies to confirmed bookings cancelled within 5 days.
                     </p>
-                    <p>
-                        <i class="bi bi-check2-circle"></i> = confirmed.<br />
-                        <i class="bi bi-hourglass"></i> = requested, pending confirmation.<br />
-                        <i class="bi bi-clock-history"></i> = waitlisted (full, you'll be notified if a spot opens).<br />
-                        Click <i class="bi bi-x-square"></i> to cancel.<br />
-                    </p>
+                    {% endif %}
 
-                    <table class="table">
-                        <tbody>
-                            {% for booking in bookings %}
-                            <tr{% if booking.status=='requested' %} class="table-warning"{% elif booking.status=='waitlisted' %} class="table-info"{% endif %}>
-                                <td>{{ booking.date_display }}</td>
-                                <td>{{ booking.slot }}</td>
-                                <td>
-                                    {% if booking.status == 'confirmed' %}
-                                    <i class="bi bi-check2-circle"></i>
-                                    {% elif booking.status == 'requested' %}
-                                    <i class="bi bi-hourglass"></i>
-                                    {% elif booking.status == 'waitlisted' %}
-                                    <i class="bi bi-clock-history text-info"></i>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <button class="btn btn-link p-0 cancel-booking-btn"
-                                        data-booking-id="{{ booking.id }}" data-booking-slot="{{ booking.slot }}"
-                                        data-booking-date="{{ booking.date_display }}" title="Cancel booking">
-                                        <i class="bi bi-x-square text-danger"></i>
-                                    </button>
-                                </td>
-                                </tr>
-                                {% endfor %}
-                        </tbody>
-                    </table>
-                    <p class="card-text"><small class="text-body-secondary">NB: Our cancellation policy applies to
-                            confirmed bookings cancelled within 5 days.</small></p>
                     {% else %}
-                    <p>No bookings found.</p>
+                    <div class="text-center py-4">
+                        <i class="bi bi-calendar2-x fs-2 text-muted mb-2 d-block"></i>
+                        <p class="text-muted small mb-0">No upcoming walks for {{ dog.name }}.<br>Use the form to request one!</p>
+                    </div>
                     {% endif %}
                 </div>
+
+            </div>
+            {% endfor %}
+
+        {% else %}
+        <div class="card shadow-sm border-0 text-center py-5" style="border-radius: 1rem;">
+            <div class="card-body">
+                <i class="bi bi-heart fs-1 d-block mb-3" style="color: var(--bs-primary);"></i>
+                <h5 class="fw-bold">No dogs registered yet</h5>
+                <p class="text-muted">Head to your profile to add your dog and get started.</p>
+                <a href="{{ url_for('client.profile') }}" class="btn btn-primary fw-semibold">Go to profile</a>
             </div>
         </div>
-    </div>
-    {% endfor %}
-    {% else %}
-    <p>No dogs registered. Update your profile to add a dog</p>
-    {% endif %}
+        {% endif %}
 
+    </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
+// Time-of-day greeting
+(function() {
+    const h = new Date().getHours();
+    const greeting = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+    const el = document.getElementById('greeting');
+    if (el) el.textContent = greeting + ', {{ current_user.firstname }}.';
+})();
+
 document.addEventListener('DOMContentLoaded', function() {
 
     // --- Slot availability checker ---
@@ -136,7 +164,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const slotSelect = document.getElementById('booking-slot');
     const availabilityHint = document.getElementById('slot-availability');
     const submitBtn = document.getElementById('booking-submit');
-    let slotData = null; // cached per selected date
+    let slotData = null;
 
     function updateAvailabilityHint() {
         if (!slotData || !slotSelect.value) {
@@ -151,16 +179,16 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         if (info.total === 0) {
-            availabilityHint.innerHTML = '<span class="text-muted">No walkers scheduled for this slot</span>';
+            availabilityHint.innerHTML = '<span class="text-muted"><i class="bi bi-slash-circle me-1"></i>No walkers scheduled for this slot</span>';
             submitBtn.disabled = true;
         } else if (info.available <= 0) {
-            availabilityHint.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Full — you\'ll be added to the waitlist</span>';
+            availabilityHint.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle me-1"></i>Full — you\'ll be added to the waitlist</span>';
             submitBtn.disabled = false;
         } else if (info.available <= 2) {
-            availabilityHint.innerHTML = `<span class="text-warning">${info.available} spot${info.available === 1 ? '' : 's'} left</span>`;
+            availabilityHint.innerHTML = `<span class="text-warning"><i class="bi bi-exclamation-circle me-1"></i>${info.available} spot${info.available === 1 ? '' : 's'} left</span>`;
             submitBtn.disabled = false;
         } else {
-            availabilityHint.innerHTML = `<span class="text-success">${info.available} spots available</span>`;
+            availabilityHint.innerHTML = `<span class="text-success"><i class="bi bi-check-circle me-1"></i>${info.available} spots available</span>`;
             submitBtn.disabled = false;
         }
     }
@@ -171,8 +199,7 @@ document.addEventListener('DOMContentLoaded', function() {
         fetch(`{{ url_for('api.slot_availability') }}?date=${dateVal}`)
             .then(r => r.json())
             .then(data => {
-                if (data.error) { slotData = null; }
-                else { slotData = data; }
+                slotData = data.error ? null : data;
                 updateAvailabilityHint();
             })
             .catch(() => { slotData = null; updateAvailabilityHint(); });
@@ -181,19 +208,14 @@ document.addEventListener('DOMContentLoaded', function() {
     if (dateInput) dateInput.addEventListener('change', fetchAvailability);
     if (slotSelect) slotSelect.addEventListener('change', updateAvailabilityHint);
 
-    // Add click event listeners to all cancel buttons
+    // --- Cancel booking ---
     document.querySelectorAll('.cancel-booking-btn').forEach(button => {
         button.addEventListener('click', function(e) {
             e.preventDefault();
-            
             const bookingId = this.getAttribute('data-booking-id');
             const bookingSlot = this.getAttribute('data-booking-slot');
             const bookingDate = this.getAttribute('data-booking-date');
-            
-            // Show confirmation dialog
-            const confirmMessage = `Are you sure you want to cancel the ${bookingSlot} walk on ${bookingDate}?`;
-            
-            if (confirm(confirmMessage)) {
+            if (confirm(`Cancel the ${bookingSlot} walk on ${bookingDate}?`)) {
                 cancelBooking(bookingId, this);
             }
         });
@@ -201,67 +223,36 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function cancelBooking(bookingId, buttonElement) {
-    
-    // Disable the button to prevent multiple clicks
     buttonElement.disabled = true;
     buttonElement.innerHTML = '<i class="bi bi-hourglass-split"></i>';
-    
-    // Get CSRF token
-    const csrfToken = document.querySelector('meta[name=csrf-token]')?.getAttribute('content') || 
+
+    const csrfToken = document.querySelector('meta[name=csrf-token]')?.getAttribute('content') ||
                      document.querySelector('input[name=csrf_token]')?.value;
-    
-    
+
     fetch('{{ url_for("client.cancel_booking") }}', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': csrfToken
-        },
-        body: JSON.stringify({
-            booking_id: bookingId
-        })
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify({ booking_id: bookingId })
     })
-    .then(response => {
-        return response.json();
-    })
+    .then(r => r.json())
     .then(data => {
-        
         if (data.success) {
-           
-            // Find the table row and fade it out
-            const row = buttonElement.closest('tr');
-            if (row) {
-                row.style.transition = 'opacity 0.5s ease';
-                row.style.opacity = '0.3';
-                
-                // Add cancelled styling
-                row.classList.add('table-secondary');
-                
-                // Update the row to show it's cancelled
-                const statusCell = row.cells[2]; // Column 3 (0-indexed)
-                statusCell.innerHTML = '<i class="bi bi-x-circle text-muted"></i>';
-                
-                // Replace cancel button with "Cancelled" text
-                buttonElement.outerHTML = '<span class="text-muted small">Cancelled</span>';
+            const item = buttonElement.closest('li');
+            if (item) {
+                item.style.transition = 'opacity 0.4s ease';
+                item.style.opacity = '0';
+                setTimeout(() => item.remove(), 400);
             }
         } else {
-           
-            // Re-enable button and restore original content
             buttonElement.disabled = false;
-            buttonElement.innerHTML = '<i class="bi bi-x-square text-danger"></i>';
+            buttonElement.innerHTML = '<i class="bi bi-x-lg"></i>';
         }
     })
-    .catch(error => {
-        console.error('Error cancelling booking:', error);
-        
-        // Re-enable button and restore original content
+    .catch(() => {
         buttonElement.disabled = false;
-        buttonElement.innerHTML = '<i class="bi bi-x-square text-danger"></i>';
-        
-        // Show a generic client-side error since server flash won't work for network errors
-        alert('Network error: Could not cancel booking. Please try again.');
+        buttonElement.innerHTML = '<i class="bi bi-x-lg"></i>';
+        alert('Network error — could not cancel booking. Please try again.');
     });
 }
 </script>
-
 {% endblock %}

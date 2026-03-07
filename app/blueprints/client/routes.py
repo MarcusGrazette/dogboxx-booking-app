@@ -51,7 +51,7 @@ def index():
     upcoming_bookings = list(upcoming_bookings_query)
     for b in upcoming_bookings:
         if b.date:
-            b.date_display = b.date.strftime("%d %b")
+            b.date_display = b.date.strftime("%a %d %b")
         else:
             b.date_display = None
 
