@@ -1,6 +1,6 @@
-# Bermondsey Street Dog Walkers - Code Review
+# Dogboxx - Code Review
 
-This document contains a comprehensive review of the codebase for the Bermondsey Street Dog Walkers application, highlighting issues, suggesting improvements, and flagging bugs or security flaws. The content is organized by category to make it easier for junior developers to understand the context and approach to fixing each issue.
+This document contains a comprehensive review of the codebase for the Dogboxx application, highlighting issues, suggesting improvements, and flagging bugs or security flaws. The content is organized by category to make it easier for junior developers to understand the context and approach to fixing each issue.
 
 ## Security Issues
 
@@ -360,7 +360,7 @@ This document contains a comprehensive review of the codebase for the Bermondsey
 
 ## Conclusion
 
-This TODO list provides a comprehensive overview of issues and improvements for the Bermondsey Street Dog Walkers application. By addressing these items systematically, the codebase will become more secure, maintainable, and scalable. 
+This TODO list provides a comprehensive overview of issues and improvements for the Dogboxx application. By addressing these items systematically, the codebase will become more secure, maintainable, and scalable. 
 
 Priority should be given to security issues, followed by critical bugs, and then improvements to code structure and maintainability. The application has a solid foundation but would benefit significantly from these enhancements.
 

@@ -1,4 +1,4 @@
-# Bermondsey Street Dog Walkers
+# Dogboxx
 This is a web app for dog walking company. It uses Python, Flask, and an SQL database on the backend, and HTML styled with Bootstrap CSS for the front end.
 
 # Setup
