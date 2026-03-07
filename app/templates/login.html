@@ -2,10 +2,12 @@
 
 {% block title %}Log In{% endblock %}
 
+{% block navbar %}{% endblock %}
+
 {% block main_class %}container-fluid px-0{% endblock %}
 
 {% block main %}
-<div class="d-flex align-items-center justify-content-center" style="min-height: calc(100vh - 60px);">
+<div class="d-flex align-items-center justify-content-center" style="min-height: 100vh;">
     <div class="container py-5">
         <div class="row justify-content-center align-items-center">
             <div class="col col-xl-9">
@@ -28,7 +30,7 @@
                                 <div class="mb-4">
                                     <img src="{{ url_for('static', filename='logo-transparent.png') }}"
                                          alt="Dogboxx"
-                                         style="max-width: 180px; height: auto;">
+                                         style="max-width: 260px; height: auto;">
                                 </div>
 
                                 <h5 class="fw-normal mb-4" style="letter-spacing: 1px;">Sign in to your account</h5>
