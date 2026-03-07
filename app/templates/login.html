@@ -1,58 +1,86 @@
 {% extends "layout.html" %}
 
-{% block title %}
-Log In
-{% endblock %}
+{% block title %}Log In{% endblock %}
+
+{% block main_class %}container-fluid px-0{% endblock %}
 
 {% block main %}
-<div class="card auth-card shadow-sm">
-    <div class="card-body p-4">
+<div class="d-flex align-items-center justify-content-center" style="min-height: calc(100vh - 60px);">
+    <div class="container py-5">
+        <div class="row justify-content-center align-items-center">
+            <div class="col col-xl-9">
+                <div class="card shadow border-0" style="border-radius: 1rem; overflow: hidden;">
+                    <div class="row g-0">
 
-        <div class="text-center mb-4">
-            <img src="{{ url_for('static', filename='logo-transparent.png') }}" class="auth-logo mb-3" alt="Dogboxx logo" style="max-width: 240px; height: auto;">
+                        <!-- Left: Luna photo -->
+                        <div class="col-md-5 d-none d-md-block">
+                            <img src="{{ url_for('static', filename='luna_cropped.png') }}"
+                                 alt="Luna the dog"
+                                 class="img-fluid h-100 w-100"
+                                 style="object-fit: cover; border-radius: 1rem 0 0 1rem;">
+                        </div>
 
-            <p class="text-muted small mt-1">Sign in to your account</p>
+                        <!-- Right: form -->
+                        <div class="col-md-7 d-flex align-items-center">
+                            <div class="card-body p-4 p-lg-5 text-start">
+
+                                <!-- Logo -->
+                                <div class="mb-4">
+                                    <img src="{{ url_for('static', filename='logo-transparent.png') }}"
+                                         alt="Dogboxx"
+                                         style="max-width: 180px; height: auto;">
+                                </div>
+
+                                <h5 class="fw-normal mb-4" style="letter-spacing: 1px;">Sign in to your account</h5>
+
+                                <form method="post" novalidate>
+                                    {{ form.hidden_tag() }}
+
+                                    <div class="mb-3">
+                                        <div class="input-group">
+                                            <span class="input-group-text">
+                                                <i class="bi bi-envelope-at-fill text-secondary"></i>
+                                            </span>
+                                            {{ form.email(autocomplete="email", class="form-control form-control-lg", placeholder="Email address") }}
+                                        </div>
+                                        {% for error in form.email.errors %}
+                                        <div class="text-danger small mt-1">{{ error }}</div>
+                                        {% endfor %}
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <div class="input-group">
+                                            <span class="input-group-text">
+                                                <i class="bi bi-key-fill text-secondary"></i>
+                                            </span>
+                                            {{ form.password(autocomplete="current-password", class="form-control form-control-lg", placeholder="Password") }}
+                                        </div>
+                                        {% for error in form.password.errors %}
+                                        <div class="text-danger small mt-1">{{ error }}</div>
+                                        {% endfor %}
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <div class="form-check">
+                                            {{ form.remember_me(class="form-check-input") }}
+                                            <label class="form-check-label" for="remember_me">Remember me</label>
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-4">
+                                        {{ form.submit(class="btn btn-primary btn-lg fw-semibold w-100") }}
+                                    </div>
+
+                                    <a class="small text-muted" href="#">Forgot password?</a>
+
+                                </form>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
         </div>
-
-        <form method="post" novalidate>
-            {{ form.hidden_tag() }}
-
-            <div class="mb-3">
-                <div class="input-group">
-                    <span class="input-group-text">
-                        <i class="bi bi-envelope-at-fill text-secondary"></i>
-                    </span>
-                    {{ form.email(autocomplete="email", class="form-control", placeholder="Email") }}
-                </div>
-                {% for error in form.email.errors %}
-                <div class="text-danger small mt-1">{{ error }}</div>
-                {% endfor %}
-            </div>
-
-            <div class="mb-3">
-                <div class="input-group">
-                    <span class="input-group-text">
-                        <i class="bi bi-key-fill text-secondary"></i>
-                    </span>
-                    {{ form.password(autocomplete="current-password", class="form-control", placeholder="Password") }}
-                </div>
-                {% for error in form.password.errors %}
-                <div class="text-danger small mt-1">{{ error }}</div>
-                {% endfor %}
-            </div>
-
-            <div class="mb-3">
-                <div class="form-check">
-                    {{ form.remember_me(class="form-check-input") }}
-                    <label class="form-check-label" for="remember_me">Remember Me</label>
-                </div>
-            </div>
-
-            <div class="d-grid">
-                {{ form.submit(class="btn btn-primary fw-semibold") }}
-            </div>
-
-        </form>
     </div>
 </div>
 {% endblock %}

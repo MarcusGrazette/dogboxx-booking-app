@@ -100,7 +100,7 @@
     {% endif %}
     {% endwith %}
 
-    <main class="container py-3 text-center">
+    <main class="{% block main_class %}container py-3 text-center{% endblock %}">
         {% block main %}{% endblock %}
     </main>
 
