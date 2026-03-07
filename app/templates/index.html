@@ -88,11 +88,11 @@
                             <div class="d-flex align-items-center gap-3">
                                 <!-- Status pill -->
                                 {% if booking.status == 'confirmed' %}
-                                <span class="badge rounded-pill text-bg-success px-3 py-2">Confirmed</span>
+                                <span class="badge rounded-pill text-bg-success py-2 text-center" style="min-width:90px;">Confirmed</span>
                                 {% elif booking.status == 'requested' %}
-                                <span class="badge rounded-pill px-3 py-2" style="background-color: #fff3cd; color: #856404;">Pending</span>
+                                <span class="badge rounded-pill py-2 text-center" style="min-width:90px; background-color:#fff3cd; color:#856404;">Pending</span>
                                 {% elif booking.status == 'waitlisted' %}
-                                <span class="badge rounded-pill text-bg-info px-3 py-2">Waitlisted</span>
+                                <span class="badge rounded-pill text-bg-info py-2 text-center" style="min-width:90px;">Waitlisted</span>
                                 {% endif %}
                                 <!-- Date + slot -->
                                 <div>
