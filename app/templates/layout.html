@@ -31,12 +31,12 @@
 
 <body>
 
-    {% block navbar %}<nav class="navbar navbar-dark" style="height:64px; position:sticky; top:0; z-index:1030;">
+    {% block navbar %}<nav class="navbar navbar-dark" style="height:77px; position:sticky; top:0; z-index:1030;">
         <div class="container-fluid px-3 d-flex align-items-center">
 
             <!-- Logo: me-auto pushes everything else right -->
             <a class="navbar-brand lh-1 py-0 me-auto" href="{{ url_for('client.index') }}">
-                <img src="{{ url_for('static', filename='logo-white-on-black.png') }}" alt="Dogboxx" height="40">
+                <img src="{{ url_for('static', filename='logo-white-on-black.png') }}" alt="Dogboxx" height="48">
             </a>
 
             {% if current_user.is_authenticated %}
@@ -60,9 +60,9 @@
                 <div class="dropdown ms-2">
                     <a href="#" class="nav-link lh-1 p-0 d-flex align-items-center justify-content-center"
                        data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu"
-                       style="width:40px; height:40px; outline:none;">
+                       style="width:48px; height:48px; outline:none;">
                         <div class="rounded-circle fw-bold d-flex align-items-center justify-content-center"
-                             style="width:40px; height:40px; background:#E02FAC; font-size:0.9rem; color:#fff; pointer-events:none;">
+                             style="width:48px; height:48px; background:#E02FAC; font-size:1rem; color:#fff; pointer-events:none;">
                             {{ current_user.firstname[0] | upper }}{{ current_user.lastname[0] | upper if current_user.lastname else '' }}
                         </div>
                     </a>
