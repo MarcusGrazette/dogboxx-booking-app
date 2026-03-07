@@ -398,10 +398,23 @@ def cancel_booking():
         if booking.user_id != current_user.id and not current_user.is_admin:
             return jsonify(success=False, message="You are not authorized to cancel this booking"), 403
             
+        is_admin_cancel = current_user.is_admin and booking.user_id != current_user.id
         booking.status = "cancelled"
         booking.walker_id = None  # Unassign walker
         db.session.commit()
-        
+
+        # 22c: notify the client when an admin cancels their booking
+        if is_admin_cancel:
+            date_str_fmt = booking.date.strftime('%a %-d %b')
+            create_notification(
+                recipient_id=booking.user_id,
+                notification_type='booking_cancelled',
+                title=f'Your walk on {date_str_fmt} has been cancelled',
+                body=f'Slot: {booking.slot}',
+                link=f'/bookings/{booking.id}',
+                sender_id=current_user.id,
+            )
+
         return jsonify(success=True, message="Booking successfully cancelled")
         
     except Exception as e:
