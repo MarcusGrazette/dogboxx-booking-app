@@ -9,7 +9,7 @@ from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError
-from app.models import User, Booking, Walker, Dog, Client, WalkerSchedule, DogOwner, WalkerUnavailability, ServiceType
+from app.models import User, Booking, Walker, Dog, Client, WalkerSchedule, DogOwner, WalkerUnavailability, ServiceType, Notification
 from app import db
 from app.capacity import get_max_per_walker, get_walker_slot_count
 from app.utils.db_error_handler import handle_db_errors
@@ -489,6 +489,22 @@ def clients():
     )
     
     return render_template("admin_clients.html", clients=clients)
+
+
+@admin_bp.route("/clients/<int:client_id>")
+@login_required
+@admin_required
+def client_detail(client_id):
+    """Show client detail with notification audit trail (admin only)"""
+    user = User.query.filter(User.role == 'client', User.id == client_id).first_or_404()
+    notifications = (
+        Notification.query
+        .filter_by(recipient_id=user.id)
+        .order_by(Notification.created_at.desc())
+        .limit(20)
+        .all()
+    )
+    return render_template("admin_client_detail.html", client=user, notifications=notifications)
 
 
 @admin_bp.route("/clients/new", methods=["GET", "POST"])
