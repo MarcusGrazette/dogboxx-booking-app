@@ -333,6 +333,16 @@ def assign_walker():
             sender_id=current_user.id,
         )
 
+        # 22d: notify walker they've been assigned to a booking
+        create_notification(
+            recipient_id=walker.user_id,
+            notification_type='walker_assigned',
+            title=f'You have been assigned a walk on {date_str_fmt}',
+            body=f'Slot: {booking.slot}',
+            link=f'/walker/pickups?date={booking.date.isoformat()}',
+            sender_id=current_user.id,
+        )
+
         # Update pickup order for all bookings in this walker's slot
         pickup_order = data.get("pickup_order")  # list of booking IDs in order
         if pickup_order and isinstance(pickup_order, list):
