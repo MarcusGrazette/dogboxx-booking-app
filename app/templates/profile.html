@@ -38,26 +38,48 @@
         border-color: #E02FAC;
     }
 
-    /* Dog photo */
+    /* Profile photos — shared size for visual consistency */
+    .profile-avatar,
     .dog-photo-wrap {
-        width: 72px;
-        height: 72px;
+        width: 64px;
+        height: 64px;
         flex-shrink: 0;
+    }
+    .dog-photo-wrap {
+        position: relative;
+        cursor: pointer;
     }
     .dog-photo-wrap img,
     .dog-photo-placeholder {
-        width: 72px;
-        height: 72px;
+        width: 64px;
+        height: 64px;
         border-radius: 50%;
         object-fit: cover;
         border: 3px solid var(--db-primary-subtle);
+        display: block;
     }
     .dog-photo-placeholder {
         display: flex;
         align-items: center;
         justify-content: center;
         background: var(--db-primary-subtle);
-        font-size: 1.8rem;
+        font-size: 1.6rem;
+    }
+    .dog-photo-edit-overlay {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.45);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 1rem;
+        opacity: 0;
+        transition: opacity 0.18s ease;
+    }
+    .dog-photo-wrap:hover .dog-photo-edit-overlay {
+        opacity: 1;
     }
 
     /* Read-only detail rows */
@@ -139,12 +161,12 @@
 
                     {# Avatar + name + email #}
                     <div class="d-flex align-items-center gap-3 mb-4">
-                        <div class="rounded-circle fw-bold d-flex align-items-center justify-content-center flex-shrink-0"
-                             style="width:52px; height:52px; background:#E02FAC; font-size:1.1rem; color:#fff;">
+                        <div class="profile-avatar rounded-circle fw-bold d-flex align-items-center justify-content-center"
+                             style="background:#E02FAC; font-size:1.1rem; color:#fff;">
                             {{ current_user.firstname[0] | upper }}{{ current_user.lastname[0] | upper if current_user.lastname else '' }}
                         </div>
                         <div>
-                            <div class="fw-bold">{{ current_user.firstname }} {{ current_user.lastname }}</div>
+                            <div class="fw-bold lh-sm">{{ current_user.firstname }} {{ current_user.lastname }}</div>
                             <div class="text-muted small">{{ current_user.email }}</div>
                         </div>
                     </div>
@@ -169,7 +191,7 @@
 
                     <p class="text-muted mt-3 mb-0" style="font-size:0.75rem;">
                         <i class="bi bi-info-circle me-1"></i>
-                        To update your name or address, please contact Dogboxx.
+                        Contact Dogboxx to update these details.
                     </p>
 
                 </div>
@@ -179,18 +201,21 @@
             <div class="card shadow-sm profile-card mb-4">
                 <div class="card-body p-4">
 
-                    {# Photo + name + breed/gender #}
+                    {# Photo (hover to edit) + name + breed/gender #}
                     <div class="d-flex align-items-center gap-3 mb-3">
-                        <div class="dog-photo-wrap">
+                        <div class="dog-photo-wrap" id="dog-photo-clickable" title="Update photo">
                             {% if dog and dog.pic %}
                             <img src="{{ url_for('static', filename='uploads/dogs/' + dog.pic) }}"
-                                 alt="{{ dog.name }}">
+                                 alt="{{ dog.name }}" id="dog-photo-preview">
                             {% else %}
-                            <div class="dog-photo-placeholder">🐾</div>
+                            <div class="dog-photo-placeholder" id="dog-photo-preview">🐾</div>
                             {% endif %}
+                            <div class="dog-photo-edit-overlay">
+                                <i class="bi bi-pencil-fill"></i>
+                            </div>
                         </div>
                         <div>
-                            <div class="fw-bold">{% if dog %}{{ dog.name }}{% else %}Your Dog{% endif %}</div>
+                            <div class="fw-bold lh-sm">{% if dog %}{{ dog.name }}{% else %}Your Dog{% endif %}</div>
                             {% if dog %}
                             <div class="text-muted small">
                                 {{ dog.gender | capitalize if dog.gender }}{% if dog.breed %} · {{ dog.breed }}{% endif %}
@@ -210,15 +235,15 @@
                     </div>
                     {% endif %}
 
-                    {# Photo upload #}
-                    <div class="mb-3">
+                    {# Hidden FilePond — triggered by clicking the photo #}
+                    <div style="display:none;">
                         <input type="file" class="filepond" name="file"
                                accept="image/png, image/jpeg, image/gif" />
                     </div>
 
                     <p class="text-muted mb-0" style="font-size:0.75rem;">
                         <i class="bi bi-info-circle me-1"></i>
-                        To update your dog's details, please contact Dogboxx.
+                        Contact Dogboxx to update these details.
                     </p>
 
                 </div>
@@ -281,7 +306,7 @@
                         Let us know anything we need to know to collect {{ dog.name if dog else 'your dog' }} — gate codes, doorbells, parking notes, etc.
                     </p>
                     {{ form.pickup_instructions(class="form-control", rows=5,
-                       placeholder="e.g. Side gate, code 1234. Ring bell — dog will bark but that's fine. Key under mat if no answer.") }}
+                       placeholder="e.g. Our buzzer is labelled A, you can park the bike in our courtyard.") }}
                     <div class="d-grid mt-3 save-btn-desktop">
                         {{ form.submit(class="btn btn-primary fw-semibold") }}
                     </div>
@@ -387,15 +412,36 @@
         {% endif %}
     }
 
-    // FilePond
+    // FilePond — hidden, triggered by hovering/clicking the dog photo
     FilePond.registerPlugin(FilePondPluginImagePreview, FilePondPluginFileValidateType);
-    FilePond.create(document.querySelector('.filepond'), {
+    const pond = FilePond.create(document.querySelector('.filepond'), {
         allowMultiple: false,
         acceptedFileTypes: ['image/png', 'image/jpeg', 'image/gif'],
-        styleItemPanelAspectRatio: 1,
         storeAsFile: true,
         credits: false,
-        labelIdle: '<i class="bi bi-camera"></i> Update photo',
+        onaddfile: (error, fileItem) => {
+            if (error) return;
+            // Live-preview the chosen image in the photo circle
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const wrap = document.getElementById('dog-photo-clickable');
+                // Replace whatever's in the wrap (img or placeholder div) with a fresh <img>
+                const existing = document.getElementById('dog-photo-preview');
+                if (existing) existing.remove();
+                const img = document.createElement('img');
+                img.src = e.target.result;
+                img.id = 'dog-photo-preview';
+                img.alt = 'Dog photo preview';
+                img.style.cssText = 'width:64px;height:64px;border-radius:50%;object-fit:cover;border:3px solid var(--db-primary-subtle);display:block;';
+                wrap.insertBefore(img, wrap.querySelector('.dog-photo-edit-overlay'));
+            };
+            reader.readAsDataURL(fileItem.file);
+        },
+    });
+
+    // Click the photo circle → open FilePond's file picker
+    document.getElementById('dog-photo-clickable').addEventListener('click', () => {
+        pond.browse();
     });
 </script>
 {% endblock %}
