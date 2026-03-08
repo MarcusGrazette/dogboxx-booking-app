@@ -182,6 +182,44 @@ def profile():
     dog_owner = DogOwner.query.filter_by(user_id=current_user.id, role='primary').first()
     dog = Dog.query.get(dog_owner.dog_id) if dog_owner else None
 
+    # Booking stats for the profile sidebar
+    from datetime import date
+    today_date = date.today()
+    month_start = date(today_date.year, today_date.month, 1)
+    if today_date.month == 12:
+        month_end = date(today_date.year + 1, 1, 1)
+    else:
+        month_end = date(today_date.year, today_date.month + 1, 1)
+
+    month_bookings = Booking.query.filter(
+        Booking.user_id == current_user.id,
+        Booking.date >= month_start,
+        Booking.date < month_end,
+        Booking.status.notin_(['cancelled', 'rejected'])
+    ).all()
+    confirmed_this_month = sum(1 for b in month_bookings if b.status in ('confirmed', 'completed'))
+    pending_this_month = sum(1 for b in month_bookings if b.status in ('requested', 'waitlisted'))
+
+    next_booking = Booking.query.filter(
+        Booking.user_id == current_user.id,
+        Booking.date >= today_date,
+        Booking.status == 'confirmed'
+    ).order_by(Booking.date).first()
+
+    total_completed = Booking.query.filter(
+        Booking.user_id == current_user.id,
+        Booking.status == 'completed'
+    ).count()
+
+    booking_stats = {
+        'confirmed_this_month': confirmed_this_month,
+        'pending_this_month': pending_this_month,
+        'total_this_month': len(month_bookings),
+        'next_booking': next_booking,
+        'total_completed': total_completed,
+        'month_name': today_date.strftime('%B'),
+    }
+
     form = ProfileForm()
 
     if form.validate_on_submit():
@@ -224,11 +262,11 @@ def profile():
                             dog.pic = pic_filename
                     except ValueError as e:
                         flash(f"Upload error: {str(e)}", "error")
-                        return render_template("profile.html", form=form, dog=dog, client=client, today=datetime.now().strftime('%Y-%m-%d'))
+                        return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, today=datetime.now().strftime('%Y-%m-%d'))
                     except Exception as e:
                         logging.error(f"Error processing uploaded file: {e}")
                         flash("Error processing your image. Please try a different file.", "error")
-                        return render_template("profile.html", form=form, dog=dog, client=client, today=datetime.now().strftime('%Y-%m-%d'))
+                        return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, today=datetime.now().strftime('%Y-%m-%d'))
 
             db.session.commit()
             flash("Profile updated successfully!", "success")
@@ -266,7 +304,7 @@ def profile():
             form.dog_dob.data = dog.date_of_birth
             form.dog_allergies.data = dog.allergies
 
-    return render_template("profile.html", form=form, dog=dog, client=client, today=datetime.now().strftime('%Y-%m-%d'))
+    return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, today=datetime.now().strftime('%Y-%m-%d'))
 
 
 @client_bp.route("/onboard", methods=["GET", "POST"])

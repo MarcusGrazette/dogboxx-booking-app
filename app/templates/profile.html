@@ -78,7 +78,25 @@
         margin-top: 2px;
     }
 
-    /* Equal-height cards */
+    /* Stat blocks */
+    .stat-block {
+        text-align: center;
+        padding: 0.75rem 0.5rem;
+    }
+    .stat-block .stat-num {
+        font-size: 1.8rem;
+        font-weight: 700;
+        line-height: 1;
+        color: #E02FAC;
+    }
+    .stat-block .stat-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #999;
+        margin-top: 0.2rem;
+    }
+
     .profile-card {
         border-radius: 1rem;
         border: 0;
@@ -91,7 +109,7 @@
 <form method="post" enctype="multipart/form-data" novalidate>
     {{ form.hidden_tag() }}
 
-    {# ── Hidden fields: read-only data that must still round-trip for validation ── #}
+    {# ── Hidden fields: read-only data that must still round-trip for form validation ── #}
     {{ form.firstname(type="hidden") }}
     {{ form.lastname(type="hidden") }}
     {{ form.address_line_1(type="hidden") }}
@@ -99,187 +117,232 @@
     {{ form.address_line_3(type="hidden") }}
     {{ form.postcode(type="hidden") }}
     {{ form.dog_name(type="hidden") }}
-    {{ form.dog_gender(type="hidden") }}
+    {# dog_gender is a SelectField — type="hidden" doesn't work on <select>, use raw input #}
+    <input type="hidden" name="dog_gender" value="{{ form.dog_gender.data or '' }}">
     {{ form.dog_breed(type="hidden") }}
     {{ form.dog_dob(type="hidden") }}
+    {# dog_allergies hidden so existing data isn't wiped — admin manages this field #}
+    <input type="hidden" name="dog_allergies" value="{{ form.dog_allergies.data or '' }}">
 
     <div class="row justify-content-center">
-    <div class="col-12 col-lg-10">
+    <div class="col-12 col-xl-11">
+    <div class="row g-4 align-items-start">
 
-        {# ══════════════════════════════════════════════
-           ROW 1 — Client card + Dog card (side by side)
-           ══════════════════════════════════════════════ #}
-        <div class="row g-4 mb-4 align-items-stretch">
+        {# ══════════════════════════════════
+           LEFT COLUMN — info cards
+           ══════════════════════════════════ #}
+        <div class="col-12 col-md-5">
 
             {# ─── CLIENT CARD ─── #}
-            <div class="col-12 col-md-6 d-flex">
-                <div class="card shadow-sm profile-card w-100">
-                    <div class="card-body p-4 d-flex flex-column">
+            <div class="card shadow-sm profile-card mb-4">
+                <div class="card-body p-4">
 
-                        {# Avatar + name + email #}
-                        <div class="d-flex align-items-center gap-3 mb-4">
-                            <div class="rounded-circle fw-bold d-flex align-items-center justify-content-center flex-shrink-0"
-                                 style="width:56px; height:56px; background:#E02FAC; font-size:1.2rem; color:#fff;">
-                                {{ current_user.firstname[0] | upper }}{{ current_user.lastname[0] | upper if current_user.lastname else '' }}
-                            </div>
-                            <div>
-                                <div class="fw-bold fs-6">{{ current_user.firstname }} {{ current_user.lastname }}</div>
-                                <div class="text-muted small">{{ current_user.email }}</div>
-                            </div>
+                    {# Avatar + name + email #}
+                    <div class="d-flex align-items-center gap-3 mb-4">
+                        <div class="rounded-circle fw-bold d-flex align-items-center justify-content-center flex-shrink-0"
+                             style="width:52px; height:52px; background:#E02FAC; font-size:1.1rem; color:#fff;">
+                            {{ current_user.firstname[0] | upper }}{{ current_user.lastname[0] | upper if current_user.lastname else '' }}
                         </div>
-
-                        {# Address #}
-                        {% if client and client.street_address %}
-                        {% set addr_lines = client.street_address.split('\n') %}
-                        <div class="detail-row">
-                            <i class="bi bi-house-door detail-icon"></i>
-                            <div>
-                                {% for line in addr_lines %}
-                                    {% if line.strip() %}<div>{{ line.strip() }}</div>{% endif %}
-                                {% endfor %}
-                                {% if client.postal_code %}
-                                <div class="fw-semibold">{{ client.postal_code | upper }}</div>
-                                {% endif %}
-                            </div>
+                        <div>
+                            <div class="fw-bold">{{ current_user.firstname }} {{ current_user.lastname }}</div>
+                            <div class="text-muted small">{{ current_user.email }}</div>
                         </div>
-                        {% else %}
-                        <div class="text-muted small fst-italic mb-3">No address on file</div>
-                        {% endif %}
-
-                        {# Contact note #}
-                        <p class="text-muted mt-3 mb-4" style="font-size:0.75rem;">
-                            <i class="bi bi-info-circle me-1"></i>
-                            To update your name or address, please contact Dogboxx.
-                        </p>
-
-                        {# Editable: pickup instructions #}
-                        <div class="mt-auto">
-                            <label class="form-label small fw-semibold">
-                                <i class="bi bi-signpost-2 me-1 text-muted"></i> Pickup instructions
-                            </label>
-                            {{ form.pickup_instructions(class="form-control", rows=4,
-                               placeholder="e.g. Gate code, ring bell, leave with neighbour…") }}
-                        </div>
-
                     </div>
+
+                    {# Address #}
+                    {% if client and client.street_address %}
+                    {% set addr_lines = client.street_address.split('\n') %}
+                    <div class="detail-row">
+                        <i class="bi bi-house-door detail-icon"></i>
+                        <div>
+                            {% for line in addr_lines %}
+                                {% if line.strip() %}<div>{{ line.strip() }}</div>{% endif %}
+                            {% endfor %}
+                            {% if client.postal_code %}
+                            <div class="fw-semibold">{{ client.postal_code | upper }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="text-muted small fst-italic">No address on file</div>
+                    {% endif %}
+
+                    <p class="text-muted mt-3 mb-0" style="font-size:0.75rem;">
+                        <i class="bi bi-info-circle me-1"></i>
+                        To update your name or address, please contact Dogboxx.
+                    </p>
+
                 </div>
             </div>
 
             {# ─── DOG CARD ─── #}
-            <div class="col-12 col-md-6 d-flex">
-                <div class="card shadow-sm profile-card w-100">
-                    <div class="card-body p-4 d-flex flex-column">
+            <div class="card shadow-sm profile-card mb-4">
+                <div class="card-body p-4">
 
-                        {# Dog photo + name #}
-                        <div class="d-flex align-items-center gap-3 mb-4">
-                            <div class="dog-photo-wrap">
-                                {% if dog and dog.pic %}
-                                <img src="{{ url_for('static', filename='uploads/dogs/' + dog.pic) }}"
-                                     alt="{{ dog.name }}">
-                                {% else %}
-                                <div class="dog-photo-placeholder">🐾</div>
-                                {% endif %}
+                    {# Photo + name + breed/gender #}
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="dog-photo-wrap">
+                            {% if dog and dog.pic %}
+                            <img src="{{ url_for('static', filename='uploads/dogs/' + dog.pic) }}"
+                                 alt="{{ dog.name }}">
+                            {% else %}
+                            <div class="dog-photo-placeholder">🐾</div>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <div class="fw-bold">{% if dog %}{{ dog.name }}{% else %}Your Dog{% endif %}</div>
+                            {% if dog %}
+                            <div class="text-muted small">
+                                {{ dog.gender | capitalize if dog.gender }}{% if dog.breed %} · {{ dog.breed }}{% endif %}
                             </div>
-                            <div>
-                                <div class="fw-bold fs-6">{% if dog %}{{ dog.name }}{% else %}Your Dog{% endif %}</div>
-                                {% if dog %}
-                                <div class="text-muted small">
-                                    {{ dog.gender | capitalize if dog.gender }}{% if dog.breed %} · {{ dog.breed }}{% endif %}
-                                </div>
-                                {% endif %}
-                            </div>
+                            {% endif %}
                         </div>
-
-                        {# DOB + age #}
-                        {% if dog and dog.date_of_birth %}
-                        <div class="detail-row mb-1">
-                            <i class="bi bi-calendar3 detail-icon"></i>
-                            <div>
-                                <div>{{ dog.date_of_birth.strftime('%d %b %Y') }}</div>
-                                <div class="text-muted" style="font-size:0.75rem;" id="dog-age-display"></div>
-                            </div>
-                        </div>
-                        {% endif %}
-
-                        {# Photo upload #}
-                        <div class="mt-3 mb-3">
-                            <label class="form-label small fw-semibold">
-                                <i class="bi bi-camera me-1 text-muted"></i> Update photo
-                            </label>
-                            <input type="file" class="filepond" name="file"
-                                   accept="image/png, image/jpeg, image/gif" />
-                        </div>
-
-                        {# Contact note #}
-                        <p class="text-muted mb-4" style="font-size:0.75rem;">
-                            <i class="bi bi-info-circle me-1"></i>
-                            To update your dog's name, breed or date of birth, please contact Dogboxx.
-                        </p>
-
-                        {# Editable: allergies / notes #}
-                        <div class="mt-auto">
-                            <label class="form-label small fw-semibold">
-                                <i class="bi bi-bandaid me-1 text-muted"></i> Allergies / health notes
-                            </label>
-                            {{ form.dog_allergies(class="form-control", rows=4,
-                               placeholder="Any allergies or health notes") }}
-                        </div>
-
                     </div>
+
+                    {# DOB + age #}
+                    {% if dog and dog.date_of_birth %}
+                    <div class="detail-row mb-3">
+                        <i class="bi bi-calendar3 detail-icon"></i>
+                        <div>
+                            <div>{{ dog.date_of_birth.strftime('%d %b %Y') }}</div>
+                            <div class="text-muted" style="font-size:0.75rem;" id="dog-age-display"></div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {# Photo upload #}
+                    <div class="mb-3">
+                        <input type="file" class="filepond" name="file"
+                               accept="image/png, image/jpeg, image/gif" />
+                    </div>
+
+                    <p class="text-muted mb-0" style="font-size:0.75rem;">
+                        <i class="bi bi-info-circle me-1"></i>
+                        To update your dog's details, please contact Dogboxx.
+                    </p>
+
                 </div>
             </div>
 
-        </div>{# /row #}
+            {# ─── NOTIFICATIONS CARD ─── #}
+            <div class="card shadow-sm profile-card">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold text-uppercase text-muted small mb-3">
+                        <i class="bi bi-bell-fill me-1" style="color:var(--bs-primary);"></i> Notifications
+                    </h6>
 
-        {# ══════════════════════════════════════════════
-           ROW 2 — Notifications (full width)
-           ══════════════════════════════════════════════ #}
-        <div class="card shadow-sm profile-card mb-4">
-            <div class="card-body p-4">
-                <h6 class="fw-bold text-uppercase text-muted small mb-3">
-                    <i class="bi bi-bell-fill me-1" style="color:var(--bs-primary);"></i> Notifications
-                </h6>
+                    <div class="d-flex align-items-center justify-content-between py-2 border-bottom">
+                        <div>
+                            <div class="fw-semibold small"><i class="bi bi-envelope me-1 text-muted"></i> Email</div>
+                            <div class="text-muted" style="font-size:0.75rem;">{{ current_user.email }}</div>
+                        </div>
+                        <div class="form-check form-switch mb-0">
+                            {{ form.notify_email(class="form-check-input", role="switch") }}
+                        </div>
+                    </div>
 
-                <div class="d-flex align-items-center justify-content-between py-2 border-bottom">
-                    <div>
-                        <div class="fw-semibold small"><i class="bi bi-envelope me-1 text-muted"></i> Email</div>
-                        <div class="text-muted" style="font-size:0.75rem;">{{ current_user.email }}</div>
+                    <div class="d-flex align-items-center justify-content-between py-2">
+                        <div>
+                            <div class="fw-semibold small"><i class="bi bi-whatsapp me-1 text-muted"></i> WhatsApp</div>
+                            <div class="text-muted" style="font-size:0.75rem;">Get booking updates via WhatsApp</div>
+                        </div>
+                        <div class="form-check form-switch mb-0">
+                            {{ form.notify_whatsapp(class="form-check-input", role="switch", id="notify_whatsapp") }}
+                        </div>
                     </div>
-                    <div class="form-check form-switch mb-0">
-                        {{ form.notify_email(class="form-check-input", role="switch") }}
+
+                    <div id="phone-field" class="mt-2" style="{% if not form.notify_whatsapp.data %}display:none;{% endif %}">
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-phone text-secondary"></i></span>
+                            {{ form.phone(class="form-control", placeholder="e.g. +44 7700 900000") }}
+                        </div>
+                        {% for error in form.phone.errors %}
+                        <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
                     </div>
+
                 </div>
-
-                <div class="d-flex align-items-center justify-content-between py-2">
-                    <div>
-                        <div class="fw-semibold small"><i class="bi bi-whatsapp me-1 text-muted"></i> WhatsApp</div>
-                        <div class="text-muted" style="font-size:0.75rem;">Get booking updates via WhatsApp</div>
-                    </div>
-                    <div class="form-check form-switch mb-0">
-                        {{ form.notify_whatsapp(class="form-check-input", role="switch", id="notify_whatsapp") }}
-                    </div>
-                </div>
-
-                <div id="phone-field" class="mt-2" style="{% if not form.notify_whatsapp.data %}display:none;{% endif %}">
-                    <div class="input-group" style="max-width:300px;">
-                        <span class="input-group-text"><i class="bi bi-phone text-secondary"></i></span>
-                        {{ form.phone(class="form-control", placeholder="e.g. +44 7700 900000") }}
-                    </div>
-                    {% for error in form.phone.errors %}
-                    <div class="text-danger small mt-1">{{ error }}</div>
-                    {% endfor %}
-                </div>
-
             </div>
-        </div>
 
-        {# Save (desktop) #}
-        <div class="d-grid mb-4 save-btn-desktop">
-            {{ form.submit(class="btn btn-primary btn-lg fw-semibold") }}
-        </div>
+        </div>{# /left col #}
+
+        {# ══════════════════════════════════
+           RIGHT COLUMN — editable + stats
+           ══════════════════════════════════ #}
+        <div class="col-12 col-md-7">
+
+            {# ─── PICKUP INSTRUCTIONS ─── #}
+            <div class="card shadow-sm profile-card mb-4">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold text-uppercase text-muted small mb-1">
+                        <i class="bi bi-signpost-2 me-1" style="color:var(--bs-primary);"></i> Pickup Instructions
+                    </h6>
+                    <p class="text-muted mb-3" style="font-size:0.8rem;">
+                        Let us know anything we need to know to collect {{ dog.name if dog else 'your dog' }} — gate codes, doorbells, parking notes, etc.
+                    </p>
+                    {{ form.pickup_instructions(class="form-control", rows=5,
+                       placeholder="e.g. Side gate, code 1234. Ring bell — dog will bark but that's fine. Key under mat if no answer.") }}
+                </div>
+            </div>
+
+            {# ─── BOOKING STATS ─── #}
+            <div class="card shadow-sm profile-card mb-4">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold text-uppercase text-muted small mb-3">
+                        <i class="bi bi-bar-chart-fill me-1" style="color:var(--bs-primary);"></i> {{ booking_stats.month_name }} at a glance
+                    </h6>
+
+                    <div class="row g-0 text-center mb-3">
+                        <div class="col border-end">
+                            <div class="stat-block">
+                                <div class="stat-num">{{ booking_stats.confirmed_this_month }}</div>
+                                <div class="stat-label">Confirmed</div>
+                            </div>
+                        </div>
+                        <div class="col border-end">
+                            <div class="stat-block">
+                                <div class="stat-num">{{ booking_stats.pending_this_month }}</div>
+                                <div class="stat-label">Pending</div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="stat-block">
+                                <div class="stat-num">{{ booking_stats.total_completed }}</div>
+                                <div class="stat-label">All-time walks</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if booking_stats.next_booking %}
+                    <div class="d-flex align-items-center gap-2 p-3 rounded-3"
+                         style="background:#fdf0fa; border: 1px solid #f5c8ed;">
+                        <i class="bi bi-calendar-check text-primary fs-5"></i>
+                        <div>
+                            <div class="fw-semibold small">Next confirmed walk</div>
+                            <div class="text-muted small">
+                                {{ booking_stats.next_booking.date.strftime('%A, %d %B') }}
+                                · {{ booking_stats.next_booking.slot }}
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="text-muted small fst-italic text-center pt-1">No upcoming confirmed walks</div>
+                    {% endif %}
+
+                </div>
+            </div>
+
+            {# Save button (desktop) #}
+            <div class="d-grid save-btn-desktop">
+                {{ form.submit(class="btn btn-primary btn-lg fw-semibold") }}
+            </div>
+
+        </div>{# /right col #}
 
     </div>
     </div>
+    </div>
+
 </form>
 </div>
 
@@ -334,7 +397,7 @@
         styleItemPanelAspectRatio: 1,
         storeAsFile: true,
         credits: false,
-        labelIdle: '<i class="bi bi-camera"></i> Choose photo',
+        labelIdle: '<i class="bi bi-camera"></i> Update photo',
     });
 </script>
 {% endblock %}
