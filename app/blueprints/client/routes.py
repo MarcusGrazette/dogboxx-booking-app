@@ -224,11 +224,11 @@ def profile():
                             dog.pic = pic_filename
                     except ValueError as e:
                         flash(f"Upload error: {str(e)}", "error")
-                        return render_template("profile.html", form=form, dog=dog, today=datetime.now().strftime('%Y-%m-%d'))
+                        return render_template("profile.html", form=form, dog=dog, client=client, today=datetime.now().strftime('%Y-%m-%d'))
                     except Exception as e:
                         logging.error(f"Error processing uploaded file: {e}")
                         flash("Error processing your image. Please try a different file.", "error")
-                        return render_template("profile.html", form=form, dog=dog, today=datetime.now().strftime('%Y-%m-%d'))
+                        return render_template("profile.html", form=form, dog=dog, client=client, today=datetime.now().strftime('%Y-%m-%d'))
 
             db.session.commit()
             flash("Profile updated successfully!", "success")
@@ -266,7 +266,7 @@ def profile():
             form.dog_dob.data = dog.date_of_birth
             form.dog_allergies.data = dog.allergies
 
-    return render_template("profile.html", form=form, dog=dog, today=datetime.now().strftime('%Y-%m-%d'))
+    return render_template("profile.html", form=form, dog=dog, client=client, today=datetime.now().strftime('%Y-%m-%d'))
 
 
 @client_bp.route("/onboard", methods=["GET", "POST"])
