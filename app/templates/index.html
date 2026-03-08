@@ -94,11 +94,13 @@
 
                     <div class="mb-3">
                         <label class="form-label small fw-semibold">Slot</label>
-                        {{ form.slot(class="form-select", id="booking-slot") }}
+                        <div class="d-flex align-items-center gap-2">
+                            {{ form.slot(class="form-select", id="booking-slot", style="max-width:160px;") }}
+                            <span id="slot-availability" class="small text-nowrap"></span>
+                        </div>
                         {% for error in form.slot.errors %}
                         <div class="text-danger small mt-1">{{ error }}</div>
                         {% endfor %}
-                        <div id="slot-availability" class="small mt-2"></div>
                     </div>
 
                     {# Recurring toggle #}
@@ -327,13 +329,11 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!info) { availHint.textContent = ''; return; }
 
         if (info.total === 0) {
-            availHint.innerHTML = '<span class="text-muted"><i class="bi bi-slash-circle me-1"></i>No walkers scheduled for this slot</span>';
+            availHint.innerHTML = '<span class="text-muted"><i class="bi bi-slash-circle me-1"></i>Unavailable</span>';
         } else if (info.available <= 0) {
-            availHint.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle me-1"></i>Full — you\'ll be added to the waitlist</span>';
-        } else if (info.available <= 2) {
-            availHint.innerHTML = `<span class="text-warning"><i class="bi bi-exclamation-circle me-1"></i>${info.available} spot${info.available === 1 ? '' : 's'} left</span>`;
+            availHint.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle me-1"></i>Waitlist</span>';
         } else {
-            availHint.innerHTML = `<span class="text-success"><i class="bi bi-check-circle me-1"></i>${info.available} spots available</span>`;
+            availHint.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Available</span>';
         }
     }
 
