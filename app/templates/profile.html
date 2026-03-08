@@ -87,22 +87,22 @@
         </div>
 
         <!-- Personal Info -->
-        <div class="card shadow-sm border-0 mb-4" style="border-radius:1rem;">
+        <div class="card shadow-sm border-0 mb-4" style="border-radius:1rem; background:#f8f8f8;">
             <div class="card-body p-4">
                 <h6 class="fw-bold text-uppercase text-muted small mb-3">
                     <i class="bi bi-person-fill me-1" style="color:var(--bs-primary);"></i> Personal Info
                 </h6>
                 <div class="row g-3">
-                    <div class="col-6">
+                    <div class="col-12 col-sm-6">
                         <label class="form-label small fw-semibold">First name</label>
-                        {{ form.firstname(class="form-control", placeholder="First name") }}
+                        {{ form.firstname(class="form-control bg-white", placeholder="First name") }}
                         {% for error in form.firstname.errors %}
                         <div class="text-danger small mt-1">{{ error }}</div>
                         {% endfor %}
                     </div>
-                    <div class="col-6">
+                    <div class="col-12 col-sm-6">
                         <label class="form-label small fw-semibold">Last name</label>
-                        {{ form.lastname(class="form-control", placeholder="Last name") }}
+                        {{ form.lastname(class="form-control bg-white", placeholder="Last name") }}
                         {% for error in form.lastname.errors %}
                         <div class="text-danger small mt-1">{{ error }}</div>
                         {% endfor %}
@@ -112,48 +112,38 @@
         </div>
 
         <!-- Address -->
-        <div class="card shadow-sm border-0 mb-4" style="border-radius:1rem;">
+        <div class="card shadow-sm border-0 mb-4" style="border-radius:1rem; background:#f8f8f8;">
             <div class="card-body p-4">
                 <h6 class="fw-bold text-uppercase text-muted small mb-3">
                     <i class="bi bi-house-door-fill me-1" style="color:var(--bs-primary);"></i> Address
                 </h6>
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold">Address line 1</label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="bi bi-house-door text-secondary"></i></span>
-                        {{ form.address_line_1(class="form-control", placeholder="Street address") }}
+                <div class="row g-3">
+                    <div class="col-12 col-sm-6">
+                        <label class="form-label small fw-semibold">Address line 1</label>
+                        {{ form.address_line_1(class="form-control bg-white", placeholder="Street address") }}
+                        {% for error in form.address_line_1.errors %}
+                        <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
                     </div>
-                    {% for error in form.address_line_1.errors %}
-                    <div class="text-danger small mt-1">{{ error }}</div>
-                    {% endfor %}
-                </div>
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold text-muted">Address line 2 <span class="fw-normal">(optional)</span></label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="bi bi-three-dots text-secondary"></i></span>
-                        {{ form.address_line_2(class="form-control", placeholder="Flat, building, etc.") }}
+                    <div class="col-12 col-sm-6">
+                        <label class="form-label small fw-semibold text-muted">Address line 2 <span class="fw-normal">(optional)</span></label>
+                        {{ form.address_line_2(class="form-control bg-white", placeholder="Flat, building, etc.") }}
                     </div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold text-muted">Address line 3 <span class="fw-normal">(optional)</span></label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="bi bi-three-dots text-secondary"></i></span>
-                        {{ form.address_line_3(class="form-control", placeholder="Town / City") }}
+                    <div class="col-12 col-sm-6">
+                        <label class="form-label small fw-semibold text-muted">Town / City <span class="fw-normal">(optional)</span></label>
+                        {{ form.address_line_3(class="form-control bg-white", placeholder="Town / City") }}
                     </div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold">Postcode</label>
-                    <div class="input-group" style="max-width:180px;">
-                        <span class="input-group-text"><i class="bi bi-mailbox text-secondary"></i></span>
-                        {{ form.postcode(class="form-control text-uppercase") }}
+                    <div class="col-12 col-sm-6">
+                        <label class="form-label small fw-semibold">Postcode</label>
+                        {{ form.postcode(class="form-control bg-white text-uppercase") }}
+                        {% for error in form.postcode.errors %}
+                        <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
                     </div>
-                    {% for error in form.postcode.errors %}
-                    <div class="text-danger small mt-1">{{ error }}</div>
-                    {% endfor %}
-                </div>
-                <div>
-                    <label class="form-label small fw-semibold">Pickup instructions</label>
-                    {{ form.pickup_instructions(class="form-control", rows=2, placeholder="e.g. Gate code, ring bell, leave with neighbour…") }}
+                    <div class="col-12">
+                        <label class="form-label small fw-semibold">Pickup instructions</label>
+                        {{ form.pickup_instructions(class="form-control bg-white", rows=2, placeholder="e.g. Gate code, ring bell, leave with neighbour…") }}
+                    </div>
                 </div>
             </div>
         </div>
@@ -217,59 +207,44 @@
                     </div>
                 </div>
 
-                <div class="row g-3 mb-3">
-                    <div class="col-7">
+                <div class="row g-3">
+                    <div class="col-12 col-sm-7">
                         <label class="form-label small fw-semibold">Name</label>
-                        <div class="input-group">
-                            <span class="input-group-text"><i class="bi bi-tag text-secondary"></i></span>
-                            {{ form.dog_name(class="form-control", placeholder="Dog's name") }}
-                        </div>
+                        {{ form.dog_name(class="form-control", placeholder="Dog's name") }}
                         {% for error in form.dog_name.errors %}
                         <div class="text-danger small mt-1">{{ error }}</div>
                         {% endfor %}
                     </div>
-                    <div class="col-5">
+                    <div class="col-12 col-sm-5">
                         <label class="form-label small fw-semibold">Gender</label>
                         {{ form.dog_gender(class="form-select") }}
                         {% for error in form.dog_gender.errors %}
                         <div class="text-danger small mt-1">{{ error }}</div>
                         {% endfor %}
                     </div>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold">Breed</label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="bi bi-search text-secondary"></i></span>
+                    <div class="col-12 col-sm-6">
+                        <label class="form-label small fw-semibold">Breed</label>
                         {{ form.dog_breed(class="form-control", placeholder="e.g. Labrador, Mixed breed…") }}
                     </div>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold">Date of birth</label>
-                    <div class="d-flex align-items-center gap-3">
-                        <div class="input-group" style="max-width:200px;">
-                            <span class="input-group-text"><i class="bi bi-calendar text-secondary"></i></span>
+                    <div class="col-12 col-sm-6">
+                        <label class="form-label small fw-semibold">Date of birth</label>
+                        <div class="d-flex align-items-center gap-2">
                             {{ form.dog_dob(class="form-control", type="date", max=today, id="dog-dob") }}
+                            <span class="badge rounded-pill text-bg-light border text-muted fw-normal px-2 py-2 text-nowrap"
+                                  id="dog-age-badge" style="font-size:0.75rem;">
+                                {% if dog and dog.date_of_birth %}
+                                <span id="dog-age-text"></span>
+                                {% else %}
+                                Age unknown
+                                {% endif %}
+                            </span>
                         </div>
-                        <span class="badge rounded-pill text-bg-light border text-muted fw-normal px-3 py-2"
-                              id="dog-age-badge" style="font-size:0.8rem;">
-                            {% if dog and dog.date_of_birth %}
-                            <span id="dog-age-text"></span>
-                            {% else %}
-                            Age unknown
-                            {% endif %}
-                        </span>
+                        {% for error in form.dog_dob.errors %}
+                        <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
                     </div>
-                    {% for error in form.dog_dob.errors %}
-                    <div class="text-danger small mt-1">{{ error }}</div>
-                    {% endfor %}
-                </div>
-
-                <div>
-                    <label class="form-label small fw-semibold">Allergies / notes</label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="bi bi-bandaid text-secondary"></i></span>
+                    <div class="col-12">
+                        <label class="form-label small fw-semibold">Allergies / notes</label>
                         {{ form.dog_allergies(class="form-control", placeholder="Any allergies or health notes") }}
                     </div>
                 </div>
