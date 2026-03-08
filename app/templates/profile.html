@@ -282,6 +282,9 @@
                     </p>
                     {{ form.pickup_instructions(class="form-control", rows=5,
                        placeholder="e.g. Side gate, code 1234. Ring bell — dog will bark but that's fine. Key under mat if no answer.") }}
+                    <div class="d-grid mt-3 save-btn-desktop">
+                        {{ form.submit(class="btn btn-primary fw-semibold") }}
+                    </div>
                 </div>
             </div>
 
@@ -330,11 +333,6 @@
                     {% endif %}
 
                 </div>
-            </div>
-
-            {# Save button (desktop) #}
-            <div class="d-grid save-btn-desktop">
-                {{ form.submit(class="btn btn-primary btn-lg fw-semibold") }}
             </div>
 
         </div>{# /right col #}
