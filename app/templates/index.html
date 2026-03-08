@@ -1,6 +1,57 @@
 {% extends "layout.html" %}
+{% from "partials/calendar_component.html" import calendar_widget %}
 
 {% block title %}Home{% endblock %}
+
+{% block head_extra %}
+<style>
+    /* Recurring panel */
+    #recurring-panel {
+        border-top: 1px solid #e9ecef;
+        padding-top: 0.75rem;
+        margin-top: 0.75rem;
+    }
+
+    /* Calendar legend dots */
+    .cal-legend {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        margin-top: 0.5rem;
+        font-size: 0.72rem;
+        color: #666;
+    }
+    .cal-legend-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        display: inline-block;
+        margin-right: 3px;
+        flex-shrink: 0;
+    }
+    .cal-legend-dot.pending  { background: #fff3cd; border: 1px solid #ffe69c; }
+    .cal-legend-dot.confirmed { background: #d1e7dd; border: 1px solid #a3cfbb; }
+
+    /* Recurring date preview chips */
+    #recurring-preview {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+        margin-top: 0.5rem;
+    }
+    .recurring-chip {
+        font-size: 0.72rem;
+        background: #e9ecef;
+        border-radius: 4px;
+        padding: 2px 6px;
+        color: #555;
+    }
+    .recurring-chip.skipped {
+        text-decoration: line-through;
+        opacity: 0.5;
+    }
+</style>
+{% endblock %}
 
 {% block main %}
 
@@ -14,8 +65,8 @@
 
     <!-- LEFT: Booking form -->
     <div class="col-12 col-md-4">
-        <div class="card shadow-sm border-0 h-auto" style="border-radius: 1rem;">
-            <div class="card-body p-4">
+        <div class="card shadow-sm border-0" style="border-radius: 1rem;">
+            <div class="card-body p-3">
                 <h6 class="fw-bold text-uppercase text-muted small mb-3 letter-spacing-1">
                     <i class="bi bi-plus-circle-fill me-1" style="color: var(--bs-primary);"></i>
                     Request a walk
@@ -23,14 +74,23 @@
 
                 <form action="{{ url_for('client.index') }}" method="post" id="BookingForm" novalidate>
                     {{ form.hidden_tag() }}
+                    {# Hidden date field — populated by calendar clicks #}
+                    <input type="hidden" name="date" id="booking-date-hidden">
 
-                    <div class="mb-3">
-                        <label class="form-label small fw-semibold">Date</label>
-                        {{ form.date(class="form-control", id="booking-date") }}
-                        {% for error in form.date.errors %}
-                        <div class="text-danger small mt-1">{{ error }}</div>
-                        {% endfor %}
+                    {# Calendar widget #}
+                    {{ calendar_widget('client-booking-cal', config={'selectable': true}) }}
+
+                    {# Legend #}
+                    <div class="cal-legend mb-3">
+                        <span><span class="cal-legend-dot pending"></span>Pending</span>
+                        <span><span class="cal-legend-dot confirmed"></span>Confirmed</span>
                     </div>
+
+                    {# Selected date display #}
+                    <p class="small text-muted mb-2" id="selected-date-label">
+                        <i class="bi bi-calendar3 me-1"></i>
+                        <span id="selected-date-text">Select a date above</span>
+                    </p>
 
                     <div class="mb-3">
                         <label class="form-label small fw-semibold">Slot</label>
@@ -41,7 +101,36 @@
                         <div id="slot-availability" class="small mt-2"></div>
                     </div>
 
-                    {{ form.submit(class="btn btn-primary w-100 fw-semibold", id="booking-submit") }}
+                    {# Recurring toggle #}
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                               id="recurring-toggle" style="cursor:pointer;">
+                        <label class="form-check-label small fw-semibold" for="recurring-toggle">
+                            Recurring
+                        </label>
+                    </div>
+
+                    <div id="recurring-panel" style="display:none;">
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold mb-1">Frequency</label>
+                                <select class="form-select form-select-sm" id="recurring-frequency">
+                                    <option value="weekly">Weekly</option>
+                                    <option value="daily">Daily (weekdays)</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold mb-1">Until</label>
+                                <input type="date" class="form-control form-control-sm" id="recurring-end-date">
+                            </div>
+                        </div>
+                        <div id="recurring-preview"></div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100 fw-semibold mt-3"
+                            id="booking-submit" disabled>
+                        Request walk
+                    </button>
                 </form>
 
                 <p class="text-muted small mt-3 mb-0">
@@ -153,8 +242,9 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/reusable-calendar.js') }}"></script>
 <script>
-// Time-of-day greeting
+// ─── Greeting ────────────────────────────────────────────────
 (function() {
     const h = new Date().getHours();
     const greeting = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
@@ -162,62 +252,221 @@
     if (el) el.textContent = greeting + ', {{ current_user.firstname }}.';
 })();
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
 
-    // --- Slot availability checker ---
-    const dateInput = document.getElementById('booking-date');
-    const slotSelect = document.getElementById('booking-slot');
-    const availabilityHint = document.getElementById('slot-availability');
-    const submitBtn = document.getElementById('booking-submit');
-    let slotData = null;
+    // ─── State ───────────────────────────────────────────────
+    const dateHidden   = document.getElementById('booking-date-hidden');
+    const slotSelect   = document.getElementById('booking-slot');
+    const availHint    = document.getElementById('slot-availability');
+    const submitBtn    = document.getElementById('booking-submit');
+    const dateText     = document.getElementById('selected-date-text');
+    const recurToggle  = document.getElementById('recurring-toggle');
+    const recurPanel   = document.getElementById('recurring-panel');
+    const recurFreq    = document.getElementById('recurring-frequency');
+    const recurEnd     = document.getElementById('recurring-end-date');
+    const recurPreview = document.getElementById('recurring-preview');
+    let slotData       = null;
+    let selectedDate   = null;   // 'YYYY-MM-DD'
 
-    function updateAvailabilityHint() {
-        if (!slotData || !slotSelect.value) {
-            availabilityHint.textContent = '';
-            submitBtn.disabled = false;
-            return;
-        }
-        const info = slotData[slotSelect.value];
-        if (!info) {
-            availabilityHint.textContent = '';
-            submitBtn.disabled = false;
-            return;
-        }
-        if (info.total === 0) {
-            availabilityHint.innerHTML = '<span class="text-muted"><i class="bi bi-slash-circle me-1"></i>No walkers scheduled for this slot</span>';
-            submitBtn.disabled = true;
-        } else if (info.available <= 0) {
-            availabilityHint.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle me-1"></i>Full — you\'ll be added to the waitlist</span>';
-            submitBtn.disabled = false;
-        } else if (info.available <= 2) {
-            availabilityHint.innerHTML = `<span class="text-warning"><i class="bi bi-exclamation-circle me-1"></i>${info.available} spot${info.available === 1 ? '' : 's'} left</span>`;
-            submitBtn.disabled = false;
-        } else {
-            availabilityHint.innerHTML = `<span class="text-success"><i class="bi bi-check-circle me-1"></i>${info.available} spots available</span>`;
-            submitBtn.disabled = false;
-        }
-    }
+    const MONTHS = ['January','February','March','April','May','June','July',
+                    'August','September','October','November','December'];
+    const DAYS   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
-    function fetchAvailability() {
-        const dateVal = dateInput.value;
-        if (!dateVal) { slotData = null; updateAvailabilityHint(); return; }
-        fetch(`{{ url_for('api.slot_availability') }}?date=${dateVal}`)
+    // ─── Calendar ────────────────────────────────────────────
+    const cal = createCalendar('client-booking-cal', {
+        onDateClick(year, month, day, dateStr) {
+            selectedDate = dateStr;
+            dateHidden.value = dateStr;
+
+            const d = new Date(dateStr + 'T00:00:00');
+            dateText.textContent = d.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+
+            updateSubmitState();
+            fetchAvailability();
+            updateRecurringEndMax();
+            renderRecurPreview();
+        },
+        onMonthChange(year, month) {
+            loadCalendarData(year, month);
+        }
+    });
+
+    function loadCalendarData(year, month) {
+        cal.showLoading();
+        const url = `{{ url_for('client.calendar_data', year=0, month=0) }}`
+                        .replace('/0/0', `/${year}/${month}`);
+        fetch(url)
             .then(r => r.json())
             .then(data => {
-                slotData = data.error ? null : data;
-                updateAvailabilityHint();
+                cal.setHighlightedDates(data.success ? data.dates : {});
             })
+            .catch(() => cal.hideLoading());
+    }
+
+    // ─── Slot availability ───────────────────────────────────
+    function fetchAvailability() {
+        if (!selectedDate) { slotData = null; updateAvailabilityHint(); return; }
+        fetch(`{{ url_for('api.slot_availability') }}?date=${selectedDate}`)
+            .then(r => r.json())
+            .then(data => { slotData = data.error ? null : data; updateAvailabilityHint(); })
             .catch(() => { slotData = null; updateAvailabilityHint(); });
     }
 
-    if (dateInput) dateInput.addEventListener('change', fetchAvailability);
-    if (slotSelect) slotSelect.addEventListener('change', updateAvailabilityHint);
+    function updateAvailabilityHint() {
+        if (!slotData || !slotSelect.value) {
+            availHint.textContent = '';
+            return;
+        }
+        const info = slotData[slotSelect.value];
+        if (!info) { availHint.textContent = ''; return; }
 
-    // --- Cancel booking ---
+        if (info.total === 0) {
+            availHint.innerHTML = '<span class="text-muted"><i class="bi bi-slash-circle me-1"></i>No walkers scheduled for this slot</span>';
+        } else if (info.available <= 0) {
+            availHint.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle me-1"></i>Full — you\'ll be added to the waitlist</span>';
+        } else if (info.available <= 2) {
+            availHint.innerHTML = `<span class="text-warning"><i class="bi bi-exclamation-circle me-1"></i>${info.available} spot${info.available === 1 ? '' : 's'} left</span>`;
+        } else {
+            availHint.innerHTML = `<span class="text-success"><i class="bi bi-check-circle me-1"></i>${info.available} spots available</span>`;
+        }
+    }
+
+    if (slotSelect) slotSelect.addEventListener('change', () => {
+        updateAvailabilityHint();
+        renderRecurPreview();
+    });
+
+    // ─── Submit state ────────────────────────────────────────
+    function updateSubmitState() {
+        submitBtn.disabled = !selectedDate;
+        if (recurToggle.checked) {
+            submitBtn.textContent = 'Request recurring walks';
+        } else {
+            submitBtn.textContent = 'Request walk';
+        }
+    }
+
+    // ─── Recurring panel ─────────────────────────────────────
+    recurToggle.addEventListener('change', function () {
+        recurPanel.style.display = this.checked ? 'block' : 'none';
+        updateSubmitState();
+        renderRecurPreview();
+    });
+
+    recurFreq.addEventListener('change', renderRecurPreview);
+    recurEnd.addEventListener('change', renderRecurPreview);
+
+    function updateRecurringEndMax() {
+        if (!selectedDate) return;
+        const start = new Date(selectedDate + 'T00:00:00');
+        const max   = new Date(start);
+        max.setDate(max.getDate() + 28);
+        recurEnd.min = selectedDate;
+        recurEnd.max = max.toISOString().slice(0, 10);
+        // Default end date to 4 weeks out
+        if (!recurEnd.value || recurEnd.value < selectedDate) {
+            recurEnd.value = max.toISOString().slice(0, 10);
+        }
+        renderRecurPreview();
+    }
+
+    function generateRecurDates(startStr, endStr, frequency) {
+        if (!startStr || !endStr) return [];
+        const start = new Date(startStr + 'T00:00:00');
+        const end   = new Date(endStr   + 'T00:00:00');
+        if (end < start) return [];
+        const dates = [];
+        const delta = frequency === 'daily' ? 1 : 7;
+        let cur = new Date(start);
+        while (cur <= end) {
+            if (frequency !== 'daily' || cur.getDay() !== 0 && cur.getDay() !== 6) {
+                dates.push(new Date(cur));
+            }
+            cur.setDate(cur.getDate() + delta);
+        }
+        return dates;
+    }
+
+    function renderRecurPreview() {
+        if (!recurToggle.checked || !recurPanel.style.display || recurPanel.style.display === 'none') {
+            recurPreview.innerHTML = '';
+            return;
+        }
+        const dates = generateRecurDates(selectedDate, recurEnd.value, recurFreq.value);
+        if (!dates.length) {
+            recurPreview.innerHTML = '<span class="text-muted small">No dates in range</span>';
+            return;
+        }
+        recurPreview.innerHTML = dates.map(d =>
+            `<span class="recurring-chip">${d.toLocaleDateString('en-GB', {day:'numeric', month:'short'})}</span>`
+        ).join('');
+    }
+
+    // ─── Form submit — single vs recurring ───────────────────
+    const bookingForm = document.getElementById('BookingForm');
+    bookingForm.addEventListener('submit', function (e) {
+        if (!recurToggle.checked) return; // let normal POST through
+
+        e.preventDefault();
+
+        if (!selectedDate) {
+            alert('Please select a start date on the calendar.');
+            return;
+        }
+        if (!recurEnd.value) {
+            alert('Please choose an end date.');
+            return;
+        }
+        if (!slotSelect.value) {
+            alert('Please choose a slot.');
+            return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Requesting…';
+
+        const csrfToken = document.querySelector('input[name=csrf_token]')?.value;
+
+        fetch('{{ url_for("client.recurring_booking") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify({
+                start_date: selectedDate,
+                end_date:   recurEnd.value,
+                slot:       slotSelect.value,
+                frequency:  recurFreq.value,
+            }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                const parts = [];
+                if (data.created)    parts.push(`${data.created} requested`);
+                if (data.waitlisted) parts.push(`${data.waitlisted} waitlisted`);
+                if (data.skipped)    parts.push(`${data.skipped} skipped (already booked)`);
+                alert(`Done! ${parts.join(', ')}.`);
+                window.location.reload();
+            } else {
+                alert('Error: ' + (data.message || 'Something went wrong'));
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Request recurring walks';
+            }
+        })
+        .catch(() => {
+            alert('Network error — please try again.');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Request recurring walks';
+        });
+    });
+
+    // ─── Cancel booking ──────────────────────────────────────
     document.querySelectorAll('.cancel-booking-btn').forEach(button => {
-        button.addEventListener('click', function(e) {
+        button.addEventListener('click', function (e) {
             e.preventDefault();
-            const bookingId = this.getAttribute('data-booking-id');
+            const bookingId   = this.getAttribute('data-booking-id');
             const bookingSlot = this.getAttribute('data-booking-slot');
             const bookingDate = this.getAttribute('data-booking-date');
             if (confirm(`Cancel the ${bookingSlot} walk on ${bookingDate}?`)) {
@@ -225,14 +474,15 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
-});
+
+}); // DOMContentLoaded
 
 function cancelBooking(bookingId, buttonElement) {
     buttonElement.disabled = true;
     buttonElement.innerHTML = '<i class="bi bi-hourglass-split"></i>';
 
     const csrfToken = document.querySelector('meta[name=csrf-token]')?.getAttribute('content') ||
-                     document.querySelector('input[name=csrf_token]')?.value;
+                      document.querySelector('input[name=csrf_token]')?.value;
 
     fetch('{{ url_for("client.cancel_booking") }}', {
         method: 'POST',
