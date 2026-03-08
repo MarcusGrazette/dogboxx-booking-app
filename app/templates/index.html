@@ -273,6 +273,22 @@ document.addEventListener('DOMContentLoaded', function () {
     const DAYS   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
     // ─── Calendar ────────────────────────────────────────────
+    // loadCalendarData uses getCalendar() rather than the outer `cal` variable
+    // so it's safe to call during createCalendar's synchronous init (when cal
+    // is still undefined) — getCalendar returns null and we bail early,
+    // then the manual call below fires once cal is properly assigned.
+    function loadCalendarData(year, month) {
+        const instance = getCalendar('client-booking-cal');
+        if (!instance) return;
+        instance.showLoading();
+        const url = `{{ url_for('client.calendar_data', year=0, month=0) }}`
+                        .replace('/0/0', `/${year}/${month}`);
+        fetch(url)
+            .then(r => r.json())
+            .then(data => instance.setHighlightedDates(data.success ? data.dates : {}))
+            .catch(() => instance.hideLoading());
+    }
+
     const cal = createCalendar('client-booking-cal', {
         onDateClick(year, month, day, dateStr) {
             selectedDate = dateStr;
@@ -291,17 +307,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    function loadCalendarData(year, month) {
-        cal.showLoading();
-        const url = `{{ url_for('client.calendar_data', year=0, month=0) }}`
-                        .replace('/0/0', `/${year}/${month}`);
-        fetch(url)
-            .then(r => r.json())
-            .then(data => {
-                cal.setHighlightedDates(data.success ? data.dates : {});
-            })
-            .catch(() => cal.hideLoading());
-    }
+    // Initial data load — now that cal is assigned and registered
+    loadCalendarData(cal.year, cal.month);
 
     // ─── Slot availability ───────────────────────────────────
     function fetchAvailability() {
