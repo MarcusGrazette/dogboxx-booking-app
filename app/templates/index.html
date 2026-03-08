@@ -77,8 +77,8 @@
                     {# Hidden date field — populated by calendar clicks #}
                     <input type="hidden" name="date" id="booking-date-hidden">
 
-                    {# Calendar widget #}
-                    {{ calendar_widget('client-booking-cal', config={'selectable': true}) }}
+                    {# Calendar widget — no loading overlay (grid renders instantly) #}
+                    {{ calendar_widget('client-booking-cal', config={'selectable': true}, show_loading=false) }}
 
                     {# Legend #}
                     <div class="cal-legend mb-3">
@@ -280,13 +280,12 @@ document.addEventListener('DOMContentLoaded', function () {
     function loadCalendarData(year, month) {
         const instance = getCalendar('client-booking-cal');
         if (!instance) return;
-        instance.showLoading();
         const url = `{{ url_for('client.calendar_data', year=0, month=0) }}`
                         .replace('/0/0', `/${year}/${month}`);
         fetch(url)
             .then(r => r.json())
             .then(data => instance.setHighlightedDates(data.success ? data.dates : {}))
-            .catch(() => instance.hideLoading());
+            .catch(() => {});
     }
 
     const cal = createCalendar('client-booking-cal', {
