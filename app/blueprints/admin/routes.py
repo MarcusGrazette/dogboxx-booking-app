@@ -49,39 +49,46 @@ def index():
 
     active_walkers = Walker.query.join(User).filter(User.active == True).count()
 
-    # ── Next 4 weeks weekdays (Mon–Fri only) ────────────────────────────────
-    weekdays = []
-    d = today
-    while len(weekdays) < 20:  # 4 weeks × 5 days
-        if d.weekday() < 5:  # 0=Mon, 4=Fri
-            weekdays.append(d)
-        d += timedelta(days=1)
+    # ── Next 4 weeks: all 28 days for chart, weekdays only for walker grid ───
+    chart_days = [today + timedelta(days=i) for i in range(28)]
+    weekdays   = [d for d in chart_days if d.weekday() < 5]
+    chart_end  = chart_days[-1]
 
-    end_date = weekdays[-1]
-
-    # ── Booking chart data ───────────────────────────────────────────────────
+    # ── Booking chart data — split by slot AND status ────────────────────────
     chart_bookings = (
         Booking.query
         .filter(
             Booking.date >= today,
-            Booking.date <= end_date,
+            Booking.date <= chart_end,
             Booking.status.in_(['confirmed', 'requested', 'waitlisted']),
             Booking.slot.in_(['Morning', 'Afternoon']),
         )
-        .with_entities(Booking.date, Booking.slot, func.count(Booking.id).label('cnt'))
-        .group_by(Booking.date, Booking.slot)
+        .with_entities(
+            Booking.date,
+            Booking.slot,
+            Booking.status,
+            func.count(Booking.id).label('cnt'),
+        )
+        .group_by(Booking.date, Booking.slot, Booking.status)
         .all()
     )
 
-    # Build lookup: {date: {slot: count}}
+    # Build lookup: {date: {slot: {status: count}}}
     booking_lookup = {}
     for row in chart_bookings:
-        booking_lookup.setdefault(row.date, {})
-        booking_lookup[row.date][row.slot] = row.cnt
+        booking_lookup.setdefault(row.date, {}).setdefault(row.slot, {})[row.status] = row.cnt
 
-    chart_labels = [d.strftime('%a %-d %b') for d in weekdays]
-    chart_morning = [booking_lookup.get(d, {}).get('Morning', 0) for d in weekdays]
-    chart_afternoon = [booking_lookup.get(d, {}).get('Afternoon', 0) for d in weekdays]
+    def slot_cnt(d, slot, status):
+        return booking_lookup.get(d, {}).get(slot, {}).get(status, 0)
+
+    chart_labels              = [d.strftime('%a %-d') for d in chart_days]
+    chart_is_weekend          = [1 if d.weekday() >= 5 else 0 for d in chart_days]
+    chart_morning_confirmed   = [slot_cnt(d, 'Morning',   'confirmed')  for d in chart_days]
+    chart_morning_pending     = [slot_cnt(d, 'Morning',   'requested')  for d in chart_days]
+    chart_morning_waitlisted  = [slot_cnt(d, 'Morning',   'waitlisted') for d in chart_days]
+    chart_afternoon_confirmed = [slot_cnt(d, 'Afternoon', 'confirmed')  for d in chart_days]
+    chart_afternoon_pending   = [slot_cnt(d, 'Afternoon', 'requested')  for d in chart_days]
+    chart_afternoon_waitlisted= [slot_cnt(d, 'Afternoon', 'waitlisted') for d in chart_days]
 
     # ── Walker availability grid ─────────────────────────────────────────────
     all_walkers = Walker.query.join(User).filter(User.active == True).options(
@@ -124,8 +131,13 @@ def index():
         active_walkers=active_walkers,
         # Chart
         chart_labels=chart_labels,
-        chart_morning=chart_morning,
-        chart_afternoon=chart_afternoon,
+        chart_is_weekend=chart_is_weekend,
+        chart_morning_confirmed=chart_morning_confirmed,
+        chart_morning_pending=chart_morning_pending,
+        chart_morning_waitlisted=chart_morning_waitlisted,
+        chart_afternoon_confirmed=chart_afternoon_confirmed,
+        chart_afternoon_pending=chart_afternoon_pending,
+        chart_afternoon_waitlisted=chart_afternoon_waitlisted,
         # Availability grid
         weekdays=weekdays,
         walker_grid=walker_grid,
