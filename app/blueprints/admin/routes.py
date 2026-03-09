@@ -254,7 +254,24 @@ def bookings_by_date():
     OperationalError: "Database is temporarily unavailable. Please try again."
 })
 def assign_walker():
-    """Assign a walker and slot to a booking (admin only). Returns JSON for AJAX requests."""
+    """Assign (or unassign) a walker and slot to a booking. Admin only. Returns JSON.
+
+    POST body (JSON or form-encoded):
+        booking_id  (int)   Required. Booking to update.
+        walker_id   (int)   Walker to assign. Omit or null to unassign.
+        slot        (str)   'Morning' or 'Afternoon'. Overrides booking.slot if provided.
+        pickup_order (list) Optional. List of booking IDs in pickup order for this
+                            walker/date/slot — persists pickup_order on each booking.
+
+    Side effects on successful assignment:
+        - Sets booking.status = 'confirmed', booking.walker_id, booking.slot
+        - Sends in-app notification to client (booking_confirmed)
+        - Sends in-app notification to walker (walker_assigned)
+        - Persists pickup_order if provided
+
+    On unassignment (walker_id = null):
+        - Clears booking.walker_id, sets status back to 'requested'
+    """
     # Accept JSON or form-encoded
     data = request.get_json(silent=True) or request.form
     booking_id = data.get("booking_id")

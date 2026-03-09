@@ -493,7 +493,25 @@ def calendar_data(year, month):
 @client_bp.route("/recurring_booking", methods=["POST"])
 @login_required
 def recurring_booking():
-    """Create a series of bookings from a start date, end date, slot and frequency."""
+    """Create a series of bookings from a start date, end date, slot and frequency.
+
+    POST body (JSON):
+        start_date  (str)  'YYYY-MM-DD' — must be tomorrow or later
+        end_date    (str)  'YYYY-MM-DD' — max 4 weeks from today (client limit)
+        slot        (str)  'Morning' or 'Afternoon'
+        frequency   (str)  'daily' (weekdays only) or 'weekly'
+
+    For each date in the range:
+        - Skips weekends when frequency='daily'
+        - Skips dates where this dog already has an active booking in that slot
+        - Skips dates where the dog already has 2 bookings (one per slot limit)
+        - Books as 'requested' if capacity available, 'waitlisted' if full
+
+    Returns JSON: { success, created, waitlisted, skipped }
+
+    Note: the 4-week cap is a client-facing safeguard. Admins booking on behalf
+    of clients via /admin/recurring_for_dog have no such cap.
+    """
     try:
         data = request.get_json()
         if not data:

@@ -1,45 +1,91 @@
-# Feature Tracker — Dog Walking Booking App
+# Feature Tracker — Dogboxx
 
 > Priority: **P1** = must-have, **P2** = should-have, **P3** = nice-to-have
 > Effort: **S** = small (< 1hr), **M** = medium (1-4hrs), **L** = large (4hrs+)
 > Status: 🔲 todo · 🔧 in progress · ✅ done · ❌ dropped
 
+## Core Booking Flow
+
 | # | Priority | Effort | Status | Feature | Notes |
 |---|----------|--------|--------|---------|-------|
-| 1 | P1 | M | 🔲 | **Client onboarding improvements** | Multi-dog support, edit after completion |
-| 2 | P1 | L | 🔲 | **Booking workflow with capacity checks** | Enforce walker max capacity per slot, waitlist logic |
-| 3 | P1 | M | 🔲 | **Admin booking review** | Approve/reject requests, bulk actions |
-| 4 | P2 | M | ✅ | **Walker pickup list** | Daily route view with dog details, addresses, order |
-| 5 | P2 | S | ✅ | **Dog DOB field** | Replaced years/months dropdowns with date_of_birth date picker |
-| 6 | P2 | L | 🔲 | **Email notifications** | Booking confirmation, status changes, reminders |
-| 20 | P1 | S | ✅ | **Brand colours / Phase 1 polish** | CSS variable overrides, dark navbar, pink accents, auth card login |
-| 21 | P1 | M | ✅ | **AdminLTE sidebar / Phase 2** | admin_layout.html, sidebar nav (Dashboard/Walks/People/Dental stub), page header bar |
-| 22 | P1 | L | 🔧 | **Notification system** | Persistent bell notifications with read audit trail. Foundation done (model, helpers, bell UI, routes). Integration work remaining — see sub-tasks below |
-| 22a | P1 | S | ✅ | **Notif: wire booking_confirmed** | Call create_notification() in admin assign_walker route when status → confirmed. Notify client. |
-| 22b | P1 | S | ✅ | **Notif: wire booking_requested** | Call create_notification() when client submits a booking. Notify admin. |
-| 22c | P1 | S | ✅ | **Notif: wire booking_cancelled** | On admin cancel, notify client. On client cancel (future), notify admin. |
-| 22d | P1 | S | 🔲 | **Notif: wire walker_assigned** | When admin drag-drops to a walker, notify that walker. |
-| 22e | P2 | M | 🔲 | **Notif: admin audit view on client page** | Show notification history (sent_at, read_at) on the admin client detail page |
-| 23 | P1 | L | 🔲 | **Dental cleans service type** | Admin: manage available date+time slots. Client: book from available slots. Data model: dental_slots table. Slot-based approach agreed. |
-| 7 | P3 | M | 🔲 | **Client booking history** | Past bookings list with status and walker info |
-| 8 | P3 | S | 🔲 | **Admin dashboard stats** | Booking counts, utilisation, revenue summary |
-| 9 | P1 | M | 🔧 | **Client profile edit** | Edit address, notification prefs, dog details + photo. Pre-filled from onboarding. Merges old #5 (dog edit) |
-| 10 | P1 | M | 🔲 | **Password reset (forgot password)** | Email-based reset flow: "Forgot password?" link on login → enter email → token email → set new password |
-| 11 | P3 | L | 🔲 | **Firebase Auth migration** | Replace Flask-Login auth with Firebase Auth. Handles MFA, social login, OTP. Plan as a full auth layer swap post-launch |
-| 12 | P2 | M | ✅ | **Walker unavailability** | Date-specific exceptions to default schedule. Per-slot, soft block on admin dashboard |
-| 13 | P2 | S | ✅ | **Walker schedule page** | Shows default weekly schedule + manage unavailability exceptions |
-| 14 | P1 | M | ✅ | **is_admin role model** | Admins can also be walkers. Walkers promotable via is_admin flag |
-| 15 | P1 | S | ✅ | **Fix profile photo upload** | Fixed: route missing POST method; FilePond config matched to onboarding layout |
-| 16 | P1 | S | ✅ | **Prevent duplicate bookings** | Block same dog+date+slot. Allow max 2 bookings per dog per day (one per slot) |
-| 17 | P1 | S | ✅ | **Fix admin reorder 500 error** | /admin/reorder_pickups returning 500. Debug and fix |
-| 18 | P2 | S | ✅ | **Default dog image** | Create a default-dog.png placeholder (dog emoji or simple icon). Fix 404 |
-| 19 | P2 | S | ✅ | **Flash message layout shift** | Match admin's no-shift flash behaviour across all pages. Use fixed/overlay positioning |
+| 1 | P1 | L | ✅ | **Booking workflow with capacity checks** | Walker availability × max_per_walker. Waitlist when full. |
+| 2 | P1 | M | ✅ | **Recurring bookings (client)** | Start/end date + frequency (daily/weekly). Server expands to individual bookings. Skips weekends, duplicates. |
+| 3 | P1 | M | ✅ | **Admin booking board** | Calendar + slot view. Confirm/cancel requests. Drag-to-reorder pickup order per walker. |
+| 4 | P1 | M | ✅ | **Admin dogs view** | Searchable table of all dogs. Book on owner's behalf (one-off or recurring) via modal. Same pending flow as client-initiated. |
+| 5 | P1 | M | ✅ | **Prevent duplicate bookings** | Block same dog+date+slot. Max 2 bookings per dog per day (one per slot). DB partial unique index. |
+| 6 | P1 | M | 🔲 | **Password reset** | "Forgot password?" → token email → set new password. |
+| 7 | P1 | M | 🔲 | **Booking capacity display for clients** | Show remaining slots when client is booking, not just accept/reject. |
+
+## Walker
+
+| # | Priority | Effort | Status | Feature | Notes |
+|---|----------|--------|--------|---------|-------|
+| 10 | P1 | M | ✅ | **Walker pickup list** | Daily route view with dog photo, owner, address, pickup instructions, ordered by pickup_order. Date navigation. |
+| 11 | P2 | M | ✅ | **Walker schedule management** | Default weekly schedule (day + slot). Admin sets. Walker can view. |
+| 12 | P2 | M | ✅ | **Walker unavailability** | Date-specific exceptions (per slot). Admin marks unavailability. Reduces capacity for that slot automatically. |
+| 13 | P3 | L | 🔲 | **Walker self-manage availability** | Walkers flag their own exceptions (holidays, sick days) rather than admin doing it. |
+| 14 | P3 | L | 🔲 | **Google Maps pickup directions** | Link from pickup list to Google Maps directions for each address. |
+
+## Admin
+
+| # | Priority | Effort | Status | Feature | Notes |
+|---|----------|--------|--------|---------|-------|
+| 20 | P1 | M | ✅ | **Client management** | Create, view, edit client accounts. Notification audit trail per client. |
+| 21 | P1 | M | ✅ | **Walker management** | Create walkers. Set/edit default schedule. Mark unavailability. |
+| 22 | P2 | S | ✅ | **Admin is also a walker** | is_admin flag on User. Admin can be a walker. "My Pickup List" in admin sidebar. |
+| 23 | P2 | M | 🔲 | **Admin dashboard stats** | Booking counts, utilisation, revenue summary. Currently shows upcoming bookings only. |
+| 24 | P3 | L | 🔲 | **Dental cleans service type** | Admin: manage available date+time slots. Client: book from available slots. Stubbed in nav. |
+| 25 | P3 | L | 🔲 | **Invoicing** | Generate invoices per client based on confirmed walks. Cancellation policy enforcement (<5 days notice = billable). |
+
+## Client
+
+| # | Priority | Effort | Status | Feature | Notes |
+|---|----------|--------|--------|---------|-------|
+| 30 | P1 | M | ✅ | **Client onboarding** | Address (with Google Places autocomplete), pickup instructions, dog profile. |
+| 31 | P1 | M | ✅ | **Client profile edit** | Edit address, notification prefs, dog details + photo. |
+| 32 | P2 | M | 🔲 | **Monthly walk summary** | Client-facing summary of walks taken, upcoming, and any outstanding items. |
+| 33 | P3 | L | 🔲 | **Online payments** | Stripe integration for invoice payment. |
+| 34 | P3 | M | 🔲 | **Multi-dog support** | Client adds multiple dogs. Share dog profile with another registered user (e.g. partner). |
+
+## Notifications
+
+| # | Priority | Effort | Status | Feature | Notes |
+|---|----------|--------|--------|---------|-------|
+| 40 | P1 | L | ✅ | **In-app notification system** | Bell icon, unread count, mark read. Persistent DB records. |
+| 41 | P1 | S | ✅ | **Notify client: booking confirmed** | Triggered when admin confirms a booking. |
+| 42 | P1 | S | ✅ | **Notify admin: booking requested** | Triggered when client submits a new booking. |
+| 43 | P1 | S | ✅ | **Notify client: booking cancelled** | Triggered when admin cancels a booking. |
+| 44 | P1 | S | ✅ | **Notify walker: assigned to booking** | Triggered when admin assigns a walker. |
+| 45 | P1 | S | ✅ | **Notification audit trail (admin)** | Admin can see notification history per client on their detail page. |
+| 46 | P2 | L | 🔲 | **Email notifications** | SMTP (Outlook 365 @dogboxx.org) for booking confirmations, cancellations, reminders. In-app notifications are live; email integration pending. |
+
+## Infrastructure & Quality
+
+| # | Priority | Effort | Status | Feature | Notes |
+|---|----------|--------|--------|---------|-------|
+| 50 | P1 | M | ✅ | **PostgreSQL migration** | Moved from SQLite to PostgreSQL. Flask-Migrate (Alembic) for schema management. |
+| 51 | P1 | M | ✅ | **Security hardening** | CSRF, rate limiting, CSP headers, secure cookies, UUID file uploads, session hardening. |
+| 52 | P1 | S | ✅ | **DB indexes** | Indexes on date, walker_id, user_id, dog_id, status for query performance. |
+| 53 | P1 | M | ✅ | **Git branching** | `develop` for ongoing work, `main` for production. PRs required to merge to main. |
+| 54 | P1 | L | 🔧 | **Unit test suite** | pytest + pytest-flask. T1 (infrastructure) → T2 (capacity) → T3 (bookings) → T4 (auth) → T5 (notifications). See HEARTBEAT.md. |
+| 55 | P2 | M | 🔲 | **Password reset flow** | Email-based token reset. Requires email notifications (#46) to be wired first. |
+| 56 | P3 | L | 🔲 | **CI/CD pipeline** | GitHub Actions: run tests on push to develop, block PRs to main if tests fail. |
+
+---
+
+## Dropped / Descoped
+
+| Feature | Reason |
+|---|---|
+| Firebase Auth migration | Overkill for current scale. Flask-Login is sufficient. Revisit post-launch. |
+| Public client self-registration | Business prefers admin-created accounts (vets clients first). Register route still exists but not promoted. |
+| Walker pickup status tracking (en_route / picked_up / dropped_off) | WalkEvent model exists in docs plan. Deprioritised — pickup list is the priority. |
 
 ---
 
 ## How to use this file
 
-**Adding a request:** Add a row to the table. Assign a `#`, estimate priority and effort.
+**Adding a request:** Add a row to the relevant section. Assign a `#`, estimate priority and effort.
 
 **Effort guide:**
 - **S (small):** Template tweak, new route, simple query — under an hour
@@ -47,6 +93,3 @@
 - **L (large):** New subsystem, multiple routes/templates, external integrations — half a day+
 
 **Reassessing:** Update priority/effort as we learn more. Move notes into the Notes column.
-
-## Backlog (Low Priority)
-- [ ] Client profile photo upload — show photo in navbar avatar instead of initials; collect during onboarding alongside dog photo
