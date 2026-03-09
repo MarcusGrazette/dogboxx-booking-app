@@ -24,6 +24,7 @@ import json
 from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
 from app.utils.notifications import create_notification
+from app.capacity import check_availability
 
 
 @admin_bp.route("/")
@@ -788,3 +789,223 @@ def walker_schedule(walker_id):
             day_form.afternoon.data = schedule_dict[day_index].get('afternoon', False)
     
     return render_template("admin_walker_schedule.html", walker=walker, form=form)
+
+
+# ─── Dogs ─────────────────────────────────────────────────────────────────────
+
+@admin_bp.route("/dogs")
+@login_required
+@admin_required
+def dogs():
+    """Admin view: all dogs on the books, searchable by name."""
+    search = request.args.get('q', '').strip()
+    query = (
+        Dog.query
+        .join(DogOwner, DogOwner.dog_id == Dog.id)
+        .join(User, User.id == DogOwner.user_id)
+        .filter(DogOwner.role == 'primary')
+        .add_columns(User.id.label('owner_user_id'),
+                     User.firstname.label('owner_firstname'),
+                     User.lastname.label('owner_lastname'),
+                     User.email.label('owner_email'))
+        .order_by(Dog.name)
+    )
+    if search:
+        query = query.filter(Dog.name.ilike(f'%{search}%'))
+
+    rows = query.all()
+    # rows is a list of (Dog, owner_user_id, owner_firstname, owner_lastname, owner_email)
+    dogs_data = [
+        {
+            'dog': row[0],
+            'owner_user_id': row[1],
+            'owner_name': f"{row[2]} {row[3]}",
+            'owner_email': row[4],
+        }
+        for row in rows
+    ]
+    return render_template("admin_dogs.html", dogs_data=dogs_data, search=search)
+
+
+@admin_bp.route("/book_for_dog", methods=["POST"])
+@login_required
+@admin_required
+def book_for_dog():
+    """Admin: create a single booking on behalf of a dog's owner."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify(success=False, message="No data received"), 400
+
+        dog_id    = data.get('dog_id')
+        user_id   = data.get('user_id')
+        date_str  = data.get('date', '')
+        slot      = data.get('slot', '')
+
+        if not all([dog_id, user_id, date_str, slot]):
+            return jsonify(success=False, message="Missing required fields"), 400
+
+        from datetime import date as date_type
+        try:
+            booking_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify(success=False, message="Invalid date format"), 400
+
+        if booking_date <= date_type.today():
+            return jsonify(success=False, message="Date must be in the future"), 400
+
+        if slot not in ('Morning', 'Afternoon'):
+            return jsonify(success=False, message="Invalid slot"), 400
+
+        dog = Dog.query.get(dog_id)
+        if not dog:
+            return jsonify(success=False, message="Dog not found"), 404
+
+        # Duplicate check
+        active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
+        existing = Booking.query.filter(
+            Booking.dog_id == dog_id,
+            Booking.date == booking_date,
+            Booking.slot == slot,
+            Booking.status.in_(active_statuses)
+        ).first()
+        if existing:
+            return jsonify(success=False, message="This dog already has a booking for that slot on that date"), 400
+
+        default_service = ServiceType.query.filter_by(slug='group-walk', active=True).first()
+        if not default_service:
+            return jsonify(success=False, message="No service type available"), 400
+
+        available, can_waitlist, capacity_msg = check_availability(default_service, booking_date, slot)
+        if not available and not can_waitlist:
+            return jsonify(success=False, message=capacity_msg), 400
+
+        status = 'requested' if available else 'waitlisted'
+        booking = Booking(
+            user_id=user_id,
+            dog_id=dog_id,
+            service_type_id=default_service.id,
+            date=booking_date,
+            slot=slot,
+            status=status,
+        )
+        db.session.add(booking)
+        db.session.commit()
+
+        return jsonify(success=True, status=status,
+                       message=f"Booking {'requested' if status == 'requested' else 'waitlisted'} for {dog.name} on {booking_date.strftime('%-d %b %Y')}")
+
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error in admin book_for_dog: {e}")
+        return jsonify(success=False, message="Server error"), 500
+
+
+@admin_bp.route("/recurring_for_dog", methods=["POST"])
+@login_required
+@admin_required
+def recurring_for_dog():
+    """Admin: create a recurring series of bookings on behalf of a dog's owner."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify(success=False, message="No data received"), 400
+
+        dog_id     = data.get('dog_id')
+        user_id    = data.get('user_id')
+        start_str  = data.get('start_date', '')
+        end_str    = data.get('end_date', '')
+        slot       = data.get('slot', '')
+        frequency  = data.get('frequency', '')
+
+        if not all([dog_id, user_id, start_str, end_str, slot, frequency]):
+            return jsonify(success=False, message="Missing required fields"), 400
+
+        from datetime import date as date_type
+        try:
+            start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
+            end_date   = datetime.strptime(end_str,   '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify(success=False, message="Invalid date format"), 400
+
+        today = date_type.today()
+        if start_date <= today:
+            return jsonify(success=False, message="Start date must be in the future"), 400
+        if end_date < start_date:
+            return jsonify(success=False, message="End date must be after start date"), 400
+        if slot not in ('Morning', 'Afternoon'):
+            return jsonify(success=False, message="Invalid slot"), 400
+        if frequency not in ('daily', 'weekly'):
+            return jsonify(success=False, message="Invalid frequency"), 400
+
+        dog = Dog.query.get(dog_id)
+        if not dog:
+            return jsonify(success=False, message="Dog not found"), 404
+
+        default_service = ServiceType.query.filter_by(slug='group-walk', active=True).first()
+        if not default_service:
+            return jsonify(success=False, message="No service type available"), 400
+
+        # Generate target dates
+        delta = timedelta(days=1) if frequency == 'daily' else timedelta(weeks=1)
+        target_dates = []
+        current = start_date
+        while current <= end_date:
+            if frequency == 'daily' and current.weekday() >= 5:
+                current += timedelta(days=1)
+                continue
+            target_dates.append(current)
+            current += delta
+
+        if not target_dates:
+            return jsonify(success=False, message="No valid dates in that range"), 400
+
+        active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
+        created = waitlisted = skipped = 0
+
+        for d in target_dates:
+            existing = Booking.query.filter(
+                Booking.dog_id == dog_id,
+                Booking.date == d,
+                Booking.slot == slot,
+                Booking.status.in_(active_statuses)
+            ).first()
+            if existing:
+                skipped += 1
+                continue
+
+            day_count = Booking.query.filter(
+                Booking.dog_id == dog_id,
+                Booking.date == d,
+                Booking.status.in_(active_statuses)
+            ).count()
+            if day_count >= 2:
+                skipped += 1
+                continue
+
+            available, can_waitlist, _ = check_availability(default_service, d, slot)
+            if not available and not can_waitlist:
+                skipped += 1
+                continue
+
+            status = 'requested' if available else 'waitlisted'
+            db.session.add(Booking(
+                user_id=user_id,
+                dog_id=dog_id,
+                service_type_id=default_service.id,
+                date=d,
+                slot=slot,
+                status=status,
+            ))
+            if status == 'waitlisted':
+                waitlisted += 1
+            else:
+                created += 1
+
+        db.session.commit()
+        return jsonify(success=True, created=created, waitlisted=waitlisted, skipped=skipped)
+
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error in admin recurring_for_dog: {e}")
+        return jsonify(success=False, message="Server error"), 500

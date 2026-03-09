@@ -125,6 +125,13 @@
                             <span>Bookings</span>
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('admin.dogs') }}"
+                           class="nav-link {% if request.endpoint == 'admin.dogs' %}active{% endif %}">
+                            <i class="bi bi-heart me-2"></i>
+                            <span>Dogs</span>
+                        </a>
+                    </li>
 
                     <!-- People -->
                     <li class="nav-header">People</li>
@@ -142,6 +149,18 @@
                             <span>Walkers</span>
                         </a>
                     </li>
+
+                    {% if current_user.walker %}
+                    <!-- My Walker View -->
+                    <li class="nav-header">My Walker View</li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('walker.pickups') }}"
+                           class="nav-link {% if request.endpoint == 'walker.pickups' %}active{% endif %}">
+                            <i class="bi bi-list-check me-2"></i>
+                            <span>My Pickup List</span>
+                        </a>
+                    </li>
+                    {% endif %}
 
                     <!-- Coming Soon -->
                     <li class="nav-header">Coming Soon</li>
