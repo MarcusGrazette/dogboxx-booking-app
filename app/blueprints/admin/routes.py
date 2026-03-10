@@ -103,7 +103,7 @@ def index():
 
     unavails = WalkerUnavailability.query.filter(
         WalkerUnavailability.date >= today,
-        WalkerUnavailability.date <= end_date,
+        WalkerUnavailability.date <= chart_end,
     ).all()
     # Build: {walker_id: {date: set of unavailable slots}}
     unavail_map = {}
