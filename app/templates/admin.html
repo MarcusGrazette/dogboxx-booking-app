@@ -186,23 +186,23 @@
           borderWidth: 1,
           borderRadius: 2,
         },
-        // ── Afternoon stack (same colours, hidden from legend) ─────────
+        // ── Afternoon stack ────────────────────────────────────────────
         {
-          label: '',
+          label: 'Confirmed',
           stack: 'afternoon',
           data: {{ chart_afternoon_confirmed | tojson }},
           backgroundColor: PINK,
           borderRadius: 2,
         },
         {
-          label: '',
+          label: 'Pending',
           stack: 'afternoon',
           data: {{ chart_afternoon_pending | tojson }},
           backgroundColor: DARK,
           borderRadius: 2,
         },
         {
-          label: '',
+          label: 'Waitlisted',
           stack: 'afternoon',
           data: {{ chart_afternoon_waitlisted | tojson }},
           backgroundColor: WHITE,
@@ -266,7 +266,7 @@
                 : labels[idx];
             },
             label: (item) => {
-              if (!item.dataset.label) return null;   // hide afternoon duplicates
+              if (item.datasetIndex >= 6) return null;  // hide capacity lines
               const slot = item.datasetIndex < 3 ? 'Morning' : 'Afternoon';
               return ` ${slot} ${item.dataset.label}: ${item.raw}`;
             },
