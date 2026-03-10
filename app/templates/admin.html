@@ -71,9 +71,14 @@
     <div class="col-12 mb-3">
       <div class="card">
         <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-          <div>
-            <strong>Bookings — next 4 weeks</strong>
-            <small class="text-muted ms-2">left bar = Morning · right bar = Afternoon</small>
+          <div class="d-flex align-items-center gap-2">
+            <button id="chartPrev" class="btn btn-sm btn-outline-secondary py-0 px-2" disabled title="Previous 4 weeks">
+              <i class="bi bi-chevron-left"></i>
+            </button>
+            <button id="chartNext" class="btn btn-sm btn-outline-secondary py-0 px-2" title="Next 4 weeks">
+              <i class="bi bi-chevron-right"></i>
+            </button>
+            <strong id="chartTitle">Bookings — next 4 weeks</strong>
           </div>
           <div class="d-flex gap-3 small">
             <span><span class="d-inline-block rounded-1 me-1" style="width:12px;height:12px;background:#E02FAC;"></span>Confirmed</span>
@@ -143,95 +148,91 @@
 {% block scripts %}
 {{ super() }}
 <script>
-// Bookings chart
+// Bookings chart with date navigation
 (function() {
-  const labels    = {{ chart_labels | tojson }};
-  const isWeekend = {{ chart_is_weekend | tojson }};
-  const PINK = '#E02FAC';
-  const DARK = '#1B1B1B';
+  const PINK  = '#E02FAC';
+  const DARK  = '#1B1B1B';
   const WHITE = '#ffffff';
+
+  const TODAY_ISO = '{{ today_iso }}';
+
+  // Parse YYYY-MM-DD → Date (local, no timezone shift)
+  function parseIso(s) {
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  // Format Date → YYYY-MM-DD
+  function toIso(dt) {
+    return dt.toISOString().slice(0, 10);
+  }
+
+  // Add/subtract days from a YYYY-MM-DD string
+  function shiftDate(iso, days) {
+    const dt = parseIso(iso);
+    dt.setDate(dt.getDate() + days);
+    return toIso(dt);
+  }
+
+  let currentStart = TODAY_ISO;   // tracks the displayed window start
 
   const ctx = document.getElementById('bookingsChart');
   if (!ctx) return;
 
-  new Chart(ctx, {
+  const capacityPlugin = {
+    id: 'capacityLines',
+    afterDraw(chart) {
+      const { ctx: c, chartArea: { left, right }, scales: { y } } = chart;
+      [6, 12, 18].forEach(val => {
+        const yPos = y.getPixelForValue(val);
+        c.save();
+        c.beginPath();
+        c.setLineDash([4, 4]);
+        c.strokeStyle = 'rgba(100,100,100,0.6)';
+        c.lineWidth = 1.5;
+        c.moveTo(left, yPos);
+        c.lineTo(right, yPos);
+        c.stroke();
+        c.restore();
+      });
+    }
+  };
+
+  function makeDatasets(d) {
+    return [
+      { label: 'Confirmed',  stack: 'morning',   data: d.morning_confirmed,   backgroundColor: PINK,  borderRadius: 2 },
+      { label: 'Pending',    stack: 'morning',   data: d.morning_pending,     backgroundColor: DARK,  borderRadius: 2 },
+      { label: 'Waitlisted', stack: 'morning',   data: d.morning_waitlisted,  backgroundColor: WHITE, borderColor: DARK, borderWidth: 1, borderRadius: 2 },
+      { label: 'Confirmed',  stack: 'afternoon', data: d.afternoon_confirmed, backgroundColor: PINK,  borderRadius: 2 },
+      { label: 'Pending',    stack: 'afternoon', data: d.afternoon_pending,   backgroundColor: DARK,  borderRadius: 2 },
+      { label: 'Waitlisted', stack: 'afternoon', data: d.afternoon_waitlisted,backgroundColor: WHITE, borderColor: DARK, borderWidth: 1, borderRadius: 2 },
+    ];
+  }
+
+  // Initial data from server-rendered template (no fetch on first load)
+  const initialData = {
+    labels:              {{ chart_labels | tojson }},
+    is_weekend:          {{ chart_is_weekend | tojson }},
+    morning_confirmed:   {{ chart_morning_confirmed | tojson }},
+    morning_pending:     {{ chart_morning_pending | tojson }},
+    morning_waitlisted:  {{ chart_morning_waitlisted | tojson }},
+    afternoon_confirmed: {{ chart_afternoon_confirmed | tojson }},
+    afternoon_pending:   {{ chart_afternoon_pending | tojson }},
+    afternoon_waitlisted:{{ chart_afternoon_waitlisted | tojson }},
+  };
+
+  let isWeekend = initialData.is_weekend;
+
+  const chart = new Chart(ctx, {
     type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        // ── Morning stack ──────────────────────────────────────────────
-        {
-          label: 'Confirmed',
-          stack: 'morning',
-          data: {{ chart_morning_confirmed | tojson }},
-          backgroundColor: PINK,
-          borderRadius: 2,
-        },
-        {
-          label: 'Pending',
-          stack: 'morning',
-          data: {{ chart_morning_pending | tojson }},
-          backgroundColor: DARK,
-          borderRadius: 2,
-        },
-        {
-          label: 'Waitlisted',
-          stack: 'morning',
-          data: {{ chart_morning_waitlisted | tojson }},
-          backgroundColor: WHITE,
-          borderColor: DARK,
-          borderWidth: 1,
-          borderRadius: 2,
-        },
-        // ── Afternoon stack ────────────────────────────────────────────
-        {
-          label: 'Confirmed',
-          stack: 'afternoon',
-          data: {{ chart_afternoon_confirmed | tojson }},
-          backgroundColor: PINK,
-          borderRadius: 2,
-        },
-        {
-          label: 'Pending',
-          stack: 'afternoon',
-          data: {{ chart_afternoon_pending | tojson }},
-          backgroundColor: DARK,
-          borderRadius: 2,
-        },
-        {
-          label: 'Waitlisted',
-          stack: 'afternoon',
-          data: {{ chart_afternoon_waitlisted | tojson }},
-          backgroundColor: WHITE,
-          borderColor: DARK,
-          borderWidth: 1,
-          borderRadius: 2,
-        },
-      ],
-    },
-    plugins: [{
-      id: 'capacityLines',
-      afterDraw(chart) {
-        const { ctx, chartArea: { left, right }, scales: { y } } = chart;
-        [6, 12, 18].forEach(val => {
-          const yPos = y.getPixelForValue(val);
-          ctx.save();
-          ctx.beginPath();
-          ctx.setLineDash([4, 4]);
-          ctx.strokeStyle = 'rgba(100,100,100,0.6)';
-          ctx.lineWidth = 1.5;
-          ctx.moveTo(left, yPos);
-          ctx.lineTo(right, yPos);
-          ctx.stroke();
-          ctx.restore();
-        });
-      }
-    }],
+    data: { labels: initialData.labels, datasets: makeDatasets(initialData) },
+    plugins: [capacityPlugin],
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: { duration: 300 },
       plugins: {
-        legend: { display: false },   // Custom legend in card-header
+        legend: { display: false },
         tooltip: {
           mode: 'index',
           intersect: false,
@@ -239,12 +240,9 @@
           callbacks: {
             title: (items) => {
               const idx = items[0]?.dataIndex;
-              return isWeekend[idx]
-                ? labels[idx] + ' (weekend)'
-                : labels[idx];
+              return isWeekend[idx] ? items[0].label + ' (weekend)' : items[0].label;
             },
             label: (item) => {
-              if (item.datasetIndex >= 6) return null;  // hide capacity lines
               const slot = item.datasetIndex < 3 ? 'Morning' : 'Afternoon';
               return ` ${slot} ${item.dataset.label}: ${item.raw}`;
             },
@@ -256,8 +254,8 @@
           stacked: true,
           grid: { display: false },
           ticks: {
-            font: (ctx) => ({ size: isWeekend[ctx.index] ? 8 : 10 }),
-            color: (ctx) => isWeekend[ctx.index] ? '#ccc' : '#555',
+            font: (c) => ({ size: isWeekend[c.index] ? 8 : 10 }),
+            color: (c) => isWeekend[c.index] ? '#ccc' : '#555',
             maxRotation: 45,
           },
         },
@@ -271,6 +269,54 @@
       },
     },
   });
+
+  // ── Navigation ──────────────────────────────────────────────────────────
+  const prevBtn   = document.getElementById('chartPrev');
+  const nextBtn   = document.getElementById('chartNext');
+  const titleEl   = document.getElementById('chartTitle');
+
+  function updateTitle(start) {
+    // "Bookings — 10 Mar → 6 Apr"
+    const s = parseIso(start);
+    const e = parseIso(shiftDate(start, 27));
+    const fmt = (dt) => dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    titleEl.textContent = `Bookings — ${fmt(s)} → ${fmt(e)}`;
+  }
+
+  function updateButtons() {
+    prevBtn.disabled = currentStart <= TODAY_ISO;
+  }
+
+  async function loadWindow(startIso) {
+    prevBtn.disabled = true;
+    nextBtn.disabled = true;
+    try {
+      const resp = await fetch(`/admin/api/chart-data?start=${startIso}`);
+      const d = await resp.json();
+      currentStart = d.start;     // server may have clamped it
+      isWeekend = d.is_weekend;
+
+      chart.data.labels   = d.labels;
+      chart.data.datasets = makeDatasets(d);
+      chart.update();
+
+      updateTitle(currentStart);
+    } finally {
+      updateButtons();
+      nextBtn.disabled = false;
+    }
+  }
+
+  prevBtn.addEventListener('click', () => {
+    loadWindow(shiftDate(currentStart, -28));
+  });
+
+  nextBtn.addEventListener('click', () => {
+    loadWindow(shiftDate(currentStart, 28));
+  });
+
+  // Set initial title (first window = "next 4 weeks" default wording)
+  // Leave as-is on first load; title updates on navigation
 })();
 </script>
 {% endblock %}

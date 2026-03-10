@@ -130,6 +130,7 @@ def index():
         active_dogs=active_dogs,
         active_walkers=active_walkers,
         # Chart
+        today_iso=today.isoformat(),
         chart_labels=chart_labels,
         chart_is_weekend=chart_is_weekend,
         chart_morning_confirmed=chart_morning_confirmed,
@@ -141,6 +142,68 @@ def index():
         # Availability grid
         weekdays=weekdays,
         walker_grid=walker_grid,
+    )
+
+
+@admin_bp.route("/api/chart-data")
+@login_required
+@admin_required
+def chart_data():
+    """Return 28-day booking chart data as JSON starting from ?start=YYYY-MM-DD.
+    Start date is clamped to today at the minimum."""
+    from datetime import date, timedelta
+    from sqlalchemy import func
+
+    today = date.today()
+
+    start_str = request.args.get('start')
+    try:
+        start = date.fromisoformat(start_str)
+    except (TypeError, ValueError):
+        start = today
+
+    # Never allow scrolling before today
+    if start < today:
+        start = today
+
+    chart_days = [start + timedelta(days=i) for i in range(28)]
+    chart_end  = chart_days[-1]
+
+    chart_bookings = (
+        Booking.query
+        .filter(
+            Booking.date >= start,
+            Booking.date <= chart_end,
+            Booking.status.in_(['confirmed', 'requested', 'waitlisted']),
+            Booking.slot.in_(['Morning', 'Afternoon']),
+        )
+        .with_entities(
+            Booking.date,
+            Booking.slot,
+            Booking.status,
+            func.count(Booking.id).label('cnt'),
+        )
+        .group_by(Booking.date, Booking.slot, Booking.status)
+        .all()
+    )
+
+    booking_lookup = {}
+    for row in chart_bookings:
+        booking_lookup.setdefault(row.date, {}).setdefault(row.slot, {})[row.status] = row.cnt
+
+    def slot_cnt(d, slot, status):
+        return booking_lookup.get(d, {}).get(slot, {}).get(status, 0)
+
+    return jsonify(
+        start=start.isoformat(),
+        labels=[d.strftime('%a %-d %b') for d in chart_days],
+        is_weekend=[1 if d.weekday() >= 5 else 0 for d in chart_days],
+        morning_confirmed=[slot_cnt(d, 'Morning',   'confirmed')  for d in chart_days],
+        morning_pending=[slot_cnt(d, 'Morning',   'requested')  for d in chart_days],
+        morning_waitlisted=[slot_cnt(d, 'Morning',   'waitlisted') for d in chart_days],
+        afternoon_confirmed=[slot_cnt(d, 'Afternoon', 'confirmed')  for d in chart_days],
+        afternoon_pending=[slot_cnt(d, 'Afternoon', 'requested')  for d in chart_days],
+        afternoon_waitlisted=[slot_cnt(d, 'Afternoon', 'waitlisted') for d in chart_days],
     )
 
 
