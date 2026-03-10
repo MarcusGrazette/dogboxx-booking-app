@@ -153,17 +153,11 @@
                 <!-- Dog header -->
                 <div class="card-body pb-2">
                     <div class="d-flex align-items-center gap-3 mb-3">
-                        {% if dog.pic %}
-                        <img src="{{ url_for('static', filename='uploads/dogs/' + dog.pic) }}"
+                        <img src="{{ url_for('static', filename='uploads/dogs/' + dog.pic) if dog.pic else url_for('static', filename='uploads/dogs/default-dog.png') }}"
+                             onerror="this.onerror=null;this.src='{{ url_for('static', filename='uploads/dogs/default-dog.png') }}'"
                              class="rounded-circle flex-shrink-0"
                              alt="{{ dog.name }}"
                              style="width: 64px; height: 64px; object-fit: cover; border: 3px solid var(--db-primary-subtle);">
-                        {% else %}
-                        <div class="rounded-circle flex-shrink-0 d-flex align-items-center justify-content-center"
-                             style="width: 64px; height: 64px; background: var(--db-primary-subtle); border: 3px solid var(--db-primary-subtle);">
-                            <i class="bi bi-heart-fill fs-4" style="color: var(--bs-primary);"></i>
-                        </div>
-                        {% endif %}
                         <div>
                             <h5 class="fw-bold mb-0">{{ dog.name }}</h5>
                             <span class="text-muted small">Upcoming walks</span>

@@ -24,33 +24,18 @@ def app():
     return application
 
 
-@pytest.fixture(scope='session')
-def _db_session(app):
-    """Create all tables once per test session."""
+@pytest.fixture(autouse=True)
+def db(app):
+    """
+    Create all tables before each test, drop them after.
+    Reliable isolation across SQLAlchemy 2.x — slightly slower than
+    transaction rollback but avoids session.bind deprecation issues.
+    """
     with app.app_context():
         _db.create_all()
         yield _db
+        _db.session.remove()
         _db.drop_all()
-
-
-@pytest.fixture(autouse=True)
-def db(app, _db_session):
-    """
-    Wrap each test in a transaction that rolls back when done.
-    This keeps tests isolated without recreating the schema each time.
-    """
-    with app.app_context():
-        connection = _db_session.engine.connect()
-        transaction = connection.begin()
-
-        # Bind the session to this connection
-        _db_session.session.bind = connection
-
-        yield _db_session
-
-        _db_session.session.remove()
-        transaction.rollback()
-        connection.close()
 
 
 @pytest.fixture

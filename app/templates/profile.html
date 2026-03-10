@@ -204,12 +204,9 @@
                     {# Photo (hover to edit) + name + breed/gender #}
                     <div class="d-flex align-items-center gap-3 mb-3">
                         <div class="dog-photo-wrap" id="dog-photo-clickable" title="Update photo">
-                            {% if dog and dog.pic %}
-                            <img src="{{ url_for('static', filename='uploads/dogs/' + dog.pic) }}"
-                                 alt="{{ dog.name }}" id="dog-photo-preview">
-                            {% else %}
-                            <div class="dog-photo-placeholder" id="dog-photo-preview">🐾</div>
-                            {% endif %}
+                            <img src="{{ url_for('static', filename='uploads/dogs/' + dog.pic) if dog and dog.pic else url_for('static', filename='uploads/dogs/default-dog.png') }}"
+                                 onerror="this.onerror=null;this.src='{{ url_for('static', filename='uploads/dogs/default-dog.png') }}'"
+                                 alt="{{ dog.name if dog else 'Dog' }}" id="dog-photo-preview">
                             <div class="dog-photo-edit-overlay">
                                 <i class="bi bi-pencil-fill"></i>
                             </div>

@@ -61,7 +61,8 @@ class TestingConfig(Config):
     DEBUG = True
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
     WTF_CSRF_ENABLED = False
-    
+    RATELIMIT_ENABLED = False
+
     # No HTTPS enforcement in testing
     SESSION_COOKIE_SECURE = False
     REMEMBER_COOKIE_SECURE = False
