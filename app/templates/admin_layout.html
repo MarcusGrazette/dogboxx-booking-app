@@ -115,6 +115,13 @@
                             <span>Dashboard</span>
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('admin.revenue') }}"
+                           class="nav-link {% if request.endpoint == 'admin.revenue' %}active{% endif %}">
+                            <i class="bi bi-currency-pound me-2"></i>
+                            <span>Revenue</span>
+                        </a>
+                    </li>
 
                     <!-- Group Walks -->
                     <li class="nav-header">Group Walks</li>

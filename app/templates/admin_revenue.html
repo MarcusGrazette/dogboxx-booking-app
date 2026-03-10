@@ -1,0 +1,300 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}Revenue{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block page_title %}Revenue{% endblock %}
+{% block page_subtitle %}Confirmed walks · revenue by day{% endblock %}
+
+{% block main %}
+
+  {# ── Stat cards ── #}
+  <div class="row mb-3">
+
+    <div class="col-md-4 mb-3">
+      <div class="card h-100">
+        <div class="card-body d-flex align-items-center gap-3 py-3">
+          <div style="font-size:2rem; color:#C0258F;"><i class="bi bi-currency-pound"></i></div>
+          <div>
+            <div id="statRevenue" style="font-size:1.75rem; font-weight:700; line-height:1; color:#1B1B1B;">
+              £{{ "%.2f"|format(total_revenue) }}
+            </div>
+            <div class="text-muted small">Total revenue</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4 mb-3">
+      <div class="card h-100">
+        <div class="card-body d-flex align-items-center gap-3 py-3">
+          <div style="font-size:2rem; color:#E02FAC;"><i class="bi bi-person-walking"></i></div>
+          <div>
+            <div id="statWalks" style="font-size:1.75rem; font-weight:700; line-height:1; color:#1B1B1B;">
+              {{ total_walks }}
+            </div>
+            <div class="text-muted small">Confirmed walks</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4 mb-3">
+      <div class="card h-100">
+        <div class="card-body d-flex align-items-center gap-3 py-3">
+          <div style="font-size:2rem; color:#5E5E5E;"><i class="bi bi-tags"></i></div>
+          <div>
+            <div id="statDoubles" style="font-size:1.75rem; font-weight:700; line-height:1; color:#1B1B1B;">
+              {{ total_doubles }}
+            </div>
+            <div class="text-muted small">Double-slot discounts applied</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  {# ── Revenue chart ── #}
+  <div class="row mb-3">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <div class="d-flex align-items-center gap-2">
+            <button id="chartPrev" class="btn btn-sm btn-outline-secondary py-0 px-2" title="Previous month">
+              <i class="bi bi-chevron-left"></i>
+            </button>
+            <button id="chartNext" class="btn btn-sm btn-outline-secondary py-0 px-2" title="Next month">
+              <i class="bi bi-chevron-right"></i>
+            </button>
+            {%- set m = start_iso[5:7]|int %}
+            {%- set months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] %}
+            <strong id="chartTitle">Revenue — {{ months[m-1] }} {{ start_iso[:4] }}</strong>
+          </div>
+          <div class="small text-muted" id="chartPricingNote">
+            {% if current_pricing %}
+              £{{ "%.2f"|format(current_pricing.price_per_walk) }}/walk
+              · £{{ "%.2f"|format(current_pricing.double_slot_discount) }} double-slot discount
+            {% endif %}
+          </div>
+        </div>
+        <div class="card-body" style="position:relative; height:280px;">
+          <canvas id="revenueChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Pricing tiers ── #}
+  <div class="row">
+
+    {# Current pricing #}
+    <div class="col-md-5 mb-3">
+      <div class="card h-100">
+        <div class="card-header"><strong>Pricing history</strong></div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0">
+            <thead style="background:#f8f9fa;">
+              <tr>
+                <th>Effective from</th>
+                <th>Price / walk</th>
+                <th>Double-slot discount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in all_pricing %}
+              <tr {% if loop.first %}class="table-active fw-bold"{% endif %}>
+                <td>{{ p.effective_from.strftime('%-d %b %Y') }}
+                  {% if loop.first %}<span class="badge text-bg-secondary ms-1" style="font-size:0.65rem;">current</span>{% endif %}
+                </td>
+                <td>£{{ "%.2f"|format(p.price_per_walk) }}</td>
+                <td>£{{ "%.2f"|format(p.double_slot_discount) }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="3" class="text-muted text-center py-3">No pricing configured.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    {# Add new tier #}
+    <div class="col-md-7 mb-3">
+      <div class="card h-100">
+        <div class="card-header"><strong>Update pricing</strong></div>
+        <div class="card-body">
+          <p class="text-muted small mb-3">
+            Add a new pricing tier with a future effective date.
+            Past revenue figures will continue to use whichever tier was in effect at the time.
+          </p>
+          <form method="POST" action="{{ url_for('admin.update_pricing') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="row g-3">
+              <div class="col-sm-4">
+                <label class="form-label small fw-semibold">Price per walk (£)</label>
+                <input type="number" name="price_per_walk" class="form-control"
+                       step="0.01" min="0" required
+                       value="{{ "%.2f"|format(current_pricing.price_per_walk) if current_pricing else '20.00' }}">
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label small fw-semibold">Double-slot discount (£)</label>
+                <input type="number" name="double_slot_discount" class="form-control"
+                       step="0.01" min="0" required
+                       value="{{ "%.2f"|format(current_pricing.double_slot_discount) if current_pricing else '0.00' }}">
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label small fw-semibold">Effective from</label>
+                <input type="date" name="effective_from" class="form-control" required
+                       value="{{ today_iso }}">
+              </div>
+            </div>
+            <div class="mt-3">
+              <button type="submit" class="btn btn-sm" style="background:#E02FAC; color:#fff;">
+                <i class="bi bi-plus-circle me-1"></i>Save pricing tier
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+(function () {
+  const PINK = '#E02FAC';
+  const TODAY_ISO  = '{{ today_iso }}';
+  const MONTH_DAYS = {{ chart_labels | tojson }};   // day numbers as strings
+
+  // First-of-month helper
+  function firstOfMonth(iso) {
+    return iso.slice(0, 7) + '-01';
+  }
+
+  // Shift a YYYY-MM-01 string by N months
+  function shiftMonth(ymd, delta) {
+    const d = new Date(ymd + 'T00:00:00');
+    d.setMonth(d.getMonth() + delta);
+    return d.toISOString().slice(0, 7) + '-01';
+  }
+
+  function todayFirstOfMonth() {
+    return TODAY_ISO.slice(0, 7) + '-01';
+  }
+
+  let currentStart = firstOfMonth('{{ start_iso }}');
+
+  const ctx = document.getElementById('revenueChart');
+  if (!ctx) return;
+
+  const chart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: {{ chart_labels | tojson }},
+      datasets: [{
+        label: 'Revenue (£)',
+        data: {{ chart_revenue | tojson }},
+        backgroundColor: PINK,
+        borderRadius: 3,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 300 },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              const d = new Date(currentStart + 'T00:00:00');
+              d.setDate(parseInt(items[0].label));
+              return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+            },
+            label: (item) => {
+              const walks = walkData[item.dataIndex];
+              return [
+                ` Revenue: £${item.raw.toFixed(2)}`,
+                ` Walks: ${walks}`,
+              ];
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { font: { size: 10 } },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: (v) => '£' + v,
+          },
+          grid: { color: 'rgba(0,0,0,0.05)' },
+        },
+      },
+    },
+  });
+
+  let walkData = {{ chart_walks | tojson }};
+
+  // ── Stat card helpers ────────────────────────────────────────────────────
+  function updateStats(d) {
+    document.getElementById('statRevenue').textContent  = '£' + d.total_revenue.toFixed(2);
+    document.getElementById('statWalks').textContent    = d.total_walks;
+    document.getElementById('statDoubles').textContent  = d.total_doubles;
+  }
+
+  // ── Navigation ───────────────────────────────────────────────────────────
+  const prevBtn   = document.getElementById('chartPrev');
+  const nextBtn   = document.getElementById('chartNext');
+  const titleEl   = document.getElementById('chartTitle');
+
+  function updateTitle(startIso) {
+    const d = new Date(startIso + 'T00:00:00');
+    titleEl.textContent = 'Revenue — ' + d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  }
+
+  function updateButtons() {
+    prevBtn.disabled = currentStart <= todayFirstOfMonth();
+  }
+
+  async function loadMonth(startIso) {
+    prevBtn.disabled = true;
+    nextBtn.disabled = true;
+    try {
+      const resp = await fetch(`/admin/api/revenue-data?start=${startIso}`);
+      const d    = await resp.json();
+      currentStart = d.start;
+      walkData     = d.walks;
+
+      chart.data.labels            = d.labels;
+      chart.data.datasets[0].data  = d.revenue;
+      chart.update();
+
+      updateTitle(currentStart);
+      updateStats(d);
+    } finally {
+      updateButtons();
+      nextBtn.disabled = false;
+    }
+  }
+
+  prevBtn.addEventListener('click', () => loadMonth(shiftMonth(currentStart, -1)));
+  nextBtn.addEventListener('click', () => loadMonth(shiftMonth(currentStart,  1)));
+
+  // Disable prev if we're already at the earliest useful month
+  updateButtons();
+  updateTitle(currentStart);
+})();
+</script>
+{% endblock %}
