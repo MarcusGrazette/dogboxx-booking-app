@@ -18,7 +18,7 @@
         {% endif %}
     </a>
 
-    <div class="dropdown-menu dropdown-menu-end shadow p-0"
+    <div class="dropdown-menu dropdown-menu-end shadow p-0 notif-dropdown-panel"
          style="width:360px; max-height:480px; overflow-y:auto; border:1px solid #e8e0e6;">
 
         {# Header #}
@@ -93,6 +93,19 @@
 }
 .notif-item:hover {
     background-color: #f9f0f7 !important;
+}
+
+/* On small screens, pin the panel to the viewport edges instead of
+   letting it overflow left of the bell icon. */
+@media (max-width: 576px) {
+    .notif-dropdown-panel {
+        position: fixed !important;
+        top: 60px !important;   /* below the navbar */
+        left: 8px !important;
+        right: 8px !important;
+        width: auto !important;
+        max-height: 70vh !important;
+    }
 }
 </style>
 
