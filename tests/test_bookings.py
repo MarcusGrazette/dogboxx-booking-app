@@ -12,12 +12,38 @@ import json
 import pytest
 from werkzeug.security import generate_password_hash
 from flask import url_for
+from sqlalchemy import text
 
 from app import db
 from app.models import (
     User, Client, Dog, DogOwner, Walker, WalkerSchedule,
     ServiceType, Booking,
 )
+
+
+# ---------------------------------------------------------------------------
+# Integration test isolation
+#
+# HTTP requests commit to the real DB — conftest's transaction rollback only
+# covers direct db.session calls.  We truncate all relevant tables before each
+# test so we always start from a clean slate.
+# ---------------------------------------------------------------------------
+
+TRUNCATE_ORDER = [
+    'booking_status_changes', 'bookings', 'notifications',
+    'dog_owners', 'dogs', 'walker_schedules', 'walker_unavailabilities',
+    'walkers', 'clients', 'service_types', 'users',
+]
+
+
+@pytest.fixture(autouse=True)
+def clean_tables(app):
+    """Truncate all tables before each test in this module."""
+    with app.app_context():
+        for table in TRUNCATE_ORDER:
+            db.session.execute(text(f'DELETE FROM {table}'))
+        db.session.commit()
+    yield
 
 # ---------------------------------------------------------------------------
 # Date helpers — use tomorrow and next week to pass validation
@@ -252,10 +278,18 @@ class TestClientRecurringBooking:
         sun = mon + datetime.timedelta(days=6)   # includes Sat + Sun
 
         with app.app_context():
-            make_walker_with_schedule(
-                f'walker_daily_{id(self)}@test.com',
-                mon.weekday(), 'Morning'
-            )
+            # Schedule walker for every weekday so capacity exists Mon–Fri
+            walker_email = f'walker_daily_{id(self)}@test.com'
+            for dow in range(5):  # Mon=0 through Fri=4
+                if dow == 0:
+                    make_walker_with_schedule(walker_email, dow, 'Morning')
+                else:
+                    # Re-use the walker already created
+                    from app.models import Walker as WModel
+                    w = WModel.query.join(User).filter(User.email == walker_email).first()
+                    s = WalkerSchedule(walker_id=w.id, day_of_week=dow, slot='Morning', active=True)
+                    db.session.add(s)
+                    db.session.flush()
             make_service(capacity=6)
             user = make_user(f'client_daily_{id(self)}@test.com')
             make_client_profile(user.id)
@@ -508,10 +542,17 @@ class TestAdminRecurringForDog:
         sun = mon + datetime.timedelta(days=6)
 
         with app.app_context():
-            make_walker_with_schedule(
-                f'walker_adr_{id(self)}@test.com',
-                mon.weekday(), 'Morning'
-            )
+            # Schedule walker for every weekday so capacity exists Mon–Fri
+            walker_email = f'walker_adr_{id(self)}@test.com'
+            for dow in range(5):
+                if dow == 0:
+                    make_walker_with_schedule(walker_email, dow, 'Morning')
+                else:
+                    from app.models import Walker as WModel
+                    w = WModel.query.join(User).filter(User.email == walker_email).first()
+                    s = WalkerSchedule(walker_id=w.id, day_of_week=dow, slot='Morning', active=True)
+                    db.session.add(s)
+                    db.session.flush()
             make_service(capacity=6)
             admin = make_user(f'admin_adr_{id(self)}@test.com', role='walker', is_admin=True)
             client_user = make_user(f'cl_adr_{id(self)}@test.com', role='client')
