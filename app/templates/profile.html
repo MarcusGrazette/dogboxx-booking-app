@@ -38,27 +38,90 @@
         border-color: #E02FAC;
     }
 
-    /* Dog photo */
+    /* Profile photos — shared size for visual consistency */
+    .profile-avatar,
+    .dog-photo-wrap {
+        width: 64px;
+        height: 64px;
+        flex-shrink: 0;
+    }
     .dog-photo-wrap {
         position: relative;
-        width: 120px;
-        height: 120px;
-        margin: 0 auto 1rem;
+        cursor: pointer;
     }
     .dog-photo-wrap img,
     .dog-photo-placeholder {
-        width: 120px;
-        height: 120px;
+        width: 64px;
+        height: 64px;
         border-radius: 50%;
         object-fit: cover;
-        border: 4px solid var(--db-primary-subtle);
+        border: 3px solid var(--db-primary-subtle);
+        display: block;
     }
     .dog-photo-placeholder {
         display: flex;
         align-items: center;
         justify-content: center;
         background: var(--db-primary-subtle);
-        font-size: 2.5rem;
+        font-size: 1.6rem;
+    }
+    .dog-photo-edit-overlay {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.45);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 1rem;
+        opacity: 0;
+        transition: opacity 0.18s ease;
+    }
+    .dog-photo-wrap:hover .dog-photo-edit-overlay {
+        opacity: 1;
+    }
+
+    /* Read-only detail rows */
+    .detail-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.6rem;
+        padding: 0.4rem 0;
+        font-size: 0.875rem;
+        color: #444;
+    }
+    .detail-row + .detail-row {
+        border-top: 1px solid #f0f0f0;
+    }
+    .detail-row .detail-icon {
+        color: #bbb;
+        flex-shrink: 0;
+        margin-top: 2px;
+    }
+
+    /* Stat blocks */
+    .stat-block {
+        text-align: center;
+        padding: 0.75rem 0.5rem;
+    }
+    .stat-block .stat-num {
+        font-size: 1.8rem;
+        font-weight: 700;
+        line-height: 1;
+        color: #E02FAC;
+    }
+    .stat-block .stat-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #999;
+        margin-top: 0.2rem;
+    }
+
+    .profile-card {
+        border-radius: 1rem;
+        border: 0;
     }
 </style>
 {% endblock %}
@@ -68,232 +131,251 @@
 <form method="post" enctype="multipart/form-data" novalidate>
     {{ form.hidden_tag() }}
 
+    {# ── Hidden fields: read-only data that must still round-trip for form validation ── #}
+    {{ form.firstname(type="hidden") }}
+    {{ form.lastname(type="hidden") }}
+    {{ form.address_line_1(type="hidden") }}
+    {{ form.address_line_2(type="hidden") }}
+    {{ form.address_line_3(type="hidden") }}
+    {{ form.postcode(type="hidden") }}
+    {{ form.dog_name(type="hidden") }}
+    {# dog_gender is a SelectField — type="hidden" doesn't work on <select>, use raw input #}
+    <input type="hidden" name="dog_gender" value="{{ form.dog_gender.data or '' }}">
+    {{ form.dog_breed(type="hidden") }}
+    {{ form.dog_dob(type="hidden") }}
+    {# dog_allergies hidden so existing data isn't wiped — admin manages this field #}
+    <input type="hidden" name="dog_allergies" value="{{ form.dog_allergies.data or '' }}">
+
     <div class="row justify-content-center">
-    <div class="col-12 col-md-10 col-lg-8">
+    <div class="col-12 col-xl-11">
+    <div class="row g-4 align-items-start">
 
-        <!-- Profile header -->
-        <div class="card shadow-sm border-0 mb-4" style="border-radius:1rem; overflow:hidden;">
-            <div class="card-body p-4 d-flex align-items-center gap-4">
-                <div class="rounded-circle fw-bold d-flex align-items-center justify-content-center flex-shrink-0"
-                     style="width:64px; height:64px; background:#E02FAC; font-size:1.4rem; color:#fff;">
-                    {{ current_user.firstname[0] | upper }}{{ current_user.lastname[0] | upper if current_user.lastname else '' }}
-                </div>
-                <div>
-                    <h4 class="fw-bold mb-0">{{ current_user.firstname }} {{ current_user.lastname }}</h4>
-                    <div class="text-muted small">{{ current_user.email }}</div>
-                    <div class="text-muted" style="font-size:0.72rem;">Contact support to change your email address.</div>
-                </div>
-            </div>
-        </div>
+        {# ══════════════════════════════════
+           LEFT COLUMN — info cards
+           ══════════════════════════════════ #}
+        <div class="col-12 col-md-5">
 
-        <!-- Personal Info -->
-        <div class="card shadow-sm border-0 mb-4" style="border-radius:1rem;">
-            <div class="card-body p-4">
-                <h6 class="fw-bold text-uppercase text-muted small mb-3">
-                    <i class="bi bi-person-fill me-1" style="color:var(--bs-primary);"></i> Personal Info
-                </h6>
-                <div class="row g-3">
-                    <div class="col-6">
-                        <label class="form-label small fw-semibold">First name</label>
-                        {{ form.firstname(class="form-control", placeholder="First name") }}
-                        {% for error in form.firstname.errors %}
-                        <div class="text-danger small mt-1">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label small fw-semibold">Last name</label>
-                        {{ form.lastname(class="form-control", placeholder="Last name") }}
-                        {% for error in form.lastname.errors %}
-                        <div class="text-danger small mt-1">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-        </div>
+            {# ─── CLIENT CARD ─── #}
+            <div class="card shadow-sm profile-card mb-4" style="background:#f2f2f2;">
+                <div class="card-body p-4">
 
-        <!-- Address -->
-        <div class="card shadow-sm border-0 mb-4" style="border-radius:1rem;">
-            <div class="card-body p-4">
-                <h6 class="fw-bold text-uppercase text-muted small mb-3">
-                    <i class="bi bi-house-door-fill me-1" style="color:var(--bs-primary);"></i> Address
-                </h6>
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold">Address line 1</label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="bi bi-house-door text-secondary"></i></span>
-                        {{ form.address_line_1(class="form-control", placeholder="Street address") }}
-                    </div>
-                    {% for error in form.address_line_1.errors %}
-                    <div class="text-danger small mt-1">{{ error }}</div>
-                    {% endfor %}
-                </div>
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold text-muted">Address line 2 <span class="fw-normal">(optional)</span></label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="bi bi-three-dots text-secondary"></i></span>
-                        {{ form.address_line_2(class="form-control", placeholder="Flat, building, etc.") }}
-                    </div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold text-muted">Address line 3 <span class="fw-normal">(optional)</span></label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="bi bi-three-dots text-secondary"></i></span>
-                        {{ form.address_line_3(class="form-control", placeholder="Town / City") }}
-                    </div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold">Postcode</label>
-                    <div class="input-group" style="max-width:180px;">
-                        <span class="input-group-text"><i class="bi bi-mailbox text-secondary"></i></span>
-                        {{ form.postcode(class="form-control text-uppercase") }}
-                    </div>
-                    {% for error in form.postcode.errors %}
-                    <div class="text-danger small mt-1">{{ error }}</div>
-                    {% endfor %}
-                </div>
-                <div>
-                    <label class="form-label small fw-semibold">Pickup instructions</label>
-                    {{ form.pickup_instructions(class="form-control", rows=2, placeholder="e.g. Gate code, ring bell, leave with neighbour…") }}
-                </div>
-            </div>
-        </div>
-
-        <!-- Notifications -->
-        <div class="card shadow-sm border-0 mb-4" style="border-radius:1rem;">
-            <div class="card-body p-4">
-                <h6 class="fw-bold text-uppercase text-muted small mb-3">
-                    <i class="bi bi-bell-fill me-1" style="color:var(--bs-primary);"></i> Notifications
-                </h6>
-                <div class="d-flex align-items-center justify-content-between py-2 border-bottom">
-                    <div>
-                        <div class="fw-semibold small"><i class="bi bi-envelope me-1 text-muted"></i> Email</div>
-                        <div class="text-muted" style="font-size:0.75rem;">{{ current_user.email }}</div>
-                    </div>
-                    <div class="form-check form-switch mb-0">
-                        {{ form.notify_email(class="form-check-input", role="switch") }}
-                    </div>
-                </div>
-                <div class="d-flex align-items-center justify-content-between py-2">
-                    <div>
-                        <div class="fw-semibold small"><i class="bi bi-whatsapp me-1 text-muted"></i> WhatsApp</div>
-                        <div class="text-muted" style="font-size:0.75rem;">Get booking updates via WhatsApp</div>
-                    </div>
-                    <div class="form-check form-switch mb-0">
-                        {{ form.notify_whatsapp(class="form-check-input", role="switch", id="notify_whatsapp") }}
-                    </div>
-                </div>
-                <div id="phone-field" class="mt-2" style="{% if not form.notify_whatsapp.data %}display:none;{% endif %}">
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="bi bi-phone text-secondary"></i></span>
-                        {{ form.phone(class="form-control", placeholder="Phone number") }}
-                    </div>
-                    {% for error in form.phone.errors %}
-                    <div class="text-danger small mt-1">{{ error }}</div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-
-        <!-- Dog Info -->
-        <div class="card shadow-sm border-0 mb-4" style="border-radius:1rem;">
-            <div class="card-body p-4">
-                <h6 class="fw-bold text-uppercase text-muted small mb-4">
-                    <i class="bi bi-heart-fill me-1" style="color:var(--bs-primary);"></i>
-                    {% if dog %}{{ dog.name }}{% else %}Your Dog{% endif %}
-                </h6>
-
-                <!-- Dog photo -->
-                <div class="text-center mb-4">
-                    <div class="dog-photo-wrap">
-                        {% if dog and dog.pic %}
-                        <img src="{{ url_for('static', filename='uploads/dogs/' + dog.pic) }}"
-                             alt="{{ dog.name }}" id="dog-photo-preview">
-                        {% else %}
-                        <div class="dog-photo-placeholder" id="dog-photo-preview">🐾</div>
-                        {% endif %}
-                    </div>
-                    <div class="mt-2">
-                        <input type="file" class="filepond" name="file" accept="image/png, image/jpeg, image/gif" />
-                    </div>
-                </div>
-
-                <div class="row g-3 mb-3">
-                    <div class="col-7">
-                        <label class="form-label small fw-semibold">Name</label>
-                        <div class="input-group">
-                            <span class="input-group-text"><i class="bi bi-tag text-secondary"></i></span>
-                            {{ form.dog_name(class="form-control", placeholder="Dog's name") }}
+                    {# Avatar + name + email #}
+                    <div class="d-flex align-items-center gap-3 mb-4">
+                        <div class="profile-avatar rounded-circle fw-bold d-flex align-items-center justify-content-center"
+                             style="background:#E02FAC; font-size:1.1rem; color:#fff;">
+                            {{ current_user.firstname[0] | upper }}{{ current_user.lastname[0] | upper if current_user.lastname else '' }}
                         </div>
-                        {% for error in form.dog_name.errors %}
-                        <div class="text-danger small mt-1">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-                    <div class="col-5">
-                        <label class="form-label small fw-semibold">Gender</label>
-                        {{ form.dog_gender(class="form-select") }}
-                        {% for error in form.dog_gender.errors %}
-                        <div class="text-danger small mt-1">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold">Breed</label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="bi bi-search text-secondary"></i></span>
-                        {{ form.dog_breed(class="form-control", placeholder="e.g. Labrador, Mixed breed…") }}
-                    </div>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold">Date of birth</label>
-                    <div class="d-flex align-items-center gap-3">
-                        <div class="input-group" style="max-width:200px;">
-                            <span class="input-group-text"><i class="bi bi-calendar text-secondary"></i></span>
-                            {{ form.dog_dob(class="form-control", type="date", max=today, id="dog-dob") }}
+                        <div>
+                            <div class="fw-bold lh-sm">{{ current_user.firstname }} {{ current_user.lastname }}</div>
+                            <div class="text-muted small">{{ current_user.email }}</div>
                         </div>
-                        <span class="badge rounded-pill text-bg-light border text-muted fw-normal px-3 py-2"
-                              id="dog-age-badge" style="font-size:0.8rem;">
-                            {% if dog and dog.date_of_birth %}
-                            <span id="dog-age-text"></span>
-                            {% else %}
-                            Age unknown
+                    </div>
+
+                    {# Address #}
+                    {% if client and client.street_address %}
+                    {% set addr_lines = client.street_address.split('\n') %}
+                    <div class="detail-row">
+                        <i class="bi bi-house-door detail-icon"></i>
+                        <div>
+                            {% for line in addr_lines %}
+                                {% if line.strip() %}<div>{{ line.strip() }}</div>{% endif %}
+                            {% endfor %}
+                            {% if client.postal_code %}
+                            <div class="fw-semibold">{{ client.postal_code | upper }}</div>
                             {% endif %}
-                        </span>
+                        </div>
                     </div>
-                    {% for error in form.dog_dob.errors %}
-                    <div class="text-danger small mt-1">{{ error }}</div>
-                    {% endfor %}
-                </div>
+                    {% else %}
+                    <div class="text-muted small fst-italic">No address on file</div>
+                    {% endif %}
 
-                <div>
-                    <label class="form-label small fw-semibold">Allergies / notes</label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="bi bi-bandaid text-secondary"></i></span>
-                        {{ form.dog_allergies(class="form-control", placeholder="Any allergies or health notes") }}
+                    <p class="text-muted mt-3 mb-0" style="font-size:0.75rem;">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Contact Dogboxx to update these details.
+                    </p>
+
+                </div>
+            </div>
+
+            {# ─── DOG CARD ─── #}
+            <div class="card shadow-sm profile-card mb-4" style="background:#f2f2f2;">
+                <div class="card-body p-4">
+
+                    {# Photo (hover to edit) + name + breed/gender #}
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="dog-photo-wrap" id="dog-photo-clickable" title="Update photo">
+                            {% if dog and dog.pic %}
+                            <img src="{{ url_for('static', filename='uploads/dogs/' + dog.pic) }}"
+                                 alt="{{ dog.name }}" id="dog-photo-preview">
+                            {% else %}
+                            <div class="dog-photo-placeholder" id="dog-photo-preview">🐾</div>
+                            {% endif %}
+                            <div class="dog-photo-edit-overlay">
+                                <i class="bi bi-pencil-fill"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="fw-bold lh-sm">{% if dog %}{{ dog.name }}{% else %}Your Dog{% endif %}</div>
+                            {% if dog %}
+                            <div class="text-muted small">
+                                {{ dog.gender | capitalize if dog.gender }}{% if dog.breed %} · {{ dog.breed }}{% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {# DOB + age #}
+                    {% if dog and dog.date_of_birth %}
+                    <div class="detail-row mb-3">
+                        <i class="bi bi-calendar3 detail-icon"></i>
+                        <div>
+                            <div>{{ dog.date_of_birth.strftime('%d %b %Y') }}</div>
+                            <div class="text-muted" style="font-size:0.75rem;" id="dog-age-display"></div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {# Hidden FilePond — triggered by clicking the photo #}
+                    <div style="display:none;">
+                        <input type="file" class="filepond" name="file"
+                               accept="image/png, image/jpeg, image/gif" />
+                    </div>
+
+                    <p class="text-muted mb-0" style="font-size:0.75rem;">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Contact Dogboxx to update these details.
+                    </p>
+
+                </div>
+            </div>
+
+            {# ─── NOTIFICATIONS CARD ─── #}
+            <div class="card shadow-sm profile-card" style="background:#f2f2f2;">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold text-uppercase text-muted small mb-3">
+                        <i class="bi bi-bell-fill me-1" style="color:var(--bs-primary);"></i> Notifications
+                    </h6>
+
+                    <div class="d-flex align-items-center justify-content-between py-2 border-bottom">
+                        <div>
+                            <div class="fw-semibold small"><i class="bi bi-envelope me-1 text-muted"></i> Email</div>
+                            <div class="text-muted" style="font-size:0.75rem;">{{ current_user.email }}</div>
+                        </div>
+                        <div class="form-check form-switch mb-0">
+                            {{ form.notify_email(class="form-check-input", role="switch") }}
+                        </div>
+                    </div>
+
+                    <div class="d-flex align-items-center justify-content-between py-2">
+                        <div>
+                            <div class="fw-semibold small"><i class="bi bi-whatsapp me-1 text-muted"></i> WhatsApp</div>
+                            <div class="text-muted" style="font-size:0.75rem;">Get booking updates via WhatsApp</div>
+                        </div>
+                        <div class="form-check form-switch mb-0">
+                            {{ form.notify_whatsapp(class="form-check-input", role="switch", id="notify_whatsapp") }}
+                        </div>
+                    </div>
+
+                    <div id="phone-field" class="mt-2" style="{% if not form.notify_whatsapp.data %}display:none;{% endif %}">
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-phone text-secondary"></i></span>
+                            {{ form.phone(class="form-control", placeholder="e.g. +44 7700 900000") }}
+                        </div>
+                        {% for error in form.phone.errors %}
+                        <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                </div>
+            </div>
+
+        </div>{# /left col #}
+
+        {# ══════════════════════════════════
+           RIGHT COLUMN — editable + stats
+           ══════════════════════════════════ #}
+        <div class="col-12 col-md-7">
+
+            {# ─── PICKUP INSTRUCTIONS ─── #}
+            <div class="card shadow-sm profile-card mb-4">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold text-uppercase text-muted small mb-1">
+                        <i class="bi bi-signpost-2 me-1" style="color:var(--bs-primary);"></i> Pickup Instructions
+                    </h6>
+                    <p class="text-muted mb-3" style="font-size:0.8rem;">
+                        Let us know anything we need to know to collect {{ dog.name if dog else 'your dog' }} — gate codes, doorbells, parking notes, etc.
+                    </p>
+                    {{ form.pickup_instructions(class="form-control", rows=5,
+                       placeholder="e.g. Our buzzer is labelled A, you can park the bike in our courtyard.") }}
+                    <div class="d-grid mt-3 save-btn-desktop">
+                        {{ form.submit(class="btn btn-primary fw-semibold") }}
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Save button (desktop) -->
-        <div class="d-grid mb-4 save-btn-desktop">
-            {{ form.submit(class="btn btn-primary btn-lg fw-semibold") }}
-        </div>
+            {# ─── BOOKING STATS ─── #}
+            <div class="card shadow-sm profile-card mb-4">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold text-uppercase text-muted small mb-3">
+                        <i class="bi bi-bar-chart-fill me-1" style="color:var(--bs-primary);"></i> {{ booking_stats.month_name }} at a glance
+                    </h6>
+
+                    <div class="row g-0 text-center mb-3">
+                        <div class="col border-end">
+                            <div class="stat-block">
+                                <div class="stat-num">{{ booking_stats.confirmed_this_month }}</div>
+                                <div class="stat-label">Confirmed</div>
+                            </div>
+                        </div>
+                        <div class="col border-end">
+                            <div class="stat-block">
+                                <div class="stat-num">{{ booking_stats.pending_this_month }}</div>
+                                <div class="stat-label">Pending</div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="stat-block">
+                                <div class="stat-num">{{ booking_stats.total_completed }}</div>
+                                <div class="stat-label">All-time walks</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if booking_stats.next_booking %}
+                    <div class="d-flex align-items-center gap-2 p-3 rounded-3"
+                         style="background:#fdf0fa; border: 1px solid #f5c8ed;">
+                        <i class="bi bi-calendar-check text-primary fs-5"></i>
+                        <div>
+                            <div class="fw-semibold small">Next confirmed walk</div>
+                            <div class="text-muted small">
+                                {{ booking_stats.next_booking.date.strftime('%A, %d %B') }}
+                                · {{ booking_stats.next_booking.slot }}
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="text-muted small fst-italic text-center pt-1">No upcoming confirmed walks</div>
+                    {% endif %}
+
+                </div>
+            </div>
+
+        </div>{# /right col #}
 
     </div>
     </div>
+    </div>
+
 </form>
 </div>
 
-<!-- Sticky save bar (mobile) -->
+{# Sticky save bar (mobile) #}
 <div class="save-bar shadow-lg">
-    <button type="submit" form="profile-form-id" class="btn btn-primary fw-semibold w-100"
+    <button type="button" class="btn btn-primary fw-semibold w-100"
             onclick="document.querySelector('form').submit()">
         Save changes
     </button>
 </div>
-
 {% endblock %}
 
 {% block scripts %}
@@ -303,12 +385,12 @@
     const whatsappCheckbox = document.getElementById('notify_whatsapp');
     const phoneField = document.getElementById('phone-field');
     if (whatsappCheckbox) {
-        whatsappCheckbox.addEventListener('change', function() {
+        whatsappCheckbox.addEventListener('change', function () {
             phoneField.style.display = this.checked ? 'block' : 'none';
         });
     }
 
-    // Dog age badge
+    // Dog age display
     function calcDogAge(dobStr) {
         if (!dobStr) return null;
         const dob = new Date(dobStr);
@@ -322,35 +404,44 @@
         return years === 1 ? `1 year, ${months}mo old` : `${years} years, ${months}mo old`;
     }
 
-    const dobInput = document.getElementById('dog-dob');
-    const ageBadge = document.getElementById('dog-age-text');
-
-    function updateAgeBadge() {
-        if (!dobInput || !ageBadge) return;
-        const age = calcDogAge(dobInput.value);
-        const badge = document.getElementById('dog-age-badge');
-        if (age) {
-            ageBadge.textContent = age;
-            badge.innerHTML = age;
-        } else {
-            badge.innerHTML = 'Age unknown';
-        }
+    const ageEl = document.getElementById('dog-age-display');
+    if (ageEl) {
+        {% if dog and dog.date_of_birth %}
+        const age = calcDogAge('{{ dog.date_of_birth.strftime("%Y-%m-%d") }}');
+        if (age) ageEl.textContent = age;
+        {% endif %}
     }
 
-    if (dobInput) {
-        dobInput.addEventListener('change', updateAgeBadge);
-        updateAgeBadge(); // run on load
-    }
-
-    // FilePond
+    // FilePond — hidden, triggered by hovering/clicking the dog photo
     FilePond.registerPlugin(FilePondPluginImagePreview, FilePondPluginFileValidateType);
-    FilePond.create(document.querySelector('.filepond'), {
+    const pond = FilePond.create(document.querySelector('.filepond'), {
         allowMultiple: false,
         acceptedFileTypes: ['image/png', 'image/jpeg', 'image/gif'],
-        styleItemPanelAspectRatio: 1,
         storeAsFile: true,
         credits: false,
-        labelIdle: '<i class="bi bi-camera fs-5"></i> Update photo',
+        onaddfile: (error, fileItem) => {
+            if (error) return;
+            // Live-preview the chosen image in the photo circle
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const wrap = document.getElementById('dog-photo-clickable');
+                // Replace whatever's in the wrap (img or placeholder div) with a fresh <img>
+                const existing = document.getElementById('dog-photo-preview');
+                if (existing) existing.remove();
+                const img = document.createElement('img');
+                img.src = e.target.result;
+                img.id = 'dog-photo-preview';
+                img.alt = 'Dog photo preview';
+                img.style.cssText = 'width:64px;height:64px;border-radius:50%;object-fit:cover;border:3px solid var(--db-primary-subtle);display:block;';
+                wrap.insertBefore(img, wrap.querySelector('.dog-photo-edit-overlay'));
+            };
+            reader.readAsDataURL(fileItem.file);
+        },
+    });
+
+    // Click the photo circle → open FilePond's file picker
+    document.getElementById('dog-photo-clickable').addEventListener('click', () => {
+        pond.browse();
     });
 </script>
 {% endblock %}

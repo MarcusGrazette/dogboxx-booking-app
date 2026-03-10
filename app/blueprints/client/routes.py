@@ -17,7 +17,7 @@ from app.capacity import check_availability, get_slot_availability_summary
 from app.forms import OnboardingForm, BookingForm, ProfileForm
 import logging
 import traceback
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date as date_type
 
 from app.blueprints.client import client_bp
 from app.utils.notifications import create_notification
@@ -182,6 +182,44 @@ def profile():
     dog_owner = DogOwner.query.filter_by(user_id=current_user.id, role='primary').first()
     dog = Dog.query.get(dog_owner.dog_id) if dog_owner else None
 
+    # Booking stats for the profile sidebar
+    from datetime import date
+    today_date = date.today()
+    month_start = date(today_date.year, today_date.month, 1)
+    if today_date.month == 12:
+        month_end = date(today_date.year + 1, 1, 1)
+    else:
+        month_end = date(today_date.year, today_date.month + 1, 1)
+
+    month_bookings = Booking.query.filter(
+        Booking.user_id == current_user.id,
+        Booking.date >= month_start,
+        Booking.date < month_end,
+        Booking.status.notin_(['cancelled', 'rejected'])
+    ).all()
+    confirmed_this_month = sum(1 for b in month_bookings if b.status in ('confirmed', 'completed'))
+    pending_this_month = sum(1 for b in month_bookings if b.status in ('requested', 'waitlisted'))
+
+    next_booking = Booking.query.filter(
+        Booking.user_id == current_user.id,
+        Booking.date >= today_date,
+        Booking.status == 'confirmed'
+    ).order_by(Booking.date).first()
+
+    total_completed = Booking.query.filter(
+        Booking.user_id == current_user.id,
+        Booking.status == 'completed'
+    ).count()
+
+    booking_stats = {
+        'confirmed_this_month': confirmed_this_month,
+        'pending_this_month': pending_this_month,
+        'total_this_month': len(month_bookings),
+        'next_booking': next_booking,
+        'total_completed': total_completed,
+        'month_name': today_date.strftime('%B'),
+    }
+
     form = ProfileForm()
 
     if form.validate_on_submit():
@@ -224,11 +262,11 @@ def profile():
                             dog.pic = pic_filename
                     except ValueError as e:
                         flash(f"Upload error: {str(e)}", "error")
-                        return render_template("profile.html", form=form, dog=dog, today=datetime.now().strftime('%Y-%m-%d'))
+                        return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, today=datetime.now().strftime('%Y-%m-%d'))
                     except Exception as e:
                         logging.error(f"Error processing uploaded file: {e}")
                         flash("Error processing your image. Please try a different file.", "error")
-                        return render_template("profile.html", form=form, dog=dog, today=datetime.now().strftime('%Y-%m-%d'))
+                        return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, today=datetime.now().strftime('%Y-%m-%d'))
 
             db.session.commit()
             flash("Profile updated successfully!", "success")
@@ -266,7 +304,7 @@ def profile():
             form.dog_dob.data = dog.date_of_birth
             form.dog_allergies.data = dog.allergies
 
-    return render_template("profile.html", form=form, dog=dog, today=datetime.now().strftime('%Y-%m-%d'))
+    return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, today=datetime.now().strftime('%Y-%m-%d'))
 
 
 @client_bp.route("/onboard", methods=["GET", "POST"])
@@ -420,4 +458,164 @@ def cancel_booking():
     except Exception as e:
         db.session.rollback()
         logging.error(f"Error cancelling booking: {e}")
+        return jsonify(success=False, message="Server error"), 500
+
+
+@client_bp.route("/calendar_data/<int:year>/<int:month>")
+@login_required
+def calendar_data(year, month):
+    """Return this client's bookings for a given month, for the booking calendar."""
+    try:
+        start_date = date_type(year, month, 1)
+        end_date = date_type(year + 1, 1, 1) if month == 12 else date_type(year, month + 1, 1)
+    except ValueError:
+        return jsonify(success=False, message="Invalid date"), 400
+
+    bookings = Booking.query.filter(
+        Booking.user_id == current_user.id,
+        Booking.date >= start_date,
+        Booking.date < end_date,
+        Booking.status.notin_(['cancelled', 'rejected'])
+    ).all()
+
+    # Confirmed takes priority if multiple bookings on same day
+    dates = {}
+    for b in bookings:
+        ds = b.date.strftime('%Y-%m-%d')
+        if b.status == 'confirmed':
+            dates[ds] = 'confirmed'
+        elif ds not in dates:
+            dates[ds] = 'pending'
+
+    return jsonify(success=True, dates=dates)
+
+
+@client_bp.route("/recurring_booking", methods=["POST"])
+@login_required
+def recurring_booking():
+    """Create a series of bookings from a start date, end date, slot and frequency."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify(success=False, message="No data received"), 400
+
+        start_str = data.get('start_date', '')
+        end_str = data.get('end_date', '')
+        slot = data.get('slot', '')
+        frequency = data.get('frequency', '')
+
+        if not all([start_str, end_str, slot, frequency]):
+            return jsonify(success=False, message="Missing required fields"), 400
+
+        try:
+            start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify(success=False, message="Invalid date format"), 400
+
+        today = datetime.now(timezone.utc).date()
+        tomorrow = today + timedelta(days=1)
+        max_end = today + timedelta(weeks=4)
+
+        if start_date < tomorrow:
+            return jsonify(success=False, message="Start date must be in the future"), 400
+        if end_date > max_end:
+            return jsonify(success=False, message="End date must be within 4 weeks from today"), 400
+        if end_date < start_date:
+            return jsonify(success=False, message="End date must be after start date"), 400
+        if slot not in ('Morning', 'Afternoon'):
+            return jsonify(success=False, message="Invalid slot"), 400
+        if frequency not in ('daily', 'weekly'):
+            return jsonify(success=False, message="Invalid frequency"), 400
+
+        # Generate target dates
+        target_dates = []
+        delta = timedelta(days=1) if frequency == 'daily' else timedelta(weeks=1)
+        current = start_date
+        while current <= end_date:
+            if frequency == 'daily' and current.weekday() >= 5:
+                current += timedelta(days=1)
+                continue  # Skip weekends for daily
+            target_dates.append(current)
+            current += delta
+
+        if not target_dates:
+            return jsonify(success=False, message="No valid dates in that range"), 400
+
+        # Get dog
+        user_dogs = Dog.query.join(DogOwner).filter(DogOwner.user_id == current_user.id).all()
+        if not user_dogs:
+            return jsonify(success=False, message="No dog found on your account"), 400
+        dog = user_dogs[0]
+
+        default_service = ServiceType.query.filter_by(slug='group-walk', active=True).first()
+        if not default_service:
+            return jsonify(success=False, message="No service type available"), 400
+
+        active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
+        created = waitlisted = skipped = 0
+
+        for d in target_dates:
+            # Skip duplicates
+            existing = Booking.query.filter(
+                Booking.dog_id == dog.id,
+                Booking.date == d,
+                Booking.slot == slot,
+                Booking.status.in_(active_statuses)
+            ).first()
+            if existing:
+                skipped += 1
+                continue
+
+            # Skip if already 2 bookings that day
+            day_count = Booking.query.filter(
+                Booking.dog_id == dog.id,
+                Booking.date == d,
+                Booking.status.in_(active_statuses)
+            ).count()
+            if day_count >= 2:
+                skipped += 1
+                continue
+
+            available, can_waitlist, _ = check_availability(default_service, d, slot)
+            if not available and not can_waitlist:
+                skipped += 1
+                continue
+
+            status = 'requested' if available else 'waitlisted'
+            db.session.add(Booking(
+                user_id=current_user.id,
+                dog_id=dog.id,
+                service_type_id=default_service.id,
+                date=d,
+                slot=slot,
+                status=status,
+            ))
+            if status == 'waitlisted':
+                waitlisted += 1
+            else:
+                created += 1
+
+        db.session.commit()
+
+        # Notify admins once for the whole batch
+        total = created + waitlisted
+        if total > 0:
+            admins = User.query.filter_by(is_admin=True).all()
+            freq_label = 'daily' if frequency == 'daily' else 'weekly'
+            for admin in admins:
+                create_notification(
+                    recipient_id=admin.id,
+                    notification_type='booking_requested',
+                    title=f'Recurring booking request — {total} walks',
+                    body=f'{current_user.firstname} requested {freq_label} {slot} walks for {dog.name}',
+                    link='/admin',
+                    sender_id=current_user.id,
+                )
+
+        return jsonify(success=True, created=created, waitlisted=waitlisted, skipped=skipped)
+
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error creating recurring bookings: {e}")
         return jsonify(success=False, message="Server error"), 500
