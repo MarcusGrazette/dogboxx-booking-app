@@ -55,7 +55,20 @@ def create_app(config_name=None):
 
     # Initialize SQLAlchemy
     db.init_app(app)
-    
+
+    # Fire queued SSE broadcasts after each DB commit.
+    # create_notification() stashes events in db.session.info['sse_pending'];
+    # this listener drains them once the transaction is safely committed.
+    from sqlalchemy import event as sa_event
+
+    @sa_event.listens_for(db.session, 'after_commit')
+    def _fire_sse_after_commit(session):
+        pending = session.info.pop('sse_pending', [])
+        if pending:
+            from app.sse import broadcast
+            for item in pending:
+                broadcast(item['user_id'], item['event'], item['data'])
+
     # Initialize Flask-Migrate for database migrations
     migrate.init_app(app, db)
     

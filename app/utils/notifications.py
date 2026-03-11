@@ -48,6 +48,9 @@ def create_notification(recipient_id, notification_type, title,
     """
     Insert a notification row and flush to DB.
     Returns the new Notification instance.
+
+    Also queues an SSE broadcast that fires after the caller commits,
+    so all open browser tabs/PWA windows for this user update instantly.
     """
     notif = Notification(
         recipient_id=recipient_id,
@@ -59,6 +62,25 @@ def create_notification(recipient_id, notification_type, title,
     )
     db.session.add(notif)
     db.session.flush()   # get an ID without committing — caller commits
+
+    # Queue SSE event — fires in the after_commit hook (app/__init__.py)
+    icon, colour = get_meta(notification_type)
+    pending = db.session.info.setdefault('sse_pending', [])
+    pending.append({
+        'user_id': recipient_id,
+        'event': 'notification',
+        'data': {
+            'id': notif.id,
+            'type': notification_type,
+            'title': title,
+            'body': body or '',
+            'link': link or '',
+            'icon': icon,
+            'colour': colour,
+            'created_at': notif.created_at.isoformat(),
+        },
+    })
+
     return notif
 
 
@@ -88,6 +110,9 @@ def mark_read(notification_id, user_id):
     if notif and notif.read_at is None:
         notif.read_at = datetime.now(timezone.utc)
         db.session.commit()
+        # Broadcast to all other open surfaces for this user
+        from app.sse import broadcast
+        broadcast(user_id, 'read_one', {'id': notification_id})
         return True
     return False
 
@@ -100,3 +125,6 @@ def mark_all_read(user_id):
         read_at=None,
     ).update({'read_at': now})
     db.session.commit()
+    # Broadcast to all other open surfaces for this user
+    from app.sse import broadcast
+    broadcast(user_id, 'read_all', {})
