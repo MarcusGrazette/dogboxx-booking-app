@@ -113,7 +113,9 @@
 (function() {
     // ── Relative timestamps ────────────────────────────────────────────────
     function formatRelTime(isoString) {
-        const ts = new Date(isoString.endsWith('Z') ? isoString : isoString + 'Z');
+        // Normalise to Z suffix — handles both naive ('...123456') and aware ('...+00:00') formats
+        const normalised = isoString.replace(/\+00:00$/, 'Z');
+        const ts = new Date(normalised.endsWith('Z') ? normalised : normalised + 'Z');
         const diff = Date.now() - ts;
         const mins = Math.floor(diff / 60000);
         const hours = Math.floor(mins / 60);

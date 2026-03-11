@@ -96,7 +96,7 @@ def create_notification(recipient_id, notification_type, title,
             'link': link or '',
             'icon': icon,
             'colour': colour,
-            'created_at': notif.created_at.isoformat(),
+            'created_at': notif.created_at.strftime('%Y-%m-%dT%H:%M:%S') + 'Z',
         },
     })
 
