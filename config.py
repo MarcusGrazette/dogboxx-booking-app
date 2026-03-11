@@ -5,7 +5,8 @@ class Config:
     """Base configuration."""
     SECRET_KEY = os.environ.get('SECRET_KEY')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    SESSION_TYPE = "filesystem"
+    SESSION_TYPE = "sqlalchemy"          # store sessions in the app DB (works on Railway)
+    SESSION_SQLALCHEMY_TABLE = "sessions" # table name in Postgres/SQLite
     SESSION_PERMANENT = False
     
     # Logging configuration

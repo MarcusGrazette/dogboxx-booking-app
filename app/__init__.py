@@ -47,14 +47,16 @@ def create_app(config_name=None):
     app.config['UPLOAD_FOLDER'] = upload_folder
     os.makedirs(upload_folder, exist_ok=True)
 
-    # Initialize Flask-Session
-    Session(app)
-
     # Initialize CSRF protection
     csrf.init_app(app)
 
     # Initialize SQLAlchemy
     db.init_app(app)
+
+    # Flask-Session: must point at the db instance before Session(app) is called,
+    # so it uses the same engine and auto-creates the sessions table.
+    app.config['SESSION_SQLALCHEMY'] = db
+    Session(app)
 
     # Fire queued SSE broadcasts after each DB commit.
     # create_notification() stashes events in db.session.info['sse_pending'];
