@@ -29,9 +29,9 @@
 
 <div class="card shadow-sm border-0" style="border-radius:1rem; overflow:hidden;">
     <div class="card-body p-0">
-        {% if notifications.items %}
+        {% if notifications %}
         <ul class="list-group list-group-flush">
-            {% for n in notifications.items %}
+            {% for n in notifications %}
             {% set icon, colour = notification_meta(n.notification_type) %}
             <li class="list-group-item px-4 py-3 {{ 'notif-unread' if n.is_unread else '' }}"
                 data-notif-id="{{ n.id }}">
@@ -64,20 +64,6 @@
             {% endfor %}
         </ul>
 
-        {% if notifications.pages > 1 %}
-        <div class="p-3 d-flex justify-content-center gap-2">
-            {% if notifications.has_prev %}
-            <a href="{{ url_for('notifications.index', page=notifications.prev_num) }}"
-               class="btn btn-outline-secondary btn-sm">← Newer</a>
-            {% endif %}
-            <span class="btn btn-sm disabled">Page {{ notifications.page }} / {{ notifications.pages }}</span>
-            {% if notifications.has_next %}
-            <a href="{{ url_for('notifications.index', page=notifications.next_num) }}"
-               class="btn btn-outline-secondary btn-sm">Older →</a>
-            {% endif %}
-        </div>
-        {% endif %}
-
         {% else %}
         <div class="text-center py-5 text-muted">
             <i class="bi bi-bell-slash" style="font-size:2.5rem; opacity:0.3;"></i>
@@ -99,20 +85,6 @@
 
 {% block scripts %}
 <script>
-// Mark notification read on link click (AJAX)
-document.querySelectorAll('.notif-link').forEach(function(link) {
-    link.addEventListener('click', function() {
-        const id = this.dataset.notifId;
-        fetch('/notifications/' + id + '/read', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content,
-                'X-Requested-With': 'XMLHttpRequest',
-            }
-        });
-    });
-});
-
 // Relative timestamps
 document.querySelectorAll('.notif-time[data-ts]').forEach(function(el) {
     const ts = new Date(el.dataset.ts);

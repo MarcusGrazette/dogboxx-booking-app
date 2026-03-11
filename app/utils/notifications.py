@@ -18,6 +18,11 @@ from datetime import datetime, timezone
 from app import db
 from app.models import Notification
 
+# ── Caps ──────────────────────────────────────────────────────────────────────
+NOTIF_DB_CAP   = 50   # max stored per user (oldest pruned at insert time)
+NOTIF_PAGE_CAP = 20   # max shown on the full notifications page
+NOTIF_BELL_CAP = 5    # max shown in the navbar bell dropdown
+
 
 # ── Type metadata ─────────────────────────────────────────────────────────────
 # Maps notification_type → (Bootstrap icon class, CSS colour)
@@ -63,6 +68,20 @@ def create_notification(recipient_id, notification_type, title,
     db.session.add(notif)
     db.session.flush()   # get an ID without committing — caller commits
 
+    # Prune oldest notifications beyond the DB cap for this user
+    oldest_ids = (
+        db.session.query(Notification.id)
+        .filter(Notification.recipient_id == recipient_id)
+        .order_by(Notification.created_at.desc())
+        .offset(NOTIF_DB_CAP)
+        .all()
+    )
+    if oldest_ids:
+        ids_to_delete = [row.id for row in oldest_ids]
+        Notification.query.filter(Notification.id.in_(ids_to_delete)).delete(
+            synchronize_session=False
+        )
+
     # Queue SSE event — fires in the after_commit hook (app/__init__.py)
     icon, colour = get_meta(notification_type)
     pending = db.session.info.setdefault('sse_pending', [])
@@ -92,8 +111,11 @@ def get_unread_count(user_id):
     ).count()
 
 
-def get_recent(user_id, limit=8):
-    """Return the most recent notifications for a user (read + unread)."""
+def get_recent(user_id, limit=NOTIF_BELL_CAP):
+    """Return the most recent notifications for a user (read + unread).
+
+    Defaults to NOTIF_BELL_CAP for the navbar bell dropdown.
+    """
     return (Notification.query
             .filter_by(recipient_id=user_id)
             .order_by(Notification.created_at.desc())

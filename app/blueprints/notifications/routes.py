@@ -33,12 +33,13 @@ def stream():
 @notifications_bp.route('/')
 @login_required
 def index():
-    """Full notification list page — paginated."""
-    page = request.args.get('page', 1, type=int)
+    """Full notification list page — most recent NOTIF_PAGE_CAP entries."""
+    from app.utils.notifications import NOTIF_PAGE_CAP
     notifications = (Notification.query
                      .filter_by(recipient_id=current_user.id)
                      .order_by(Notification.created_at.desc())
-                     .paginate(page=page, per_page=20, error_out=False))
+                     .limit(NOTIF_PAGE_CAP)
+                     .all())
     return render_template('notifications/index.html',
                            notifications=notifications,
                            notification_meta=get_meta)
