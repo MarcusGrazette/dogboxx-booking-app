@@ -622,11 +622,12 @@ def assign_walker():
 
         # 22a: notify client that their booking has been confirmed
         date_str_fmt = booking.date.strftime('%a %-d %b')
+        dog_name = booking.dog.name if booking.dog else 'your dog'
         create_notification(
             recipient_id=booking.user_id,
             notification_type='booking_confirmed',
-            title=f'Your walk on {date_str_fmt} has been confirmed',
-            body=f'Slot: {booking.slot}',
+            title=f"{dog_name}'s walk on {date_str_fmt} has been confirmed",
+            body=booking.slot,
             link=f'/bookings/{booking.id}',
             sender_id=current_user.id,
         )
@@ -636,7 +637,7 @@ def assign_walker():
             recipient_id=walker.user_id,
             notification_type='walker_assigned',
             title=f'You have been assigned a walk on {date_str_fmt}',
-            body=f'Slot: {booking.slot}',
+            body=f'{dog_name} — {booking.slot}',
             link=f'/walker/pickups?date={booking.date.isoformat()}',
             sender_id=current_user.id,
         )

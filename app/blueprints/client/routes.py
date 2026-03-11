@@ -444,11 +444,12 @@ def cancel_booking():
         # 22c: notify the client when an admin cancels their booking
         if is_admin_cancel:
             date_str_fmt = booking.date.strftime('%a %-d %b')
+            dog_name = booking.dog.name if booking.dog else 'your dog'
             create_notification(
                 recipient_id=booking.user_id,
                 notification_type='booking_cancelled',
-                title=f'Your walk on {date_str_fmt} has been cancelled',
-                body=f'Slot: {booking.slot}',
+                title=f"{dog_name}'s walk on {date_str_fmt} has been cancelled",
+                body=booking.slot,
                 link=f'/bookings/{booking.id}',
                 sender_id=current_user.id,
             )

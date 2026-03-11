@@ -4,16 +4,7 @@
 {% block page_title %}Notifications{% endblock %}
 {% block page_subtitle %}Your activity feed{% endblock %}
 
-{% block page_actions %}
-{% if unread_notification_count > 0 %}
-<form method="post" action="{{ url_for('notifications.mark_all') }}" class="d-inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button type="submit" class="btn btn-outline-secondary btn-sm">
-        <i class="bi bi-check2-all"></i> Mark all read
-    </button>
-</form>
-{% endif %}
-{% endblock %}
+{% block page_actions %}{% endblock %}
 
 {% block main %}
 <div class="text-start mb-4 mt-3 px-1 d-flex align-items-center justify-content-between">
@@ -21,14 +12,19 @@
         <h2 class="fw-bold mb-0">Notifications</h2>
         <p class="text-muted small mb-0">Your activity feed</p>
     </div>
-    {% if unread_notification_count > 0 %}
-    <form method="post" action="{{ url_for('notifications.mark_all') }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-check2-all"></i> Mark all read
-        </button>
-    </form>
-    {% endif %}
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('client.index') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> Back
+        </a>
+        {% if unread_notification_count > 0 %}
+        <form method="post" action="{{ url_for('notifications.mark_all') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-check2-all"></i> Mark all read
+            </button>
+        </form>
+        {% endif %}
+    </div>
 </div>
 
 <div class="card shadow-sm border-0" style="border-radius:1rem; overflow:hidden;">
@@ -44,7 +40,7 @@
                          style="color:{{ colour }}; font-size:1.2rem;">
                         <i class="bi {{ icon }}"></i>
                     </div>
-                    <div class="flex-grow-1">
+                    <div class="flex-grow-1 text-start">
                         <div class="d-flex justify-content-between align-items-start">
                             <strong class="notif-title">{{ n.title }}</strong>
                             <small class="text-muted ms-3 flex-shrink-0 notif-time"
@@ -55,19 +51,13 @@
                         {% if n.body %}
                         <div class="text-muted small mt-1">{{ n.body }}</div>
                         {% endif %}
-                        <div class="mt-1 d-flex align-items-center gap-3">
-                            {% if n.link %}
-                            <a href="{{ n.link }}" class="small text-primary notif-link"
-                               data-notif-id="{{ n.id }}">View →</a>
-                            {% endif %}
-                            {% if n.is_unread %}
-                            <span class="badge" style="background:#E02FAC; font-size:0.65rem;">Unread</span>
-                            {% else %}
+                        {% if not n.is_unread %}
+                        <div class="mt-1">
                             <small class="text-muted" style="font-size:0.72rem;">
                                 Read {{ n.read_at.strftime('%d %b %H:%M') }}
                             </small>
-                            {% endif %}
                         </div>
+                        {% endif %}
                     </div>
                 </div>
             </li>
