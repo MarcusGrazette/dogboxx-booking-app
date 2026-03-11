@@ -15,6 +15,9 @@ class Config:
     
     # Upload folder (overridden in create_app to use static/uploads/dogs/)
     UPLOAD_FOLDER = os.path.join(os.getcwd(), "app", "static", "uploads", "dogs")
+
+    # Cap request body size — protects against large file upload abuse
+    MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10 MB
     
     # Security settings
     SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access to session cookie

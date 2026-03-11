@@ -173,6 +173,13 @@ def create_app(config_name=None):
                                 BookingStatusChange, WalkEvent, Notification)
 
     # Custom error handler for rate limiting
+    @app.errorhandler(413)
+    def too_large(e):
+        return render_template('error.html',
+                              error_code=413,
+                              error_message="File too large.",
+                              error_description="Photos must be under 10 MB. Try reducing the image size before uploading."), 413
+
     @app.errorhandler(429)
     def ratelimit_handler(e):
         return render_template('error.html',
