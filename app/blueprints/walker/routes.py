@@ -166,9 +166,6 @@ def pickups(date_str=None):
     else:
         selected_date = today
 
-    prev_date = selected_date - timedelta(days=1)
-    next_date = selected_date + timedelta(days=1)
-
     # Query confirmed bookings for this walker on this date
     bookings = (
         Booking.query
@@ -197,8 +194,82 @@ def pickups(date_str=None):
                            walker=walker,
                            selected_date=selected_date,
                            today=today,
-                           prev_date=prev_date,
-                           next_date=next_date,
+                           morning_pickups=morning_pickups,
+                           afternoon_pickups=afternoon_pickups,
+                           has_pickups=len(bookings) > 0)
+
+
+@walker_bp.route("/api/pickup-days/<int:year>/<int:month>")
+@login_required
+@walker_required
+def api_pickup_days(year, month):
+    """Return a JSON map of dates that have pickups for this walker in a given month."""
+    walker = Walker.query.filter_by(user_id=current_user.id).first()
+    if not walker:
+        return jsonify({}), 404
+
+    from calendar import monthrange
+    try:
+        start = date(year, month, 1)
+        end = date(year, month, monthrange(year, month)[1])
+    except ValueError:
+        return jsonify({}), 400
+
+    bookings = (
+        Booking.query
+        .filter(
+            Booking.walker_id == walker.id,
+            Booking.date >= start,
+            Booking.date <= end,
+            Booking.status.in_(['confirmed', 'completed']),
+        )
+        .with_entities(Booking.date)
+        .distinct()
+        .all()
+    )
+
+    dates = {b.date.strftime('%Y-%m-%d'): 'pickup' for b in bookings}
+    return jsonify(dates)
+
+
+@walker_bp.route("/api/pickup-list/<date_str>")
+@login_required
+@walker_required
+def api_pickup_list(date_str):
+    """Return the pickup list HTML partial for a given date."""
+    walker = Walker.query.filter_by(user_id=current_user.id).first()
+    if not walker:
+        return "Walker not found", 404
+
+    try:
+        selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return "Invalid date", 400
+
+    bookings = (
+        Booking.query
+        .options(
+            joinedload(Booking.dog),
+            joinedload(Booking.user).joinedload(User.client),
+        )
+        .filter(
+            Booking.walker_id == walker.id,
+            Booking.date == selected_date,
+            Booking.status.in_(['confirmed', 'completed']),
+        )
+        .order_by(
+            Booking.slot,
+            case((Booking.pickup_order.is_(None), 1), else_=0),
+            Booking.pickup_order,
+        )
+        .all()
+    )
+
+    morning_pickups = [b for b in bookings if b.slot == 'Morning']
+    afternoon_pickups = [b for b in bookings if b.slot == 'Afternoon']
+
+    return render_template("partials/pickup_list.html",
+                           selected_date=selected_date,
                            morning_pickups=morning_pickups,
                            afternoon_pickups=afternoon_pickups,
                            has_pickups=len(bookings) > 0)
