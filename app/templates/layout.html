@@ -50,20 +50,10 @@
 
             {% if current_user.is_authenticated %}
 
-                <!-- Walker nav links -->
-                {% if current_user.role == 'walker' %}
-                <a class="nav-link px-2 small fw-semibold lh-1" href="{{ url_for('walker.schedule') }}">
-                    <i class="bi bi-calendar-week me-1"></i>Schedule
-                </a>
-                <a class="nav-link px-2 small fw-semibold lh-1" href="{{ url_for('walker.pickups') }}">
-                    <i class="bi bi-geo-alt me-1"></i>Pickups
-                </a>
-                {% endif %}
-
                 <!-- Notification bell -->
                 {% include 'partials/notification_bell.html' %}
 
-                <!-- Avatar dropdown: plain div, not ul/li, Tabler-style -->
+                <!-- Avatar dropdown -->
                 <div class="dropdown ms-2">
                     <a href="#" class="nav-link lh-1 p-0 d-flex align-items-center justify-content-center"
                        data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu"
@@ -81,6 +71,19 @@
                                 <div class="text-muted" style="font-size:0.72rem;">{{ current_user.email }}</div>
                             </div>
                         </li>
+                        {% if current_user.role == 'walker' %}
+                        <li>
+                            <a class="dropdown-item py-2" href="{{ url_for('walker.pickups') }}">
+                                <i class="bi bi-geo-alt me-2 text-muted"></i>Pickups
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item py-2" href="{{ url_for('walker.schedule') }}">
+                                <i class="bi bi-calendar-week me-2 text-muted"></i>Schedule
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider my-1"></li>
+                        {% endif %}
                         {% if current_user.role == 'client' %}
                         <li>
                             <a class="dropdown-item py-2" href="{{ url_for('client.profile') }}">
