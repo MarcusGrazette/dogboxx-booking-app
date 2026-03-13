@@ -20,6 +20,21 @@ login_manager = LoginManager()
 csrf = CSRFProtect()
 limiter = Limiter(key_func=get_remote_address)
 
+def _home_url_for(user):
+    """Return the most appropriate home URL for the given user."""
+    from flask import url_for
+    try:
+        if user and user.is_authenticated:
+            if user.is_admin:
+                return url_for('admin.index')
+            if user.role == 'walker':
+                return url_for('walker.pickups')
+            return url_for('client.index')
+    except Exception:
+        pass
+    return url_for('auth.login')
+
+
 def create_app(config_name=None):
     app = Flask(__name__)
     
@@ -186,6 +201,33 @@ def create_app(config_name=None):
                               error_code=429,
                               error_message="Too many attempts. Please try again later.",
                               error_description="For security reasons, we limit the number of requests. Please wait a few minutes before trying again."), 429
+
+    @app.errorhandler(404)
+    def not_found(e):
+        from flask import url_for
+        from flask_login import current_user
+        home_url = _home_url_for(current_user)
+        return render_template('error.html',
+                              error_code=404,
+                              error_message="Page not found.",
+                              error_description="The page you're looking for doesn't exist or has been moved.",
+                              home_url=home_url), 404
+
+    @app.errorhandler(403)
+    def forbidden(e):
+        from flask import url_for
+        from flask_login import current_user
+        home_url = _home_url_for(current_user)
+        return render_template('error.html',
+                              error_code=403,
+                              error_message="Access denied.",
+                              error_description="You don't have permission to view this page.",
+                              home_url=home_url), 403
+
+    @app.errorhandler(500)
+    def internal_error(e):
+        db.session.rollback()
+        return render_template('500.html'), 500
 
     @app.context_processor
     def inject_csrf_token():
