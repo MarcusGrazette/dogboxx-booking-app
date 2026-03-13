@@ -22,7 +22,7 @@ from app.utils.decorators import walker_required
 @walker_required
 def index():
     """Walker dashboard page"""
-    return redirect(url_for('walker.schedule'))
+    return redirect(url_for('walker.pickups'))
 
 
 @walker_bp.route("/schedule")
