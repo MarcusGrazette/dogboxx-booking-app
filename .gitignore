@@ -6,7 +6,6 @@ flask_session/
 *.db
 *.pyc
 /app/static/images
-/app/static/js
 /app/static/icons
 /app/seed_db
 /seed_data
