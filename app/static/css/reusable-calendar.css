@@ -1,0 +1,67 @@
+/* Reusable Calendar */
+.calendar-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.85rem;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.calendar-table th {
+  text-align: center;
+  padding: 6px 2px;
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: #6c757d;
+  border-bottom: 1px solid #dee2e6;
+}
+.cal-cell {
+  text-align: center;
+  padding: 8px 2px;
+  border-radius: 4px;
+}
+.cal-day {
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.cal-day:hover { background: #e9ecef; }
+.cal-weekend { color: #999; }
+.cal-today {
+  font-weight: 700;
+  color: var(--bs-primary);
+  box-shadow: inset 0 0 0 2px var(--bs-primary);
+}
+.cal-selected {
+  background: var(--bs-primary) !important;
+  color: #fff !important;
+  font-weight: 700;
+}
+.cal-selected.cal-today { box-shadow: inset 0 0 0 2px #fff; }
+.cal-pending {
+  background: #fff3cd;
+}
+.cal-pending:hover { background: #ffe69c; }
+.cal-pending.cal-selected {
+  background: var(--bs-primary) !important;
+  color: #fff !important;
+}
+.cal-confirmed {
+  background: #d1e7dd;
+  color: #0a3622;
+}
+.cal-confirmed:hover { background: #a3cfbb; }
+.cal-confirmed.cal-selected {
+  background: var(--bs-primary) !important;
+  color: #fff !important;
+}
+.calendar-loading { top: 0; left: 0; }
+.calendar-component .card-body { min-height: 220px; }
+/* Walker pickup days */
+.cal-pickup {
+    background: #fde4f0;
+}
+.cal-pickup:hover { background: #f9c0df; }
+.cal-pickup.cal-selected {
+    background: var(--bs-primary) !important;
+    color: #fff !important;
+}
