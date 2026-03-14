@@ -121,10 +121,7 @@ def _redirect_by_role(user):
     if user.is_admin:
         return redirect(url_for('admin.index'))
     elif user.role == 'walker':
-        device = get_device_info()
-        if device.is_mobile:
-            return redirect(url_for('walker.pickups'))
-        return redirect(url_for('walker.schedule'))
+        return redirect(url_for('walker.pickups'))
     elif user.role == 'client':
         return redirect(url_for('client.index'))
     else:
