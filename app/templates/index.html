@@ -191,23 +191,23 @@
                                 </div>
                             </div>
                             <!-- Actions -->
-                            <div class="d-flex align-items-center gap-2">
-                                <button class="btn btn-link p-0 note-booking-btn text-secondary"
+                            <div class="d-flex align-items-center gap-3">
+                                <button class="btn btn-link p-1 note-booking-btn text-secondary"
                                         data-booking-id="{{ booking.id }}"
                                         data-booking-slot="{{ booking.slot }}"
                                         data-booking-date="{{ booking.date_display }}"
                                         data-current-note="{{ booking.client_notes or '' }}"
                                         title="{{ 'Edit note' if booking.client_notes else 'Add note' }}"
-                                        style="line-height: 1;">
-                                    <i class="bi bi-{{ 'pencil-fill text-primary' if booking.client_notes else 'pencil' }}"></i>
+                                        style="line-height: 1; font-size: 1.1rem;">
+                                    <i class="bi bi-{{ 'pencil-square text-primary' if booking.client_notes else 'pencil-square' }}"></i>
                                 </button>
-                                <button class="btn btn-link p-0 cancel-booking-btn text-danger"
+                                <button class="btn btn-link p-1 cancel-booking-btn text-danger"
                                         data-booking-id="{{ booking.id }}"
                                         data-booking-slot="{{ booking.slot }}"
                                         data-booking-date="{{ booking.date_display }}"
                                         title="Cancel booking"
-                                        style="line-height: 1;">
-                                    <i class="bi bi-x-lg"></i>
+                                        style="line-height: 1; font-size: 1.1rem;">
+                                    <i class="bi bi-x-circle"></i>
                                 </button>
                             </div>
                         </li>
@@ -557,7 +557,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const csrfToken = document.querySelector('input[name=csrf_token]')?.value;
 
-        fetch(`/client/booking/${activeBookingId}/note`, {
+        fetch(`/booking/${activeBookingId}/note`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
             body: JSON.stringify({ note })
@@ -571,10 +571,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 activeNoteBtn.setAttribute('data-current-note', note);
                 const icon = activeNoteBtn.querySelector('i');
                 if (note) {
-                    icon.className = 'bi bi-pencil-fill text-primary';
+                    icon.className = 'bi bi-pencil-square text-primary';
                     activeNoteBtn.title = 'Edit note';
                 } else {
-                    icon.className = 'bi bi-pencil';
+                    icon.className = 'bi bi-pencil-square';
                     activeNoteBtn.title = 'Add note';
                 }
                 modal.hide();
