@@ -64,11 +64,21 @@
                     </div>
                     {% endif %}
 
-                    <!-- Row 5: Phone (subtle, below the fold) -->
+                    <!-- Row 5: WhatsApp buttons -->
                     {% if b.user and b.user.phone %}
-                    <div class="small text-muted mt-1">
-                        <a href="tel:{{ b.user.phone }}" class="text-decoration-none text-muted">
-                            <i class="bi bi-telephone me-1"></i>{{ b.user.phone }}
+                    {% set wa_num = b.user.phone | wa_number %}
+                    <div class="d-flex gap-2 mt-2">
+                        <a href="https://wa.me/{{ wa_num }}?text=Hi%2C%20I'm%205%20mins%20away%21"
+                           target="_blank" rel="noopener"
+                           class="btn btn-sm fw-semibold flex-fill"
+                           style="background:#25D366;color:#fff;font-size:0.78rem;">
+                            <i class="bi bi-chat-fill me-1"></i>5 mins away
+                        </a>
+                        <a href="https://wa.me/{{ wa_num }}"
+                           target="_blank" rel="noopener"
+                           class="btn btn-sm btn-outline-secondary flex-fill"
+                           style="font-size:0.78rem;">
+                            <i class="bi bi-telephone me-1"></i>Call
                         </a>
                     </div>
                     {% endif %}

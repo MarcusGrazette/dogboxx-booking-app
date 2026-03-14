@@ -234,6 +234,21 @@ def create_app(config_name=None):
         from flask_wtf.csrf import generate_csrf
         return dict(csrf_token=generate_csrf)
 
+    @app.template_filter('wa_number')
+    def wa_number_filter(phone: str) -> str:
+        """Format a phone number for use in a wa.me URL.
+
+        Strips all non-digit characters, then converts a UK local number
+        starting with 0 to the international 44 prefix.
+        e.g. '+44 7700 900000' → '447700900000'
+             '07700 900000'    → '447700900000'
+        """
+        import re
+        digits = re.sub(r'\D', '', phone or '')
+        if digits.startswith('0'):
+            digits = '44' + digits[1:]
+        return digits
+
     @app.context_processor
     def inject_device_info():
         """Expose UA device flags to all templates.
