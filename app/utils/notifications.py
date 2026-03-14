@@ -18,6 +18,11 @@ from datetime import datetime, timezone
 from app import db
 from app.models import Notification
 
+# ── Caps ──────────────────────────────────────────────────────────────────────
+NOTIF_DB_CAP   = 50   # max stored per user (oldest pruned at insert time)
+NOTIF_PAGE_CAP = 20   # max shown on the full notifications page
+NOTIF_BELL_CAP = 5    # max shown in the navbar bell dropdown
+
 
 # ── Type metadata ─────────────────────────────────────────────────────────────
 # Maps notification_type → (Bootstrap icon class, CSS colour)
@@ -48,6 +53,9 @@ def create_notification(recipient_id, notification_type, title,
     """
     Insert a notification row and flush to DB.
     Returns the new Notification instance.
+
+    Also queues an SSE broadcast that fires after the caller commits,
+    so all open browser tabs/PWA windows for this user update instantly.
     """
     notif = Notification(
         recipient_id=recipient_id,
@@ -59,6 +67,39 @@ def create_notification(recipient_id, notification_type, title,
     )
     db.session.add(notif)
     db.session.flush()   # get an ID without committing — caller commits
+
+    # Prune oldest notifications beyond the DB cap for this user
+    oldest_ids = (
+        db.session.query(Notification.id)
+        .filter(Notification.recipient_id == recipient_id)
+        .order_by(Notification.created_at.desc())
+        .offset(NOTIF_DB_CAP)
+        .all()
+    )
+    if oldest_ids:
+        ids_to_delete = [row.id for row in oldest_ids]
+        Notification.query.filter(Notification.id.in_(ids_to_delete)).delete(
+            synchronize_session=False
+        )
+
+    # Queue SSE event — fires in the after_commit hook (app/__init__.py)
+    icon, colour = get_meta(notification_type)
+    pending = db.session.info.setdefault('sse_pending', [])
+    pending.append({
+        'user_id': recipient_id,
+        'event': 'notification',
+        'data': {
+            'id': notif.id,
+            'type': notification_type,
+            'title': title,
+            'body': body or '',
+            'link': link or '',
+            'icon': icon,
+            'colour': colour,
+            'created_at': notif.created_at.strftime('%Y-%m-%dT%H:%M:%S') + 'Z',
+        },
+    })
+
     return notif
 
 
@@ -70,8 +111,11 @@ def get_unread_count(user_id):
     ).count()
 
 
-def get_recent(user_id, limit=8):
-    """Return the most recent notifications for a user (read + unread)."""
+def get_recent(user_id, limit=NOTIF_BELL_CAP):
+    """Return the most recent notifications for a user (read + unread).
+
+    Defaults to NOTIF_BELL_CAP for the navbar bell dropdown.
+    """
     return (Notification.query
             .filter_by(recipient_id=user_id)
             .order_by(Notification.created_at.desc())
@@ -88,6 +132,9 @@ def mark_read(notification_id, user_id):
     if notif and notif.read_at is None:
         notif.read_at = datetime.now(timezone.utc)
         db.session.commit()
+        # Broadcast to all other open surfaces for this user
+        from app.sse import broadcast
+        broadcast(user_id, 'read_one', {'id': notification_id})
         return True
     return False
 
@@ -100,3 +147,6 @@ def mark_all_read(user_id):
         read_at=None,
     ).update({'read_at': now})
     db.session.commit()
+    # Broadcast to all other open surfaces for this user
+    from app.sse import broadcast
+    broadcast(user_id, 'read_all', {})

@@ -49,39 +49,46 @@ def index():
 
     active_walkers = Walker.query.join(User).filter(User.active == True).count()
 
-    # ── Next 4 weeks weekdays (Mon–Fri only) ────────────────────────────────
-    weekdays = []
-    d = today
-    while len(weekdays) < 20:  # 4 weeks × 5 days
-        if d.weekday() < 5:  # 0=Mon, 4=Fri
-            weekdays.append(d)
-        d += timedelta(days=1)
+    # ── Next 4 weeks: all 28 days for chart, weekdays only for walker grid ───
+    chart_days = [today + timedelta(days=i) for i in range(28)]
+    weekdays   = [d for d in chart_days if d.weekday() < 5]
+    chart_end  = chart_days[-1]
 
-    end_date = weekdays[-1]
-
-    # ── Booking chart data ───────────────────────────────────────────────────
+    # ── Booking chart data — split by slot AND status ────────────────────────
     chart_bookings = (
         Booking.query
         .filter(
             Booking.date >= today,
-            Booking.date <= end_date,
+            Booking.date <= chart_end,
             Booking.status.in_(['confirmed', 'requested', 'waitlisted']),
             Booking.slot.in_(['Morning', 'Afternoon']),
         )
-        .with_entities(Booking.date, Booking.slot, func.count(Booking.id).label('cnt'))
-        .group_by(Booking.date, Booking.slot)
+        .with_entities(
+            Booking.date,
+            Booking.slot,
+            Booking.status,
+            func.count(Booking.id).label('cnt'),
+        )
+        .group_by(Booking.date, Booking.slot, Booking.status)
         .all()
     )
 
-    # Build lookup: {date: {slot: count}}
+    # Build lookup: {date: {slot: {status: count}}}
     booking_lookup = {}
     for row in chart_bookings:
-        booking_lookup.setdefault(row.date, {})
-        booking_lookup[row.date][row.slot] = row.cnt
+        booking_lookup.setdefault(row.date, {}).setdefault(row.slot, {})[row.status] = row.cnt
 
-    chart_labels = [d.strftime('%a %-d %b') for d in weekdays]
-    chart_morning = [booking_lookup.get(d, {}).get('Morning', 0) for d in weekdays]
-    chart_afternoon = [booking_lookup.get(d, {}).get('Afternoon', 0) for d in weekdays]
+    def slot_cnt(d, slot, status):
+        return booking_lookup.get(d, {}).get(slot, {}).get(status, 0)
+
+    chart_labels              = [d.strftime('%a %-d') for d in chart_days]
+    chart_is_weekend          = [1 if d.weekday() >= 5 else 0 for d in chart_days]
+    chart_morning_confirmed   = [slot_cnt(d, 'Morning',   'confirmed')  for d in chart_days]
+    chart_morning_pending     = [slot_cnt(d, 'Morning',   'requested')  for d in chart_days]
+    chart_morning_waitlisted  = [slot_cnt(d, 'Morning',   'waitlisted') for d in chart_days]
+    chart_afternoon_confirmed = [slot_cnt(d, 'Afternoon', 'confirmed')  for d in chart_days]
+    chart_afternoon_pending   = [slot_cnt(d, 'Afternoon', 'requested')  for d in chart_days]
+    chart_afternoon_waitlisted= [slot_cnt(d, 'Afternoon', 'waitlisted') for d in chart_days]
 
     # ── Walker availability grid ─────────────────────────────────────────────
     all_walkers = Walker.query.join(User).filter(User.active == True).options(
@@ -96,7 +103,7 @@ def index():
 
     unavails = WalkerUnavailability.query.filter(
         WalkerUnavailability.date >= today,
-        WalkerUnavailability.date <= end_date,
+        WalkerUnavailability.date <= chart_end,
     ).all()
     # Build: {walker_id: {date: set of unavailable slots}}
     unavail_map = {}
@@ -123,13 +130,286 @@ def index():
         active_dogs=active_dogs,
         active_walkers=active_walkers,
         # Chart
+        today_iso=today.isoformat(),
         chart_labels=chart_labels,
-        chart_morning=chart_morning,
-        chart_afternoon=chart_afternoon,
+        chart_is_weekend=chart_is_weekend,
+        chart_morning_confirmed=chart_morning_confirmed,
+        chart_morning_pending=chart_morning_pending,
+        chart_morning_waitlisted=chart_morning_waitlisted,
+        chart_afternoon_confirmed=chart_afternoon_confirmed,
+        chart_afternoon_pending=chart_afternoon_pending,
+        chart_afternoon_waitlisted=chart_afternoon_waitlisted,
         # Availability grid
         weekdays=weekdays,
         walker_grid=walker_grid,
     )
+
+
+@admin_bp.route("/api/chart-data")
+@login_required
+@admin_required
+def chart_data():
+    """Return 28-day booking chart data as JSON starting from ?start=YYYY-MM-DD.
+    Start date is clamped to today at the minimum."""
+    from datetime import date, timedelta
+    from sqlalchemy import func
+
+    today = date.today()
+
+    start_str = request.args.get('start')
+    try:
+        start = date.fromisoformat(start_str)
+    except (TypeError, ValueError):
+        start = today
+
+    # Never allow scrolling before today
+    if start < today:
+        start = today
+
+    chart_days = [start + timedelta(days=i) for i in range(28)]
+    chart_end  = chart_days[-1]
+
+    chart_bookings = (
+        Booking.query
+        .filter(
+            Booking.date >= start,
+            Booking.date <= chart_end,
+            Booking.status.in_(['confirmed', 'requested', 'waitlisted']),
+            Booking.slot.in_(['Morning', 'Afternoon']),
+        )
+        .with_entities(
+            Booking.date,
+            Booking.slot,
+            Booking.status,
+            func.count(Booking.id).label('cnt'),
+        )
+        .group_by(Booking.date, Booking.slot, Booking.status)
+        .all()
+    )
+
+    booking_lookup = {}
+    for row in chart_bookings:
+        booking_lookup.setdefault(row.date, {}).setdefault(row.slot, {})[row.status] = row.cnt
+
+    def slot_cnt(d, slot, status):
+        return booking_lookup.get(d, {}).get(slot, {}).get(status, 0)
+
+    return jsonify(
+        start=start.isoformat(),
+        labels=[d.strftime('%a %-d %b') for d in chart_days],
+        is_weekend=[1 if d.weekday() >= 5 else 0 for d in chart_days],
+        morning_confirmed=[slot_cnt(d, 'Morning',   'confirmed')  for d in chart_days],
+        morning_pending=[slot_cnt(d, 'Morning',   'requested')  for d in chart_days],
+        morning_waitlisted=[slot_cnt(d, 'Morning',   'waitlisted') for d in chart_days],
+        afternoon_confirmed=[slot_cnt(d, 'Afternoon', 'confirmed')  for d in chart_days],
+        afternoon_pending=[slot_cnt(d, 'Afternoon', 'requested')  for d in chart_days],
+        afternoon_waitlisted=[slot_cnt(d, 'Afternoon', 'waitlisted') for d in chart_days],
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Revenue helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _revenue_for_range(start, end):
+    """Return a list of daily revenue dicts for start..end (inclusive).
+
+    Each dict: {date, revenue, walks, doubles, price_per_walk, discount}
+
+    Logic per day:
+      - Count confirmed bookings by (dog_id, slot)
+      - A dog with BOTH Morning + Afternoon on the same day gets one discount
+      - revenue = walks * price_per_walk - doubles * double_slot_discount
+    Uses the PricingConfig with the highest effective_from <= that day.
+    """
+    from datetime import timedelta
+    from sqlalchemy import func
+    from app.models import PricingConfig, Booking, DogOwner
+
+    # Load all relevant pricing configs once
+    all_configs = (
+        PricingConfig.query
+        .filter(PricingConfig.effective_from <= end)
+        .order_by(PricingConfig.effective_from.desc())
+        .all()
+    )
+
+    def config_for(d):
+        for c in all_configs:
+            if c.effective_from <= d:
+                return c
+        return None  # no pricing configured before this date
+
+    # Query confirmed bookings in range — get (date, dog_id, slot) tuples
+    rows = (
+        Booking.query
+        .filter(
+            Booking.date >= start,
+            Booking.date <= end,
+            Booking.status == 'confirmed',
+            Booking.slot.in_(['Morning', 'Afternoon']),
+        )
+        .with_entities(Booking.date, Booking.dog_id, Booking.slot)
+        .all()
+    )
+
+    # Build lookup: {date: {dog_id: set(slots)}}
+    day_dog_slots = {}
+    for r in rows:
+        day_dog_slots.setdefault(r.date, {}).setdefault(r.dog_id, set()).add(r.slot)
+
+    results = []
+    d = start
+    while d <= end:
+        dog_slots = day_dog_slots.get(d, {})
+        walks   = sum(len(slots) for slots in dog_slots.values())
+        doubles = sum(1 for slots in dog_slots.values()
+                      if 'Morning' in slots and 'Afternoon' in slots)
+        cfg = config_for(d)
+        if cfg:
+            price    = float(cfg.price_per_walk)
+            discount = float(cfg.double_slot_discount)
+            revenue  = round(walks * price - doubles * discount, 2)
+        else:
+            price = discount = revenue = 0.0
+        results.append({
+            'date':           d,
+            'revenue':        revenue,
+            'walks':          walks,
+            'doubles':        doubles,
+            'price_per_walk': price,
+            'discount':       discount,
+        })
+        d += timedelta(days=1)
+    return results
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Revenue page
+# ─────────────────────────────────────────────────────────────────────────────
+
+@admin_bp.route("/revenue")
+@login_required
+@admin_required
+def revenue():
+    """Revenue tracker page."""
+    from datetime import date
+    from app.models import PricingConfig
+
+    today = date.today()
+    # Default: current calendar month
+    start = today.replace(day=1)
+    end   = (start.replace(month=start.month % 12 + 1, day=1)
+             if start.month < 12
+             else start.replace(year=start.year + 1, month=1, day=1))
+    import datetime as _dt
+    end = end - _dt.timedelta(days=1)
+
+    daily = _revenue_for_range(start, end)
+
+    current_pricing = (
+        PricingConfig.query
+        .filter(PricingConfig.effective_from <= today)
+        .order_by(PricingConfig.effective_from.desc())
+        .first()
+    )
+    all_pricing = (
+        PricingConfig.query
+        .order_by(PricingConfig.effective_from.desc())
+        .all()
+    )
+
+    return render_template(
+        "admin_revenue.html",
+        today_iso=today.isoformat(),
+        start_iso=start.isoformat(),
+        chart_labels=[r['date'].strftime('%-d') for r in daily],
+        chart_revenue=[r['revenue'] for r in daily],
+        chart_walks=[r['walks'] for r in daily],
+        total_revenue=sum(r['revenue'] for r in daily),
+        total_walks=sum(r['walks'] for r in daily),
+        total_doubles=sum(r['doubles'] for r in daily),
+        current_pricing=current_pricing,
+        all_pricing=all_pricing,
+    )
+
+
+@admin_bp.route("/api/revenue-data")
+@login_required
+@admin_required
+def revenue_data():
+    """JSON revenue data for a calendar month. ?start=YYYY-MM-DD (any day in the month)."""
+    from datetime import date
+    import datetime as _dt
+
+    today = date.today()
+    start_str = request.args.get('start')
+    try:
+        raw = date.fromisoformat(start_str)
+    except (TypeError, ValueError):
+        raw = today
+
+    start = raw.replace(day=1)
+    end   = (start.replace(month=start.month % 12 + 1, day=1)
+             if start.month < 12
+             else start.replace(year=start.year + 1, month=1, day=1))
+    end = end - _dt.timedelta(days=1)
+
+    daily = _revenue_for_range(start, end)
+
+    from app.models import PricingConfig
+    current_pricing = (
+        PricingConfig.query
+        .filter(PricingConfig.effective_from <= today)
+        .order_by(PricingConfig.effective_from.desc())
+        .first()
+    )
+
+    return jsonify(
+        start=start.isoformat(),
+        labels=[r['date'].strftime('%-d') for r in daily],
+        month_label=start.strftime('%B %Y'),
+        revenue=[r['revenue'] for r in daily],
+        walks=[r['walks'] for r in daily],
+        total_revenue=round(sum(r['revenue'] for r in daily), 2),
+        total_walks=sum(r['walks'] for r in daily),
+        total_doubles=sum(r['doubles'] for r in daily),
+        current_pricing=current_pricing.to_dict() if current_pricing else None,
+    )
+
+
+@admin_bp.route("/revenue/pricing", methods=["POST"])
+@login_required
+@admin_required
+def update_pricing():
+    """Add a new pricing tier."""
+    from datetime import date
+    from app.models import PricingConfig
+
+    try:
+        price    = float(request.form['price_per_walk'])
+        discount = float(request.form['double_slot_discount'])
+        eff_from = date.fromisoformat(request.form['effective_from'])
+    except (KeyError, ValueError) as e:
+        flash(f"Invalid pricing data: {e}", "danger")
+        return redirect(url_for('admin.revenue'))
+
+    # Check for duplicate effective_from
+    existing = PricingConfig.query.filter_by(effective_from=eff_from).first()
+    if existing:
+        existing.price_per_walk       = price
+        existing.double_slot_discount = discount
+        flash(f"Pricing for {eff_from} updated.", "success")
+    else:
+        db.session.add(PricingConfig(
+            price_per_walk=price,
+            double_slot_discount=discount,
+            effective_from=eff_from,
+        ))
+        flash(f"New pricing tier effective from {eff_from} added.", "success")
+
+    db.session.commit()
+    return redirect(url_for('admin.revenue'))
 
 
 @admin_bp.route("/bookings")
@@ -254,7 +534,24 @@ def bookings_by_date():
     OperationalError: "Database is temporarily unavailable. Please try again."
 })
 def assign_walker():
-    """Assign a walker and slot to a booking (admin only). Returns JSON for AJAX requests."""
+    """Assign (or unassign) a walker and slot to a booking. Admin only. Returns JSON.
+
+    POST body (JSON or form-encoded):
+        booking_id  (int)   Required. Booking to update.
+        walker_id   (int)   Walker to assign. Omit or null to unassign.
+        slot        (str)   'Morning' or 'Afternoon'. Overrides booking.slot if provided.
+        pickup_order (list) Optional. List of booking IDs in pickup order for this
+                            walker/date/slot — persists pickup_order on each booking.
+
+    Side effects on successful assignment:
+        - Sets booking.status = 'confirmed', booking.walker_id, booking.slot
+        - Sends in-app notification to client (booking_confirmed)
+        - Sends in-app notification to walker (walker_assigned)
+        - Persists pickup_order if provided
+
+    On unassignment (walker_id = null):
+        - Clears booking.walker_id, sets status back to 'requested'
+    """
     # Accept JSON or form-encoded
     data = request.get_json(silent=True) or request.form
     booking_id = data.get("booking_id")
@@ -325,11 +622,12 @@ def assign_walker():
 
         # 22a: notify client that their booking has been confirmed
         date_str_fmt = booking.date.strftime('%a %-d %b')
+        dog_name = booking.dog.name if booking.dog else 'your dog'
         create_notification(
             recipient_id=booking.user_id,
             notification_type='booking_confirmed',
-            title=f'Your walk on {date_str_fmt} has been confirmed',
-            body=f'Slot: {booking.slot}',
+            title=f"{dog_name}'s walk on {date_str_fmt} has been confirmed",
+            body=booking.slot,
             link=f'/bookings/{booking.id}',
             sender_id=current_user.id,
         )
@@ -339,7 +637,7 @@ def assign_walker():
             recipient_id=walker.user_id,
             notification_type='walker_assigned',
             title=f'You have been assigned a walk on {date_str_fmt}',
-            body=f'Slot: {booking.slot}',
+            body=f'{dog_name} — {booking.slot}',
             link=f'/walker/pickups?date={booking.date.isoformat()}',
             sender_id=current_user.id,
         )
@@ -605,6 +903,34 @@ def activate_client(client_id):
         db.session.rollback()
         logging.error(f"Error activating client {client_id}: {e}")
         return jsonify(success=False, message="Error activating client"), 500
+
+
+@admin_bp.route("/clients/<int:client_id>/pickup-details", methods=["POST"])
+@login_required
+@admin_required
+def update_client_pickup_details(client_id):
+    """Save pickup_instructions and maps_url for a client (admin only)."""
+    user = User.query.filter(User.role == 'client', User.id == client_id).first()
+    if not user:
+        return jsonify(success=False, message="Client not found"), 404
+
+    client = Client.query.filter_by(user_id=user.id).first()
+    if not client:
+        return jsonify(success=False, message="Client record not found"), 404
+
+    data = request.get_json(silent=True) or {}
+    pickup_instructions = (data.get('pickup_instructions') or '').strip() or None
+    maps_url = (data.get('maps_url') or '').strip() or None
+
+    if maps_url and len(maps_url) > 2048:
+        return jsonify(success=False, message="Maps URL too long"), 400
+    if pickup_instructions and len(pickup_instructions) > 500:
+        return jsonify(success=False, message="Instructions too long (max 500 chars)"), 400
+
+    client.pickup_instructions = pickup_instructions
+    client.maps_url = maps_url
+    db.session.commit()
+    return jsonify(success=True)
 
 
 # === WALKER MANAGEMENT ROUTES ===

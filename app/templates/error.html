@@ -22,7 +22,7 @@ Error {{ error_code }} - {{ error_message }}
                     <p class="card-text text-muted">{{ error_description }}</p>
                     
                     <div class="text-center mt-4">
-                        <a href="{{ url_for('client.index') }}" class="btn btn-primary">Go Home</a>
+                        <a href="{{ home_url if home_url is defined else url_for('auth.login') }}" class="btn btn-primary">Go Home</a>
                     </div>
                 </div>
             </div>

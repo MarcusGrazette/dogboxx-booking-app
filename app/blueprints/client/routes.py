@@ -236,6 +236,7 @@ def profile():
                 client.street_address += '\n' + form.address_line_3.data.strip()
             client.postal_code = form.postcode.data.strip()
             client.pickup_instructions = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
+            client.maps_url = form.maps_url.data.strip() if form.maps_url.data else None
 
             # Notifications
             current_user.phone = form.phone.data.strip() if form.phone.data else None
@@ -290,6 +291,7 @@ def profile():
             form.address_line_3.data = address_lines[2] if len(address_lines) > 2 else ''
         form.postcode.data = client.postal_code
         form.pickup_instructions.data = client.pickup_instructions
+        form.maps_url.data = client.maps_url
 
         # Notifications
         form.phone.data = current_user.phone
@@ -338,6 +340,7 @@ def onboard():
 
             pickup_instructions = form.pickup_instructions.data.strip()
             client.pickup_instructions = pickup_instructions
+            client.maps_url = form.maps_url.data.strip() if form.maps_url.data else None
             client.onboarding_completed = True
             client.onboarding_completed_at = datetime.now(timezone.utc)
 
@@ -444,11 +447,12 @@ def cancel_booking():
         # 22c: notify the client when an admin cancels their booking
         if is_admin_cancel:
             date_str_fmt = booking.date.strftime('%a %-d %b')
+            dog_name = booking.dog.name if booking.dog else 'your dog'
             create_notification(
                 recipient_id=booking.user_id,
                 notification_type='booking_cancelled',
-                title=f'Your walk on {date_str_fmt} has been cancelled',
-                body=f'Slot: {booking.slot}',
+                title=f"{dog_name}'s walk on {date_str_fmt} has been cancelled",
+                body=booking.slot,
                 link=f'/bookings/{booking.id}',
                 sender_id=current_user.id,
             )
@@ -493,7 +497,25 @@ def calendar_data(year, month):
 @client_bp.route("/recurring_booking", methods=["POST"])
 @login_required
 def recurring_booking():
-    """Create a series of bookings from a start date, end date, slot and frequency."""
+    """Create a series of bookings from a start date, end date, slot and frequency.
+
+    POST body (JSON):
+        start_date  (str)  'YYYY-MM-DD' — must be tomorrow or later
+        end_date    (str)  'YYYY-MM-DD' — max 4 weeks from today (client limit)
+        slot        (str)  'Morning' or 'Afternoon'
+        frequency   (str)  'daily' (weekdays only) or 'weekly'
+
+    For each date in the range:
+        - Skips weekends when frequency='daily'
+        - Skips dates where this dog already has an active booking in that slot
+        - Skips dates where the dog already has 2 bookings (one per slot limit)
+        - Books as 'requested' if capacity available, 'waitlisted' if full
+
+    Returns JSON: { success, created, waitlisted, skipped }
+
+    Note: the 4-week cap is a client-facing safeguard. Admins booking on behalf
+    of clients via /admin/recurring_for_dog have no such cap.
+    """
     try:
         data = request.get_json()
         if not data:
@@ -619,3 +641,27 @@ def recurring_booking():
         db.session.rollback()
         logging.error(f"Error creating recurring bookings: {e}")
         return jsonify(success=False, message="Server error"), 500
+
+
+@client_bp.route("/booking/<int:booking_id>/note", methods=["POST"])
+@login_required
+def update_booking_note(booking_id):
+    """Save or clear the client note on a booking."""
+    if current_user.role != 'client' and not current_user.is_admin:
+        return jsonify(success=False, message="Unauthorized"), 403
+
+    booking = Booking.query.get(booking_id)
+    if not booking:
+        return jsonify(success=False, message="Booking not found"), 404
+
+    if booking.user_id != current_user.id and not current_user.is_admin:
+        return jsonify(success=False, message="Not your booking"), 403
+
+    data = request.get_json(silent=True) or {}
+    note = (data.get('note') or '').strip()
+    if len(note) > 500:
+        return jsonify(success=False, message="Note must be 500 characters or fewer"), 400
+
+    booking.client_notes = note or None
+    db.session.commit()
+    return jsonify(success=True, note=booking.client_notes)

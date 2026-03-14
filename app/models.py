@@ -90,6 +90,7 @@ class Client(db.Model):
                            onupdate=lambda: datetime.now(timezone.utc))
 
     pickup_instructions = db.Column(db.String(500), nullable=True)
+    maps_url = db.Column(db.String(2048), nullable=True)
 
     # Relationship
     user = db.relationship('User', backref=db.backref('client', uselist=False))
@@ -439,6 +440,34 @@ class Notification(db.Model):
 
     def __repr__(self):
         return f'<Notification {self.id} → user:{self.recipient_id} [{self.notification_type}]>'
+
+
+class PricingConfig(db.Model):
+    """Pricing tiers for walk revenue calculation.
+
+    Multiple rows allowed; the row with the highest effective_from that is
+    still <= the booking date is used.  This means historical revenue figures
+    remain accurate when prices change.
+    """
+    __tablename__ = 'pricing_configs'
+
+    id                   = db.Column(db.Integer, primary_key=True)
+    price_per_walk       = db.Column(db.Numeric(8, 2), nullable=False)
+    double_slot_discount = db.Column(db.Numeric(8, 2), nullable=False, default=0)
+    effective_from       = db.Column(db.Date, nullable=False, unique=True)
+    created_at           = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    def __repr__(self):
+        return (f'<PricingConfig £{self.price_per_walk}/walk '
+                f'(−£{self.double_slot_discount} double) from {self.effective_from}>')
+
+    def to_dict(self):
+        return {
+            'id':                   self.id,
+            'price_per_walk':       float(self.price_per_walk),
+            'double_slot_discount': float(self.double_slot_discount),
+            'effective_from':       self.effective_from.isoformat(),
+        }
 
 
 class WalkEvent(db.Model):

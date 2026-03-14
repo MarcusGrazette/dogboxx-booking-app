@@ -18,7 +18,7 @@
         {% endif %}
     </a>
 
-    <div class="dropdown-menu dropdown-menu-end shadow p-0"
+    <div class="dropdown-menu dropdown-menu-end shadow p-0 notif-dropdown-panel"
          style="width:360px; max-height:480px; overflow-y:auto; border:1px solid #e8e0e6;">
 
         {# Header #}
@@ -94,27 +94,47 @@
 .notif-item:hover {
     background-color: #f9f0f7 !important;
 }
+
+/* On small screens, pin the panel to the viewport edges instead of
+   letting it overflow left of the bell icon. */
+@media (max-width: 576px) {
+    .notif-dropdown-panel {
+        position: fixed !important;
+        top: 60px !important;   /* below the navbar */
+        left: 8px !important;
+        right: 8px !important;
+        width: auto !important;
+        max-height: 70vh !important;
+    }
+}
 </style>
 
 <script>
 (function() {
-    // Relative timestamps in dropdown
-    document.querySelectorAll('#notification-bell .notif-time[data-ts]').forEach(function(el) {
-        const ts = new Date(el.dataset.ts + 'Z');
+    // ── Relative timestamps ────────────────────────────────────────────────
+    function formatRelTime(isoString) {
+        // Normalise to Z suffix — handles both naive ('...123456') and aware ('...+00:00') formats
+        const normalised = isoString.replace(/\+00:00$/, 'Z');
+        const ts = new Date(normalised.endsWith('Z') ? normalised : normalised + 'Z');
         const diff = Date.now() - ts;
         const mins = Math.floor(diff / 60000);
         const hours = Math.floor(mins / 60);
         const days = Math.floor(hours / 24);
-        if (mins < 1) el.textContent = 'Just now';
-        else if (mins < 60) el.textContent = mins + 'm ago';
-        else if (hours < 24) el.textContent = hours + 'h ago';
-        else if (days < 7) el.textContent = days + 'd ago';
-        else el.textContent = el.textContent; // keep formatted date
+        if (mins < 1)   return 'Just now';
+        if (mins < 60)  return mins + 'm ago';
+        if (hours < 24) return hours + 'h ago';
+        if (days < 7)   return days + 'd ago';
+        return ts.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    }
+
+    document.querySelectorAll('#notification-bell .notif-time[data-ts]').forEach(function(el) {
+        el.textContent = formatRelTime(el.dataset.ts);
     });
 
-    // Mark notification read on click (AJAX, non-blocking)
-    document.querySelectorAll('#notification-bell .notif-item').forEach(function(item) {
-        item.addEventListener('click', function() {
+    // ── Mark read on click ────────────────────────────────────────────────
+    function bindReadOnClick(item) {
+        item.addEventListener('click', function(e) {
+            e.preventDefault();
             const id = this.dataset.notifId;
             if (!id) return;
             fetch('/notifications/' + id + '/read', {
@@ -124,22 +144,14 @@
                     'X-Requested-With': 'XMLHttpRequest',
                 }
             }).then(function() {
-                // Remove unread dot + highlight
-                const dot = item.querySelector('.rounded-circle');
-                if (dot) dot.remove();
-                item.classList.remove('notif-dropdown-unread');
-                // Decrement badge
-                const badge = document.getElementById('notif-badge');
-                if (badge) {
-                    let count = parseInt(badge.textContent) - 1;
-                    if (count <= 0) { badge.classList.add('d-none'); }
-                    else { badge.textContent = count; }
-                }
+                clearUnreadItem(item);
+                decrementBadge(1);
             });
         });
-    });
+    }
+    document.querySelectorAll('#notification-bell .notif-item').forEach(bindReadOnClick);
 
-    // Mark all read
+    // ── Mark all read ─────────────────────────────────────────────────────
     const markAllBtn = document.getElementById('mark-all-read-btn');
     if (markAllBtn) {
         markAllBtn.addEventListener('click', function(e) {
@@ -152,18 +164,148 @@
                     'X-Requested-With': 'XMLHttpRequest',
                 }
             }).then(function() {
-                document.querySelectorAll('.notif-dropdown-unread').forEach(function(el) {
-                    el.classList.remove('notif-dropdown-unread');
-                });
-                document.querySelectorAll('#notification-bell .rounded-circle').forEach(function(el) {
-                    el.remove();
-                });
-                const badge = document.getElementById('notif-badge');
-                if (badge) badge.classList.add('d-none');
-                markAllBtn.closest('.d-flex').querySelector('.badge')?.remove();
-                markAllBtn.remove();
+                applyReadAll();
             });
         });
     }
+
+    // ── DOM helpers ───────────────────────────────────────────────────────
+    function clearUnreadItem(item) {
+        item.classList.remove('notif-dropdown-unread');
+        const dot = item.querySelector('.rounded-circle');
+        if (dot) dot.remove();
+    }
+
+    function decrementBadge(n) {
+        const badge = document.getElementById('notif-badge');
+        if (!badge) return;
+        const next = Math.max(0, (parseInt(badge.textContent) || 0) - n);
+        if (next <= 0) badge.classList.add('d-none');
+        else badge.textContent = next > 99 ? '99+' : next;
+    }
+
+    function incrementBadge(n) {
+        const badge = document.getElementById('notif-badge');
+        if (!badge) return;
+        const next = (parseInt(badge.textContent) || 0) + n;
+        badge.textContent = next > 99 ? '99+' : next;
+        badge.classList.remove('d-none');
+    }
+
+    function applyReadAll() {
+        document.querySelectorAll('.notif-dropdown-unread').forEach(function(el) {
+            el.classList.remove('notif-dropdown-unread');
+        });
+        document.querySelectorAll('#notification-bell .rounded-circle').forEach(function(el) {
+            el.remove();
+        });
+        const badge = document.getElementById('notif-badge');
+        if (badge) badge.classList.add('d-none');
+        // Remove header badge count + "mark all" button
+        const headerBadge = document.querySelector('#notification-bell .dropdown-menu .fw-bold .badge');
+        if (headerBadge) headerBadge.remove();
+        const btn = document.getElementById('mark-all-read-btn');
+        if (btn) btn.remove();
+    }
+
+    // ── SSE: real-time updates ────────────────────────────────────────────
+    let evtSource = null;
+    let reconnectDelay = 2000;
+
+    function connectSSE() {
+        evtSource = new EventSource('/notifications/stream');
+
+        evtSource.onopen = function() {
+            reconnectDelay = 2000;
+        };
+
+        // New notification arrived
+        evtSource.addEventListener('notification', function(e) {
+            const d = JSON.parse(e.data);
+            incrementBadge(1);
+            prependNotification(d);
+            updateHeaderUnreadCount(1);
+        });
+
+        // A read event from another surface
+        evtSource.addEventListener('read_one', function(e) {
+            const d = JSON.parse(e.data);
+            const item = document.querySelector('.notif-item[data-notif-id="' + d.id + '"]');
+            if (item) { clearUnreadItem(item); decrementBadge(1); }
+        });
+
+        // Mark-all-read from another surface
+        evtSource.addEventListener('read_all', function() {
+            applyReadAll();
+        });
+
+        evtSource.onerror = function() {
+            evtSource.close();
+            setTimeout(connectSSE, reconnectDelay);
+            reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+        };
+    }
+
+    // Prepend a new notification row into the dropdown
+    function prependNotification(d) {
+        const panel = document.querySelector('.notif-dropdown-panel');
+        if (!panel) return;
+
+        // Remove the "no notifications yet" placeholder if present
+        const empty = panel.querySelector('.text-center.py-4');
+        if (empty) empty.remove();
+
+        const item = document.createElement('a');
+        item.href = d.link || '/notifications/';
+        item.className = 'd-flex align-items-start gap-2 px-3 py-2 text-decoration-none notif-item notif-dropdown-unread';
+        item.dataset.notifId = d.id;
+        item.style.cssText = 'border-bottom:1px solid #f0e8ee; color:#1B1B1B;';
+        item.innerHTML =
+            '<div class="flex-shrink-0 mt-1" style="color:' + d.colour + ';">' +
+                '<i class="bi ' + d.icon + '"></i>' +
+            '</div>' +
+            '<div class="flex-grow-1 overflow-hidden">' +
+                '<div class="fw-semibold text-truncate" style="font-size:0.82rem;">' + escHtml(d.title) + '</div>' +
+                (d.body ? '<div class="text-muted text-truncate" style="font-size:0.75rem;">' + escHtml(d.body) + '</div>' : '') +
+                '<div class="text-muted notif-time" style="font-size:0.7rem;" data-ts="' + d.created_at + '">' +
+                    formatRelTime(d.created_at) +
+                '</div>' +
+            '</div>' +
+            '<div class="flex-shrink-0 mt-2">' +
+                '<span class="rounded-circle d-inline-block" style="width:8px;height:8px;background:#E02FAC;"></span>' +
+            '</div>';
+
+        bindReadOnClick(item);
+
+        // Insert before the first existing notif-item (or before the footer)
+        const firstItem = panel.querySelector('.notif-item');
+        const footer = panel.querySelector('.px-3.py-2.text-center');
+        if (firstItem) {
+            panel.insertBefore(item, firstItem);
+        } else if (footer) {
+            panel.insertBefore(item, footer);
+        } else {
+            panel.appendChild(item);
+        }
+    }
+
+    function updateHeaderUnreadCount(delta) {
+        // Update the count badge in the dropdown header
+        const headerBadge = document.querySelector('#notification-bell .dropdown-menu .fw-bold .badge');
+        if (headerBadge) {
+            const next = (parseInt(headerBadge.textContent) || 0) + delta;
+            headerBadge.textContent = next;
+        }
+    }
+
+    function escHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    connectSSE();
 })();
 </script>

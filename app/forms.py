@@ -1,6 +1,6 @@
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, BooleanField, SubmitField, TextAreaField, HiddenField, SelectField, DateField, FieldList, FormField
-from wtforms.validators import DataRequired, Email, Length, EqualTo, Optional
+from wtforms.validators import DataRequired, Email, Length, EqualTo, Optional, URL
 from flask_wtf.file import FileField, FileAllowed
 from .validators import wtforms_password_validator
 from datetime import datetime, timezone, timedelta
@@ -91,6 +91,11 @@ class OnboardingForm(FlaskForm):
         render_kw={
             "rows": 5,
             "placeholder": "Anything we need to know when accessing your home? Eg, door codes, notes on the concierge, fiddly keys... Or any special instructions for pickup and drop off?"},
+    )
+    maps_url = StringField(
+        "Google Maps pin URL (optional)",
+        validators=[Optional(), URL(message="Please enter a valid URL"), Length(max=2048)],
+        render_kw={"placeholder": "https://maps.app.goo.gl/..."}
     )
     notify_email = BooleanField('Email', default=True)
     notify_whatsapp = BooleanField('WhatsApp')
@@ -190,6 +195,11 @@ class ProfileForm(FlaskForm):
         "Access instructions (optional)",
         validators=[Length(max=500)],
         render_kw={"rows": 3, "placeholder": "Door codes, concierge notes, special instructions..."}
+    )
+    maps_url = StringField(
+        "Google Maps pin URL (optional)",
+        validators=[Optional(), URL(message="Please enter a valid URL"), Length(max=2048)],
+        render_kw={"placeholder": "https://maps.app.goo.gl/..."}
     )
 
     # Notifications

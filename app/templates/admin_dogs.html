@@ -79,15 +79,10 @@
                     {% for row in dogs_data %}
                     <tr>
                         <td class="ps-3 fw-semibold align-middle">
-                            {% if row.dog.pic %}
-                            <img src="{{ url_for('static', filename='uploads/dogs/' ~ row.dog.pic) }}"
+                            <img src="{{ url_for('static', filename='uploads/dogs/' ~ row.dog.pic) if row.dog.pic else url_for('static', filename='uploads/dogs/default-dog.png') }}"
+                                 onerror="this.onerror=null;this.src='{{ url_for('static', filename='uploads/dogs/default-dog.png') }}'"
                                  class="rounded-circle me-2"
                                  style="width:32px;height:32px;object-fit:cover;">
-                            {% else %}
-                            <img src="{{ url_for('static', filename='img/default-dog.png') }}"
-                                 class="rounded-circle me-2"
-                                 style="width:32px;height:32px;object-fit:cover;">
-                            {% endif %}
                             {{ row.dog.name }}
                         </td>
                         <td class="align-middle text-muted">{{ row.dog.breed or '—' }}</td>

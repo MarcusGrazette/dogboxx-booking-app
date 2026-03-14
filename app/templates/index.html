@@ -153,17 +153,11 @@
                 <!-- Dog header -->
                 <div class="card-body pb-2">
                     <div class="d-flex align-items-center gap-3 mb-3">
-                        {% if dog.pic %}
-                        <img src="{{ url_for('static', filename='uploads/dogs/' + dog.pic) }}"
+                        <img src="{{ url_for('static', filename='uploads/dogs/' + dog.pic) if dog.pic else url_for('static', filename='uploads/dogs/default-dog.png') }}"
+                             onerror="this.onerror=null;this.src='{{ url_for('static', filename='uploads/dogs/default-dog.png') }}'"
                              class="rounded-circle flex-shrink-0"
                              alt="{{ dog.name }}"
                              style="width: 64px; height: 64px; object-fit: cover; border: 3px solid var(--db-primary-subtle);">
-                        {% else %}
-                        <div class="rounded-circle flex-shrink-0 d-flex align-items-center justify-content-center"
-                             style="width: 64px; height: 64px; background: var(--db-primary-subtle); border: 3px solid var(--db-primary-subtle);">
-                            <i class="bi bi-heart-fill fs-4" style="color: var(--bs-primary);"></i>
-                        </div>
-                        {% endif %}
                         <div>
                             <h5 class="fw-bold mb-0">{{ dog.name }}</h5>
                             <span class="text-muted small">Upcoming walks</span>
@@ -196,15 +190,26 @@
                                     </div>
                                 </div>
                             </div>
-                            <!-- Cancel button -->
-                            <button class="btn btn-link p-0 cancel-booking-btn text-danger"
-                                    data-booking-id="{{ booking.id }}"
-                                    data-booking-slot="{{ booking.slot }}"
-                                    data-booking-date="{{ booking.date_display }}"
-                                    title="Cancel booking"
-                                    style="line-height: 1;">
-                                <i class="bi bi-x-lg"></i>
-                            </button>
+                            <!-- Actions -->
+                            <div class="d-flex align-items-center gap-3">
+                                <button class="btn btn-link p-1 note-booking-btn text-secondary"
+                                        data-booking-id="{{ booking.id }}"
+                                        data-booking-slot="{{ booking.slot }}"
+                                        data-booking-date="{{ booking.date_display }}"
+                                        data-current-note="{{ booking.client_notes or '' }}"
+                                        title="{{ 'Edit note' if booking.client_notes else 'Add note' }}"
+                                        style="line-height: 1; font-size: 1.1rem;">
+                                    <i class="bi bi-{{ 'pencil-square text-primary' if booking.client_notes else 'pencil-square' }}"></i>
+                                </button>
+                                <button class="btn btn-link p-1 cancel-booking-btn text-danger"
+                                        data-booking-id="{{ booking.id }}"
+                                        data-booking-slot="{{ booking.slot }}"
+                                        data-booking-date="{{ booking.date_display }}"
+                                        title="Cancel booking"
+                                        style="line-height: 1; font-size: 1.1rem;">
+                                    <i class="bi bi-x-circle"></i>
+                                </button>
+                            </div>
                         </li>
                         {% endfor %}
                     </ul>
@@ -238,6 +243,54 @@
         </div>
         {% endif %}
 
+    </div>
+</div>
+
+<!-- Cancel booking confirmation modal -->
+<div class="modal fade" id="cancelModal" tabindex="-1" aria-labelledby="cancelModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content" style="border-radius: 1rem;">
+            <div class="modal-header border-0 pb-0">
+                <h6 class="modal-title fw-bold" id="cancelModalLabel">
+                    <i class="bi bi-x-circle me-2 text-danger"></i>Cancel walk
+                </h6>
+            </div>
+            <div class="modal-body pt-1">
+                <p class="mb-0" id="cancel-modal-body" style="font-size: 0.92rem;"></p>
+            </div>
+            <div class="modal-footer border-0 pt-1 gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm flex-fill" data-bs-dismiss="modal">No, keep it</button>
+                <button type="button" class="btn btn-danger btn-sm flex-fill fw-semibold" id="cancel-confirm-btn">Yes, cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Booking note modal -->
+<div class="modal fade" id="noteModal" tabindex="-1" aria-labelledby="noteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 1rem;">
+            <div class="modal-header border-0 pb-0">
+                <h6 class="modal-title fw-bold" id="noteModalLabel">
+                    <i class="bi bi-pencil me-2 text-primary"></i>Walk note
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body pt-2">
+                <p class="text-muted small mb-2" id="note-modal-subtitle"></p>
+                <textarea id="note-textarea" class="form-control" rows="4"
+                          maxlength="500"
+                          placeholder="e.g. Please use the side gate. Buddy has been limping on his left front paw."></textarea>
+                <div class="d-flex justify-content-between mt-1">
+                    <div id="note-error" class="text-danger small"></div>
+                    <div id="note-char-count" class="text-muted small">0 / 500</div>
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm fw-semibold" id="note-save-btn">Save note</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -469,19 +522,106 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // ─── Cancel booking ──────────────────────────────────────
+    const cancelModal     = new bootstrap.Modal(document.getElementById('cancelModal'));
+    const cancelModalBody = document.getElementById('cancel-modal-body');
+    const cancelConfirmBtn = document.getElementById('cancel-confirm-btn');
+    let pendingCancelId  = null;
+    let pendingCancelBtn = null;
+
     document.querySelectorAll('.cancel-booking-btn').forEach(button => {
         button.addEventListener('click', function (e) {
             e.preventDefault();
-            const bookingId   = this.getAttribute('data-booking-id');
-            const bookingSlot = this.getAttribute('data-booking-slot');
-            const bookingDate = this.getAttribute('data-booking-date');
-            if (confirm(`Cancel the ${bookingSlot} walk on ${bookingDate}?`)) {
-                cancelBooking(bookingId, this);
-            }
+            pendingCancelId  = this.getAttribute('data-booking-id');
+            pendingCancelBtn = this;
+            const slot = this.getAttribute('data-booking-slot');
+            const date = this.getAttribute('data-booking-date');
+            cancelModalBody.textContent = `Are you sure you want to cancel the ${slot} walk on ${date}?`;
+            cancelModal.show();
         });
     });
 
+    cancelConfirmBtn.addEventListener('click', function () {
+        cancelModal.hide();
+        if (pendingCancelId && pendingCancelBtn) {
+            cancelBooking(pendingCancelId, pendingCancelBtn);
+        }
+    });
+
 }); // DOMContentLoaded
+
+// ─── Booking notes ───────────────────────────────────────────────────────────
+(function () {
+    const modal       = new bootstrap.Modal(document.getElementById('noteModal'));
+    const textarea    = document.getElementById('note-textarea');
+    const saveBtn     = document.getElementById('note-save-btn');
+    const subtitle    = document.getElementById('note-modal-subtitle');
+    const charCount   = document.getElementById('note-char-count');
+    const errorEl     = document.getElementById('note-error');
+    let activeBookingId   = null;
+    let activeNoteBtn     = null;
+
+    textarea.addEventListener('input', () => {
+        charCount.textContent = `${textarea.value.length} / 500`;
+    });
+
+    document.querySelectorAll('.note-booking-btn').forEach(btn => {
+        btn.addEventListener('click', function () {
+            activeBookingId = this.getAttribute('data-booking-id');
+            activeNoteBtn   = this;
+            const slot      = this.getAttribute('data-booking-slot');
+            const dateDisp  = this.getAttribute('data-booking-date');
+            const current   = this.getAttribute('data-current-note');
+
+            subtitle.textContent    = `${slot} · ${dateDisp}`;
+            textarea.value          = current;
+            charCount.textContent   = `${current.length} / 500`;
+            errorEl.textContent     = '';
+            modal.show();
+            // Focus textarea after transition
+            document.getElementById('noteModal').addEventListener('shown.bs.modal', () => textarea.focus(), { once: true });
+        });
+    });
+
+    saveBtn.addEventListener('click', function () {
+        const note = textarea.value.trim();
+        errorEl.textContent = '';
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+
+        const csrfToken = document.querySelector('input[name=csrf_token]')?.value;
+
+        fetch(`/booking/${activeBookingId}/note`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ note })
+        })
+        .then(r => r.json())
+        .then(data => {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save note';
+            if (data.success) {
+                // Update the button icon + data attr to reflect saved state
+                activeNoteBtn.setAttribute('data-current-note', note);
+                const icon = activeNoteBtn.querySelector('i');
+                if (note) {
+                    icon.className = 'bi bi-pencil-square text-primary';
+                    activeNoteBtn.title = 'Edit note';
+                } else {
+                    icon.className = 'bi bi-pencil-square';
+                    activeNoteBtn.title = 'Add note';
+                }
+                modal.hide();
+            } else {
+                errorEl.textContent = data.message || 'Could not save note.';
+            }
+        })
+        .catch(() => {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save note';
+            errorEl.textContent = 'Network error — please try again.';
+        });
+    });
+})();
 
 function cancelBooking(bookingId, buttonElement) {
     buttonElement.disabled = true;

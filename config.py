@@ -5,7 +5,8 @@ class Config:
     """Base configuration."""
     SECRET_KEY = os.environ.get('SECRET_KEY')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    SESSION_TYPE = "filesystem"
+    SESSION_TYPE = "sqlalchemy"          # store sessions in the app DB (works on Railway)
+    SESSION_SQLALCHEMY_TABLE = "sessions" # table name in Postgres/SQLite
     SESSION_PERMANENT = False
     
     # Logging configuration
@@ -14,6 +15,9 @@ class Config:
     
     # Upload folder (overridden in create_app to use static/uploads/dogs/)
     UPLOAD_FOLDER = os.path.join(os.getcwd(), "app", "static", "uploads", "dogs")
+
+    # Cap request body size — protects against large file upload abuse
+    MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10 MB
     
     # Security settings
     SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access to session cookie
@@ -61,7 +65,8 @@ class TestingConfig(Config):
     DEBUG = True
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
     WTF_CSRF_ENABLED = False
-    
+    RATELIMIT_ENABLED = False
+
     # No HTTPS enforcement in testing
     SESSION_COOKIE_SECURE = False
     REMEMBER_COOKIE_SECURE = False

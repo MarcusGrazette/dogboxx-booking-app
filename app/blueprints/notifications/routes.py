@@ -1,20 +1,45 @@
-from flask import render_template, request, jsonify
+from flask import render_template, request, jsonify, Response, stream_with_context
 from flask_login import login_required, current_user
 from . import notifications_bp
 from app.utils.notifications import mark_read, mark_all_read, get_recent
 from app.models import Notification
 from app.utils.notifications import get_meta
+from app import limiter
+
+
+@notifications_bp.route('/stream')
+@login_required
+@limiter.exempt
+def stream():
+    """SSE endpoint — streams real-time notification events to the browser.
+
+    Each open tab/PWA window opens one long-lived connection here.
+    Events pushed: 'notification', 'read_one', 'read_all'.
+    """
+    from app.sse import subscribe, stream_generator
+    user_id = current_user.id
+    q = subscribe(user_id)
+    return Response(
+        stream_with_context(stream_generator(user_id, q)),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',   # tell nginx not to buffer this stream
+            'Connection': 'keep-alive',
+        },
+    )
 
 
 @notifications_bp.route('/')
 @login_required
 def index():
-    """Full notification list page — paginated."""
-    page = request.args.get('page', 1, type=int)
+    """Full notification list page — most recent NOTIF_PAGE_CAP entries."""
+    from app.utils.notifications import NOTIF_PAGE_CAP
     notifications = (Notification.query
                      .filter_by(recipient_id=current_user.id)
                      .order_by(Notification.created_at.desc())
-                     .paginate(page=page, per_page=20, error_out=False))
+                     .limit(NOTIF_PAGE_CAP)
+                     .all())
     return render_template('notifications/index.html',
                            notifications=notifications,
                            notification_meta=get_meta)

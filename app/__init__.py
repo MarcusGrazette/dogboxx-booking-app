@@ -20,6 +20,21 @@ login_manager = LoginManager()
 csrf = CSRFProtect()
 limiter = Limiter(key_func=get_remote_address)
 
+def _home_url_for(user):
+    """Return the most appropriate home URL for the given user."""
+    from flask import url_for
+    try:
+        if user and user.is_authenticated:
+            if user.is_admin:
+                return url_for('admin.index')
+            if user.role == 'walker':
+                return url_for('walker.pickups')
+            return url_for('client.index')
+    except Exception:
+        pass
+    return url_for('auth.login')
+
+
 def create_app(config_name=None):
     app = Flask(__name__)
     
@@ -47,15 +62,30 @@ def create_app(config_name=None):
     app.config['UPLOAD_FOLDER'] = upload_folder
     os.makedirs(upload_folder, exist_ok=True)
 
-    # Initialize Flask-Session
-    Session(app)
-
     # Initialize CSRF protection
     csrf.init_app(app)
 
     # Initialize SQLAlchemy
     db.init_app(app)
-    
+
+    # Flask-Session: must point at the db instance before Session(app) is called,
+    # so it uses the same engine and auto-creates the sessions table.
+    app.config['SESSION_SQLALCHEMY'] = db
+    Session(app)
+
+    # Fire queued SSE broadcasts after each DB commit.
+    # create_notification() stashes events in db.session.info['sse_pending'];
+    # this listener drains them once the transaction is safely committed.
+    from sqlalchemy import event as sa_event
+
+    @sa_event.listens_for(db.session, 'after_commit')
+    def _fire_sse_after_commit(session):
+        pending = session.info.pop('sse_pending', [])
+        if pending:
+            from app.sse import broadcast
+            for item in pending:
+                broadcast(item['user_id'], item['event'], item['data'])
+
     # Initialize Flask-Migrate for database migrations
     migrate.init_app(app, db)
     
@@ -158,6 +188,13 @@ def create_app(config_name=None):
                                 BookingStatusChange, WalkEvent, Notification)
 
     # Custom error handler for rate limiting
+    @app.errorhandler(413)
+    def too_large(e):
+        return render_template('error.html',
+                              error_code=413,
+                              error_message="File too large.",
+                              error_description="Photos must be under 10 MB. Try reducing the image size before uploading."), 413
+
     @app.errorhandler(429)
     def ratelimit_handler(e):
         return render_template('error.html',
@@ -165,10 +202,56 @@ def create_app(config_name=None):
                               error_message="Too many attempts. Please try again later.",
                               error_description="For security reasons, we limit the number of requests. Please wait a few minutes before trying again."), 429
 
+    @app.errorhandler(404)
+    def not_found(e):
+        from flask import url_for
+        from flask_login import current_user
+        home_url = _home_url_for(current_user)
+        return render_template('error.html',
+                              error_code=404,
+                              error_message="Page not found.",
+                              error_description="The page you're looking for doesn't exist or has been moved.",
+                              home_url=home_url), 404
+
+    @app.errorhandler(403)
+    def forbidden(e):
+        from flask import url_for
+        from flask_login import current_user
+        home_url = _home_url_for(current_user)
+        return render_template('error.html',
+                              error_code=403,
+                              error_message="Access denied.",
+                              error_description="You don't have permission to view this page.",
+                              home_url=home_url), 403
+
+    @app.errorhandler(500)
+    def internal_error(e):
+        db.session.rollback()
+        return render_template('500.html'), 500
+
     @app.context_processor
     def inject_csrf_token():
         from flask_wtf.csrf import generate_csrf
         return dict(csrf_token=generate_csrf)
+
+    @app.context_processor
+    def inject_device_info():
+        """Expose UA device flags to all templates.
+
+        Available in every template:
+            {{ is_mobile }}   — True on Android / any mobile browser
+            {{ is_desktop }}  — True on macOS / non-mobile
+            {{ is_android }}  — True specifically on Android Chrome
+            {{ is_macos }}    — True specifically on macOS Chrome
+        """
+        from app.utils.ua import get_device_info
+        d = get_device_info()
+        return dict(
+            is_mobile=d.is_mobile,
+            is_desktop=d.is_desktop,
+            is_android=d.is_android,
+            is_macos=d.is_macos,
+        )
 
     @app.context_processor
     def inject_notifications():
