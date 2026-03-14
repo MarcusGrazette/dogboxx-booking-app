@@ -246,6 +246,26 @@
     </div>
 </div>
 
+<!-- Cancel booking confirmation modal -->
+<div class="modal fade" id="cancelModal" tabindex="-1" aria-labelledby="cancelModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content" style="border-radius: 1rem;">
+            <div class="modal-header border-0 pb-0">
+                <h6 class="modal-title fw-bold" id="cancelModalLabel">
+                    <i class="bi bi-x-circle me-2 text-danger"></i>Cancel walk
+                </h6>
+            </div>
+            <div class="modal-body pt-1">
+                <p class="mb-0" id="cancel-modal-body" style="font-size: 0.92rem;"></p>
+            </div>
+            <div class="modal-footer border-0 pt-1 gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm flex-fill" data-bs-dismiss="modal">No, keep it</button>
+                <button type="button" class="btn btn-danger btn-sm flex-fill fw-semibold" id="cancel-confirm-btn">Yes, cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Booking note modal -->
 <div class="modal fade" id="noteModal" tabindex="-1" aria-labelledby="noteModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -502,16 +522,29 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // ─── Cancel booking ──────────────────────────────────────
+    const cancelModal     = new bootstrap.Modal(document.getElementById('cancelModal'));
+    const cancelModalBody = document.getElementById('cancel-modal-body');
+    const cancelConfirmBtn = document.getElementById('cancel-confirm-btn');
+    let pendingCancelId  = null;
+    let pendingCancelBtn = null;
+
     document.querySelectorAll('.cancel-booking-btn').forEach(button => {
         button.addEventListener('click', function (e) {
             e.preventDefault();
-            const bookingId   = this.getAttribute('data-booking-id');
-            const bookingSlot = this.getAttribute('data-booking-slot');
-            const bookingDate = this.getAttribute('data-booking-date');
-            if (confirm(`Cancel the ${bookingSlot} walk on ${bookingDate}?`)) {
-                cancelBooking(bookingId, this);
-            }
+            pendingCancelId  = this.getAttribute('data-booking-id');
+            pendingCancelBtn = this;
+            const slot = this.getAttribute('data-booking-slot');
+            const date = this.getAttribute('data-booking-date');
+            cancelModalBody.textContent = `Are you sure you want to cancel the ${slot} walk on ${date}?`;
+            cancelModal.show();
         });
+    });
+
+    cancelConfirmBtn.addEventListener('click', function () {
+        cancelModal.hide();
+        if (pendingCancelId && pendingCancelBtn) {
+            cancelBooking(pendingCancelId, pendingCancelBtn);
+        }
     });
 
 }); // DOMContentLoaded
