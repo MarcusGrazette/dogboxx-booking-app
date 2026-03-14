@@ -32,6 +32,11 @@ class Config:
         'font-src': "'self' https://cdn.jsdelivr.net",
     }
     
+    # Email (Resend)
+    RESEND_API_KEY = os.environ.get('RESEND_API_KEY')
+    MAIL_FROM = os.environ.get('MAIL_FROM', 'Dogboxx <noreply@dogboxx.org>')
+    APP_BASE_URL = os.environ.get('APP_BASE_URL', 'http://localhost:5000')
+
     # Rate Limiting Configuration
     RATELIMIT_DEFAULT = "200 per day, 50 per hour"
     RATELIMIT_STORAGE_URL = "memory://"  # Use in-memory storage for development
