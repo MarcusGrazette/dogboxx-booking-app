@@ -127,3 +127,119 @@ def _redirect_by_role(user):
     else:
         flash("Unknown user role. Please contact support.", "warning")
         return redirect(url_for('client.index'))
+
+
+# ── Password reset helpers ────────────────────────────────────────────────────
+
+def _make_reset_token(user):
+    """Return a signed, time-limited token embedding the user's current password hash."""
+    from itsdangerous import URLSafeTimedSerializer
+    from flask import current_app
+    s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+    # Include hashed_password so token is invalidated the moment the password changes
+    return s.dumps({'user_id': user.id, 'pw': user.hashed_password[:16]},
+                   salt='password-reset')
+
+
+def _verify_reset_token(token, max_age=3600):
+    """Return the User for a valid token, or None if expired/invalid/already used."""
+    from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
+    from flask import current_app
+    s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+    try:
+        data = s.loads(token, salt='password-reset', max_age=max_age)
+    except (SignatureExpired, BadSignature):
+        return None
+    user = User.query.get(data.get('user_id'))
+    if not user:
+        return None
+    # Reject if password has already been changed since token was issued
+    if user.hashed_password[:16] != data.get('pw'):
+        return None
+    return user
+
+
+# ── Forgot password ───────────────────────────────────────────────────────────
+
+@auth_bp.route("/forgot-password", methods=["GET", "POST"])
+@limiter.limit("5 per hour")
+def forgot_password():
+    """Step 1 — user enters their email to request a reset link."""
+    from app.forms import ForgotPasswordForm
+    from app.utils.email import send_email
+    from flask import current_app
+
+    if current_user.is_authenticated:
+        return _redirect_by_role(current_user)
+
+    form = ForgotPasswordForm()
+    sent = False
+
+    if form.validate_on_submit():
+        email = form.email.data.strip().lower()
+        user = User.query.filter_by(email=email).first()
+
+        # Always show the same success message — don't reveal whether the email exists
+        if user and user.is_active():
+            token = _make_reset_token(user)
+            base_url = current_app.config.get('APP_BASE_URL', '').rstrip('/')
+            reset_url = f"{base_url}/auth/reset-password/{token}"
+
+            html = f"""
+            <p>Hi {user.firstname},</p>
+            <p>We received a request to reset your Dogboxx password.
+               Click the button below — the link expires in 1 hour.</p>
+            <p style="margin: 24px 0;">
+              <a href="{reset_url}"
+                 style="background:#0d6efd;color:#fff;padding:12px 24px;
+                        border-radius:6px;text-decoration:none;font-weight:600;">
+                Reset my password
+              </a>
+            </p>
+            <p style="color:#666;font-size:0.9em;">
+              If you didn't request this, you can safely ignore this email.
+            </p>
+            """
+            send_email(
+                to=user.email,
+                subject="Reset your Dogboxx password",
+                html=html,
+            )
+            logging.info(f"Password reset requested for {email}")
+
+        sent = True  # Always show success — prevents email enumeration
+
+    return render_template("forgot_password.html", form=form, sent=sent)
+
+
+# ── Reset password ────────────────────────────────────────────────────────────
+
+@auth_bp.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    """Step 2 — user clicks the link in the email and sets a new password."""
+    from app.forms import ResetPasswordForm
+
+    if current_user.is_authenticated:
+        return _redirect_by_role(current_user)
+
+    user = _verify_reset_token(token)
+    if not user:
+        flash("That reset link is invalid or has expired. Please request a new one.", "error")
+        return redirect(url_for('auth.forgot_password'))
+
+    form = ResetPasswordForm()
+    if form.validate_on_submit():
+        try:
+            from werkzeug.security import generate_password_hash
+            user.hashed_password = generate_password_hash(form.password.data)
+            user.must_change_password = False
+            db.session.commit()
+            flash("Password updated! You can now log in.", "success")
+            logging.info(f"Password reset completed for user {user.id}")
+            return redirect(url_for('auth.login'))
+        except Exception as e:
+            db.session.rollback()
+            logging.error(f"Error resetting password for user {user.id}: {e}")
+            flash("Something went wrong. Please try again.", "error")
+
+    return render_template("reset_password.html", form=form, token=token)

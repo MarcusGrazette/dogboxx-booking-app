@@ -327,3 +327,27 @@ class WalkerScheduleForm(FlaskForm):
     saturday = FormField(WalkerScheduleSlotForm, label='Saturday')
     sunday = FormField(WalkerScheduleSlotForm, label='Sunday')
     submit = SubmitField('Update Schedule')
+
+class ForgotPasswordForm(FlaskForm):
+    """Form for requesting a password reset email."""
+    email = StringField(
+        'Email address',
+        validators=[DataRequired(), Email(), Length(max=120)],
+        render_kw={"placeholder": "Your account email address", "autocomplete": "email"}
+    )
+    submit = SubmitField('Send reset link')
+
+
+class ResetPasswordForm(FlaskForm):
+    """Form for setting a new password via reset token."""
+    password = PasswordField(
+        'New password',
+        validators=[DataRequired(), Length(min=8, max=128)],
+        render_kw={"placeholder": "New password", "autocomplete": "new-password"}
+    )
+    confirm_password = PasswordField(
+        'Confirm new password',
+        validators=[DataRequired(), EqualTo('password', message='Passwords must match')],
+        render_kw={"placeholder": "Confirm new password", "autocomplete": "new-password"}
+    )
+    submit = SubmitField('Reset password')
