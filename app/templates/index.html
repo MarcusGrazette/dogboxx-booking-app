@@ -165,11 +165,14 @@
                     </div>
 
                     {% set dog_bookings = bookings | selectattr('dog_id', 'equalto', dog.id) | list if bookings else [] %}
+                    {% set visible_count = 5 %}
+                    {% set hidden_count = dog_bookings | length - visible_count %}
 
                     {% if dog_bookings %}
-                    <ul class="list-group list-group-flush">
+                    <ul class="list-group list-group-flush" id="bookings-list-{{ dog.id }}">
                         {% for booking in dog_bookings %}
-                        <li class="list-group-item px-0 py-3 border-bottom d-flex align-items-center justify-content-between gap-2">
+                        <li class="list-group-item px-0 py-3 border-bottom d-flex align-items-center justify-content-between gap-2{% if loop.index > visible_count %} booking-hidden-{{ dog.id }}{% endif %}"
+                            {% if loop.index > visible_count %}style="display:none;"{% endif %}>
                             <div class="d-flex align-items-center gap-3">
                                 <!-- Status pill -->
                                 {% if booking.status == 'confirmed' %}
@@ -213,6 +216,14 @@
                         </li>
                         {% endfor %}
                     </ul>
+
+                    {% if hidden_count > 0 %}
+                    <button class="btn btn-link btn-sm text-muted px-0 mt-1 show-more-btn"
+                            data-dog-id="{{ dog.id }}"
+                            data-hidden="{{ hidden_count }}">
+                        <i class="bi bi-chevron-down me-1"></i>Show {{ hidden_count }} more walk{{ 's' if hidden_count != 1 else '' }}
+                    </button>
+                    {% endif %}
 
                     {% if bookings %}
                     <p class="text-muted mt-3 mb-0" style="font-size: 0.75rem;">
@@ -518,6 +529,17 @@ document.addEventListener('DOMContentLoaded', function () {
             alert('Network error — please try again.');
             submitBtn.disabled = false;
             submitBtn.textContent = 'Request recurring walks';
+        });
+    });
+
+    // ─── Show more walks ─────────────────────────────────────
+    document.querySelectorAll('.show-more-btn').forEach(btn => {
+        btn.addEventListener('click', function () {
+            const dogId = this.getAttribute('data-dog-id');
+            document.querySelectorAll(`.booking-hidden-${dogId}`).forEach(el => {
+                el.style.display = '';
+            });
+            this.remove();
         });
     });
 
