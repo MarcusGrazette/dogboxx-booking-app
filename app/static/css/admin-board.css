@@ -3,17 +3,21 @@
     display: flex;
     gap: 12px;
     align-items: flex-start;
+    width: 100%;
     overflow-x: auto;
     padding-bottom: 8px;
 }
 
-.board-column {
-    flex: 0 0 180px;
-    min-width: 160px;
+/* Pending column: fixed width */
+.board-column.pending-column {
+    flex: 0 0 190px;
+    min-width: 170px;
 }
 
-.board-column.pending-column {
-    flex: 0 0 200px;
+/* Walker columns: grow equally to fill remaining space */
+.board-column {
+    flex: 1 1 160px;
+    min-width: 150px;
 }
 
 /* ── Lane (Morning / Afternoon within a column) ────────────────────────────── */
