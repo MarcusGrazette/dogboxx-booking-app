@@ -235,6 +235,25 @@ def create_app(config_name=None):
         return dict(csrf_token=generate_csrf)
 
     @app.context_processor
+    def inject_device_info():
+        """Expose UA device flags to all templates.
+
+        Available in every template:
+            {{ is_mobile }}   — True on Android / any mobile browser
+            {{ is_desktop }}  — True on macOS / non-mobile
+            {{ is_android }}  — True specifically on Android Chrome
+            {{ is_macos }}    — True specifically on macOS Chrome
+        """
+        from app.utils.ua import get_device_info
+        d = get_device_info()
+        return dict(
+            is_mobile=d.is_mobile,
+            is_desktop=d.is_desktop,
+            is_android=d.is_android,
+            is_macos=d.is_macos,
+        )
+
+    @app.context_processor
     def inject_notifications():
         """Inject unread notification count + recent notifications into all templates."""
         from flask_login import current_user

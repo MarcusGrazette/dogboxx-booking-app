@@ -133,7 +133,8 @@
 
     // ── Mark read on click ────────────────────────────────────────────────
     function bindReadOnClick(item) {
-        item.addEventListener('click', function() {
+        item.addEventListener('click', function(e) {
+            e.preventDefault();
             const id = this.dataset.notifId;
             if (!id) return;
             fetch('/notifications/' + id + '/read', {

@@ -6,57 +6,83 @@
     </div>
     <div class="list-group list-group-flush">
         {% for b in bookings %}
-        <div class="list-group-item">
+        <div class="list-group-item py-3">
             <div class="d-flex align-items-start gap-3">
-                <!-- Pickup order -->
-                <div class="text-center flex-shrink-0" style="width: 32px;">
+
+                <!-- Pickup order badge -->
+                <div class="text-center flex-shrink-0 pt-1" style="width: 28px;">
                     {% if b.pickup_order %}
-                    <span class="badge bg-dark rounded-circle fs-6">{{ b.pickup_order }}</span>
+                    <span class="badge bg-dark rounded-circle" style="width:26px;height:26px;line-height:18px;">{{ b.pickup_order }}</span>
                     {% else %}
-                    <span class="badge bg-secondary rounded-circle fs-6">—</span>
+                    <span class="badge bg-secondary rounded-circle" style="width:26px;height:26px;line-height:18px;">—</span>
                     {% endif %}
                 </div>
 
                 <!-- Dog photo -->
                 <div class="flex-shrink-0">
                     <img src="{{ '/static/uploads/dogs/' + b.dog.pic if b.dog and b.dog.pic else '/static/uploads/dogs/default-dog.png' }}"
-                         class="rounded-circle" width="48" height="48" style="object-fit: cover;"
+                         class="rounded-circle" width="52" height="52" style="object-fit: cover;"
                          alt="{{ b.dog.name if b.dog else 'Dog' }}"
                          onerror="this.onerror=null; this.src='/static/uploads/dogs/default-dog.png'">
                 </div>
 
                 <!-- Details -->
-                <div class="flex-grow-1">
-                    <div class="fw-bold">{{ b.dog.name if b.dog else 'Unknown' }}
-                        {% if b.dog and b.dog.breed %}
-                        <small class="text-muted fw-normal">· {{ b.dog.breed }}</small>
+                <div class="flex-grow-1 min-width-0">
+
+                    <!-- Row 1: Dog name + owner name -->
+                    <div class="d-flex align-items-baseline gap-2 flex-wrap">
+                        <span class="fw-bold">{{ b.dog.name if b.dog else 'Unknown' }}</span>
+                        <span class="text-muted small">{{ b.user.full_name if b.user else 'Unknown client' }}</span>
+                    </div>
+
+                    <!-- Row 2: Address + maps link -->
+                    {% set client = b.user.client if b.user else none %}
+                    {% if client and client.formatted_address %}
+                    <div class="small text-muted mt-1 d-flex align-items-start gap-2">
+                        <span>{{ client.formatted_address }}</span>
+                        {% if client.maps_url %}
+                        <a href="{{ client.maps_url }}" target="_blank" rel="noopener"
+                           class="text-decoration-none flex-shrink-0"
+                           title="Open in Google Maps"
+                           style="color: #1a73e8;">
+                            <i class="bi bi-geo-alt-fill fs-6"></i>
+                        </a>
                         {% endif %}
                     </div>
-                    <div class="small">
-                        <i class="bi bi-person"></i> {{ b.user.full_name if b.user else 'Unknown client' }}
-                    </div>
-                    {% if b.user and b.user.client and b.user.client.formatted_address %}
-                    <div class="small text-muted">
-                        <i class="bi bi-geo-alt"></i> {{ b.user.client.formatted_address }}
-                    </div>
-                    {% endif %}
-                    {% if b.user and b.user.client and b.user.client.pickup_instructions %}
-                    <div class="small text-info">
-                        <i class="bi bi-info-circle"></i> {{ b.user.client.pickup_instructions }}
-                    </div>
-                    {% endif %}
-                    {% if b.client_notes %}
-                    <div class="small mt-1 px-2 py-1 rounded" style="background: #fff8e1; color: #7a5800; border-left: 3px solid #ffc107;">
-                        <i class="bi bi-pencil me-1"></i><strong>Today's note:</strong> {{ b.client_notes }}
-                    </div>
-                    {% endif %}
-                    {% if b.user and b.user.phone %}
-                    <div class="small">
-                        <a href="tel:{{ b.user.phone }}" class="text-decoration-none">
-                            <i class="bi bi-telephone"></i> {{ b.user.phone }}
+                    {% elif client and client.maps_url %}
+                    <div class="small mt-1">
+                        <a href="{{ client.maps_url }}" target="_blank" rel="noopener"
+                           class="text-decoration-none"
+                           title="Open in Google Maps"
+                           style="color: #1a73e8;">
+                            <i class="bi bi-geo-alt-fill me-1"></i>Open in Maps
                         </a>
                     </div>
                     {% endif %}
+
+                    <!-- Row 3: Today's note (amber) -->
+                    {% if b.client_notes %}
+                    <div class="small mt-2 px-2 py-1 rounded" style="background:#fff8e1;color:#7a5800;border-left:3px solid #ffc107;">
+                        <i class="bi bi-pencil-square me-1"></i><strong>Today's note:</strong> {{ b.client_notes }}
+                    </div>
+                    {% endif %}
+
+                    <!-- Row 4: Pickup instructions (blue) -->
+                    {% if client and client.pickup_instructions %}
+                    <div class="small mt-1 text-info">
+                        <i class="bi bi-info-circle me-1"></i>{{ client.pickup_instructions }}
+                    </div>
+                    {% endif %}
+
+                    <!-- Row 5: Phone (subtle, below the fold) -->
+                    {% if b.user and b.user.phone %}
+                    <div class="small text-muted mt-1">
+                        <a href="tel:{{ b.user.phone }}" class="text-decoration-none text-muted">
+                            <i class="bi bi-telephone me-1"></i>{{ b.user.phone }}
+                        </a>
+                    </div>
+                    {% endif %}
+
                 </div>
             </div>
         </div>

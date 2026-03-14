@@ -90,6 +90,7 @@ class Client(db.Model):
                            onupdate=lambda: datetime.now(timezone.utc))
 
     pickup_instructions = db.Column(db.String(500), nullable=True)
+    maps_url = db.Column(db.String(2048), nullable=True)
 
     # Relationship
     user = db.relationship('User', backref=db.backref('client', uselist=False))

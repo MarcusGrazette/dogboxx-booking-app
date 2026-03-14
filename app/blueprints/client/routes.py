@@ -236,6 +236,7 @@ def profile():
                 client.street_address += '\n' + form.address_line_3.data.strip()
             client.postal_code = form.postcode.data.strip()
             client.pickup_instructions = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
+            client.maps_url = form.maps_url.data.strip() if form.maps_url.data else None
 
             # Notifications
             current_user.phone = form.phone.data.strip() if form.phone.data else None
@@ -290,6 +291,7 @@ def profile():
             form.address_line_3.data = address_lines[2] if len(address_lines) > 2 else ''
         form.postcode.data = client.postal_code
         form.pickup_instructions.data = client.pickup_instructions
+        form.maps_url.data = client.maps_url
 
         # Notifications
         form.phone.data = current_user.phone
@@ -338,6 +340,7 @@ def onboard():
 
             pickup_instructions = form.pickup_instructions.data.strip()
             client.pickup_instructions = pickup_instructions
+            client.maps_url = form.maps_url.data.strip() if form.maps_url.data else None
             client.onboarding_completed = True
             client.onboarding_completed_at = datetime.now(timezone.utc)
 

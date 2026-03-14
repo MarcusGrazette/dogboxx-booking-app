@@ -1,0 +1,250 @@
+/* ============================================================
+   Dogboxx Brand CSS
+   Overrides Bootstrap 5 CSS variables to match dogboxx.org
+   Primary pink: #E02FAC  |  Dark: #1B1B1B  |  Light bg: #F6F6F6
+   ============================================================ */
+
+/* ---- Root variable overrides ---- */
+:root {
+  --bs-primary:              #E02FAC;
+  --bs-primary-rgb:          224, 47, 172;
+
+  /* A slightly deeper pink for hover/active states */
+  --db-primary-dark:         #C0258F;
+  --db-primary-light:        #F55EC2;
+  --db-primary-subtle:       #fce8f6;
+
+  /* Neutral palette */
+  --db-dark:                 #1B1B1B;
+  --db-surface:              #F6F6F6;
+  --db-muted:                #5E5E5E;
+
+  /* Override body */
+  --bs-body-bg:              #F6F6F6;
+  --bs-body-color:           #1B1B1B;
+  --bs-secondary-color:      #5E5E5E;
+
+  /* Links */
+  --bs-link-color:           #E02FAC;
+  --bs-link-color-rgb:       224, 47, 172;
+  --bs-link-hover-color:     #C0258F;
+  --bs-link-hover-color-rgb: 192, 37, 143;
+}
+
+/* ---- Buttons ---- */
+.btn-primary {
+  --bs-btn-bg:               #E02FAC;
+  --bs-btn-border-color:     #E02FAC;
+  --bs-btn-hover-bg:         #C0258F;
+  --bs-btn-hover-border-color: #C0258F;
+  --bs-btn-active-bg:        #A81E7C;
+  --bs-btn-active-border-color: #A81E7C;
+  --bs-btn-disabled-bg:      #E02FAC;
+  --bs-btn-disabled-border-color: #E02FAC;
+  color: #fff;
+}
+
+.btn-outline-primary {
+  --bs-btn-color:            #E02FAC;
+  --bs-btn-border-color:     #E02FAC;
+  --bs-btn-hover-bg:         #E02FAC;
+  --bs-btn-hover-border-color: #E02FAC;
+  --bs-btn-active-bg:        #C0258F;
+  --bs-btn-active-border-color: #C0258F;
+}
+
+/* ---- Navbar ---- */
+.navbar {
+  background-color: #1B1B1B !important;
+  border-bottom: 3px solid #E02FAC;
+}
+
+.navbar-brand,
+.navbar-brand:hover {
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.nav-link {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.nav-link:hover,
+.nav-link.active {
+  color: #E02FAC !important;
+}
+
+/* ---- Cards ---- */
+.card {
+  border: 1px solid #e8e0e6;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(27, 27, 27, 0.06);
+}
+
+.card-header {
+  background-color: #fff;
+  border-bottom: 2px solid #E02FAC;
+  font-weight: 600;
+}
+
+/* ---- Form controls ---- */
+.form-control:focus,
+.form-select:focus {
+  border-color: #E02FAC;
+  box-shadow: 0 0 0 0.2rem rgba(224, 47, 172, 0.2);
+}
+
+/* ---- Badges ---- */
+.badge.bg-primary {
+  background-color: #E02FAC !important;
+}
+
+/* ---- Tables ---- */
+.table thead th {
+  background-color: #1B1B1B;
+  color: #fff;
+  border-color: #1B1B1B;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.table-hover > tbody > tr:hover > * {
+  background-color: var(--db-primary-subtle);
+}
+
+/* ---- Alerts — keep semantic colours but tint primary ---- */
+.alert-primary {
+  background-color: var(--db-primary-subtle);
+  border-color: var(--db-primary-light);
+  color: var(--db-dark);
+}
+
+/* ---- Flash toast container ---- */
+#flash-container .alert {
+  border-left: 4px solid #E02FAC;
+}
+
+/* ---- Page layout tweaks ---- */
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+main.container {
+  text-align: left; /* override the global text-center on main */
+  padding-top: 1.5rem;
+  padding-bottom: 2rem;
+}
+
+/* ---- Headings ---- */
+h1, h2, h3 {
+  color: #1B1B1B;
+  font-weight: 700;
+}
+
+h1 { font-size: 1.75rem; }
+h2 { font-size: 1.35rem; }
+
+/* ---- Page header block (reusable) ---- */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid #E02FAC;
+}
+
+.page-header h1,
+.page-header h2 {
+  margin: 0;
+}
+
+/* ---- Drag & drop overrides (admin-bookings.css colours) ---- */
+.drop-zone.drag-over {
+  border-color: #E02FAC !important;
+  background-color: rgba(224, 47, 172, 0.05) !important;
+}
+
+.booking-card.insert-before {
+  border-top: 3px solid #E02FAC !important;
+}
+
+.booking-card.insert-after {
+  border-bottom: 3px solid #E02FAC !important;
+}
+
+/* ---- Calendar overrides ---- */
+.cal-cell.today .cal-day {
+  background-color: #E02FAC;
+  border-color: #E02FAC;
+}
+
+.cal-cell.selected .cal-day {
+  background-color: var(--db-primary-dark);
+  border-color: var(--db-primary-dark);
+}
+
+/* ---- Login / auth pages ---- */
+
+/* ---- Footer ---- */
+footer {
+  border-top: 1px solid #dee2e6;
+  padding: 1rem 0;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--db-muted);
+  margin-top: 2rem;
+}
+
+/* ---- Utility ---- */
+.text-primary  { color: #E02FAC !important; }
+.bg-primary    { background-color: #E02FAC !important; }
+.border-primary { border-color: #E02FAC !important; }
+
+/* ---- AdminLTE overrides ---- */
+.app-sidebar {
+  background-color: #1B1B1B !important;
+}
+
+.app-header {
+  background-color: #1B1B1B !important;
+  border-bottom: 3px solid #E02FAC !important;
+}
+
+/* Sidebar nav links */
+.sidebar-menu .nav-link {
+  color: rgba(255,255,255,0.75) !important;
+  border-radius: 6px;
+  margin: 1px 8px;
+  transition: background 0.15s;
+}
+
+.sidebar-menu .nav-link:hover {
+  background-color: rgba(255,255,255,0.08) !important;
+  color: #fff !important;
+}
+
+.sidebar-menu .nav-link.active {
+  background-color: #E02FAC !important;
+  color: #fff !important;
+}
+
+.nav-header {
+  color: rgba(255,255,255,0.4) !important;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 1rem 1rem 0.25rem;
+}
+
+/* Content area background */
+.app-content {
+  background-color: #F6F6F6;
+}
+
+/* Content header */
+.app-content-header {
+  background: #fff;
+  border-bottom: 1px solid #e8e0e6;
+}

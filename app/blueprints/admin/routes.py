@@ -905,6 +905,34 @@ def activate_client(client_id):
         return jsonify(success=False, message="Error activating client"), 500
 
 
+@admin_bp.route("/clients/<int:client_id>/pickup-details", methods=["POST"])
+@login_required
+@admin_required
+def update_client_pickup_details(client_id):
+    """Save pickup_instructions and maps_url for a client (admin only)."""
+    user = User.query.filter(User.role == 'client', User.id == client_id).first()
+    if not user:
+        return jsonify(success=False, message="Client not found"), 404
+
+    client = Client.query.filter_by(user_id=user.id).first()
+    if not client:
+        return jsonify(success=False, message="Client record not found"), 404
+
+    data = request.get_json(silent=True) or {}
+    pickup_instructions = (data.get('pickup_instructions') or '').strip() or None
+    maps_url = (data.get('maps_url') or '').strip() or None
+
+    if maps_url and len(maps_url) > 2048:
+        return jsonify(success=False, message="Maps URL too long"), 400
+    if pickup_instructions and len(pickup_instructions) > 500:
+        return jsonify(success=False, message="Instructions too long (max 500 chars)"), 400
+
+    client.pickup_instructions = pickup_instructions
+    client.maps_url = maps_url
+    db.session.commit()
+    return jsonify(success=True)
+
+
 # === WALKER MANAGEMENT ROUTES ===
 
 @admin_bp.route("/walkers")

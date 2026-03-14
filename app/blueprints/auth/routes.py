@@ -110,14 +110,23 @@ def change_password():
 
 
 def _redirect_by_role(user):
-    """Helper function to redirect users based on their role"""
+    """Redirect users to their home page based on role + device type.
+
+    Walkers on mobile (Android) land on pickups — their daily operational
+    view when they're out and about. Walkers on desktop go to schedule for
+    planning. Admins and clients are device-agnostic for now.
+    """
+    from app.utils.ua import get_device_info
+
     if user.is_admin:
         return redirect(url_for('admin.index'))
     elif user.role == 'walker':
+        device = get_device_info()
+        if device.is_mobile:
+            return redirect(url_for('walker.pickups'))
         return redirect(url_for('walker.schedule'))
     elif user.role == 'client':
         return redirect(url_for('client.index'))
     else:
-        # Handle unexpected roles gracefully
         flash("Unknown user role. Please contact support.", "warning")
         return redirect(url_for('client.index'))
