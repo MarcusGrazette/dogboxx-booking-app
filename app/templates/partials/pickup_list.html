@@ -24,35 +24,28 @@
                 <!-- Details -->
                 <div class="flex-grow-1 min-width-0">
 
-                    <!-- Row 1: Dog name + owner name -->
-                    <div class="d-flex align-items-baseline gap-2 flex-wrap">
-                        <span class="fw-bold" style="font-size:1.05rem;">{{ b.dog.name if b.dog else 'Unknown' }}</span>
-                        <span class="text-muted small"><i class="bi bi-person me-1"></i>{{ b.user.full_name if b.user else 'Unknown client' }}</span>
+                    <!-- Row 1: Dog name -->
+                    <div>
+                        <span class="fw-bold" style="font-size:1.2rem;">{{ b.dog.name if b.dog else 'Unknown' }}</span>
                     </div>
 
-                    <!-- Row 2: Address + maps link -->
+                    <!-- Row 2: Owner name + maps link -->
                     {% set client = b.user.client if b.user else none %}
-                    {% if client and client.formatted_address %}
-                    <div class="small text-muted mt-1 d-flex align-items-start gap-2">
-                        <span>{{ client.formatted_address }}</span>
-                        {% if client.maps_url %}
+                    <div class="d-flex align-items-center gap-3 mt-1">
+                        <span class="text-muted small"><i class="bi bi-person me-1"></i>{{ b.user.full_name if b.user else 'Unknown client' }}</span>
+                        {% if client and client.maps_url %}
                         <a href="{{ client.maps_url }}" target="_blank" rel="noopener"
-                           class="text-decoration-none flex-shrink-0"
+                           class="text-decoration-none small fw-semibold"
                            title="Open in Google Maps"
-                           style="color: #1a73e8;">
-                            <i class="bi bi-geo-alt-fill fs-6"></i>
+                           style="color:#1a73e8;">
+                            <i class="bi bi-geo-alt-fill me-1"></i>Maps
                         </a>
                         {% endif %}
                     </div>
-                    {% elif client and client.maps_url %}
-                    <div class="small mt-1">
-                        <a href="{{ client.maps_url }}" target="_blank" rel="noopener"
-                           class="text-decoration-none"
-                           title="Open in Google Maps"
-                           style="color: #1a73e8;">
-                            <i class="bi bi-geo-alt-fill me-1"></i>Open in Maps
-                        </a>
-                    </div>
+
+                    <!-- Row 3: Address -->
+                    {% if client and client.formatted_address %}
+                    <div class="small text-muted mt-1">{{ client.formatted_address }}</div>
                     {% endif %}
 
                     <!-- Row 3: Today's note (amber) -->
@@ -64,7 +57,7 @@
 
                     <!-- Row 4: Pickup instructions (blue) -->
                     {% if client and client.pickup_instructions %}
-                    <div class="small mt-1 px-2 py-1 rounded" style="background:#e8f4fd;color:#0a58ca;border-left:3px solid #3d8bcd;">
+                    <div class="small mt-2 px-2 py-1 rounded" style="background:#e8f4fd;color:#0a58ca;border-left:3px solid #3d8bcd;">
                         <i class="bi bi-info-circle me-1"></i>{{ client.pickup_instructions }}
                     </div>
                     {% endif %}
