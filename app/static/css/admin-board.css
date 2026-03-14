@@ -1,0 +1,218 @@
+/* ── Assignment board layout ───────────────────────────────────────────────── */
+#board-columns {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    overflow-x: auto;
+    padding-bottom: 8px;
+}
+
+.board-column {
+    flex: 0 0 180px;
+    min-width: 160px;
+}
+
+.board-column.pending-column {
+    flex: 0 0 200px;
+}
+
+/* ── Lane (Morning / Afternoon within a column) ────────────────────────────── */
+.board-lane {
+    background: #f8f9fa;
+    border: 2px solid #dee2e6;
+    border-radius: 8px;
+    padding: 8px;
+    margin-bottom: 8px;
+    min-height: 80px;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.board-lane.lane-target {
+    border-color: #0d6efd;
+    background: #e8f0fe;
+    cursor: pointer;
+}
+
+.board-lane.lane-full {
+    border-color: #dc3545;
+    background: #fff0f0;
+    opacity: 0.7;
+}
+
+.board-lane.lane-target:hover {
+    background: #d0e4ff;
+}
+
+.lane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.lane-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #6c757d;
+}
+
+.capacity-badge {
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 10px;
+    background: #dee2e6;
+    color: #495057;
+    font-weight: 600;
+}
+
+.capacity-badge.cap-full {
+    background: #dc3545;
+    color: #fff;
+}
+
+/* ── Board cards ───────────────────────────────────────────────────────────── */
+.board-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: #fff;
+    border: 2px solid #dee2e6;
+    border-radius: 8px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+    user-select: none;
+}
+
+.board-card:last-child {
+    margin-bottom: 0;
+}
+
+.board-card:hover {
+    border-color: #adb5bd;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+.board-card.card-selected {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13,110,253,0.2);
+    transform: scale(1.02);
+}
+
+.board-card.card-waitlisted {
+    border-color: #0dcaf0;
+}
+
+.board-card.card-ghost {
+    opacity: 0.4;
+    border-style: dashed;
+}
+
+.board-dog-img {
+    width: 36px;
+    height: 36px;
+    object-fit: cover;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.board-card-info {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.board-card-name {
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.board-card-owner {
+    font-size: 0.7rem;
+    color: #6c757d;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pickup-num {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #212529;
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ── Column headers ────────────────────────────────────────────────────────── */
+.board-col-header {
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding: 6px 8px;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    color: #fff;
+    background: #1B1B1B;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+}
+
+.board-col-header.pending-header {
+    background: #C0258F;
+}
+
+/* ── Drag handle hint ──────────────────────────────────────────────────────── */
+.drag-handle {
+    color: #adb5bd;
+    font-size: 0.8rem;
+    cursor: grab;
+    flex-shrink: 0;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+/* ── Slot badge on pending cards ───────────────────────────────────────────── */
+.slot-pill {
+    font-size: 0.65rem;
+    padding: 2px 5px;
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+
+/* ── Empty lane placeholder ────────────────────────────────────────────────── */
+.lane-empty {
+    color: #adb5bd;
+    font-size: 0.72rem;
+    text-align: center;
+    padding: 10px 0 4px;
+}
+
+/* ── Selection hint bar ────────────────────────────────────────────────────── */
+#selection-hint {
+    transition: opacity 0.2s;
+}
+
+/* ── Sortable ghost ────────────────────────────────────────────────────────── */
+.sortable-ghost {
+    opacity: 0.3;
+    border-style: dashed;
+}
+
+.sortable-chosen {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}

@@ -420,6 +420,90 @@ def bookings():
     return render_template("admin_bookings.html")
 
 
+@admin_bp.route("/board")
+@login_required
+@admin_required
+def board():
+    """New assignment board — click-to-assign + drag-to-reorder."""
+    return render_template("admin_board.html")
+
+
+@admin_bp.route("/api/board-data/<date_str>")
+@login_required
+@admin_required
+def board_data(date_str):
+    """JSON board data for a given date — pending bookings, walkers, assignments."""
+    try:
+        selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify(success=False, message="Invalid date"), 400
+
+    all_bookings = (
+        Booking.query
+        .options(
+            joinedload(Booking.dog),
+            joinedload(Booking.walker).joinedload(Walker.user),
+            joinedload(Booking.user),
+        )
+        .filter(Booking.date == selected_date, Booking.status != 'cancelled')
+        .all()
+    )
+
+    day_of_week = selected_date.weekday()
+    schedules = WalkerSchedule.query.filter_by(day_of_week=day_of_week, active=True).all()
+    walker_available_slots = {}
+    for s in schedules:
+        walker_available_slots.setdefault(s.walker_id, set()).add(s.slot)
+
+    unavailabilities = WalkerUnavailability.query.filter_by(date=selected_date).all()
+    for u in unavailabilities:
+        if u.walker_id in walker_available_slots:
+            walker_available_slots[u.walker_id].discard(u.slot)
+    walker_available_slots = {wid: slots for wid, slots in walker_available_slots.items() if slots}
+
+    walkers = (
+        Walker.query.options(joinedload(Walker.user))
+        .filter(Walker.id.in_(walker_available_slots.keys()))
+        .all()
+    ) if walker_available_slots else []
+
+    def booking_dict(b, include_walker=False):
+        d = {
+            'id': b.id,
+            'dog_name': b.dog.name if b.dog else 'Unknown',
+            'dog_pic': b.dog.pic if b.dog and b.dog.pic else None,
+            'owner_name': b.user.full_name if b.user else '',
+            'slot': b.slot,
+            'status': b.status,
+            'pickup_order': b.pickup_order,
+            'walker_id': b.walker_id,
+        }
+        return d
+
+    pending   = [booking_dict(b) for b in all_bookings if b.status in ('requested', 'waitlisted')]
+    assigned  = [booking_dict(b) for b in all_bookings if b.walker_id and b.status == 'confirmed']
+
+    walkers_data = [
+        {
+            'id': w.id,
+            'name': w.user.firstname if w.user else 'Walker',
+            'available_slots': sorted(walker_available_slots.get(w.id, [])),
+        }
+        for w in walkers
+    ]
+
+    max_capacity = get_max_per_walker('group-walk')
+
+    return jsonify(
+        success=True,
+        date=date_str,
+        pending=pending,
+        assigned=assigned,
+        walkers=walkers_data,
+        max_capacity=max_capacity,
+    )
+
+
 @admin_bp.route("/bookings_by_date")
 @login_required
 @admin_required

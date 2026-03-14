@@ -5,6 +5,12 @@
 {% block page_title %}Bookings{% endblock %}
 {% block page_subtitle %}Assign and manage daily walk bookings{% endblock %}
 
+{% block page_actions %}
+<a href="{{ url_for('admin.board') }}" class="btn btn-sm btn-primary">
+    <i class="bi bi-kanban me-1"></i>Try new assignment board
+</a>
+{% endblock %}
+
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin-bookings.css') }}">
 {% endblock %}
