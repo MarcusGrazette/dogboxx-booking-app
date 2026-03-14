@@ -8,15 +8,9 @@
     padding-bottom: 8px;
 }
 
-/* Pending column: fixed width */
-.board-column.pending-column {
-    flex: 0 0 190px;
-    min-width: 170px;
-}
-
-/* Walker columns: grow equally to fill remaining space */
+/* All columns: col-3 equivalent (25% minus gap share) */
 .board-column {
-    flex: 1 1 160px;
+    flex: 0 0 calc(25% - 9px);
     min-width: 150px;
 }
 
