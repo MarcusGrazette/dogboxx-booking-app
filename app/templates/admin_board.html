@@ -16,40 +16,48 @@
 {% endblock %}
 
 {% block main %}
-<div class="row g-3">
 
-    <!-- Calendar col -->
-    <div class="col-3">
-        {{ calendar_widget('board-cal', config={
-            'selectable': true,
-            'highlight_today': true,
-            'allow_other_month_nav': true,
-            'autoSelectToday': true
-        }, show_loading=false, footer_text='Highlighted days have pending bookings.') }}
-    </div>
-
-    <!-- Board col -->
-    <div class="col-9">
-
-        <!-- Selection hint bar -->
-        <div id="selection-hint" class="alert alert-primary d-flex align-items-center gap-2 py-2 mb-3"
-             style="display:none !important; font-size:0.88rem;">
-            <i class="bi bi-cursor-fill"></i>
-            <span id="hint-text">Select a dog, then click a walker slot to assign</span>
-            <button class="btn btn-sm btn-outline-primary ms-auto py-0" id="hint-deselect">Cancel</button>
+<!-- Date summary bar (shown when calendar is collapsed) -->
+<div id="date-summary" class="mb-3 d-none">
+    <div class="d-flex align-items-center justify-content-between px-3 py-2 bg-light rounded border">
+        <div>
+            <i class="bi bi-calendar3 me-2 text-primary"></i>
+            <span id="date-summary-text" class="fw-semibold"></span>
+            <span id="date-today-badge" class="badge bg-primary ms-2 d-none">Today</span>
         </div>
-
-        <!-- Board -->
-        <div id="board-wrap">
-            <div class="text-muted text-center py-5" id="board-placeholder">
-                <i class="bi bi-calendar3 fs-3 d-block mb-2 text-muted"></i>
-                Select a date from the calendar
-            </div>
-            <div id="board-columns" style="display:none;"></div>
-        </div>
-
+        <button class="btn btn-sm btn-outline-secondary" id="change-date-btn">
+            <i class="bi bi-pencil me-1"></i>Change date
+        </button>
     </div>
 </div>
+
+<!-- Collapsible calendar -->
+<div id="calendar-section" class="mb-3">
+    {{ calendar_widget('board-cal', config={
+        'selectable': true,
+        'highlight_today': true,
+        'allow_other_month_nav': true,
+        'autoSelectToday': true
+    }, show_loading=false, footer_text='Highlighted days have pending bookings.') }}
+</div>
+
+<!-- Selection hint bar -->
+<div id="selection-hint" class="alert alert-primary d-flex align-items-center gap-2 py-2 mb-3"
+     style="display:none !important; font-size:0.88rem;">
+    <i class="bi bi-cursor-fill"></i>
+    <span id="hint-text">Select a dog, then click a walker slot to assign</span>
+    <button class="btn btn-sm btn-outline-primary ms-auto py-0" id="hint-deselect">Cancel</button>
+</div>
+
+<!-- Board (full width) -->
+<div id="board-wrap">
+    <div class="text-muted text-center py-5" id="board-placeholder">
+        <i class="bi bi-calendar3 fs-3 d-block mb-2 text-muted"></i>
+        Select a date from the calendar
+    </div>
+    <div id="board-columns" style="display:none;"></div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -431,10 +439,48 @@
         setTimeout(() => el.parentNode?.removeChild(el), 4000);
     }
 
+    // ── Calendar collapse ─────────────────────────────────────────────────────
+    const MONTHS_LONG  = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const DAYS_SHORT   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const calSection   = document.getElementById('calendar-section');
+    const dateSummary  = document.getElementById('date-summary');
+    const summaryText  = document.getElementById('date-summary-text');
+    const todayBadge   = document.getElementById('date-today-badge');
+    const changeDateBtn= document.getElementById('change-date-btn');
+    const todayStr     = new Date().toISOString().slice(0, 10);
+
+    function formatDateDisplay(dateStr) {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const dow = new Date(y, m - 1, d).getDay();
+        const dowIdx = (dow + 6) % 7;
+        return `${DAYS_SHORT[dowIdx]}, ${d} ${MONTHS_LONG[m - 1]} ${y}`;
+    }
+
+    function collapseCalendar(dateStr) {
+        summaryText.textContent = formatDateDisplay(dateStr);
+        todayBadge.classList.toggle('d-none', dateStr !== todayStr);
+        calSection.style.maxHeight = calSection.scrollHeight + 'px';
+        requestAnimationFrame(() => {
+            calSection.style.transition = 'max-height 0.3s ease, opacity 0.3s ease';
+            calSection.style.maxHeight = '0';
+            calSection.style.overflow = 'hidden';
+            calSection.style.opacity = '0';
+        });
+        dateSummary.classList.remove('d-none');
+    }
+
+    function expandCalendar() {
+        calSection.style.transition = 'max-height 0.3s ease, opacity 0.3s ease';
+        calSection.style.maxHeight = '500px';
+        calSection.style.overflow = '';
+        calSection.style.opacity = '1';
+        dateSummary.classList.add('d-none');
+    }
+
+    changeDateBtn.addEventListener('click', expandCalendar);
+
     // ── Calendar ──────────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', () => {
-        const todayStr = new Date().toISOString().slice(0, 10);
-
         const cal = createCalendar('board-cal', {
             onMonthChange(year, month) {
                 const baseUrl = '{{ url_for("admin.calendar_data", year=0, month=0) }}';
@@ -451,11 +497,13 @@
                     });
             },
             onDateClick(year, month, day, dateStr) {
+                collapseCalendar(dateStr);
                 loadBoard(dateStr);
             }
         });
 
         cal.selectDate(todayStr);
+        collapseCalendar(todayStr);
         loadBoard(todayStr);
     });
 

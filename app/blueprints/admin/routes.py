@@ -487,7 +487,7 @@ def board_data(date_str):
         {
             'id': w.id,
             'name': w.user.firstname if w.user else 'Walker',
-            'available_slots': sorted(walker_available_slots.get(w.id, [])),
+            'available_slots': sorted(walker_available_slots.get(w.id, []), key=lambda s: 0 if s == 'Morning' else 1),
         }
         for w in walkers
     ]
