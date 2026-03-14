@@ -9,21 +9,16 @@
         <div class="list-group-item py-3">
             <div class="d-flex align-items-start gap-3">
 
-                <!-- Pickup order badge -->
-                <div class="text-center flex-shrink-0 pt-1" style="width: 28px;">
-                    {% if b.pickup_order %}
-                    <span class="badge bg-dark rounded-circle" style="width:26px;height:26px;line-height:18px;">{{ b.pickup_order }}</span>
-                    {% else %}
-                    <span class="badge bg-secondary rounded-circle" style="width:26px;height:26px;line-height:18px;">—</span>
-                    {% endif %}
-                </div>
-
-                <!-- Dog photo -->
-                <div class="flex-shrink-0">
+                <!-- Dog photo + pickup order badge -->
+                <div class="flex-shrink-0 position-relative" style="width:64px;height:64px;">
                     <img src="{{ '/static/uploads/dogs/' + b.dog.pic if b.dog and b.dog.pic else '/static/uploads/dogs/default-dog.png' }}"
-                         class="rounded-circle" width="52" height="52" style="object-fit: cover;"
+                         class="rounded-circle" width="64" height="64" style="object-fit:cover;"
                          alt="{{ b.dog.name if b.dog else 'Dog' }}"
                          onerror="this.onerror=null; this.src='/static/uploads/dogs/default-dog.png'">
+                    <span class="position-absolute bottom-0 end-0 badge rounded-circle d-flex align-items-center justify-content-center fw-bold"
+                          style="width:22px;height:22px;font-size:0.7rem;background:#212529;color:#fff;border:2px solid #fff;">
+                        {{ b.pickup_order if b.pickup_order else '—' }}
+                    </span>
                 </div>
 
                 <!-- Details -->
@@ -31,8 +26,8 @@
 
                     <!-- Row 1: Dog name + owner name -->
                     <div class="d-flex align-items-baseline gap-2 flex-wrap">
-                        <span class="fw-bold">{{ b.dog.name if b.dog else 'Unknown' }}</span>
-                        <span class="text-muted small">{{ b.user.full_name if b.user else 'Unknown client' }}</span>
+                        <span class="fw-bold" style="font-size:1.05rem;">{{ b.dog.name if b.dog else 'Unknown' }}</span>
+                        <span class="text-muted small"><i class="bi bi-person me-1"></i>{{ b.user.full_name if b.user else 'Unknown client' }}</span>
                     </div>
 
                     <!-- Row 2: Address + maps link -->
@@ -63,13 +58,13 @@
                     <!-- Row 3: Today's note (amber) -->
                     {% if b.client_notes %}
                     <div class="small mt-2 px-2 py-1 rounded" style="background:#fff8e1;color:#7a5800;border-left:3px solid #ffc107;">
-                        <i class="bi bi-pencil-square me-1"></i><strong>Today's note:</strong> {{ b.client_notes }}
+                        <i class="bi bi-pencil-square me-1"></i>{{ b.client_notes }}
                     </div>
                     {% endif %}
 
                     <!-- Row 4: Pickup instructions (blue) -->
                     {% if client and client.pickup_instructions %}
-                    <div class="small mt-1 text-info">
+                    <div class="small mt-1 px-2 py-1 rounded" style="background:#e8f4fd;color:#0a58ca;border-left:3px solid #3d8bcd;">
                         <i class="bi bi-info-circle me-1"></i>{{ client.pickup_instructions }}
                     </div>
                     {% endif %}
