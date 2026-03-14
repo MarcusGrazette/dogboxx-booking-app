@@ -638,3 +638,27 @@ def recurring_booking():
         db.session.rollback()
         logging.error(f"Error creating recurring bookings: {e}")
         return jsonify(success=False, message="Server error"), 500
+
+
+@client_bp.route("/booking/<int:booking_id>/note", methods=["POST"])
+@login_required
+def update_booking_note(booking_id):
+    """Save or clear the client note on a booking."""
+    if current_user.role != 'client' and not current_user.is_admin:
+        return jsonify(success=False, message="Unauthorized"), 403
+
+    booking = Booking.query.get(booking_id)
+    if not booking:
+        return jsonify(success=False, message="Booking not found"), 404
+
+    if booking.user_id != current_user.id and not current_user.is_admin:
+        return jsonify(success=False, message="Not your booking"), 403
+
+    data = request.get_json(silent=True) or {}
+    note = (data.get('note') or '').strip()
+    if len(note) > 500:
+        return jsonify(success=False, message="Note must be 500 characters or fewer"), 400
+
+    booking.client_notes = note or None
+    db.session.commit()
+    return jsonify(success=True, note=booking.client_notes)

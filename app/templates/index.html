@@ -190,15 +190,26 @@
                                     </div>
                                 </div>
                             </div>
-                            <!-- Cancel button -->
-                            <button class="btn btn-link p-0 cancel-booking-btn text-danger"
-                                    data-booking-id="{{ booking.id }}"
-                                    data-booking-slot="{{ booking.slot }}"
-                                    data-booking-date="{{ booking.date_display }}"
-                                    title="Cancel booking"
-                                    style="line-height: 1;">
-                                <i class="bi bi-x-lg"></i>
-                            </button>
+                            <!-- Actions -->
+                            <div class="d-flex align-items-center gap-2">
+                                <button class="btn btn-link p-0 note-booking-btn text-secondary"
+                                        data-booking-id="{{ booking.id }}"
+                                        data-booking-slot="{{ booking.slot }}"
+                                        data-booking-date="{{ booking.date_display }}"
+                                        data-current-note="{{ booking.client_notes or '' }}"
+                                        title="{{ 'Edit note' if booking.client_notes else 'Add note' }}"
+                                        style="line-height: 1;">
+                                    <i class="bi bi-{{ 'pencil-fill text-primary' if booking.client_notes else 'pencil' }}"></i>
+                                </button>
+                                <button class="btn btn-link p-0 cancel-booking-btn text-danger"
+                                        data-booking-id="{{ booking.id }}"
+                                        data-booking-slot="{{ booking.slot }}"
+                                        data-booking-date="{{ booking.date_display }}"
+                                        title="Cancel booking"
+                                        style="line-height: 1;">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
                         </li>
                         {% endfor %}
                     </ul>
@@ -232,6 +243,34 @@
         </div>
         {% endif %}
 
+    </div>
+</div>
+
+<!-- Booking note modal -->
+<div class="modal fade" id="noteModal" tabindex="-1" aria-labelledby="noteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 1rem;">
+            <div class="modal-header border-0 pb-0">
+                <h6 class="modal-title fw-bold" id="noteModalLabel">
+                    <i class="bi bi-pencil me-2 text-primary"></i>Walk note
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body pt-2">
+                <p class="text-muted small mb-2" id="note-modal-subtitle"></p>
+                <textarea id="note-textarea" class="form-control" rows="4"
+                          maxlength="500"
+                          placeholder="e.g. Please use the side gate. Buddy has been limping on his left front paw."></textarea>
+                <div class="d-flex justify-content-between mt-1">
+                    <div id="note-error" class="text-danger small"></div>
+                    <div id="note-char-count" class="text-muted small">0 / 500</div>
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm fw-semibold" id="note-save-btn">Save note</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -476,6 +515,80 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
 }); // DOMContentLoaded
+
+// ─── Booking notes ───────────────────────────────────────────────────────────
+(function () {
+    const modal       = new bootstrap.Modal(document.getElementById('noteModal'));
+    const textarea    = document.getElementById('note-textarea');
+    const saveBtn     = document.getElementById('note-save-btn');
+    const subtitle    = document.getElementById('note-modal-subtitle');
+    const charCount   = document.getElementById('note-char-count');
+    const errorEl     = document.getElementById('note-error');
+    let activeBookingId   = null;
+    let activeNoteBtn     = null;
+
+    textarea.addEventListener('input', () => {
+        charCount.textContent = `${textarea.value.length} / 500`;
+    });
+
+    document.querySelectorAll('.note-booking-btn').forEach(btn => {
+        btn.addEventListener('click', function () {
+            activeBookingId = this.getAttribute('data-booking-id');
+            activeNoteBtn   = this;
+            const slot      = this.getAttribute('data-booking-slot');
+            const dateDisp  = this.getAttribute('data-booking-date');
+            const current   = this.getAttribute('data-current-note');
+
+            subtitle.textContent    = `${slot} · ${dateDisp}`;
+            textarea.value          = current;
+            charCount.textContent   = `${current.length} / 500`;
+            errorEl.textContent     = '';
+            modal.show();
+            // Focus textarea after transition
+            document.getElementById('noteModal').addEventListener('shown.bs.modal', () => textarea.focus(), { once: true });
+        });
+    });
+
+    saveBtn.addEventListener('click', function () {
+        const note = textarea.value.trim();
+        errorEl.textContent = '';
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+
+        const csrfToken = document.querySelector('input[name=csrf_token]')?.value;
+
+        fetch(`/client/booking/${activeBookingId}/note`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ note })
+        })
+        .then(r => r.json())
+        .then(data => {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save note';
+            if (data.success) {
+                // Update the button icon + data attr to reflect saved state
+                activeNoteBtn.setAttribute('data-current-note', note);
+                const icon = activeNoteBtn.querySelector('i');
+                if (note) {
+                    icon.className = 'bi bi-pencil-fill text-primary';
+                    activeNoteBtn.title = 'Edit note';
+                } else {
+                    icon.className = 'bi bi-pencil';
+                    activeNoteBtn.title = 'Add note';
+                }
+                modal.hide();
+            } else {
+                errorEl.textContent = data.message || 'Could not save note.';
+            }
+        })
+        .catch(() => {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save note';
+            errorEl.textContent = 'Network error — please try again.';
+        });
+    });
+})();
 
 function cancelBooking(bookingId, buttonElement) {
     buttonElement.disabled = true;
