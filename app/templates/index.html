@@ -89,11 +89,10 @@
                     {# Selected date display #}
                     <p class="small text-muted mb-2" id="selected-date-label">
                         <i class="bi bi-calendar3 me-1"></i>
-                        <span id="selected-date-text">Select a date above</span>
+                        <span id="selected-date-text">Select a date above and pick morning or afternoon below</span>
                     </p>
 
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold">Slot</label>
                         <div class="d-flex align-items-center gap-2">
                             {{ form.slot(class="form-select", id="booking-slot", style="max-width:160px;") }}
                             <span id="slot-availability" class="small text-nowrap"></span>
