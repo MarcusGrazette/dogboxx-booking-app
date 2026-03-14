@@ -16,9 +16,9 @@
 {% endblock %}
 
 {% block main %}
-<div class="row g-3">
 
-    <!-- Calendar col -->
+<!-- Row 1: Calendar (col-3 width) -->
+<div class="row mb-3">
     <div class="col-3">
         {{ calendar_widget('board-cal', config={
             'selectable': true,
@@ -27,9 +27,11 @@
             'autoSelectToday': true
         }, show_loading=false, footer_text='Highlighted days have pending bookings.') }}
     </div>
+</div>
 
-    <!-- Board col -->
-    <div class="col-9 d-flex flex-column">
+<!-- Row 2: Full-width board -->
+<div class="row">
+    <div class="col-12">
 
         <!-- Selection hint bar -->
         <div id="selection-hint" class="alert alert-primary d-flex align-items-center gap-2 py-2 mb-3"
@@ -40,7 +42,7 @@
         </div>
 
         <!-- Board -->
-        <div id="board-wrap" class="flex-grow-1">
+        <div id="board-wrap">
             <div class="text-muted text-center py-5" id="board-placeholder">
                 <i class="bi bi-calendar3 fs-3 d-block mb-2 text-muted"></i>
                 Select a date from the calendar
@@ -50,6 +52,7 @@
 
     </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
