@@ -26,8 +26,8 @@
 }
 
 .board-lane.lane-target {
-    border-color: #0d6efd;
-    background: #e8f0fe;
+    border-color: #C0258F;
+    background: #fce8f6;
     cursor: pointer;
 }
 
@@ -38,7 +38,7 @@
 }
 
 .board-lane.lane-target:hover {
-    background: #d0e4ff;
+    background: #f7ceee;
 }
 
 .lane-header {
@@ -95,8 +95,8 @@
 }
 
 .board-card.card-selected {
-    border-color: #0d6efd;
-    box-shadow: 0 0 0 3px rgba(13,110,253,0.2);
+    border-color: #C0258F;
+    box-shadow: 0 0 0 3px rgba(192,37,143,0.2);
     transform: scale(1.02);
 }
 
