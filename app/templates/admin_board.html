@@ -7,6 +7,7 @@
 
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin-board.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 {% endblock %}
 
 {% block page_actions %}
@@ -17,34 +18,28 @@
 
 {% block main %}
 
-<!-- Row 1: Calendar (col-3 width, collapsible) -->
+<!-- Row 1: Calendar (col-3) + Week overview chart (col-9) -->
 <div class="row mb-3">
     <div class="col-3">
-
-        <!-- Date summary bar (shown when calendar is collapsed) -->
-        <div id="date-summary" class="d-none">
-            <div class="d-flex align-items-center justify-content-between px-3 py-2 bg-light rounded border">
-                <div>
-                    <i class="bi bi-calendar3 me-2" style="color:#C0258F;"></i>
-                    <span id="date-summary-text" class="fw-semibold"></span>
-                    <span id="date-today-badge" class="badge ms-2 d-none" style="background:#C0258F;">Today</span>
+        {{ calendar_widget('board-cal', config={
+            'selectable': true,
+            'highlight_today': true,
+            'allow_other_month_nav': true,
+            'autoSelectToday': true
+        }, show_loading=false, footer_text='Highlighted days have pending bookings.') }}
+    </div>
+    <div class="col-9">
+        <div class="card h-100 mb-0">
+            <div class="card-body d-flex flex-column py-3">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="fw-semibold small text-muted" id="week-chart-title">—</span>
+                    <span class="small text-muted">Morning + Afternoon bookings</span>
                 </div>
-                <button class="btn btn-sm btn-outline-secondary" id="change-date-btn">
-                    <i class="bi bi-pencil me-1"></i>Change
-                </button>
+                <div class="flex-grow-1" style="min-height: 200px; position: relative;">
+                    <canvas id="weekChart"></canvas>
+                </div>
             </div>
         </div>
-
-        <!-- Collapsible calendar -->
-        <div id="calendar-section">
-            {{ calendar_widget('board-cal', config={
-                'selectable': true,
-                'highlight_today': true,
-                'allow_other_month_nav': true,
-                'autoSelectToday': true
-            }, show_loading=false, footer_text='Highlighted days have pending bookings.') }}
-        </div>
-
     </div>
 </div>
 
@@ -454,43 +449,123 @@
         setTimeout(() => el.parentNode?.removeChild(el), 4000);
     }
 
-    // ── Calendar collapse ─────────────────────────────────────────────────────
-    const MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-    const DAYS_SHORT  = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-    const calSection  = document.getElementById('calendar-section');
-    const dateSummary = document.getElementById('date-summary');
-    const summaryText = document.getElementById('date-summary-text');
-    const todayBadge  = document.getElementById('date-today-badge');
+    // ── Week chart ────────────────────────────────────────────────────────────
+    let weekChart         = null;
+    let weekIsWeekend     = [];
+    let weekSelectedIndex = null;
 
-    function formatDateDisplay(dateStr) {
-        const [y, m, d] = dateStr.split('-').map(Number);
-        const dowIdx = (new Date(y, m - 1, d).getDay() + 6) % 7;
-        return `${DAYS_SHORT[dowIdx]}, ${d} ${MONTHS_LONG[m - 1]} ${y}`;
+    const PINK  = '#E02FAC';
+    const DARK  = '#1B1B1B';
+    const WHITE = '#ffffff';
+
+    const highlightPlugin = {
+        id: 'selectedHighlight',
+        beforeDraw(chart) {
+            const idx = chart.options.plugins.selectedHighlight?.index;
+            if (idx == null) return;
+            const { ctx: c, chartArea, scales } = chart;
+            const barWidth = (chartArea.right - chartArea.left) / chart.data.labels.length;
+            const xPx = scales.x.getPixelForValue(idx);
+            c.save();
+            c.fillStyle = 'rgba(192,37,143,0.08)';
+            c.fillRect(xPx - barWidth / 2, chartArea.top, barWidth, chartArea.bottom - chartArea.top);
+            c.restore();
+        }
+    };
+
+    function makeWeekDatasets(d) {
+        return [
+            { label: 'AM Confirmed',  stack: 'morning',   data: d.morning_confirmed,   backgroundColor: PINK,  borderRadius: 2 },
+            { label: 'AM Pending',    stack: 'morning',   data: d.morning_pending,     backgroundColor: DARK,  borderRadius: 2 },
+            { label: 'AM Waitlisted', stack: 'morning',   data: d.morning_waitlisted,  backgroundColor: WHITE, borderColor: DARK, borderWidth: 1, borderRadius: 2 },
+            { label: 'PM Confirmed',  stack: 'afternoon', data: d.afternoon_confirmed, backgroundColor: PINK,  borderRadius: 2 },
+            { label: 'PM Pending',    stack: 'afternoon', data: d.afternoon_pending,   backgroundColor: DARK,  borderRadius: 2 },
+            { label: 'PM Waitlisted', stack: 'afternoon', data: d.afternoon_waitlisted,backgroundColor: WHITE, borderColor: DARK, borderWidth: 1, borderRadius: 2 },
+        ];
     }
 
-    function collapseCalendar(dateStr) {
-        const todayStr = new Date().toISOString().slice(0, 10);
-        summaryText.textContent = formatDateDisplay(dateStr);
-        todayBadge.classList.toggle('d-none', dateStr !== todayStr);
-        calSection.style.maxHeight = calSection.scrollHeight + 'px';
-        requestAnimationFrame(() => {
-            calSection.style.transition = 'max-height 0.3s ease, opacity 0.3s ease';
-            calSection.style.maxHeight = '0';
-            calSection.style.overflow = 'hidden';
-            calSection.style.opacity = '0';
-        });
-        dateSummary.classList.remove('d-none');
-    }
+    async function loadWeekChart(dateStr) {
+        try {
+            const resp = await fetch(`/admin/api/board-chart-data?date=${dateStr}`);
+            const d    = await resp.json();
 
-    function expandCalendar() {
-        calSection.style.transition = 'max-height 0.3s ease, opacity 0.3s ease';
-        calSection.style.maxHeight = '500px';
-        calSection.style.overflow = '';
-        calSection.style.opacity = '1';
-        dateSummary.classList.add('d-none');
-    }
+            weekIsWeekend     = d.is_weekend;
+            weekSelectedIndex = d.selected_index;
 
-    document.getElementById('change-date-btn').addEventListener('click', expandCalendar);
+            const ws  = new Date(d.week_start + 'T00:00:00');
+            const we  = new Date(ws); we.setDate(we.getDate() + 6);
+            const fmt = dt => dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+            document.getElementById('week-chart-title').textContent =
+                `Week of ${fmt(ws)} – ${fmt(we)}`;
+
+            const tickFont  = ctx => ({
+                size:   weekIsWeekend[ctx.index] ? 9 : 11,
+                weight: ctx.index === weekSelectedIndex ? 'bold' : 'normal',
+            });
+            const tickColor = ctx =>
+                ctx.index === weekSelectedIndex ? '#C0258F'
+                : weekIsWeekend[ctx.index]      ? '#ccc'
+                : '#555';
+
+            if (weekChart) {
+                weekChart.data.labels   = d.labels;
+                weekChart.data.datasets = makeWeekDatasets(d);
+                weekChart.options.plugins.selectedHighlight = { index: weekSelectedIndex };
+                weekChart.options.scales.x.ticks.font  = tickFont;
+                weekChart.options.scales.x.ticks.color = tickColor;
+                weekChart.update();
+                return;
+            }
+
+            const canvas = document.getElementById('weekChart');
+            if (!canvas) return;
+
+            weekChart = new Chart(canvas, {
+                type: 'bar',
+                data: { labels: d.labels, datasets: makeWeekDatasets(d) },
+                plugins: [highlightPlugin],
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 200 },
+                    plugins: {
+                        legend: { display: false },
+                        selectedHighlight: { index: weekSelectedIndex },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                title: items => {
+                                    const idx = items[0]?.dataIndex;
+                                    return weekIsWeekend[idx] ? items[0].label + ' (weekend)' : items[0].label;
+                                },
+                                label: item => {
+                                    const slot   = item.datasetIndex < 3 ? 'Morning' : 'Afternoon';
+                                    const status = ['Confirmed','Pending','Waitlisted'][item.datasetIndex % 3];
+                                    return ` ${slot} ${status}: ${item.raw}`;
+                                },
+                            },
+                        },
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            grid: { display: false },
+                            ticks: { font: tickFont, color: tickColor },
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            ticks: { stepSize: 2, precision: 0 },
+                            grid: { color: 'rgba(0,0,0,0.05)' },
+                        },
+                    },
+                },
+            });
+        } catch (err) {
+            console.error('Week chart load failed:', err);
+        }
+    }
 
     // ── Calendar ──────────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', () => {
@@ -512,14 +587,14 @@
                     });
             },
             onDateClick(year, month, day, dateStr) {
-                collapseCalendar(dateStr);
                 loadBoard(dateStr);
+                loadWeekChart(dateStr);
             }
         });
 
         cal.selectDate(todayStr);
-        collapseCalendar(todayStr);
         loadBoard(todayStr);
+        loadWeekChart(todayStr);
     });
 
 })();

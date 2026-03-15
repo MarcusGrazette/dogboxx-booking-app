@@ -207,6 +207,65 @@ def chart_data():
     )
 
 
+@admin_bp.route("/api/board-chart-data")
+@login_required
+@admin_required
+def board_chart_data():
+    """Return 7-day booking chart data for the week (Mon–Sun) containing ?date=YYYY-MM-DD."""
+    from datetime import date, timedelta
+    from sqlalchemy import func
+
+    date_str = request.args.get('date')
+    try:
+        selected = date.fromisoformat(date_str)
+    except (TypeError, ValueError):
+        selected = date.today()
+
+    # Monday of the week containing selected date
+    week_start = selected - timedelta(days=selected.weekday())
+    chart_days = [week_start + timedelta(days=i) for i in range(7)]
+    chart_end  = chart_days[-1]
+
+    chart_bookings = (
+        Booking.query
+        .filter(
+            Booking.date >= week_start,
+            Booking.date <= chart_end,
+            Booking.status.in_(['confirmed', 'requested', 'waitlisted']),
+            Booking.slot.in_(['Morning', 'Afternoon']),
+        )
+        .with_entities(
+            Booking.date,
+            Booking.slot,
+            Booking.status,
+            func.count(Booking.id).label('cnt'),
+        )
+        .group_by(Booking.date, Booking.slot, Booking.status)
+        .all()
+    )
+
+    booking_lookup = {}
+    for row in chart_bookings:
+        booking_lookup.setdefault(row.date, {}).setdefault(row.slot, {})[row.status] = row.cnt
+
+    def slot_cnt(d, slot, status):
+        return booking_lookup.get(d, {}).get(slot, {}).get(status, 0)
+
+    return jsonify(
+        week_start=week_start.isoformat(),
+        selected=selected.isoformat(),
+        selected_index=selected.weekday(),   # 0=Mon … 6=Sun
+        labels=[d.strftime('%a %-d') for d in chart_days],
+        is_weekend=[1 if d.weekday() >= 5 else 0 for d in chart_days],
+        morning_confirmed=  [slot_cnt(d, 'Morning',   'confirmed')  for d in chart_days],
+        morning_pending=    [slot_cnt(d, 'Morning',   'requested')  for d in chart_days],
+        morning_waitlisted= [slot_cnt(d, 'Morning',   'waitlisted') for d in chart_days],
+        afternoon_confirmed=[slot_cnt(d, 'Afternoon', 'confirmed')  for d in chart_days],
+        afternoon_pending=  [slot_cnt(d, 'Afternoon', 'requested')  for d in chart_days],
+        afternoon_waitlisted=[slot_cnt(d,'Afternoon', 'waitlisted') for d in chart_days],
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Revenue helpers
 # ─────────────────────────────────────────────────────────────────────────────
