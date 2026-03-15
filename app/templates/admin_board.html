@@ -11,11 +11,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 {% endblock %}
 
-{% block page_actions %}
-<a href="{{ url_for('admin.bookings') }}" class="btn btn-sm btn-outline-secondary">
-    <i class="bi bi-arrow-left me-1"></i>Classic view
-</a>
-{% endblock %}
+{% block page_actions %}{% endblock %}
 
 {% block main %}
 
@@ -140,7 +136,7 @@
                 <div class="board-card-owner">${b.owner_name}</div>
             </div>
             <span class="slot-pill bg-${slotColor} bg-opacity-10 text-${slotColor} border border-${slotColor}">
-                ${b.slot === 'Morning' ? 'AM' : 'PM'}
+                ${b.status === 'waitlisted' ? '<i class="bi bi-clock-history me-1"></i>' : ''}${b.slot === 'Morning' ? 'AM' : 'PM'}
             </span>`;
 
         el.addEventListener('click', () => selectBooking(b.id));

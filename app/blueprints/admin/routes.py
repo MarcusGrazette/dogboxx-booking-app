@@ -471,14 +471,6 @@ def update_pricing():
     return redirect(url_for('admin.revenue'))
 
 
-@admin_bp.route("/bookings")
-@login_required
-@admin_required
-def bookings():
-    """Booking allocation page — calendar + drag/drop."""
-    return render_template("admin_bookings.html")
-
-
 @admin_bp.route("/board")
 @login_required
 @admin_required
@@ -561,112 +553,6 @@ def board_data(date_str):
         walkers=walkers_data,
         max_capacity=max_capacity,
     )
-
-
-@admin_bp.route("/bookings_by_date")
-@login_required
-@admin_required
-def bookings_by_date():
-    """Return HTML fragment of drag-and-drop booking allocation interface (admin only)."""
-    # Get date from query parameter
-    date_str = request.args.get('date')
-    if not date_str:
-        return "Missing date parameter", 400
-
-    try:
-        # Parse the date string (format: YYYY-MM-DD)
-        selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-        
-        # Get all bookings for the selected date (pending and assigned)
-        all_bookings = (
-            Booking.query
-            .options(joinedload(Booking.dog), joinedload(Booking.walker), joinedload(Booking.user))
-            .filter(
-                Booking.date == selected_date,
-                Booking.status != 'cancelled'
-            )
-            .all()
-        )
-        
-        # Separate pending, waitlisted, and assigned bookings
-        pending_bookings = [b for b in all_bookings if b.status in ('requested', 'waitlisted')]
-        assigned_bookings = [b for b in all_bookings if b.walker_id is not None and b.status == 'confirmed']
-        
-        # Add display properties to all bookings
-        for b in all_bookings:
-            b.dog_name = b.dog.name if b.dog else "Unknown"
-            b.dog_pic = b.dog.pic if b.dog and b.dog.pic else None
-            if b.walker and hasattr(b.walker, 'user'):
-                b.walker_name = f"{b.walker.user.firstname}" if b.walker.user else None
-
-        # Determine which walkers are available for this date based on their schedule
-        day_of_week = selected_date.weekday()  # 0=Monday, 6=Sunday
-        
-        schedules = WalkerSchedule.query.filter_by(
-            day_of_week=day_of_week, active=True
-        ).all()
-        
-        # Build a map of walker_id → set of available slots
-        walker_available_slots = {}
-        for sched in schedules:
-            if sched.walker_id not in walker_available_slots:
-                walker_available_slots[sched.walker_id] = set()
-            walker_available_slots[sched.walker_id].add(sched.slot)
-
-        # Query unavailabilities for this date and remove from available slots
-        unavailabilities = WalkerUnavailability.query.filter_by(date=selected_date).all()
-        unavail_set = set()  # set of (walker_id, slot) tuples
-        for u in unavailabilities:
-            unavail_set.add((u.walker_id, u.slot))
-            if u.walker_id in walker_available_slots:
-                walker_available_slots[u.walker_id].discard(u.slot)
-
-        # Remove walkers with no remaining slots
-        walker_available_slots = {wid: slots for wid, slots in walker_available_slots.items() if slots}
-
-        # Only show walkers who have at least one slot on this day
-        available_walker_ids = set(walker_available_slots.keys())
-        walkers = (
-            Walker.query
-            .options(joinedload(Walker.user))
-            .filter(Walker.id.in_(available_walker_ids))
-            .all()
-        ) if available_walker_ids else []
-        
-        # Create walker capacity tracking (only for available slots)
-        walker_capacity = {}
-        for walker in walkers:
-            walker_capacity[walker.id] = {}
-            for slot in walker_available_slots.get(walker.id, set()):
-                walker_capacity[walker.id][slot] = 0
-        
-        # Count assigned bookings per walker per slot
-        for booking in assigned_bookings:
-            if booking.walker_id and booking.slot:
-                if booking.walker_id in walker_capacity and booking.slot in walker_capacity[booking.walker_id]:
-                    walker_capacity[booking.walker_id][booking.slot] += 1
-        
-        max_capacity = get_max_per_walker('group-walk')
-
-        # Generate the drag-and-drop HTML interface
-        if not pending_bookings and not assigned_bookings:
-            return '<p class="card-text"><i class="bi bi-info-circle"></i> No booking requests for the selected date. </p>'
-        
-        # Build the HTML for the drag and drop interface
-        return render_template(
-            'partials/admin_bookings_by_date.html', 
-            pending_bookings=pending_bookings,
-            assigned_bookings=assigned_bookings,
-            walkers=walkers,
-            walker_capacity=walker_capacity,
-            walker_available_slots={wid: list(slots) for wid, slots in walker_available_slots.items()},
-            unavail_set=unavail_set,
-            max_capacity=max_capacity
-        )
-    except Exception as e:
-        logging.error(f"Error in admin_bookings_by_date: {str(e)}")
-        logging.error(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
 
 
 @admin_bp.route("/assign_walker", methods=["POST"])

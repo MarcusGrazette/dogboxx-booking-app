@@ -135,17 +135,10 @@
                     <!-- Group Walks -->
                     <li class="nav-header">Group Walks</li>
                     <li class="nav-item">
-                        <a href="{{ url_for('admin.bookings') }}"
-                           class="nav-link {% if request.endpoint == 'admin.bookings' %}active{% endif %}">
-                            <i class="bi bi-calendar-check me-2"></i>
-                            <span>Bookings</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
                         <a href="{{ url_for('admin.board') }}"
                            class="nav-link {% if request.endpoint == 'admin.board' %}active{% endif %}">
-                            <i class="bi bi-kanban me-2"></i>
-                            <span>Assignment Board</span>
+                            <i class="bi bi-calendar-check me-2"></i>
+                            <span>Bookings</span>
                         </a>
                     </li>
                     <li class="nav-item">
