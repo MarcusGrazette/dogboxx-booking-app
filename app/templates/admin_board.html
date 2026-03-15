@@ -505,10 +505,10 @@
             weekSelectedIndex = d.selected_index;
 
             const ws  = new Date(d.week_start + 'T00:00:00');
-            const we  = new Date(ws); we.setDate(we.getDate() + 6);
+            const we  = new Date(d.week_end   + 'T00:00:00');
             const fmt = dt => dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
             document.getElementById('week-chart-title').textContent =
-                `Week of ${fmt(ws)} – ${fmt(we)}`;
+                `${fmt(ws)} – ${fmt(we)}`;
 
             const tickFont  = ctx => ({
                 size:   weekIsWeekend[ctx.index] ? 9 : 11,
@@ -539,7 +539,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    animation: { duration: 200 },
+                    animation: { duration: 500 },
                     plugins: {
                         legend: { display: false },
                         tooltip: { enabled: false },
