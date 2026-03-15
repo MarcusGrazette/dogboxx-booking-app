@@ -101,7 +101,8 @@
 }
 
 .board-card.card-waitlisted {
-    border-color: #0dcaf0;
+    border-color: #adb5bd;
+    opacity: 0.85;
 }
 
 .board-card.card-ghost {
