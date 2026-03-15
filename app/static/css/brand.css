@@ -160,19 +160,7 @@ h2 { font-size: 1.35rem; }
   margin: 0;
 }
 
-/* ---- Drag & drop overrides (admin-bookings.css colours) ---- */
-.drop-zone.drag-over {
-  border-color: #E02FAC !important;
-  background-color: rgba(224, 47, 172, 0.05) !important;
-}
 
-.booking-card.insert-before {
-  border-top: 3px solid #E02FAC !important;
-}
-
-.booking-card.insert-after {
-  border-bottom: 3px solid #E02FAC !important;
-}
 
 /* ---- Calendar overrides ---- */
 .cal-cell.today .cal-day {

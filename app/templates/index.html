@@ -89,11 +89,10 @@
                     {# Selected date display #}
                     <p class="small text-muted mb-2" id="selected-date-label">
                         <i class="bi bi-calendar3 me-1"></i>
-                        <span id="selected-date-text">Select a date above</span>
+                        <span id="selected-date-text">Select a date above and pick morning or afternoon below</span>
                     </p>
 
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold">Slot</label>
                         <div class="d-flex align-items-center gap-2">
                             {{ form.slot(class="form-select", id="booking-slot", style="max-width:160px;") }}
                             <span id="slot-availability" class="small text-nowrap"></span>
@@ -167,9 +166,11 @@
                     {% set dog_bookings = bookings | selectattr('dog_id', 'equalto', dog.id) | list if bookings else [] %}
 
                     {% if dog_bookings %}
-                    <ul class="list-group list-group-flush">
+                    <ul class="list-group list-group-flush" id="bookings-list-{{ dog.id }}"
+                        data-dog-id="{{ dog.id }}" data-total="{{ dog_bookings | length }}">
                         {% for booking in dog_bookings %}
-                        <li class="list-group-item px-0 py-3 border-bottom d-flex align-items-center justify-content-between gap-2">
+                        <li class="list-group-item px-0 py-3 border-bottom d-flex align-items-center justify-content-between gap-2{% if loop.index0 >= 10 %} d-none{% endif %}"
+                            data-walk-idx="{{ loop.index0 }}">
                             <div class="d-flex align-items-center gap-3">
                                 <!-- Status pill -->
                                 {% if booking.status == 'confirmed' %}
@@ -213,6 +214,22 @@
                         </li>
                         {% endfor %}
                     </ul>
+
+                    {% if dog_bookings | length > 10 %}
+                    <div class="d-flex align-items-center justify-content-between mt-2 pt-1" id="walk-pager-{{ dog.id }}">
+                        <button class="btn btn-link btn-sm text-muted px-0 walk-prev-btn"
+                                data-dog-id="{{ dog.id }}" disabled>
+                            <i class="bi bi-chevron-left me-1"></i>Previous
+                        </button>
+                        <span class="text-muted small" id="walk-page-label-{{ dog.id }}">
+                            1 – {{ [10, dog_bookings | length] | min }} of {{ dog_bookings | length }}
+                        </span>
+                        <button class="btn btn-link btn-sm text-muted px-0 walk-next-btn"
+                                data-dog-id="{{ dog.id }}">
+                            Next<i class="bi bi-chevron-right ms-1"></i>
+                        </button>
+                    </div>
+                    {% endif %}
 
                     {% if bookings %}
                     <p class="text-muted mt-3 mb-0" style="font-size: 0.75rem;">
@@ -518,6 +535,44 @@ document.addEventListener('DOMContentLoaded', function () {
             alert('Network error — please try again.');
             submitBtn.disabled = false;
             submitBtn.textContent = 'Request recurring walks';
+        });
+    });
+
+    // ─── Walk pagination ──────────────────────────────────────
+    const PAGE_SIZE = 10;
+    const walkPages = {}; // dogId → current page (0-indexed)
+
+    function renderWalkPage(dogId) {
+        const list  = document.getElementById(`bookings-list-${dogId}`);
+        if (!list) return;
+        const total = parseInt(list.dataset.total, 10);
+        const page  = walkPages[dogId] || 0;
+        const start = page * PAGE_SIZE;
+        const end   = Math.min(start + PAGE_SIZE, total);
+
+        list.querySelectorAll('li[data-walk-idx]').forEach(li => {
+            const idx = parseInt(li.dataset.walkIdx, 10);
+            li.classList.toggle('d-none', idx < start || idx >= end);
+        });
+
+        const label   = document.getElementById(`walk-page-label-${dogId}`);
+        const prevBtn = document.querySelector(`.walk-prev-btn[data-dog-id="${dogId}"]`);
+        const nextBtn = document.querySelector(`.walk-next-btn[data-dog-id="${dogId}"]`);
+
+        if (label)   label.textContent = `${start + 1} – ${end} of ${total}`;
+        if (prevBtn) prevBtn.disabled = (page === 0);
+        if (nextBtn) nextBtn.disabled = (end >= total);
+    }
+
+    document.querySelectorAll('.walk-prev-btn, .walk-next-btn').forEach(btn => {
+        btn.addEventListener('click', function () {
+            const dogId = this.getAttribute('data-dog-id');
+            const isPrev = this.classList.contains('walk-prev-btn');
+            walkPages[dogId] = (walkPages[dogId] || 0) + (isPrev ? -1 : 1);
+            renderWalkPage(dogId);
+            // Scroll back to the dog card header
+            const card = document.getElementById(`bookings-list-${dogId}`);
+            if (card) card.closest('.card').scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
     });
 

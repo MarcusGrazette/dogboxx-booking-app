@@ -207,6 +207,65 @@ def chart_data():
     )
 
 
+@admin_bp.route("/api/board-chart-data")
+@login_required
+@admin_required
+def board_chart_data():
+    """Return 7-day booking chart data for the week (Mon–Sun) containing ?date=YYYY-MM-DD."""
+    from datetime import date, timedelta
+    from sqlalchemy import func
+
+    date_str = request.args.get('date')
+    try:
+        selected = date.fromisoformat(date_str)
+    except (TypeError, ValueError):
+        selected = date.today()
+
+    # Monday of the week containing selected date
+    week_start = selected - timedelta(days=selected.weekday())
+    chart_days = [week_start + timedelta(days=i) for i in range(7)]
+    chart_end  = chart_days[-1]
+
+    chart_bookings = (
+        Booking.query
+        .filter(
+            Booking.date >= week_start,
+            Booking.date <= chart_end,
+            Booking.status.in_(['confirmed', 'requested', 'waitlisted']),
+            Booking.slot.in_(['Morning', 'Afternoon']),
+        )
+        .with_entities(
+            Booking.date,
+            Booking.slot,
+            Booking.status,
+            func.count(Booking.id).label('cnt'),
+        )
+        .group_by(Booking.date, Booking.slot, Booking.status)
+        .all()
+    )
+
+    booking_lookup = {}
+    for row in chart_bookings:
+        booking_lookup.setdefault(row.date, {}).setdefault(row.slot, {})[row.status] = row.cnt
+
+    def slot_cnt(d, slot, status):
+        return booking_lookup.get(d, {}).get(slot, {}).get(status, 0)
+
+    return jsonify(
+        week_start=week_start.isoformat(),
+        selected=selected.isoformat(),
+        selected_index=selected.weekday(),   # 0=Mon … 6=Sun
+        labels=[d.strftime('%a %-d') for d in chart_days],
+        is_weekend=[1 if d.weekday() >= 5 else 0 for d in chart_days],
+        morning_confirmed=  [slot_cnt(d, 'Morning',   'confirmed')  for d in chart_days],
+        morning_pending=    [slot_cnt(d, 'Morning',   'requested')  for d in chart_days],
+        morning_waitlisted= [slot_cnt(d, 'Morning',   'waitlisted') for d in chart_days],
+        afternoon_confirmed=[slot_cnt(d, 'Afternoon', 'confirmed')  for d in chart_days],
+        afternoon_pending=  [slot_cnt(d, 'Afternoon', 'requested')  for d in chart_days],
+        afternoon_waitlisted=[slot_cnt(d,'Afternoon', 'waitlisted') for d in chart_days],
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Revenue helpers
 # ─────────────────────────────────────────────────────────────────────────────
@@ -412,118 +471,88 @@ def update_pricing():
     return redirect(url_for('admin.revenue'))
 
 
-@admin_bp.route("/bookings")
+@admin_bp.route("/board")
 @login_required
 @admin_required
-def bookings():
-    """Booking allocation page — calendar + drag/drop."""
-    return render_template("admin_bookings.html")
+def board():
+    """New assignment board — click-to-assign + drag-to-reorder."""
+    return render_template("admin_board.html")
 
 
-@admin_bp.route("/bookings_by_date")
+@admin_bp.route("/api/board-data/<date_str>")
 @login_required
 @admin_required
-def bookings_by_date():
-    """Return HTML fragment of drag-and-drop booking allocation interface (admin only)."""
-    # Get date from query parameter
-    date_str = request.args.get('date')
-    if not date_str:
-        return "Missing date parameter", 400
-
+def board_data(date_str):
+    """JSON board data for a given date — pending bookings, walkers, assignments."""
     try:
-        # Parse the date string (format: YYYY-MM-DD)
         selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-        
-        # Get all bookings for the selected date (pending and assigned)
-        all_bookings = (
-            Booking.query
-            .options(joinedload(Booking.dog), joinedload(Booking.walker), joinedload(Booking.user))
-            .filter(
-                Booking.date == selected_date,
-                Booking.status != 'cancelled'
-            )
-            .all()
+    except ValueError:
+        return jsonify(success=False, message="Invalid date"), 400
+
+    all_bookings = (
+        Booking.query
+        .options(
+            joinedload(Booking.dog),
+            joinedload(Booking.walker).joinedload(Walker.user),
+            joinedload(Booking.user),
         )
-        
-        # Separate pending, waitlisted, and assigned bookings
-        pending_bookings = [b for b in all_bookings if b.status in ('requested', 'waitlisted')]
-        assigned_bookings = [b for b in all_bookings if b.walker_id is not None and b.status == 'confirmed']
-        
-        # Add display properties to all bookings
-        for b in all_bookings:
-            b.dog_name = b.dog.name if b.dog else "Unknown"
-            b.dog_pic = b.dog.pic if b.dog and b.dog.pic else None
-            if b.walker and hasattr(b.walker, 'user'):
-                b.walker_name = f"{b.walker.user.firstname}" if b.walker.user else None
+        .filter(Booking.date == selected_date, Booking.status != 'cancelled')
+        .all()
+    )
 
-        # Determine which walkers are available for this date based on their schedule
-        day_of_week = selected_date.weekday()  # 0=Monday, 6=Sunday
-        
-        schedules = WalkerSchedule.query.filter_by(
-            day_of_week=day_of_week, active=True
-        ).all()
-        
-        # Build a map of walker_id → set of available slots
-        walker_available_slots = {}
-        for sched in schedules:
-            if sched.walker_id not in walker_available_slots:
-                walker_available_slots[sched.walker_id] = set()
-            walker_available_slots[sched.walker_id].add(sched.slot)
+    day_of_week = selected_date.weekday()
+    schedules = WalkerSchedule.query.filter_by(day_of_week=day_of_week, active=True).all()
+    walker_available_slots = {}
+    for s in schedules:
+        walker_available_slots.setdefault(s.walker_id, set()).add(s.slot)
 
-        # Query unavailabilities for this date and remove from available slots
-        unavailabilities = WalkerUnavailability.query.filter_by(date=selected_date).all()
-        unavail_set = set()  # set of (walker_id, slot) tuples
-        for u in unavailabilities:
-            unavail_set.add((u.walker_id, u.slot))
-            if u.walker_id in walker_available_slots:
-                walker_available_slots[u.walker_id].discard(u.slot)
+    unavailabilities = WalkerUnavailability.query.filter_by(date=selected_date).all()
+    for u in unavailabilities:
+        if u.walker_id in walker_available_slots:
+            walker_available_slots[u.walker_id].discard(u.slot)
+    walker_available_slots = {wid: slots for wid, slots in walker_available_slots.items() if slots}
 
-        # Remove walkers with no remaining slots
-        walker_available_slots = {wid: slots for wid, slots in walker_available_slots.items() if slots}
+    walkers = (
+        Walker.query.options(joinedload(Walker.user))
+        .filter(Walker.id.in_(walker_available_slots.keys()))
+        .all()
+    ) if walker_available_slots else []
 
-        # Only show walkers who have at least one slot on this day
-        available_walker_ids = set(walker_available_slots.keys())
-        walkers = (
-            Walker.query
-            .options(joinedload(Walker.user))
-            .filter(Walker.id.in_(available_walker_ids))
-            .all()
-        ) if available_walker_ids else []
-        
-        # Create walker capacity tracking (only for available slots)
-        walker_capacity = {}
-        for walker in walkers:
-            walker_capacity[walker.id] = {}
-            for slot in walker_available_slots.get(walker.id, set()):
-                walker_capacity[walker.id][slot] = 0
-        
-        # Count assigned bookings per walker per slot
-        for booking in assigned_bookings:
-            if booking.walker_id and booking.slot:
-                if booking.walker_id in walker_capacity and booking.slot in walker_capacity[booking.walker_id]:
-                    walker_capacity[booking.walker_id][booking.slot] += 1
-        
-        max_capacity = get_max_per_walker('group-walk')
+    def booking_dict(b, include_walker=False):
+        d = {
+            'id': b.id,
+            'dog_name': b.dog.name if b.dog else 'Unknown',
+            'dog_pic': b.dog.pic if b.dog and b.dog.pic else None,
+            'owner_name': b.user.full_name if b.user else '',
+            'slot': b.slot,
+            'status': b.status,
+            'pickup_order': b.pickup_order,
+            'walker_id': b.walker_id,
+        }
+        return d
 
-        # Generate the drag-and-drop HTML interface
-        if not pending_bookings and not assigned_bookings:
-            return '<p class="card-text"><i class="bi bi-info-circle"></i> No booking requests for the selected date. </p>'
-        
-        # Build the HTML for the drag and drop interface
-        return render_template(
-            'partials/admin_bookings_by_date.html', 
-            pending_bookings=pending_bookings,
-            assigned_bookings=assigned_bookings,
-            walkers=walkers,
-            walker_capacity=walker_capacity,
-            walker_available_slots={wid: list(slots) for wid, slots in walker_available_slots.items()},
-            unavail_set=unavail_set,
-            max_capacity=max_capacity
-        )
-    except Exception as e:
-        logging.error(f"Error in admin_bookings_by_date: {str(e)}")
-        logging.error(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
+    pending   = [booking_dict(b) for b in all_bookings if b.status in ('requested', 'waitlisted')]
+    assigned  = [booking_dict(b) for b in all_bookings if b.walker_id and b.status == 'confirmed']
+
+    walkers_data = [
+        {
+            'id': w.id,
+            'name': w.user.firstname if w.user else 'Walker',
+            'available_slots': sorted(walker_available_slots.get(w.id, []), key=lambda s: 0 if s == 'Morning' else 1),
+        }
+        for w in walkers
+    ]
+
+    max_capacity = get_max_per_walker('group-walk')
+
+    return jsonify(
+        success=True,
+        date=date_str,
+        pending=pending,
+        assigned=assigned,
+        walkers=walkers_data,
+        max_capacity=max_capacity,
+    )
 
 
 @admin_bp.route("/assign_walker", methods=["POST"])
