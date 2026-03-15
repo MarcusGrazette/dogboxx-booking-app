@@ -7,8 +7,10 @@
 
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin-board.css') }}">
+{% if not is_mobile %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+{% endif %}
 {% endblock %}
 
 {% block page_actions %}{% endblock %}
@@ -25,7 +27,7 @@
             'autoSelectToday': true
         }, show_loading=false, footer_text='Highlighted days have pending bookings.') }}
     </div>
-    <div class="col-9">
+    {% if not is_mobile %}<div class="col-9">
         <div class="card mb-0" id="week-chart-card">
             <div class="card-body d-flex flex-column py-3">
                 <div class="d-flex align-items-center justify-content-between mb-1">
@@ -49,7 +51,7 @@
             </div>
         </div>
     </div>
-</div>
+</div>{% endif %}
 
 <!-- Row 2: Full-width board -->
 <div class="row">
@@ -460,6 +462,9 @@
     }
 
     // ── Week chart ────────────────────────────────────────────────────────────
+    {% if is_mobile %}
+    function loadWeekChart() {}   // no-op on mobile
+    {% else %}
     Chart.register(ChartDataLabels);
 
     let weekChart         = null;
@@ -573,6 +578,9 @@
     }
 
     // ── Calendar ──────────────────────────────────────────────────────────────
+    {% endif %}{# /is_mobile #}
+
+    {% if not is_mobile %}
     // ── Sync chart card height to calendar card ───────────────────────────────
     function syncChartHeight() {
         const calCard   = document.querySelector('.calendar-component');
@@ -581,11 +589,14 @@
             chartCard.style.height = calCard.offsetHeight + 'px';
         }
     }
+    {% endif %}
 
     document.addEventListener('DOMContentLoaded', () => {
+        {% if not is_mobile %}
         // Give the calendar a tick to render its grid before measuring
         requestAnimationFrame(() => requestAnimationFrame(syncChartHeight));
         window.addEventListener('resize', syncChartHeight);
+        {% endif %}
 
         const todayStr = new Date().toISOString().slice(0, 10);
 
