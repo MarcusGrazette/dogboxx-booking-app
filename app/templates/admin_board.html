@@ -8,6 +8,7 @@
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin-board.css') }}">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 {% endblock %}
 
 {% block page_actions %}
@@ -29,13 +30,24 @@
         }, show_loading=false, footer_text='Highlighted days have pending bookings.') }}
     </div>
     <div class="col-9">
-        <div class="card h-100 mb-0">
+        <div class="card mb-0" id="week-chart-card">
             <div class="card-body d-flex flex-column py-3">
-                <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="d-flex align-items-center justify-content-between mb-1">
                     <span class="fw-semibold small text-muted" id="week-chart-title">—</span>
-                    <span class="small text-muted">Morning + Afternoon bookings</span>
+                    <div class="d-flex gap-3" style="font-size: 0.75rem; color: #555;">
+                        <span>
+                            <span class="d-inline-block rounded-1 me-1 align-middle" style="width:11px;height:11px;background:#E02FAC;"></span>Confirmed
+                        </span>
+                        <span>
+                            <span class="d-inline-block rounded-1 me-1 align-middle" style="width:11px;height:11px;background:#1B1B1B;"></span>Pending
+                        </span>
+                        <span>
+                            <span class="d-inline-block rounded-1 me-1 align-middle border border-dark" style="width:11px;height:11px;background:#fff;"></span>Waitlisted
+                        </span>
+                        <span class="text-muted">↑ AM &nbsp; ↑ PM</span>
+                    </div>
                 </div>
-                <div class="flex-grow-1" style="min-height: 200px; position: relative;">
+                <div class="flex-grow-1" style="min-height: 0; position: relative;">
                     <canvas id="weekChart"></canvas>
                 </div>
             </div>
@@ -450,6 +462,8 @@
     }
 
     // ── Week chart ────────────────────────────────────────────────────────────
+    Chart.register(ChartDataLabels);
+
     let weekChart         = null;
     let weekIsWeekend     = [];
     let weekSelectedIndex = null;
@@ -530,21 +544,14 @@
                     animation: { duration: 200 },
                     plugins: {
                         legend: { display: false },
+                        tooltip: { enabled: false },
                         selectedHighlight: { index: weekSelectedIndex },
-                        tooltip: {
-                            mode: 'index',
-                            intersect: false,
-                            callbacks: {
-                                title: items => {
-                                    const idx = items[0]?.dataIndex;
-                                    return weekIsWeekend[idx] ? items[0].label + ' (weekend)' : items[0].label;
-                                },
-                                label: item => {
-                                    const slot   = item.datasetIndex < 3 ? 'Morning' : 'Afternoon';
-                                    const status = ['Confirmed','Pending','Waitlisted'][item.datasetIndex % 3];
-                                    return ` ${slot} ${status}: ${item.raw}`;
-                                },
-                            },
+                        datalabels: {
+                            display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+                            color: ctx => ctx.datasetIndex % 3 === 2 ? '#1B1B1B' : '#ffffff',
+                            font: { size: 10, weight: 'bold' },
+                            formatter: val => val,
+                            clip: true,
                         },
                     },
                     scales: {
@@ -568,7 +575,20 @@
     }
 
     // ── Calendar ──────────────────────────────────────────────────────────────
+    // ── Sync chart card height to calendar card ───────────────────────────────
+    function syncChartHeight() {
+        const calCard   = document.querySelector('.calendar-component');
+        const chartCard = document.getElementById('week-chart-card');
+        if (calCard && chartCard) {
+            chartCard.style.height = calCard.offsetHeight + 'px';
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
+        // Give the calendar a tick to render its grid before measuring
+        requestAnimationFrame(() => requestAnimationFrame(syncChartHeight));
+        window.addEventListener('resize', syncChartHeight);
+
         const todayStr = new Date().toISOString().slice(0, 10);
 
         const cal = createCalendar('board-cal', {
