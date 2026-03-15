@@ -17,9 +17,9 @@
 
 {% block main %}
 
-<!-- Row 1: Calendar (col-3) + Week overview chart (col-9) -->
+<!-- Row 1: Calendar (col-6 on mobile, col-3 on desktop) + Week overview chart (col-9) -->
 <div class="row mb-3">
-    <div class="col-3">
+    <div class="{{ 'col-6' if is_mobile else 'col-3' }}">
         {{ calendar_widget('board-cal', config={
             'selectable': true,
             'highlight_today': true,
