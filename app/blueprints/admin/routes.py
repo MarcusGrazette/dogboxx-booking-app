@@ -221,9 +221,17 @@ def board_chart_data():
     except (TypeError, ValueError):
         selected = date.today()
 
-    # Monday of the week containing selected date
-    week_start = selected - timedelta(days=selected.weekday())
-    chart_days = [week_start + timedelta(days=i) for i in range(7)]
+    # If weekend selected, advance to next Monday and show that week
+    if selected.weekday() >= 5:
+        days_to_monday = 7 - selected.weekday()
+        week_start = selected + timedelta(days=days_to_monday)
+        selected_index = None   # selected day isn't in the chart
+    else:
+        week_start = selected - timedelta(days=selected.weekday())
+        selected_index = selected.weekday()  # 0=Mon … 4=Fri
+
+    # Weekdays only (Mon–Fri)
+    chart_days = [week_start + timedelta(days=i) for i in range(5)]
     chart_end  = chart_days[-1]
 
     chart_bookings = (
@@ -253,10 +261,11 @@ def board_chart_data():
 
     return jsonify(
         week_start=week_start.isoformat(),
+        week_end=chart_days[-1].isoformat(),
         selected=selected.isoformat(),
-        selected_index=selected.weekday(),   # 0=Mon … 6=Sun
+        selected_index=selected_index,       # 0=Mon … 4=Fri, or null if weekend
         labels=[d.strftime('%a %-d') for d in chart_days],
-        is_weekend=[1 if d.weekday() >= 5 else 0 for d in chart_days],
+        is_weekend=[0] * 5,                  # always weekdays
         morning_confirmed=  [slot_cnt(d, 'Morning',   'confirmed')  for d in chart_days],
         morning_pending=    [slot_cnt(d, 'Morning',   'requested')  for d in chart_days],
         morning_waitlisted= [slot_cnt(d, 'Morning',   'waitlisted') for d in chart_days],
