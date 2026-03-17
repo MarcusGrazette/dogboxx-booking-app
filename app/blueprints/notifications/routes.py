@@ -1,10 +1,10 @@
-from flask import render_template, request, jsonify, Response, stream_with_context
+from flask import render_template, request, jsonify, Response, stream_with_context, current_app
 from flask_login import login_required, current_user
 from . import notifications_bp
 from app.utils.notifications import mark_read, mark_all_read, get_recent
-from app.models import Notification
+from app.models import Notification, PushSubscription
 from app.utils.notifications import get_meta
-from app import limiter
+from app import db, limiter
 
 
 @notifications_bp.route('/stream')
@@ -68,3 +68,72 @@ def mark_all(request=None):
 def _wants_json():
     return (request.accept_mimetypes.best == 'application/json'
             or request.headers.get('X-Requested-With') == 'XMLHttpRequest')
+
+
+# ── Web Push subscription management ─────────────────────────────────────────
+
+@notifications_bp.route('/push-subscribe', methods=['POST'])
+@login_required
+def push_subscribe():
+    """Save (or refresh) a Web Push subscription for the current user.
+
+    Expects JSON body:
+        {
+            "endpoint": "https://fcm.googleapis.com/...",
+            "keys": {
+                "p256dh": "<base64url>",
+                "auth":   "<base64url>"
+            }
+        }
+
+    Upserts on endpoint — safe to call on every page load.
+    """
+    data = request.get_json(silent=True)
+    if not data or not data.get('endpoint') or not data.get('keys'):
+        return jsonify({'ok': False, 'error': 'invalid payload'}), 400
+
+    endpoint = data['endpoint']
+    p256dh   = data['keys'].get('p256dh', '')
+    auth     = data['keys'].get('auth', '')
+
+    if not p256dh or not auth:
+        return jsonify({'ok': False, 'error': 'missing keys'}), 400
+
+    # Upsert: update if endpoint exists, otherwise insert
+    sub = PushSubscription.query.filter_by(endpoint=endpoint).first()
+    if sub:
+        sub.user_id  = current_user.id
+        sub.p256dh   = p256dh
+        sub.auth     = auth
+    else:
+        sub = PushSubscription(
+            user_id=current_user.id,
+            endpoint=endpoint,
+            p256dh=p256dh,
+            auth=auth,
+        )
+        db.session.add(sub)
+
+    db.session.commit()
+    current_app.logger.info('Push subscription saved for user %s', current_user.id)
+    return jsonify({'ok': True})
+
+
+@notifications_bp.route('/push-subscribe', methods=['DELETE'])
+@login_required
+def push_unsubscribe():
+    """Remove a Web Push subscription (user opted out or browser unsubscribed).
+
+    Expects JSON body: { "endpoint": "https://..." }
+    """
+    data = request.get_json(silent=True)
+    if not data or not data.get('endpoint'):
+        return jsonify({'ok': False, 'error': 'missing endpoint'}), 400
+
+    deleted = PushSubscription.query.filter_by(
+        endpoint=data['endpoint'],
+        user_id=current_user.id,
+    ).delete()
+    db.session.commit()
+
+    return jsonify({'ok': True, 'deleted': deleted})

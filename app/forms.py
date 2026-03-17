@@ -232,7 +232,15 @@ class ProfileForm(FlaskForm):
 
 
 class ClientCreateForm(FlaskForm):
-    """Form for admin to create a new client account"""
+    """Form for admin to create or edit a client account.
+
+    All fields beyond name/email are optional — the admin fills in what they
+    have; any remaining gaps are completed during client onboarding.
+    When all three of (dog_name, dog_gender, dog_dob) are supplied the dog
+    section is considered complete and will be saved.
+    """
+
+    # ── Account (required) ────────────────────────────────────────────────
     email = StringField(
         'Email',
         validators=[
@@ -255,7 +263,90 @@ class ClientCreateForm(FlaskForm):
             Length(min=2, max=80, message="Last name must be between 2 and 80 characters")
         ]
     )
-    submit = SubmitField('Create Client')
+
+    # ── Address & Access (optional) ───────────────────────────────────────
+    address_line_1 = StringField(
+        'Address Line 1',
+        validators=[Optional(), Length(max=200)],
+        render_kw={"placeholder": "Street address"}
+    )
+    address_line_2 = StringField(
+        'Address Line 2',
+        validators=[Optional(), Length(max=200)],
+        render_kw={"placeholder": "Flat, floor, etc. (optional)"}
+    )
+    address_line_3 = StringField(
+        'Address Line 3',
+        validators=[Optional(), Length(max=200)],
+        render_kw={"placeholder": "Area / neighbourhood (optional)"}
+    )
+    postcode = StringField(
+        'Postcode',
+        validators=[Optional(), Length(max=20)],
+        render_kw={"placeholder": "e.g. SE1 3QJ"}
+    )
+    pickup_instructions = TextAreaField(
+        "Access instructions",
+        validators=[Optional(), Length(max=500)],
+        render_kw={"rows": 3, "placeholder": "Door codes, concierge notes, fiddly keys…"}
+    )
+    maps_url = StringField(
+        "Google Maps pin URL",
+        validators=[Optional(), URL(message="Please enter a valid URL"), Length(max=2048)],
+        render_kw={"placeholder": "https://maps.app.goo.gl/…"}
+    )
+
+    # ── Contact & notifications (optional) ───────────────────────────────
+    phone = StringField(
+        'Phone Number',
+        validators=[Optional(), Length(max=20)],
+        render_kw={"placeholder": "+44 7700 900000"}
+    )
+    notify_email = BooleanField('Email', default=True)
+    notify_whatsapp = BooleanField('WhatsApp')
+
+    # ── Dog info (optional — all three core fields required together) ─────
+    dog_name = StringField(
+        "Dog's Name",
+        validators=[Optional(), Length(max=50)]
+    )
+    dog_gender = SelectField(
+        'Gender',
+        choices=[('', 'Select Gender'), ('male', 'Male'), ('female', 'Female')],
+        validators=[Optional()]
+    )
+    dog_breed = StringField('Breed', validators=[Optional()])
+    dog_dob = DateField(
+        'Date of Birth',
+        validators=[Optional()]
+    )
+    dog_allergies = TextAreaField(
+        'Allergies / health notes',
+        validators=[Optional()],
+        render_kw={"rows": 2, "placeholder": "Allergies, medical notes, special needs…"}
+    )
+
+    submit = SubmitField('Save Client')
+
+    def validate(self, extra_validators=None):
+        """If any dog field is provided, require name + gender + dob together."""
+        rv = super().validate(extra_validators)
+        dog_fields_provided = any([
+            self.dog_name.data and self.dog_name.data.strip(),
+            self.dog_gender.data,
+            self.dog_dob.data,
+        ])
+        if dog_fields_provided:
+            if not (self.dog_name.data and self.dog_name.data.strip()):
+                self.dog_name.errors.append("Dog name is required when adding dog info.")
+                rv = False
+            if not self.dog_gender.data:
+                self.dog_gender.errors.append("Gender is required when adding dog info.")
+                rv = False
+            if not self.dog_dob.data:
+                self.dog_dob.errors.append("Date of birth is required when adding dog info.")
+                rv = False
+        return rv
 
 
 class WalkerCreateForm(FlaskForm):

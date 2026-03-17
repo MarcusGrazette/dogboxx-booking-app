@@ -470,6 +470,26 @@ class PricingConfig(db.Model):
         }
 
 
+class PushSubscription(db.Model):
+    """Stores Web Push subscriptions for PWA users.
+
+    One row per browser/device per user. Identified by endpoint URL (unique
+    per browser). Replaced on re-subscribe (upsert on endpoint).
+    """
+    __tablename__ = 'push_subscriptions'
+
+    id          = db.Column(db.Integer, primary_key=True)
+    user_id     = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    endpoint    = db.Column(db.Text, nullable=False, unique=True)
+    p256dh      = db.Column(db.Text, nullable=False)   # client public key
+    auth        = db.Column(db.Text, nullable=False)   # auth secret
+    created_at  = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at  = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                            onupdate=lambda: datetime.now(timezone.utc))
+
+    user = db.relationship('User', backref=db.backref('push_subscriptions', lazy=True))
+
+
 class WalkEvent(db.Model):
     """Tracks pickup/dropoff events during walks."""
     __tablename__ = 'walk_events'

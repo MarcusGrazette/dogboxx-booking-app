@@ -80,11 +80,33 @@ def create_app(config_name=None):
 
     @sa_event.listens_for(db.session, 'after_commit')
     def _fire_sse_after_commit(session):
+        # ── SSE ──────────────────────────────────────────────────────────────
         pending = session.info.pop('sse_pending', [])
         if pending:
             from app.sse import broadcast
             for item in pending:
                 broadcast(item['user_id'], item['event'], item['data'])
+
+        # ── Web Push ─────────────────────────────────────────────────────────
+        wp_pending = session.info.pop('webpush_pending', [])
+        if wp_pending:
+            from app.utils.webpush import send_web_push
+            for item in wp_pending:
+                try:
+                    send_web_push(
+                        user_id=item['user_id'],
+                        title=item['title'],
+                        body=item.get('body', ''),
+                        link=item.get('link', '/'),
+                        icon=item.get('icon'),
+                        subscriptions=item.get('subscriptions', []),
+                    )
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        'Web Push after_commit error for user %s: %s',
+                        item['user_id'], e
+                    )
 
     # Initialize Flask-Migrate for database migrations
     migrate.init_app(app, db)
@@ -270,9 +292,12 @@ def create_app(config_name=None):
 
     @app.context_processor
     def inject_notifications():
-        """Inject unread notification count + recent notifications into all templates."""
+        """Inject unread notification count + recent notifications into all templates.
+        Also exposes the VAPID public key for Web Push registration.
+        """
         from flask_login import current_user
         from app.utils.notifications import get_unread_count, get_recent, get_meta
+        vapid_public_key = app.config.get('VAPID_PUBLIC_KEY', '')
         if current_user.is_authenticated:
             unread_count = get_unread_count(current_user.id)
             recent_notifications = get_recent(current_user.id, limit=8)
@@ -280,15 +305,30 @@ def create_app(config_name=None):
                 unread_notification_count=unread_count,
                 recent_notifications=recent_notifications,
                 notification_meta=get_meta,
+                vapid_public_key=vapid_public_key,
             )
         return dict(
             unread_notification_count=0,
             recent_notifications=[],
             notification_meta=get_meta,
+            vapid_public_key=vapid_public_key,
         )
 
     # Register blueprints for modular routing
     from app.blueprints.register import register_blueprints
     register_blueprints(app)
+
+    # Serve the Service Worker from the root scope so it can control the
+    # entire app (not just /static/js/).  Must be at /sw.js, not /static/…
+    from flask import send_from_directory, make_response
+
+    @app.route('/sw.js')
+    def service_worker():
+        static_js = os.path.join(app.root_path, 'static', 'js')
+        resp = make_response(send_from_directory(static_js, 'sw.js'))
+        resp.headers['Content-Type'] = 'application/javascript'
+        resp.headers['Service-Worker-Allowed'] = '/'
+        resp.headers['Cache-Control'] = 'no-cache'
+        return resp
 
     return app

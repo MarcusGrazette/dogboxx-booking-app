@@ -5,6 +5,11 @@ class Config:
     """Base configuration."""
     SECRET_KEY = os.environ.get('SECRET_KEY')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+    # Web Push (VAPID)
+    VAPID_PRIVATE_KEY   = os.environ.get('VAPID_PRIVATE_KEY', '')
+    VAPID_PUBLIC_KEY    = os.environ.get('VAPID_PUBLIC_KEY', '')
+    VAPID_CLAIMS_EMAIL  = os.environ.get('VAPID_CLAIMS_EMAIL', 'admin@dogboxx.org')
     SESSION_TYPE = "sqlalchemy"          # store sessions in the app DB (works on Railway)
     SESSION_SQLALCHEMY_TABLE = "sessions" # table name in Postgres/SQLite
     SESSION_PERMANENT = False
