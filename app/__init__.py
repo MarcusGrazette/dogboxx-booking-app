@@ -99,6 +99,7 @@ def create_app(config_name=None):
                         body=item.get('body', ''),
                         link=item.get('link', '/'),
                         icon=item.get('icon'),
+                        unread_count=item.get('unread_count', 1),
                         subscriptions=item.get('subscriptions', []),
                     )
                 except Exception as e:

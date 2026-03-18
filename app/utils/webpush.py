@@ -20,7 +20,7 @@ from flask import current_app
 log = logging.getLogger(__name__)
 
 
-def send_web_push(user_id, title, body='', link='/', icon=None, subscriptions=None):
+def send_web_push(user_id, title, body='', link='/', icon=None, unread_count=1, subscriptions=None):
     """Send a Web Push notification to every registered device for *user_id*.
 
     *subscriptions* should be a list of dicts with keys: id, endpoint, p256dh, auth.
@@ -46,11 +46,12 @@ def send_web_push(user_id, title, body='', link='/', icon=None, subscriptions=No
         return
 
     payload = json.dumps({
-        'title': title,
-        'body':  body,
-        'link':  link,
-        'icon':  icon or '/static/android-chrome-192x192.png',
-        'tag':   'dogboxx-notification',
+        'title':        title,
+        'body':         body,
+        'link':         link,
+        'icon':         icon or '/static/android-chrome-192x192.png',
+        'tag':          'dogboxx-notification',
+        'unread_count': unread_count,
     })
 
     stale_ids = []

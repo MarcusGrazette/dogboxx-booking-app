@@ -132,6 +132,22 @@
 
 <script>
 (function() {
+    // ── App badge (via SW postMessage — iOS only honours badge API from SW) ──
+    //
+    // Uses serviceWorker.ready + reg.active instead of controller, because
+    // controller is null until the SW has taken control of this specific page
+    // (requires a page reload after first SW install, unless SW calls clients.claim()).
+    // reg.active is available as soon as the SW is activated, which is immediate
+    // when skipWaiting + clients.claim() are both present in the SW.
+    function syncAppBadge(count) {
+        if (!('serviceWorker' in navigator)) return;
+        navigator.serviceWorker.ready.then(function (reg) {
+            if (reg.active) {
+                reg.active.postMessage({ type: 'SET_BADGE', count: count });
+            }
+        }).catch(function () {});
+    }
+
     // ── Relative timestamps ────────────────────────────────────────────────
     function formatRelTime(isoString) {
         // Normalise to Z suffix — handles both naive ('...123456') and aware ('...+00:00') formats
@@ -201,8 +217,12 @@
         const badge = document.getElementById('notif-badge');
         if (!badge) return;
         const next = Math.max(0, (parseInt(badge.textContent) || 0) - n);
-        if (next <= 0) badge.classList.add('d-none');
-        else badge.textContent = next > 99 ? '99+' : next;
+        if (next <= 0) {
+            badge.classList.add('d-none');
+        } else {
+            badge.textContent = next > 99 ? '99+' : next;
+        }
+        syncAppBadge(next);
     }
 
     function incrementBadge(n) {
@@ -211,6 +231,7 @@
         const next = (parseInt(badge.textContent) || 0) + n;
         badge.textContent = next > 99 ? '99+' : next;
         badge.classList.remove('d-none');
+        syncAppBadge(next);
     }
 
     function applyReadAll() {
@@ -227,6 +248,8 @@
         if (headerBadge) headerBadge.remove();
         const btn = document.getElementById('mark-all-read-btn');
         if (btn) btn.remove();
+        // Clear the PWA home screen badge
+        syncAppBadge(0);
     }
 
     // ── SSE: real-time updates ────────────────────────────────────────────

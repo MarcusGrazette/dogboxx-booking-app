@@ -103,11 +103,15 @@ def create_notification(recipient_id, notification_type, title,
     })
 
     # Queue Web Push event — fires in the same after_commit hook.
-    # Subscriptions are fetched NOW (session still active) so send_web_push()
-    # doesn't need to query the DB from inside the after_commit hook.
+    # Subscriptions and unread count are fetched NOW (session still active)
+    # so send_web_push() doesn't need to query the DB from inside the hook.
     from app.models import PushSubscription
     subs = PushSubscription.query.filter_by(user_id=recipient_id).all()
     if subs:
+        unread_count = Notification.query.filter_by(
+            recipient_id=recipient_id,
+            read_at=None,
+        ).count()
         wp_pending = db.session.info.setdefault('webpush_pending', [])
         wp_pending.append({
             'user_id':       recipient_id,
@@ -115,6 +119,7 @@ def create_notification(recipient_id, notification_type, title,
             'body':          body or '',
             'link':          link or '/',
             'icon':          icon,
+            'unread_count':  unread_count,
             'subscriptions': [
                 {'id': s.id, 'endpoint': s.endpoint, 'p256dh': s.p256dh, 'auth': s.auth}
                 for s in subs
