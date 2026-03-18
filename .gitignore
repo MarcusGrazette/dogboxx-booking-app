@@ -10,3 +10,4 @@ flask_session/
 /app/seed_db
 /seed_datalogs/
 *.log
+.DS_Store
