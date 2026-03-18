@@ -8,4 +8,4 @@ flask_session/
 /app/static/images
 /app/static/icons
 /app/seed_db
-/seed_data
+/seed_datalogs/
