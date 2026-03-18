@@ -14,6 +14,7 @@ from app import db
 from app.capacity import get_max_per_walker, get_walker_slot_count
 from app.utils.db_error_handler import handle_db_errors
 from app.forms import ClientCreateForm, WalkerCreateForm, WalkerScheduleForm
+from app.utils.uploads import process_dog_photo
 from datetime import datetime, timezone, timedelta
 from werkzeug.security import generate_password_hash
 import secrets
@@ -832,8 +833,10 @@ def clients():
 @login_required
 @admin_required
 def client_detail(client_id):
-    """Show client detail with notification audit trail (admin only)"""
+    """Show client detail with dog info and notification audit trail (admin only)"""
     user = User.query.filter(User.role == 'client', User.id == client_id).first_or_404()
+    dog_owner = DogOwner.query.filter_by(user_id=user.id, role='primary').first()
+    dog = Dog.query.get(dog_owner.dog_id) if dog_owner else None
     notifications = (
         Notification.query
         .filter_by(recipient_id=user.id)
@@ -841,52 +844,97 @@ def client_detail(client_id):
         .limit(20)
         .all()
     )
-    return render_template("admin_client_detail.html", client=user, notifications=notifications)
+    return render_template("admin_client_detail.html", client=user, dog=dog, notifications=notifications)
 
 
 @admin_bp.route("/clients/new", methods=["GET", "POST"])
 @login_required
 @admin_required
 def new_client():
-    """Form to add a new client (admin only)"""
+    """Create a new client account with full details (admin only).
+
+    The admin can fill in address, pickup notes, and dog info upfront so that
+    the client sees their profile (and any pre-created bookings) the moment
+    they first log in.  Onboarding is marked complete automatically when both
+    address and dog info are provided; otherwise the client will still be
+    prompted to complete the remaining steps on first login.
+    """
     form = ClientCreateForm()
-    
+
     if form.validate_on_submit():
         try:
-            # Check if user already exists
             existing_user = User.query.filter_by(email=form.email.data.lower()).first()
             if existing_user:
                 flash("A user with this email already exists.", "error")
-                return render_template("admin_client_form.html", form=form, title="Add New Client")
-            
-            # Generate temporary password
+                return render_template("admin_client_form.html", form=form, title="Add New Client", is_edit=False)
+
             temp_password = secrets.token_urlsafe(12)
-            
-            # Create User record
+
             user = User(
                 firstname=form.firstname.data.strip().title(),
                 lastname=form.lastname.data.strip().title(),
                 email=form.email.data.strip().lower(),
                 role='client',
                 hashed_password=generate_password_hash(temp_password),
-                must_change_password=True
+                must_change_password=True,
             )
-            
+            if form.notify_email.data and form.notify_whatsapp.data:
+                user.notification_preference = 'both'
+            elif form.notify_whatsapp.data:
+                user.notification_preference = 'whatsapp'
+            else:
+                user.notification_preference = 'email'
+            user.phone = form.phone.data.strip() if form.phone.data else None
+
             db.session.add(user)
-            db.session.flush()  # Get user.id
-            
-            # Create Client record
+            db.session.flush()  # get user.id
+
+            # Build Client record
             client = Client(user_id=user.id)
+            has_address = bool(form.address_line_1.data and form.address_line_1.data.strip())
+            if has_address:
+                client.street_address = form.address_line_1.data.strip()
+                if form.address_line_2.data and form.address_line_2.data.strip():
+                    client.street_address += '\n' + form.address_line_2.data.strip()
+                if form.address_line_3.data and form.address_line_3.data.strip():
+                    client.street_address += '\n' + form.address_line_3.data.strip()
+                client.postal_code = form.postcode.data.strip() if form.postcode.data else None
+            client.pickup_instructions = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
+            client.maps_url = form.maps_url.data.strip() if form.maps_url.data else None
             db.session.add(client)
-            
+            db.session.flush()  # get client.id
+
+            # Create Dog record if core dog fields are present
+            has_dog = bool(form.dog_name.data and form.dog_gender.data and form.dog_dob.data)
+            if has_dog:
+                new_dog = Dog(
+                    name=form.dog_name.data.strip(),
+                    gender=form.dog_gender.data,
+                    breed=form.dog_breed.data.strip() if form.dog_breed.data else "",
+                    allergies=form.dog_allergies.data.strip() if form.dog_allergies.data else "",
+                    date_of_birth=form.dog_dob.data,
+                )
+                db.session.add(new_dog)
+                db.session.flush()
+                db.session.add(DogOwner(dog_id=new_dog.id, user_id=user.id, role='primary'))
+
+            # Mark onboarding complete when the admin has provided everything
+            if has_address and has_dog:
+                client.onboarding_completed = True
+                client.onboarding_completed_at = datetime.now(timezone.utc)
+
             db.session.commit()
-            
-            # TODO: Send welcome email with temp password
-            logging.info(f"Admin {current_user.id} created client account for {user.email}")
-            flash(f"Client account created successfully. Temporary password: {temp_password}", "success")
-            
-            return redirect(url_for('admin.clients'))
-            
+
+            logging.info(f"Admin {current_user.id} created client account for {user.email} "
+                         f"(address={'yes' if has_address else 'no'}, dog={'yes' if has_dog else 'no'})")
+
+            flash(
+                f"Client account created. "
+                f"Temporary password: <strong>{temp_password}</strong> — share this with {user.firstname}.",
+                "success"
+            )
+            return redirect(url_for('admin.client_detail', client_id=user.id))
+
         except IntegrityError as e:
             db.session.rollback()
             logging.error(f"IntegrityError creating client: {e}")
@@ -895,8 +943,123 @@ def new_client():
             db.session.rollback()
             logging.error(f"Error creating client: {e}")
             flash("An error occurred while creating the client.", "error")
-    
-    return render_template("admin_client_form.html", form=form, title="Add New Client")
+
+    return render_template("admin_client_form.html", form=form, title="Add New Client", is_edit=False)
+
+
+@admin_bp.route("/clients/<int:client_id>/edit", methods=["GET", "POST"])
+@login_required
+@admin_required
+def edit_client(client_id):
+    """Edit an existing client's details (admin only).
+
+    Updates name, address, pickup notes, notification preferences, and dog
+    info.  Will create a dog record if one doesn't exist yet.  Marks
+    onboarding complete automatically when address + dog are both present.
+    """
+    user = User.query.filter(User.role == 'client', User.id == client_id).first_or_404()
+    client = Client.query.filter_by(user_id=user.id).first()
+    dog_owner = DogOwner.query.filter_by(user_id=user.id, role='primary').first()
+    dog = Dog.query.get(dog_owner.dog_id) if dog_owner else None
+
+    form = ClientCreateForm()
+
+    if form.validate_on_submit():
+        try:
+            user.firstname = form.firstname.data.strip().title()
+            user.lastname = form.lastname.data.strip().title()
+
+            if form.notify_email.data and form.notify_whatsapp.data:
+                user.notification_preference = 'both'
+            elif form.notify_whatsapp.data:
+                user.notification_preference = 'whatsapp'
+            else:
+                user.notification_preference = 'email'
+            user.phone = form.phone.data.strip() if form.phone.data else None
+
+            if not client:
+                client = Client(user_id=user.id)
+                db.session.add(client)
+
+            has_address = bool(form.address_line_1.data and form.address_line_1.data.strip())
+            if has_address:
+                client.street_address = form.address_line_1.data.strip()
+                if form.address_line_2.data and form.address_line_2.data.strip():
+                    client.street_address += '\n' + form.address_line_2.data.strip()
+                if form.address_line_3.data and form.address_line_3.data.strip():
+                    client.street_address += '\n' + form.address_line_3.data.strip()
+                client.postal_code = form.postcode.data.strip() if form.postcode.data else None
+            else:
+                client.street_address = None
+                client.postal_code = None
+            client.pickup_instructions = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
+            client.maps_url = form.maps_url.data.strip() if form.maps_url.data else None
+
+            has_dog = bool(form.dog_name.data and form.dog_gender.data and form.dog_dob.data)
+            if has_dog:
+                if dog:
+                    dog.name = form.dog_name.data.strip()
+                    dog.gender = form.dog_gender.data
+                    dog.breed = form.dog_breed.data.strip() if form.dog_breed.data else ""
+                    dog.allergies = form.dog_allergies.data.strip() if form.dog_allergies.data else ""
+                    dog.date_of_birth = form.dog_dob.data
+                else:
+                    new_dog = Dog(
+                        name=form.dog_name.data.strip(),
+                        gender=form.dog_gender.data,
+                        breed=form.dog_breed.data.strip() if form.dog_breed.data else "",
+                        allergies=form.dog_allergies.data.strip() if form.dog_allergies.data else "",
+                        date_of_birth=form.dog_dob.data,
+                    )
+                    db.session.add(new_dog)
+                    db.session.flush()
+                    db.session.add(DogOwner(dog_id=new_dog.id, user_id=user.id, role='primary'))
+
+            # Auto-complete onboarding when we now have the full picture
+            if has_address and has_dog and not client.onboarding_completed:
+                client.onboarding_completed = True
+                client.onboarding_completed_at = datetime.now(timezone.utc)
+
+            db.session.commit()
+            flash("Client details updated successfully.", "success")
+            return redirect(url_for('admin.client_detail', client_id=user.id))
+
+        except Exception as e:
+            db.session.rollback()
+            logging.error(f"Error editing client {client_id}: {e}")
+            flash("An error occurred while saving changes.", "error")
+
+    elif request.method == 'GET':
+        form.firstname.data = user.firstname
+        form.lastname.data = user.lastname
+        form.phone.data = user.phone
+        form.notify_email.data = (user.notification_preference or 'email') in ('email', 'both')
+        form.notify_whatsapp.data = (user.notification_preference or '') in ('whatsapp', 'both')
+
+        if client:
+            if client.street_address:
+                lines = client.street_address.split('\n')
+                form.address_line_1.data = lines[0] if len(lines) > 0 else ''
+                form.address_line_2.data = lines[1] if len(lines) > 1 else ''
+                form.address_line_3.data = lines[2] if len(lines) > 2 else ''
+            form.postcode.data = client.postal_code
+            form.pickup_instructions.data = client.pickup_instructions
+            form.maps_url.data = client.maps_url
+
+        if dog:
+            form.dog_name.data = dog.name
+            form.dog_gender.data = dog.gender
+            form.dog_breed.data = dog.breed
+            form.dog_dob.data = dog.date_of_birth
+            form.dog_allergies.data = dog.allergies
+
+    return render_template(
+        "admin_client_form.html",
+        form=form,
+        title=f"Edit {user.full_name}",
+        is_edit=True,
+        client_user=user,
+    )
 
 
 @admin_bp.route("/clients/<int:client_id>/deactivate", methods=["POST"])

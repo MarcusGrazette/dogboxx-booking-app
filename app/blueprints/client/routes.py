@@ -312,20 +312,31 @@ def profile():
 @client_bp.route("/onboard", methods=["GET", "POST"])
 @login_required
 def onboard():
-    """Handle complete user onboarding process"""
+    """Handle client onboarding.
+
+    If the admin has already filled in address + dog info, onboarding_completed
+    will already be True and this route redirects away immediately.  Otherwise
+    the client fills in whatever the admin left blank.
+
+    If the admin created a dog record during account setup, we update that
+    existing dog rather than creating a duplicate.
+    """
     if current_user.role != 'client':
         flash("Onboarding is only required for clients.", "info")
         return redirect(url_for('client.index'))
 
     client = Client.query.filter_by(user_id=current_user.id).first()
     if client and client.onboarding_completed:
-        flash("You have already completed onboarding!", "info")
         return redirect(url_for('client.index'))
 
+    # Check for a dog already created by the admin
+    existing_dog_owner = DogOwner.query.filter_by(user_id=current_user.id, role='primary').first()
+    existing_dog = Dog.query.get(existing_dog_owner.dog_id) if existing_dog_owner else None
+
     form = OnboardingForm()
+
     if form.validate_on_submit():
         try:
-            # Step 1: Address information
             if not client:
                 client = Client(user_id=current_user.id)
                 db.session.add(client)
@@ -337,9 +348,7 @@ def onboard():
             if form.address_line_3.data:
                 client.street_address += '\n' + form.address_line_3.data.strip()
             client.postal_code = form.postcode.data.strip()
-
-            pickup_instructions = form.pickup_instructions.data.strip()
-            client.pickup_instructions = pickup_instructions
+            client.pickup_instructions = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
             client.maps_url = form.maps_url.data.strip() if form.maps_url.data else None
             client.onboarding_completed = True
             client.onboarding_completed_at = datetime.now(timezone.utc)
@@ -353,13 +362,6 @@ def onboard():
             else:
                 current_user.notification_preference = 'email'
 
-            # Step 2: Dog information
-            dog_name = form.dog_name.data.strip()
-            dog_gender = form.dog_gender.data.strip()
-            dog_dob = form.dog_dob.data
-            dog_breed = form.dog_breed.data.strip() if form.dog_breed.data else ""
-            dog_allergies = form.dog_allergies.data.strip() if form.dog_allergies.data else ""
-
             # Handle file upload
             pic_filename = None
             if 'file' in request.files:
@@ -368,33 +370,40 @@ def onboard():
                 except ValueError as e:
                     logging.error(f"Invalid file upload: {e}")
                     flash(f"Upload error: {str(e)}. Please try a different file.", "error")
-                    return render_template("onboarding.html", form=form, today=datetime.now().strftime('%Y-%m-%d'))
+                    return render_template("onboarding.html", form=form, existing_dog=existing_dog, today=datetime.now().strftime('%Y-%m-%d'))
                 except Exception as e:
                     logging.error(f"Error processing uploaded file: {e}")
                     flash("There was an error processing your image. Please try a different file.", "error")
-                    return render_template("onboarding.html", form=form, today=datetime.now().strftime('%Y-%m-%d'))
+                    return render_template("onboarding.html", form=form, existing_dog=existing_dog, today=datetime.now().strftime('%Y-%m-%d'))
 
-            # Create dog record
-            new_dog = Dog(
-                name=dog_name,
-                gender=dog_gender,
-                breed=dog_breed,
-                allergies=dog_allergies,
-                date_of_birth=dog_dob,
-                pic=pic_filename
-            )
-            db.session.add(new_dog)
-            db.session.flush()  # Get new_dog.id
-            
-            # Create DogOwner relationship (user is primary owner)
-            dog_owner = DogOwner(
-                dog_id=new_dog.id,
-                user_id=current_user.id,
-                role='primary'
-            )
-            db.session.add(dog_owner)
-            
-            # Commit all changes together
+            # Dog: update existing record if admin already created one, else create fresh
+            dog_name = form.dog_name.data.strip()
+            dog_gender = form.dog_gender.data.strip()
+            dog_dob = form.dog_dob.data
+            dog_breed = form.dog_breed.data.strip() if form.dog_breed.data else ""
+            dog_allergies = form.dog_allergies.data.strip() if form.dog_allergies.data else ""
+
+            if existing_dog:
+                existing_dog.name = dog_name
+                existing_dog.gender = dog_gender
+                existing_dog.breed = dog_breed
+                existing_dog.allergies = dog_allergies
+                existing_dog.date_of_birth = dog_dob
+                if pic_filename:
+                    existing_dog.pic = pic_filename
+            else:
+                new_dog = Dog(
+                    name=dog_name,
+                    gender=dog_gender,
+                    breed=dog_breed,
+                    allergies=dog_allergies,
+                    date_of_birth=dog_dob,
+                    pic=pic_filename,
+                )
+                db.session.add(new_dog)
+                db.session.flush()
+                db.session.add(DogOwner(dog_id=new_dog.id, user_id=current_user.id, role='primary'))
+
             db.session.commit()
 
             flash(f"Welcome to our platform, {current_user.firstname}! Your profile is now complete.", "success")
@@ -404,8 +413,7 @@ def onboard():
             db.session.rollback()
             logging.error(f"Error during onboarding for user {current_user.email}: {e}")
             logging.debug(f"Exception details: {traceback.format_exc()}")
-            
-            # Check for specific error types
+
             if isinstance(e, SQLAlchemyError):
                 if isinstance(e, IntegrityError):
                     flash("There was a conflict with existing data. This might be because the information already exists in our system.", "error")
@@ -416,7 +424,29 @@ def onboard():
             else:
                 flash("There was an error saving your information. Please try again.", "error")
 
-    return render_template("onboarding.html", form=form, today=datetime.now().strftime('%Y-%m-%d'))
+    elif request.method == 'GET':
+        # Pre-fill anything the admin already entered — address and/or dog
+        if client:
+            if client.street_address:
+                lines = client.street_address.split('\n')
+                form.address_line_1.data = lines[0] if len(lines) > 0 else ''
+                form.address_line_2.data = lines[1] if len(lines) > 1 else ''
+                form.address_line_3.data = lines[2] if len(lines) > 2 else ''
+            form.postcode.data = client.postal_code
+            form.pickup_instructions.data = client.pickup_instructions
+            form.maps_url.data = client.maps_url
+        if current_user.phone:
+            form.phone.data = current_user.phone
+        form.notify_email.data = (current_user.notification_preference or 'email') in ('email', 'both')
+        form.notify_whatsapp.data = (current_user.notification_preference or '') in ('whatsapp', 'both')
+        if existing_dog:
+            form.dog_name.data = existing_dog.name
+            form.dog_gender.data = existing_dog.gender
+            form.dog_breed.data = existing_dog.breed
+            form.dog_dob.data = existing_dog.date_of_birth
+            form.dog_allergies.data = existing_dog.allergies
+
+    return render_template("onboarding.html", form=form, existing_dog=existing_dog, today=datetime.now().strftime('%Y-%m-%d'))
 
 
 @client_bp.route("/cancel_booking", methods=["POST"])

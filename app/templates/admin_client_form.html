@@ -1,65 +1,257 @@
 {% extends "admin_layout.html" %}
 
 {% block title %}{{ title }}{% endblock %}
-
 {% block page_title %}{{ title }}{% endblock %}
 {% block page_subtitle %}{% endblock %}
 
 {% block page_actions %}
+    {% if is_edit %}
+    <a href="{{ url_for('admin.client_detail', client_id=client_user.id) }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Client
+    </a>
+    {% else %}
     <a href="{{ url_for('admin.clients') }}" class="btn btn-outline-secondary">
         <i class="bi bi-arrow-left"></i> Back to Clients
     </a>
+    {% endif %}
 {% endblock %}
 
 {% block main %}
-    <div class="row justify-content-center">
-        <div class="col-12 col-md-8 col-lg-6">
-            <div class="card">
-                <div class="card-body">
-                    <form method="post" novalidate>
-                        {{ form.hidden_tag() }}
+<div class="row justify-content-center">
+    <div class="col-12 col-lg-8">
 
-                        <div class="mb-4">
-                            <div class="input-group">
-                                <span class="input-group-text">
-                                    <i class="bi bi-person fs-5 text-secondary"></i>
-                                </span>
-                                {{ form.firstname(autocomplete="given-name", class="form-control", placeholder="First name") }}
-                                {{ form.lastname(autocomplete="family-name", class="form-control", placeholder="Last name") }}
-                            </div>
+        <form method="post" novalidate enctype="multipart/form-data">
+            {{ form.hidden_tag() }}
+
+            {# ── Section 1: Account Details ─────────────────────────────────── #}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-person me-2"></i>Account Details</h5>
+                </div>
+                <div class="card-body">
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold small">First Name <span class="text-danger">*</span></label>
+                            {{ form.firstname(class="form-control", placeholder="First name", autocomplete="given-name") }}
                             {% for error in form.firstname.errors %}
                             <div class="text-danger small mt-1">{{ error }}</div>
                             {% endfor %}
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold small">Last Name <span class="text-danger">*</span></label>
+                            {{ form.lastname(class="form-control", placeholder="Last name", autocomplete="family-name") }}
                             {% for error in form.lastname.errors %}
                             <div class="text-danger small mt-1">{{ error }}</div>
                             {% endfor %}
                         </div>
+                    </div>
 
-                        <div class="mb-4">
-                            <div class="input-group">
-                                <span class="input-group-text">
-                                    <i class="bi bi-envelope-at-fill fs-5 text-secondary"></i>
-                                </span>
-                                {{ form.email(autocomplete="email", class="form-control", placeholder="Email") }}
-                            </div>
-                            {% for error in form.email.errors %}
-                            <div class="text-danger small mt-1">{{ error }}</div>
-                            {% endfor %}
+                    {% if is_edit %}
+                    {# Email is immutable — show read-only #}
+                    <div class="mb-1">
+                        <label class="form-label fw-semibold small">Email</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-envelope text-secondary"></i></span>
+                            <input type="email" class="form-control bg-light" value="{{ client_user.email }}" disabled>
                         </div>
+                        <div class="form-text">Email cannot be changed here.</div>
+                    </div>
+                    {% else %}
+                    <div class="mb-1">
+                        <label class="form-label fw-semibold small">Email <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-envelope text-secondary"></i></span>
+                            {{ form.email(class="form-control", placeholder="client@example.com", autocomplete="email") }}
+                        </div>
+                        {% for error in form.email.errors %}
+                        <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
 
-                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                            <a href="{{ url_for('admin.clients') }}" class="btn btn-outline-secondary me-md-2">Cancel</a>
-                            {{ form.submit(class="btn btn-primary") }}
-                        </div>
-                    </form>
                 </div>
             </div>
 
-            <div class="alert alert-info mt-3">
-                <i class="bi bi-info-circle"></i>
-                <strong>Note:</strong> A temporary password will be generated and displayed after account creation.
-                The client will be required to change their password on first login.
+            {# ── Section 2: Address & Access ────────────────────────────────── #}
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-geo-alt me-2"></i>Address &amp; Access</h5>
+                    <span class="badge bg-secondary fw-normal">Optional</span>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-3">Fill this in so walkers have the client's address and pickup instructions from day one.</p>
+
+                    <div class="mb-2">
+                        <label class="form-label fw-semibold small">Street address</label>
+                        <div class="input-group mb-2">
+                            <span class="input-group-text"><i class="bi bi-house-door text-secondary"></i></span>
+                            {{ form.address_line_1(class="form-control") }}
+                        </div>
+                        {% for error in form.address_line_1.errors %}
+                        <div class="text-danger small mb-1">{{ error }}</div>
+                        {% endfor %}
+                        {{ form.address_line_2(class="form-control mb-2") }}
+                        {{ form.address_line_3(class="form-control mb-2") }}
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-mailbox text-secondary"></i></span>
+                            {{ form.postcode(class="form-control") }}
+                        </div>
+                        {% for error in form.postcode.errors %}
+                        <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="mb-3 mt-3">
+                        <label class="form-label fw-semibold small">Access instructions</label>
+                        {{ form.pickup_instructions(class="form-control") }}
+                        {% for error in form.pickup_instructions.errors %}
+                        <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
+                        <div class="form-text">Door codes, concierge notes, fiddly keys, or special pickup/drop-off instructions.</div>
+                    </div>
+
+                    <div class="mb-1">
+                        <label class="form-label fw-semibold small">Google Maps pin URL</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-pin-map text-secondary"></i></span>
+                            {{ form.maps_url(class="form-control") }}
+                        </div>
+                        {% for error in form.maps_url.errors %}
+                        <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
+                        <div class="form-text">Share the exact front door pin — helps walkers who are new to the area.</div>
+                    </div>
+
+                </div>
             </div>
-        </div>
+
+            {# ── Section 3: Contact & Notifications ─────────────────────────── #}
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-bell me-2"></i>Contact &amp; Notifications</h5>
+                    <span class="badge bg-secondary fw-normal">Optional</span>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Phone number</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-phone text-secondary"></i></span>
+                            {{ form.phone(class="form-control") }}
+                        </div>
+                        {% for error in form.phone.errors %}
+                        <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <label class="form-label fw-semibold small">Notification preferences</label>
+                    <div class="form-check mb-2">
+                        {{ form.notify_email(class="form-check-input", id="notify_email") }}
+                        <label class="form-check-label" for="notify_email">
+                            <i class="bi bi-envelope me-1"></i> Email
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        {{ form.notify_whatsapp(class="form-check-input", id="notify_whatsapp") }}
+                        <label class="form-check-label" for="notify_whatsapp">
+                            <i class="bi bi-whatsapp me-1"></i> WhatsApp
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            {# ── Section 4: Dog Info ─────────────────────────────────────────── #}
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-heart me-2"></i>Dog Info</h5>
+                    <span class="badge bg-secondary fw-normal">Optional</span>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-3">
+                        Add the dog's details now and they'll be there when the client first logs in.
+                        If you leave this blank the client will add it during onboarding.
+                        Name, gender, and date of birth are all required together.
+                    </p>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
+                            <label class="form-label fw-semibold small">Name</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-tag text-secondary"></i></span>
+                                {{ form.dog_name(class="form-control", placeholder="e.g. Biscuit") }}
+                            </div>
+                            {% for error in form.dog_name.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label fw-semibold small">Gender</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-gender-ambiguous text-secondary"></i></span>
+                                {{ form.dog_gender(class="form-select") }}
+                            </div>
+                            {% for error in form.dog_gender.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
+                            <label class="form-label fw-semibold small">Breed</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-heart text-secondary"></i></span>
+                                {{ form.dog_breed(class="form-control", placeholder="e.g. Labrador") }}
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label fw-semibold small">Date of birth</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-calendar-heart text-secondary"></i></span>
+                                {{ form.dog_dob(class="form-control", type="date") }}
+                            </div>
+                            {% for error in form.dog_dob.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                            {% endfor %}
+                            <div class="form-text">Approximate is fine.</div>
+                        </div>
+                    </div>
+
+                    <div class="mb-1">
+                        <label class="form-label fw-semibold small">Allergies / health notes</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-bandaid text-secondary"></i></span>
+                            {{ form.dog_allergies(class="form-control") }}
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            {# ── Onboarding status hint ──────────────────────────────────────── #}
+            <div class="alert alert-info mb-4">
+                <i class="bi bi-info-circle me-1"></i>
+                {% if is_edit %}
+                    Onboarding is marked <strong>complete</strong> automatically once both address and dog info are saved.
+                    The client will skip the onboarding step when they next log in.
+                {% else %}
+                    Fill in address <em>and</em> dog info to complete onboarding on the client's behalf —
+                    they'll land straight on their booking page. Leave either blank and they'll be prompted
+                    to complete the missing details on first login.
+                    <br>A temporary password will be shown after saving.
+                {% endif %}
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mb-5">
+                {% if is_edit %}
+                <a href="{{ url_for('admin.client_detail', client_id=client_user.id) }}" class="btn btn-outline-secondary">Cancel</a>
+                {% else %}
+                <a href="{{ url_for('admin.clients') }}" class="btn btn-outline-secondary">Cancel</a>
+                {% endif %}
+                {{ form.submit(class="btn btn-primary fw-semibold px-4") }}
+            </div>
+
+        </form>
     </div>
+</div>
 {% endblock %}

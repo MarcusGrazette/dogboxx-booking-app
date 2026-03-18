@@ -84,6 +84,27 @@
                 View all notifications →
             </a>
         </div>
+
+        {# iOS push hint — shown/hidden by JS depending on device state #}
+
+        {# Shown on iOS Safari browser (not installed) #}
+        <div id="ios-install-hint" class="d-none px-3 py-2 text-center"
+             style="border-top:1px solid #e8e0e6; background:#fff8fd;">
+            <span class="small text-muted">
+                <i class="bi bi-box-arrow-up me-1" style="color:#E02FAC;"></i>
+                Add to Home Screen to enable push notifications
+            </span>
+        </div>
+
+        {# Shown on iOS PWA (installed, permission not yet granted) #}
+        <div id="ios-push-enable" class="d-none px-3 py-2 text-center"
+             style="border-top:1px solid #e8e0e6; background:#fff8fd;">
+            <button id="ios-push-btn" type="button"
+                    class="btn btn-sm w-100"
+                    style="background:#E02FAC; color:#fff; font-size:0.78rem;">
+                <i class="bi bi-bell me-1"></i>Enable push notifications
+            </button>
+        </div>
     </div>
 </div>
 
@@ -111,6 +132,22 @@
 
 <script>
 (function() {
+    // ── App badge (via SW postMessage — iOS only honours badge API from SW) ──
+    //
+    // Uses serviceWorker.ready + reg.active instead of controller, because
+    // controller is null until the SW has taken control of this specific page
+    // (requires a page reload after first SW install, unless SW calls clients.claim()).
+    // reg.active is available as soon as the SW is activated, which is immediate
+    // when skipWaiting + clients.claim() are both present in the SW.
+    function syncAppBadge(count) {
+        if (!('serviceWorker' in navigator)) return;
+        navigator.serviceWorker.ready.then(function (reg) {
+            if (reg.active) {
+                reg.active.postMessage({ type: 'SET_BADGE', count: count });
+            }
+        }).catch(function () {});
+    }
+
     // ── Relative timestamps ────────────────────────────────────────────────
     function formatRelTime(isoString) {
         // Normalise to Z suffix — handles both naive ('...123456') and aware ('...+00:00') formats
@@ -180,8 +217,12 @@
         const badge = document.getElementById('notif-badge');
         if (!badge) return;
         const next = Math.max(0, (parseInt(badge.textContent) || 0) - n);
-        if (next <= 0) badge.classList.add('d-none');
-        else badge.textContent = next > 99 ? '99+' : next;
+        if (next <= 0) {
+            badge.classList.add('d-none');
+        } else {
+            badge.textContent = next > 99 ? '99+' : next;
+        }
+        syncAppBadge(next);
     }
 
     function incrementBadge(n) {
@@ -190,6 +231,7 @@
         const next = (parseInt(badge.textContent) || 0) + n;
         badge.textContent = next > 99 ? '99+' : next;
         badge.classList.remove('d-none');
+        syncAppBadge(next);
     }
 
     function applyReadAll() {
@@ -206,6 +248,8 @@
         if (headerBadge) headerBadge.remove();
         const btn = document.getElementById('mark-all-read-btn');
         if (btn) btn.remove();
+        // Clear the PWA home screen badge
+        syncAppBadge(0);
     }
 
     // ── SSE: real-time updates ────────────────────────────────────────────
@@ -307,5 +351,164 @@
     }
 
     connectSSE();
+
+    // ── Web Push registration ────────────────────────────────────────────────
+    //
+    // iOS Safari has two hard requirements desktop browsers don't have:
+    //   1. The app must be installed as a PWA (Add to Home Screen).
+    //      PushManager is undefined in the Safari browser — only available
+    //      in standalone (home screen) mode.
+    //   2. Notification.requestPermission() must be called from a user gesture
+    //      (tap/click). Calling it on page load is silently ignored on iOS.
+    //
+    // Strategy:
+    //   • iOS browser (not installed) → show "Add to Home Screen" hint
+    //   • iOS PWA (installed, permission not yet granted) → show button; register on tap
+    //   • Everything else → auto-register on page load (works fine)
+
+    const VAPID_PUBLIC_KEY = {{ vapid_public_key | tojson }};
+    const _csrfToken   = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+
+    const _isIOS       = /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const _isStandalone = (window.navigator.standalone === true)
+                       || window.matchMedia('(display-mode: standalone)').matches;
+
+    function urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64  = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const raw     = atob(base64);
+        return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+    }
+
+    async function registerWebPush() {
+        if (!VAPID_PUBLIC_KEY)               return;  // not configured server-side
+        if (!('serviceWorker' in navigator)) return;  // browser too old
+        if (!('PushManager'   in window))    return;  // push not supported (iOS browser)
+
+        try {
+            const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+            await navigator.serviceWorker.ready;
+
+            if (Notification.permission === 'denied') return;
+
+            if (Notification.permission !== 'granted') {
+                const perm = await Notification.requestPermission();
+                if (perm !== 'granted') return;
+            }
+
+            // Hide the iOS enable button if permission already granted
+            const enableDiv = document.getElementById('ios-push-enable');
+            if (enableDiv) enableDiv.classList.add('d-none');
+
+            let sub = await reg.pushManager.getSubscription();
+            if (!sub) {
+                sub = await reg.pushManager.subscribe({
+                    userVisibleOnly:      true,
+                    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+                });
+            }
+
+            await fetch('/notifications/push-subscribe', {
+                method:  'POST',
+                headers: {
+                    'Content-Type':     'application/json',
+                    'X-CSRFToken':      _csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify(sub.toJSON()),
+            });
+
+        } catch (err) {
+            console.debug('[push] registration skipped:', err.message);
+        }
+    }
+
+    // ── iOS UI hints ──────────────────────────────────────────────────────────
+    function setupIOSHints() {
+        if (!_isIOS) return;
+
+        if (!_isStandalone) {
+            // Running in Safari browser — push is not available at all.
+            // Show the "Add to Home Screen" hint.
+            const hint = document.getElementById('ios-install-hint');
+            if (hint) hint.classList.remove('d-none');
+            return;
+        }
+
+        // Installed as PWA — push IS available, but needs a user gesture.
+        if (!('PushManager' in window)) return;  // shouldn't happen but guard anyway
+        if (Notification.permission === 'granted') return;  // already set up
+        if (Notification.permission === 'denied')  return;  // user said no
+
+        // Show the enable button
+        const enableDiv = document.getElementById('ios-push-enable');
+        const enableBtn = document.getElementById('ios-push-btn');
+        if (enableDiv) enableDiv.classList.remove('d-none');
+
+        if (enableBtn) {
+            enableBtn.addEventListener('click', async function () {
+                enableBtn.disabled = true;
+                enableBtn.textContent = 'Enabling…';
+
+                // iOS REQUIRES requestPermission() to be called as the FIRST await
+                // in the gesture handler — no other async calls before this or iOS
+                // won't consider it user-initiated and will silently ignore it.
+                let perm;
+                try {
+                    perm = await Notification.requestPermission();
+                } catch (err) {
+                    console.debug('[push] requestPermission failed:', err.message);
+                    enableBtn.disabled = false;
+                    enableBtn.textContent = 'Enable push notifications';
+                    return;
+                }
+
+                if (perm !== 'granted') {
+                    // User denied — hide the button (no point showing it again)
+                    enableDiv.classList.add('d-none');
+                    return;
+                }
+
+                // Permission granted — now do SW registration and subscription
+                try {
+                    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+                    await navigator.serviceWorker.ready;
+
+                    let sub = await reg.pushManager.getSubscription();
+                    if (!sub) {
+                        sub = await reg.pushManager.subscribe({
+                            userVisibleOnly:      true,
+                            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+                        });
+                    }
+
+                    await fetch('/notifications/push-subscribe', {
+                        method:  'POST',
+                        headers: {
+                            'Content-Type':     'application/json',
+                            'X-CSRFToken':      _csrfToken,
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body: JSON.stringify(sub.toJSON()),
+                    });
+
+                    enableDiv.classList.add('d-none');
+
+                } catch (err) {
+                    console.debug('[push] iOS subscription error:', err.message);
+                    enableBtn.disabled = false;
+                    enableBtn.textContent = 'Enable push notifications';
+                }
+            });
+        }
+    }
+
+    setupIOSHints();
+
+    // Non-iOS: auto-register on page load as normal
+    if (!_isIOS) {
+        registerWebPush();
+    }
+
 })();
 </script>

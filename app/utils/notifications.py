@@ -84,21 +84,47 @@ def create_notification(recipient_id, notification_type, title,
 
     # Queue SSE event — fires in the after_commit hook (app/__init__.py)
     icon, colour = get_meta(notification_type)
+    event_data = {
+        'id': notif.id,
+        'type': notification_type,
+        'title': title,
+        'body': body or '',
+        'link': link or '',
+        'icon': icon,
+        'colour': colour,
+        'created_at': notif.created_at.strftime('%Y-%m-%dT%H:%M:%S') + 'Z',
+    }
+
     pending = db.session.info.setdefault('sse_pending', [])
     pending.append({
         'user_id': recipient_id,
         'event': 'notification',
-        'data': {
-            'id': notif.id,
-            'type': notification_type,
-            'title': title,
-            'body': body or '',
-            'link': link or '',
-            'icon': icon,
-            'colour': colour,
-            'created_at': notif.created_at.strftime('%Y-%m-%dT%H:%M:%S') + 'Z',
-        },
+        'data': event_data,
     })
+
+    # Queue Web Push event — fires in the same after_commit hook.
+    # Subscriptions and unread count are fetched NOW (session still active)
+    # so send_web_push() doesn't need to query the DB from inside the hook.
+    from app.models import PushSubscription
+    subs = PushSubscription.query.filter_by(user_id=recipient_id).all()
+    if subs:
+        unread_count = Notification.query.filter_by(
+            recipient_id=recipient_id,
+            read_at=None,
+        ).count()
+        wp_pending = db.session.info.setdefault('webpush_pending', [])
+        wp_pending.append({
+            'user_id':       recipient_id,
+            'title':         title,
+            'body':          body or '',
+            'link':          link or '/',
+            'icon':          icon,
+            'unread_count':  unread_count,
+            'subscriptions': [
+                {'id': s.id, 'endpoint': s.endpoint, 'p256dh': s.p256dh, 'auth': s.auth}
+                for s in subs
+            ],
+        })
 
     return notif
 
