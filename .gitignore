@@ -9,3 +9,4 @@ flask_session/
 /app/static/icons
 /app/seed_db
 /seed_datalogs/
+*.log
