@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from app.models import User, Client, Dog, Booking, DogOwner, ServiceType, Walker
 from app import db
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
-from app.utils.uploads import process_dog_photo
+from app.utils.uploads import process_dog_photo, process_cropped_photo
 from app.capacity import check_availability, get_slot_availability_summary
 from app.forms import OnboardingForm, BookingForm, ProfileForm
 import logging
@@ -47,7 +47,7 @@ def index():
     ).filter(
         Booking.user_id == current_user.id,
         Booking.status != 'cancelled',
-        Booking.date > today
+        Booking.date >= today
     ).order_by(Booking.date.asc())
 
     upcoming_bookings = list(upcoming_bookings_query)
@@ -307,6 +307,42 @@ def profile():
             form.dog_allergies.data = dog.allergies
 
     return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, today=datetime.now().strftime('%Y-%m-%d'))
+
+
+@client_bp.route("/profile/upload-dog-photo", methods=["POST"])
+@login_required
+def upload_dog_photo():
+    """AJAX endpoint: accept a cropped image blob and save it as the dog's photo.
+
+    Expects a multipart POST with a 'file' field containing the canvas blob
+    from Cropper.js. Returns JSON {success, url} or {success, error}.
+    """
+    dog_owner = DogOwner.query.filter_by(user_id=current_user.id, role='primary').first()
+    dog = Dog.query.get(dog_owner.dog_id) if dog_owner else None
+    if not dog:
+        return jsonify(success=False, error="Dog profile not found"), 404
+
+    if 'file' not in request.files:
+        return jsonify(success=False, error="No file provided"), 400
+
+    try:
+        filename = process_cropped_photo(request.files['file'])
+        if not filename:
+            return jsonify(success=False, error="Empty file"), 400
+
+        dog.pic = filename
+        db.session.commit()
+
+        url = url_for('static', filename=f'uploads/dogs/{filename}')
+        logging.info(f"Dog photo updated for client {current_user.email}: {filename}")
+        return jsonify(success=True, url=url)
+
+    except ValueError as e:
+        return jsonify(success=False, error=str(e)), 400
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error saving cropped dog photo for {current_user.email}: {e}")
+        return jsonify(success=False, error="Server error saving photo"), 500
 
 
 @client_bp.route("/onboard", methods=["GET", "POST"])

@@ -1,5 +1,7 @@
 """Shared image upload processing utilities."""
 
+import base64
+import io
 import logging
 import os
 import uuid
@@ -11,6 +13,7 @@ from werkzeug.utils import secure_filename
 
 ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif'}
 MAX_SIZE = (800, 800)
+CROPPED_SIZE = (400, 400)  # square output for cropper uploads
 
 
 def process_dog_photo(file_storage):
@@ -66,4 +69,54 @@ def process_dog_photo(file_storage):
     clean_img.save(upload_path, fmt, **kwargs)
 
     logging.info(f"Saved dog photo: {unique_filename}")
+    return unique_filename
+
+
+def process_cropped_photo(file_storage):
+    """Process and save a pre-cropped dog photo from a Cropper.js canvas blob.
+
+    The canvas always outputs a square JPEG blob with no EXIF metadata.
+    This function resizes to CROPPED_SIZE, converts RGBA→RGB if needed,
+    and saves as JPEG.
+
+    Args:
+        file_storage: A werkzeug FileStorage object (blob from canvas.toBlob).
+
+    Returns:
+        The saved filename (e.g. 'abc123.jpg'), or None if no file provided.
+
+    Raises:
+        ValueError: If the file is not a valid image.
+    """
+    if not file_storage:
+        return None
+
+    # Verify it's a real image
+    try:
+        img = Image.open(file_storage)
+        img.verify()
+        file_storage.seek(0)
+    except Exception:
+        raise ValueError("Invalid image file")
+
+    # Re-open (verify() closes the file)
+    img = Image.open(file_storage)
+
+    # Canvas may output RGBA — flatten onto a white background before saving JPEG
+    if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
+        background = Image.new('RGB', img.size, (27, 27, 27))  # #1B1B1B to match app theme
+        background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+        img = background
+    elif img.mode != 'RGB':
+        img = img.convert('RGB')
+
+    # Resize to square output size
+    img = img.resize(CROPPED_SIZE, Image.LANCZOS)
+
+    # Save as JPEG with a UUID filename
+    unique_filename = f"{uuid.uuid4()}.jpg"
+    upload_path = os.path.join(current_app.config["UPLOAD_FOLDER"], unique_filename)
+    img.save(upload_path, 'JPEG', quality=88, optimize=True)
+
+    logging.info(f"Saved cropped dog photo: {unique_filename}")
     return unique_filename
