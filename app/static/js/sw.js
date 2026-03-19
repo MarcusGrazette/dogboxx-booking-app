@@ -1,85 +1,236 @@
 /**
- * Dogboxx Service Worker — Web Push handler
+ * Dogboxx Service Worker
  *
  * Responsibilities:
- *   - Receive push events and show native OS notifications
- *   - Handle notification clicks → focus/open the app at the right URL
- *   - Double-notify guard: skip the OS notification if a Dogboxx tab is
- *     already focused (SSE is already delivering the update in real time)
+ *   1. App-shell caching — static assets served cache-first for fast PWA restores
+ *   2. HTML pages — network-first with cache fallback (graceful offline experience)
+ *   3. Web Push — receive push events and show OS notifications
+ *   4. Notification clicks — focus/open the app at the right URL
+ *   5. Badge updates — proxy setAppBadge/clearAppBadge from page context (iOS fix)
  *
- * Served from /sw.js (root scope) via a Flask route.
+ * Cache strategy summary:
+ *   /static/* + cdn.jsdelivr.net  →  cache-first  (assets rarely change)
+ *   text/html requests            →  network-first (dynamic, CSRF tokens)
+ *   POST / SSE / auth flows       →  never cached
+ *
+ * ⚠️  When deploying CSS/JS changes, bump CACHE_VERSION below.
+ *     The activate handler will delete the old cache and force clients to
+ *     re-fetch updated assets.
  */
 
-const APP_NAME = 'Dogboxx';
-const DEFAULT_ICON  = '/static/android-chrome-192x192.png';
-const DEFAULT_BADGE = '/static/favicon-32x32.png';
+// ── Cache config ──────────────────────────────────────────────────────────────
+
+const CACHE_VERSION = 'v1';
+const CACHE_NAME    = `dogboxx-${CACHE_VERSION}`;
+
+/**
+ * Assets pre-fetched and cached at install time (the "app shell").
+ * Keep this list lean — only what every page needs on first paint.
+ * Everything else (dog photos, page-specific JS) is cached on first use.
+ */
+const PRECACHE_ASSETS = [
+  // ── Local CSS ─────────────────────────────────────────────────────────────
+  '/static/css/brand.css',
+  '/static/css/reusable-calendar.css',
+
+  // ── Local JS ──────────────────────────────────────────────────────────────
+  '/static/js/reusable-calendar.js',
+
+  // ── Key images ────────────────────────────────────────────────────────────
+  '/static/logo-white-on-black.png',
+  '/static/android-chrome-192x192.png',
+  '/static/uploads/dogs/default-dog.png',
+
+  // ── Bootstrap CSS + JS (CDN) ──────────────────────────────────────────────
+  'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css',
+  'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js',
+
+  // ── Bootstrap Icons CSS (font files cached on first use via fetch handler) ─
+  'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css',
+];
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 //
 // skipWaiting: activate the new SW immediately instead of waiting for all
 //   tabs to close. Without this, a SW update sits in "waiting" state and
-//   the old version keeps handling events (including push + badge calls).
+//   the old version keeps running.
 //
 // clients.claim(): take control of all open tabs immediately after activation.
 //   Without this, navigator.serviceWorker.controller is null in any tab that
-//   was open before the SW activated, breaking postMessage from page → SW.
+//   was open before the SW activated, breaking postMessage (page → SW).
 
 self.addEventListener('install', function (event) {
-    self.skipWaiting();
+  self.skipWaiting();
+
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(function (cache) {
+      // Use Promise.allSettled so a single CDN hiccup at install time
+      // doesn't abort the whole install — the asset will be cached on first use.
+      return Promise.allSettled(
+        PRECACHE_ASSETS.map(function (url) {
+          return cache.add(url).catch(function (err) {
+            console.warn('[SW] Precache skipped:', url, err.message);
+          });
+        })
+      );
+    })
+  );
 });
 
 self.addEventListener('activate', function (event) {
-    event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    // Delete any caches from previous SW versions
+    caches.keys()
+      .then(function (keys) {
+        return Promise.all(
+          keys
+            .filter(function (key) { return key !== CACHE_NAME; })
+            .map(function (key) {
+              console.log('[SW] Removing old cache:', key);
+              return caches.delete(key);
+            })
+        );
+      })
+      .then(function () {
+        return self.clients.claim();
+      })
+  );
+});
+
+// ── Fetch — caching strategies ────────────────────────────────────────────────
+
+self.addEventListener('fetch', function (event) {
+  var req = event.request;
+  var url = new URL(req.url);
+
+  // Only intercept GET requests — POST/PUT/DELETE are never cached
+  if (req.method !== 'GET') return;
+
+  // Paths that must always go to the network uncached:
+  //   /api/stream  — SSE long-poll connections
+  //   /auth/logout — must invalidate server session
+  //   /push/       — push subscription management
+  var BYPASS_PREFIXES = ['/api/stream', '/auth/logout', '/push/'];
+  if (BYPASS_PREFIXES.some(function (p) { return url.pathname.startsWith(p); })) {
+    return; // Let browser handle it normally
+  }
+
+  // ── Strategy 1: Cache-first for static assets (local + CDN) ──────────────
+  //
+  // Bootstrap, our CSS/JS, and images change rarely (or are content-addressed).
+  // Serving them from cache means they're available in <10 ms instead of
+  // waiting on the network — this is the main fix for the black-screen delay.
+  //
+  // Cache miss path: fetch → store → return response.
+  // This also catches Bootstrap Icons font files (.woff2) on first load.
+
+  var isLocalStatic = url.pathname.startsWith('/static/');
+  var isCDN         = url.hostname === 'cdn.jsdelivr.net';
+
+  if (isLocalStatic || isCDN) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then(function (cache) {
+        return cache.match(req).then(function (cached) {
+          if (cached) {
+            return cached;
+          }
+          return fetch(req).then(function (response) {
+            if (response.ok) {
+              cache.put(req, response.clone());
+            }
+            return response;
+          });
+        });
+      })
+    );
+    return;
+  }
+
+  // ── Strategy 2: Network-first for HTML pages ──────────────────────────────
+  //
+  // Flask renders pages server-side with live data and per-request CSRF tokens,
+  // so we always try the network first. The cached copy is a fallback for when
+  // the user is offline — better to see a (possibly slightly stale) page than
+  // a browser error.
+  //
+  // Note: stale cached pages are only served when the network is unreachable,
+  // so CSRF tokens in forms won't be a problem under normal conditions.
+
+  var acceptsHTML = req.headers.get('accept') || '';
+  if (acceptsHTML.indexOf('text/html') !== -1) {
+    event.respondWith(
+      fetch(req)
+        .then(function (response) {
+          if (response.ok) {
+            var clone = response.clone();
+            caches.open(CACHE_NAME).then(function (cache) {
+              cache.put(req, clone);
+            });
+          }
+          return response;
+        })
+        .catch(function () {
+          // Network unavailable — serve cached page if we have one
+          return caches.match(req).then(function (cached) {
+            return cached || caches.match('/'); // last resort: cached home page
+          });
+        })
+    );
+    return;
+  }
+  // All other requests (XHR, fetch API calls, etc.) fall through to browser default
 });
 
 // ── Push received ─────────────────────────────────────────────────────────────
 
 self.addEventListener('push', function (event) {
-    let payload = {};
+  var payload = {};
 
-    if (event.data) {
-        try {
-            payload = event.data.json();
-        } catch (e) {
-            // Plain-text fallback
-            payload = { title: event.data.text() };
-        }
+  if (event.data) {
+    try {
+      payload = event.data.json();
+    } catch (e) {
+      payload = { title: event.data.text() };
     }
+  }
 
-    const title   = payload.title  || APP_NAME;
-    const options = {
-        body:    payload.body   || '',
-        icon:    payload.icon   || DEFAULT_ICON,
-        badge:   DEFAULT_BADGE,
-        data:    { link: payload.link || '/' },
-        tag:     payload.tag    || 'dogboxx-notification',   // replaces stale notification of same type
-        renotify: false,
-    };
+  var APP_NAME    = 'Dogboxx';
+  var DEFAULT_ICON  = '/static/android-chrome-192x192.png';
+  var DEFAULT_BADGE = '/static/favicon-32x32.png';
 
-    const unreadCount = payload.unread_count || 1;
+  var title   = payload.title  || APP_NAME;
+  var options = {
+    body:     payload.body   || '',
+    icon:     payload.icon   || DEFAULT_ICON,
+    badge:    DEFAULT_BADGE,
+    data:     { link: payload.link || '/' },
+    tag:      payload.tag    || 'dogboxx-notification', // replaces stale notification of same type
+    renotify: false,
+  };
 
-    // Double-notify guard: if a Dogboxx tab is already visible, skip the OS
-    // notification — the user is watching the app and SSE will update the bell.
-    event.waitUntil(
-        self.clients.matchAll({ type: 'window', includeUncontrolled: true })
-            .then(function (clients) {
-                const appIsVisible = clients.some(function (c) {
-                    return c.visibilityState === 'visible';
-                });
+  var unreadCount = payload.unread_count || 1;
 
-                // Always update the home screen badge count regardless of visibility
-                if ('setAppBadge' in navigator) {
-                    navigator.setAppBadge(unreadCount).catch(function () {});
-                }
+  // Double-notify guard: if a Dogboxx tab is already visible, skip the OS
+  // notification — the user is watching the app and SSE will update the bell.
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then(function (clients) {
+        var appIsVisible = clients.some(function (c) {
+          return c.visibilityState === 'visible';
+        });
 
-                if (appIsVisible) {
-                    // App is open and focused — SSE handles this, skip OS push
-                    return;
-                }
+        // Always update the home screen badge count regardless of visibility
+        if ('setAppBadge' in navigator) {
+          navigator.setAppBadge(unreadCount).catch(function () {});
+        }
 
-                return self.registration.showNotification(title, options);
-            })
-    );
+        if (appIsVisible) {
+          return; // App is open and focused — SSE handles this, skip OS push
+        }
+
+        return self.registration.showNotification(title, options);
+      })
+  );
 });
 
 // ── Badge updates from page context ──────────────────────────────────────────
@@ -89,50 +240,51 @@ self.addEventListener('push', function (event) {
 // here so all badge API calls go through SW, where they're known to work.
 
 self.addEventListener('message', function (event) {
-    if (!event.data || event.data.type !== 'SET_BADGE') return;
-    const count = parseInt(event.data.count, 10) || 0;
-    if (count <= 0) {
-        if ('clearAppBadge' in navigator) {
-            navigator.clearAppBadge().catch(function () {});
-        }
-    } else {
-        if ('setAppBadge' in navigator) {
-            navigator.setAppBadge(count).catch(function () {});
-        }
+  if (!event.data || event.data.type !== 'SET_BADGE') return;
+  var count = parseInt(event.data.count, 10) || 0;
+  if (count <= 0) {
+    if ('clearAppBadge' in navigator) {
+      navigator.clearAppBadge().catch(function () {});
     }
+  } else {
+    if ('setAppBadge' in navigator) {
+      navigator.setAppBadge(count).catch(function () {});
+    }
+  }
 });
 
 // ── Notification clicked ──────────────────────────────────────────────────────
 
 self.addEventListener('notificationclick', function (event) {
-    event.notification.close();
+  event.notification.close();
 
-    const targetUrl = (event.notification.data && event.notification.data.link)
-        ? event.notification.data.link
-        : '/';
+  var targetUrl = (event.notification.data && event.notification.data.link)
+    ? event.notification.data.link
+    : '/';
 
-    event.waitUntil(
-        self.clients.matchAll({ type: 'window', includeUncontrolled: true })
-            .then(function (clients) {
-                // Clear the home screen badge — user is opening the app
-                if ('clearAppBadge' in navigator) {
-                    navigator.clearAppBadge().catch(function () {});
-                }
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then(function (clients) {
+        // Clear the home screen badge — user is opening the app
+        if ('clearAppBadge' in navigator) {
+          navigator.clearAppBadge().catch(function () {});
+        }
 
-                // If a Dogboxx tab is already open, focus it and navigate
-                for (const client of clients) {
-                    if ('focus' in client) {
-                        client.focus();
-                        if ('navigate' in client) {
-                            client.navigate(targetUrl);
-                        }
-                        return;
-                    }
-                }
-                // No open tab — open a new one
-                if (self.clients.openWindow) {
-                    return self.clients.openWindow(targetUrl);
-                }
-            })
-    );
+        // If a Dogboxx tab is already open, focus it and navigate
+        for (var i = 0; i < clients.length; i++) {
+          var client = clients[i];
+          if ('focus' in client) {
+            client.focus();
+            if ('navigate' in client) {
+              client.navigate(targetUrl);
+            }
+            return;
+          }
+        }
+        // No open tab — open a new one
+        if (self.clients.openWindow) {
+          return self.clients.openWindow(targetUrl);
+        }
+      })
+  );
 });
