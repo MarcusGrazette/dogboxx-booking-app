@@ -3,11 +3,8 @@
 {% block title %}My Profile{% endblock %}
 
 {% block head_extra %}
-<link href="https://unpkg.com/filepond-plugin-image-preview/dist/filepond-plugin-image-preview.css" rel="stylesheet" />
-<link href="https://unpkg.com/filepond/dist/filepond.css" rel="stylesheet" />
-<script src="https://unpkg.com/filepond-plugin-image-preview/dist/filepond-plugin-image-preview.js"></script>
-<script src="https://unpkg.com/filepond-plugin-file-validate-type/dist/filepond-plugin-file-validate-type.js"></script>
-<script src="https://unpkg.com/filepond/dist/filepond.js"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js" defer></script>
 <style>
     /* Sticky save bar on mobile */
     .save-bar {
@@ -232,11 +229,9 @@
                     </div>
                     {% endif %}
 
-                    {# Hidden FilePond — triggered by clicking the photo #}
-                    <div style="display:none;">
-                        <input type="file" class="filepond" name="file"
-                               accept="image/png, image/jpeg, image/gif" />
-                    </div>
+                    {# Hidden file input — triggered by clicking the photo circle #}
+                    <input type="file" id="dog-photo-input" accept="image/png,image/jpeg,image/gif"
+                           style="display:none;" aria-hidden="true">
 
                     <p class="text-muted mb-0" style="font-size:0.75rem;">
                         <i class="bi bi-info-circle me-1"></i>
@@ -366,6 +361,40 @@
 </form>
 </div>
 
+{# ── Crop modal ────────────────────────────────────────────────────────────── #}
+<div class="modal fade" id="cropModal" tabindex="-1" aria-labelledby="cropModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:360px;">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-1">
+                <h6 class="modal-title fw-bold" id="cropModalLabel">
+                    <i class="bi bi-crop me-1"></i>Adjust photo
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+                {# Cropper.js renders inside this container #}
+                <div style="height:300px; background:#1B1B1B; border-radius:0.5rem; overflow:hidden;">
+                    <img id="crop-image" src="" alt="Crop preview"
+                         style="max-width:100%; display:block; opacity:0;">
+                </div>
+                <p class="text-muted small text-center mt-2 mb-0">
+                    <i class="bi bi-arrows-move me-1"></i>Drag to reposition &nbsp;·&nbsp;
+                    <i class="bi bi-zoom-in me-1"></i>Pinch to zoom
+                </p>
+            </div>
+            <div class="modal-footer border-0 pt-1">
+                <button type="button" class="btn btn-outline-secondary btn-sm"
+                        data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm fw-semibold" id="crop-save-btn">
+                    Save photo
+                    <span id="crop-spinner" class="spinner-border spinner-border-sm ms-1"
+                          role="status" style="display:none;"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {# Sticky save bar (mobile) #}
 <div class="save-bar shadow-lg">
     <button type="button" class="btn btn-primary fw-semibold w-100"
@@ -378,7 +407,10 @@
 {% block scripts %}
 {{ super() }}
 <script>
-    // WhatsApp toggle
+(function () {
+    'use strict';
+
+    // ── WhatsApp toggle ───────────────────────────────────────────────────────
     const whatsappCheckbox = document.getElementById('notify_whatsapp');
     const phoneField = document.getElementById('phone-field');
     if (whatsappCheckbox) {
@@ -387,7 +419,7 @@
         });
     }
 
-    // Dog age display
+    // ── Dog age display ───────────────────────────────────────────────────────
     function calcDogAge(dobStr) {
         if (!dobStr) return null;
         const dob = new Date(dobStr);
@@ -409,36 +441,139 @@
         {% endif %}
     }
 
-    // FilePond — hidden, triggered by hovering/clicking the dog photo
-    FilePond.registerPlugin(FilePondPluginImagePreview, FilePondPluginFileValidateType);
-    const pond = FilePond.create(document.querySelector('.filepond'), {
-        allowMultiple: false,
-        acceptedFileTypes: ['image/png', 'image/jpeg', 'image/gif'],
-        storeAsFile: true,
-        credits: false,
-        onaddfile: (error, fileItem) => {
-            if (error) return;
-            // Live-preview the chosen image in the photo circle
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const wrap = document.getElementById('dog-photo-clickable');
-                // Replace whatever's in the wrap (img or placeholder div) with a fresh <img>
-                const existing = document.getElementById('dog-photo-preview');
-                if (existing) existing.remove();
-                const img = document.createElement('img');
-                img.src = e.target.result;
-                img.id = 'dog-photo-preview';
-                img.alt = 'Dog photo preview';
-                img.style.cssText = 'width:64px;height:64px;border-radius:50%;object-fit:cover;border:3px solid var(--db-primary-subtle);display:block;';
-                wrap.insertBefore(img, wrap.querySelector('.dog-photo-edit-overlay'));
-            };
-            reader.readAsDataURL(fileItem.file);
-        },
+    // ── Cropper.js photo upload ───────────────────────────────────────────────
+    //
+    // Flow:
+    //   1. Client taps dog photo circle → hidden file input opens
+    //   2. Selected image loads into #crop-image inside the Bootstrap modal
+    //   3. Cropper.js initialises with a locked 1:1 crop box; client drags/
+    //      pinches to frame the shot
+    //   4. "Save photo" → getCroppedCanvas(400×400).toBlob() → fetch POST to
+    //      /profile/upload-dog-photo → server saves → preview updates in place
+
+    const fileInput    = document.getElementById('dog-photo-input');
+    const photoWrap    = document.getElementById('dog-photo-clickable');
+    const cropImageEl  = document.getElementById('crop-image');
+    const cropSaveBtn  = document.getElementById('crop-save-btn');
+    const cropSpinner  = document.getElementById('crop-spinner');
+    const csrfToken    = document.querySelector('meta[name="csrf-token"]').content;
+
+    let cropper     = null;
+    let cropModal   = null;
+
+    // Lazy-init the Bootstrap modal on first use
+    function getCropModal() {
+        if (!cropModal) {
+            cropModal = new bootstrap.Modal(document.getElementById('cropModal'));
+        }
+        return cropModal;
+    }
+
+    // Clicking the photo circle opens the file picker
+    photoWrap.addEventListener('click', function () {
+        fileInput.value = '';   // reset so the same file can be re-selected
+        fileInput.click();
     });
 
-    // Click the photo circle → open FilePond's file picker
-    document.getElementById('dog-photo-clickable').addEventListener('click', () => {
-        pond.browse();
+    // File selected → load into cropper and open modal
+    fileInput.addEventListener('change', function () {
+        const file = this.files[0];
+        if (!file) return;
+
+        // Validate type client-side before bothering the server
+        if (!file.type.startsWith('image/')) {
+            alert('Please choose an image file (JPG, PNG, or GIF).');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            // Destroy any previous Cropper instance before re-using the element
+            if (cropper) {
+                cropper.destroy();
+                cropper = null;
+            }
+
+            cropImageEl.src = e.target.result;
+            cropImageEl.style.opacity = '1';
+
+            getCropModal().show();
+
+            // Initialise Cropper.js once the modal is visible (avoids zero-size canvas)
+            document.getElementById('cropModal').addEventListener('shown.bs.modal', function initCropper() {
+                // Remove listener so it only fires once per open
+                document.getElementById('cropModal').removeEventListener('shown.bs.modal', initCropper);
+
+                cropper = new Cropper(cropImageEl, {
+                    aspectRatio: 1,          // force square output
+                    viewMode: 1,             // keep image inside container
+                    dragMode: 'move',        // drag the image, not the box
+                    autoCropArea: 0.85,      // initial crop covers 85% of view
+                    cropBoxMovable: false,   // fixed crop box — client moves image under it
+                    cropBoxResizable: false, // consistent UX on mobile
+                    toggleDragModeOnDblClick: false,
+                    guides: false,
+                    center: false,
+                    highlight: false,
+                    background: false,
+                    responsive: true,
+                    restore: false,
+                    minContainerHeight: 300,
+                });
+            }, { once: true });
+        };
+        reader.readAsDataURL(file);
     });
+
+    // "Save photo" → crop → POST blob → update preview
+    cropSaveBtn.addEventListener('click', function () {
+        if (!cropper) return;
+
+        // Disable button and show spinner during upload
+        cropSaveBtn.disabled = true;
+        cropSpinner.style.display = 'inline-block';
+
+        cropper.getCroppedCanvas({ width: 400, height: 400 }).toBlob(function (blob) {
+            const formData = new FormData();
+            formData.append('file', blob, 'dog-photo.jpg');
+
+            fetch('{{ url_for("client.upload_dog_photo") }}', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+                body: formData,
+            })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    // Update the photo circle with the freshly saved image
+                    // Bust the browser cache with a timestamp param
+                    const preview = document.getElementById('dog-photo-preview');
+                    preview.src = data.url + '?t=' + Date.now();
+                    getCropModal().hide();
+                } else {
+                    alert('Could not save photo: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(function () {
+                alert('Upload failed. Please check your connection and try again.');
+            })
+            .finally(function () {
+                cropSaveBtn.disabled = false;
+                cropSpinner.style.display = 'none';
+            });
+        }, 'image/jpeg', 0.88);
+    });
+
+    // Clean up Cropper when modal is closed (frees memory, resets state)
+    document.getElementById('cropModal').addEventListener('hidden.bs.modal', function () {
+        if (cropper) {
+            cropper.destroy();
+            cropper = null;
+        }
+        cropImageEl.src = '';
+        cropImageEl.style.opacity = '0';
+    });
+
+}());
 </script>
 {% endblock %}
