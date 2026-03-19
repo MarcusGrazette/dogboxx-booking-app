@@ -1,0 +1,236 @@
+{#
+  flash_toasts.html — shared toast notification component
+
+  Design:
+    Mobile  : bottom-anchored, full-width pill, slides up on entry, swipe-down to dismiss
+    Desktop : top-right, fixed-width pill, same animation
+    success : green icon, 3s auto-dismiss
+    info    : blue  icon, 4s auto-dismiss
+    warning : amber icon, 6s auto-dismiss
+    error   : red   icon, manual dismiss only (close button always shown)
+    All     : pause timer on hover/touch, resume on leave
+
+  Include in any layout with:  {% include 'partials/flash_toasts.html' %}
+#}
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+
+<style>
+  /* ── Container ───────────────────────────────────────────────────────────── */
+
+  #db-toast-container {
+    position: fixed;
+    z-index: 1060;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    pointer-events: none; /* pass clicks through the empty container area */
+  }
+
+  /* Mobile: bottom-anchored, full width with gutters */
+  /* env(safe-area-inset-bottom) keeps toasts above iPhone home indicator */
+  #db-toast-container {
+    bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+    left:  1rem;
+    right: 1rem;
+  }
+
+  /* Desktop: top-right */
+  @media (min-width: 768px) {
+    #db-toast-container {
+      bottom: auto;
+      top:   1.25rem;
+      right: 1.25rem;
+      left:  auto;
+      width: 340px;
+    }
+  }
+
+  /* ── Individual toast ────────────────────────────────────────────────────── */
+
+  .db-toast {
+    pointer-events: all;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 0.8rem 1rem;
+    border-radius: 1.25rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.4;
+    color: #fff;
+    background: rgba(28, 28, 30, 0.96);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.22), 0 1px 6px rgba(0,0,0,0.14);
+    /* Frosted-glass blur — degrades gracefully if unsupported */
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    animation: db-toast-in 0.28s cubic-bezier(0.34, 1.46, 0.64, 1) both;
+    transition: transform 0.12s ease, opacity 0.12s ease;
+    will-change: transform, opacity;
+    cursor: default;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .db-toast.db-toast-out {
+    animation: db-toast-out 0.2s ease forwards;
+  }
+
+  /* Icon */
+  .db-toast-icon {
+    flex-shrink: 0;
+    font-size: 1rem;
+    margin-top: 0.1rem;
+  }
+  .db-toast-success .db-toast-icon { color: #4ade80; }
+  .db-toast-info    .db-toast-icon { color: #60a5fa; }
+  .db-toast-warning .db-toast-icon { color: #fbbf24; }
+  .db-toast-error   .db-toast-icon { color: #f87171; }
+
+  /* Message text */
+  .db-toast-msg { flex: 1; }
+
+  /* Close button — errors only */
+  .db-toast-close {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.45);
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0.1rem 0 0 0.35rem;
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+  .db-toast-close:hover,
+  .db-toast-close:focus { color: #fff; outline: none; }
+
+  /* ── Animations ──────────────────────────────────────────────────────────── */
+  /* Slide up from below on enter; slide down on exit */
+
+  @keyframes db-toast-in {
+    from { opacity: 0; transform: translateY(1.25rem) scale(0.95); }
+    to   { opacity: 1; transform: translateY(0)       scale(1);    }
+  }
+  @keyframes db-toast-out {
+    from { opacity: 1; transform: translateY(0)       scale(1);    }
+    to   { opacity: 0; transform: translateY(1.25rem) scale(0.92); }
+  }
+</style>
+
+<div id="db-toast-container" aria-live="polite" aria-atomic="false">
+  {% for category, message in messages %}
+
+  {# Normalise 'danger' → 'error' to match our four categories #}
+  {% set cat = 'error' if category in ('error', 'danger') else category %}
+
+  {# Icon class per category #}
+  {% if   cat == 'success' %}{% set icon = 'bi-check-circle-fill'          %}
+  {% elif cat == 'error'   %}{% set icon = 'bi-x-circle-fill'              %}
+  {% elif cat == 'warning' %}{% set icon = 'bi-exclamation-triangle-fill'  %}
+  {% else                  %}{% set icon = 'bi-info-circle-fill'           %}
+  {% endif %}
+
+  {# Auto-dismiss delay in ms; 0 = manual dismiss only #}
+  {% if   cat == 'success' %}{% set ms = 3000 %}
+  {% elif cat == 'warning' %}{% set ms = 6000 %}
+  {% elif cat == 'error'   %}{% set ms = 0    %}
+  {% else                  %}{% set ms = 4000 %}
+  {% endif %}
+
+  <div class="db-toast db-toast-{{ cat }}"
+       role="{{ 'alert' if cat == 'error' else 'status' }}"
+       data-timeout="{{ ms }}">
+    <i class="bi {{ icon }} db-toast-icon" aria-hidden="true"></i>
+    <span class="db-toast-msg">{{ message }}</span>
+    {% if cat == 'error' %}
+    <button class="db-toast-close" aria-label="Dismiss">&times;</button>
+    {% endif %}
+  </div>
+
+  {% endfor %}
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── Dismiss a single toast (runs exit animation, then removes) ────────────
+  function dismiss(toast) {
+    if (toast._dismissed) return;
+    toast._dismissed = true;
+    toast.classList.add('db-toast-out');
+    toast.addEventListener('animationend', function () {
+      toast.remove();
+      var container = document.getElementById('db-toast-container');
+      if (container && !container.children.length) container.remove();
+    }, { once: true });
+  }
+
+  // ── Wire each toast ───────────────────────────────────────────────────────
+  document.querySelectorAll('.db-toast').forEach(function (toast) {
+    var ms    = parseInt(toast.dataset.timeout, 10);
+    var timer = null;
+
+    function startTimer(delay) {
+      if (ms > 0 && !toast._dismissed) {
+        timer = setTimeout(function () { dismiss(toast); }, delay || ms);
+      }
+    }
+    function stopTimer() {
+      if (timer) { clearTimeout(timer); timer = null; }
+    }
+
+    startTimer();
+
+    // Hover: pause timer, resume on leave (desktop)
+    toast.addEventListener('mouseenter', stopTimer);
+    toast.addEventListener('mouseleave', function () { startTimer(2000); });
+
+    // Close button (errors)
+    var btn = toast.querySelector('.db-toast-close');
+    if (btn) btn.addEventListener('click', function () { dismiss(toast); });
+
+    // ── Swipe-down to dismiss (mobile) ──────────────────────────────────────
+    // The toast sits at the bottom of the screen, so a downward swipe
+    // is the natural gesture to send it off-screen.
+
+    var startY   = 0;
+    var dragging = false;
+
+    toast.addEventListener('touchstart', function (e) {
+      startY   = e.touches[0].clientY;
+      dragging = true;
+      stopTimer(); // pause auto-dismiss while finger is down
+    }, { passive: true });
+
+    toast.addEventListener('touchmove', function (e) {
+      if (!dragging) return;
+      var dy = e.touches[0].clientY - startY;
+      if (dy > 0) { // follow finger downward only
+        toast.style.transform = 'translateY(' + dy + 'px)';
+        toast.style.opacity   = String(Math.max(0, 1 - dy / 80));
+      }
+    }, { passive: true });
+
+    toast.addEventListener('touchend', function (e) {
+      if (!dragging) return;
+      dragging = false;
+      var dy = e.changedTouches[0].clientY - startY;
+      if (dy > 56) {
+        dismiss(toast); // committed swipe — gone
+      } else {
+        // Snap back and resume timer
+        toast.style.transform = '';
+        toast.style.opacity   = '';
+        startTimer(ms); // full delay after snap-back
+      }
+    }, { passive: true });
+  });
+
+}());
+</script>
+
+{% endif %}
+{% endwith %}
