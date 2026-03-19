@@ -317,16 +317,8 @@ def upload_dog_photo():
     Expects a multipart POST with a 'file' field containing the canvas blob
     from Cropper.js. Returns JSON {success, url} or {success, error}.
     """
-    client = Client.query.filter_by(user_id=current_user.id).first()
-    if not client:
-        return jsonify(success=False, error="Client profile not found"), 404
-
-    dog = (
-        Dog.query
-        .join(DogOwner, DogOwner.dog_id == Dog.id)
-        .filter(DogOwner.client_id == client.id)
-        .first()
-    )
+    dog_owner = DogOwner.query.filter_by(user_id=current_user.id, role='primary').first()
+    dog = Dog.query.get(dog_owner.dog_id) if dog_owner else None
     if not dog:
         return jsonify(success=False, error="Dog profile not found"), 404
 
