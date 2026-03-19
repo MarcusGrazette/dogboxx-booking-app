@@ -6,23 +6,7 @@
 <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js" defer></script>
 <style>
-    /* Sticky save bar on mobile */
-    .save-bar {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        background: #fff;
-        border-top: 1px solid #e8e0e6;
-        padding: 0.75rem 1rem;
-        z-index: 1020;
-        display: none;
-    }
-    @media (max-width: 767px) {
-        .save-bar { display: block; }
-        .save-btn-desktop { display: none; }
-        body { padding-bottom: 80px; }
-    }
+
 
     /* Toggle switch */
     .form-switch .form-check-input {
@@ -241,70 +225,6 @@
                 </div>
             </div>
 
-            {# ─── NOTIFICATIONS CARD ─── #}
-            <div class="card shadow-sm profile-card" style="background:#f2f2f2;">
-                <div class="card-body p-4">
-                    <h6 class="fw-bold text-uppercase text-muted small mb-3">
-                        <i class="bi bi-bell-fill me-1" style="color:var(--bs-primary);"></i> Notifications
-                    </h6>
-
-                    <div class="d-flex align-items-center justify-content-between py-2 border-bottom">
-                        <div>
-                            <div class="fw-semibold small"><i class="bi bi-envelope me-1 text-muted"></i> Email</div>
-                            <div class="text-muted" style="font-size:0.75rem;">{{ current_user.email }}</div>
-                        </div>
-                        <div class="form-check form-switch mb-0">
-                            {{ form.notify_email(class="form-check-input", role="switch") }}
-                        </div>
-                    </div>
-
-                    <div class="d-flex align-items-center justify-content-between py-2">
-                        <div>
-                            <div class="fw-semibold small"><i class="bi bi-whatsapp me-1 text-muted"></i> WhatsApp</div>
-                            <div class="text-muted" style="font-size:0.75rem;">Get booking updates via WhatsApp</div>
-                        </div>
-                        <div class="form-check form-switch mb-0">
-                            {{ form.notify_whatsapp(class="form-check-input", role="switch", id="notify_whatsapp") }}
-                        </div>
-                    </div>
-
-                    <div id="phone-field" class="mt-2" style="{% if not form.notify_whatsapp.data %}display:none;{% endif %}">
-                        <div class="input-group">
-                            <span class="input-group-text"><i class="bi bi-phone text-secondary"></i></span>
-                            {{ form.phone(class="form-control", placeholder="e.g. +44 7700 900000") }}
-                        </div>
-                        {% for error in form.phone.errors %}
-                        <div class="text-danger small mt-1">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-
-                </div>
-            </div>
-
-        </div>{# /left col #}
-
-        {# ══════════════════════════════════
-           RIGHT COLUMN — editable + stats
-           ══════════════════════════════════ #}
-        <div class="col-12 col-md-7">
-
-            {# ─── PICKUP INSTRUCTIONS ─── #}
-            <div class="card shadow-sm profile-card mb-4">
-                <div class="card-body p-4">
-                    <h6 class="fw-bold text-uppercase text-muted small mb-1">
-                        <i class="bi bi-signpost-2 me-1" style="color:var(--bs-primary);"></i> Pickup Instructions
-                    </h6>
-                    <p class="text-muted mb-3" style="font-size:0.8rem;">
-                        Let us know anything we need to know to collect {{ dog.name if dog else 'your dog' }} — gate codes, doorbells, parking notes, etc.
-                    </p>
-                    {{ form.pickup_instructions(class="form-control", rows=5,
-                       placeholder="e.g. Our buzzer is labelled A, you can park the bike in our courtyard.") }}
-                    <div class="d-grid mt-3 save-btn-desktop">
-                        {{ form.submit(class="btn btn-primary fw-semibold") }}
-                    </div>
-                </div>
-            </div>
-
             {# ─── BOOKING STATS ─── #}
             <div class="card shadow-sm profile-card mb-4">
                 <div class="card-body p-4">
@@ -352,6 +272,70 @@
                 </div>
             </div>
 
+            {# ─── NOTIFICATIONS CARD ─── #}
+            <div class="card shadow-sm profile-card" style="background:#f2f2f2;">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold text-uppercase text-muted small mb-3">
+                        <i class="bi bi-bell-fill me-1" style="color:var(--bs-primary);"></i> Notifications
+                    </h6>
+
+                    <div class="d-flex align-items-center justify-content-between py-2 border-bottom">
+                        <div>
+                            <div class="fw-semibold small"><i class="bi bi-envelope me-1 text-muted"></i> Email</div>
+                            <div class="text-muted" style="font-size:0.75rem;">{{ current_user.email }}</div>
+                        </div>
+                        <div class="form-check form-switch mb-0">
+                            {{ form.notify_email(class="form-check-input", role="switch") }}
+                        </div>
+                    </div>
+
+                    <div class="d-flex align-items-center justify-content-between py-2">
+                        <div>
+                            <div class="fw-semibold small"><i class="bi bi-whatsapp me-1 text-muted"></i> WhatsApp</div>
+                            <div class="text-muted" style="font-size:0.75rem;">Get booking updates via WhatsApp</div>
+                        </div>
+                        <div class="form-check form-switch mb-0">
+                            {{ form.notify_whatsapp(class="form-check-input", role="switch", id="notify_whatsapp") }}
+                        </div>
+                    </div>
+
+                    <div id="phone-field" class="mt-2" style="{% if not form.notify_whatsapp.data %}display:none;{% endif %}">
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-phone text-secondary"></i></span>
+                            {{ form.phone(class="form-control", placeholder="e.g. +44 7700 900000") }}
+                        </div>
+                        {% for error in form.phone.errors %}
+                        <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                </div>
+            </div>
+
+        </div>{# /left col #}
+
+        {# ══════════════════════════════════
+           RIGHT COLUMN — pickup instructions
+           ══════════════════════════════════ #}
+        <div class="col-12 col-md-7">
+
+            {# ─── PICKUP INSTRUCTIONS ─── #}
+            <div class="card shadow-sm profile-card mb-4">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold text-uppercase text-muted small mb-1">
+                        <i class="bi bi-signpost-2 me-1" style="color:var(--bs-primary);"></i> Pickup Instructions
+                    </h6>
+                    <p class="text-muted mb-3" style="font-size:0.8rem;">
+                        Let us know anything we need to know to collect {{ dog.name if dog else 'your dog' }} — gate codes, doorbells, parking notes, etc.
+                    </p>
+                    {{ form.pickup_instructions(class="form-control", rows=5,
+                       placeholder="e.g. Our buzzer is labelled A, you can park the bike in our courtyard.") }}
+                    <div class="d-grid mt-3">
+                        {{ form.submit(class="btn btn-primary fw-semibold") }}
+                    </div>
+                </div>
+            </div>
+
         </div>{# /right col #}
 
     </div>
@@ -395,13 +379,7 @@
     </div>
 </div>
 
-{# Sticky save bar (mobile) #}
-<div class="save-bar shadow-lg">
-    <button type="button" class="btn btn-primary fw-semibold w-100"
-            onclick="document.querySelector('form').submit()">
-        Save changes
-    </button>
-</div>
+
 {% endblock %}
 
 {% block scripts %}

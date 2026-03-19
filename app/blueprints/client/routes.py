@@ -47,7 +47,7 @@ def index():
     ).filter(
         Booking.user_id == current_user.id,
         Booking.status != 'cancelled',
-        Booking.date > today
+        Booking.date >= today
     ).order_by(Booking.date.asc())
 
     upcoming_bookings = list(upcoming_bookings_query)
