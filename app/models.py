@@ -18,6 +18,7 @@ class User(db.Model):
     hashed_password = db.Column(db.String(256), nullable=False)
     must_change_password = db.Column(db.Boolean, default=False, nullable=False)
     phone = db.Column(db.String(20), nullable=True)
+    profile_pic = db.Column(db.String(256), nullable=True)
     notification_preference = db.Column(
         db.Enum('email', 'whatsapp', 'both', name='notification_pref'),
         nullable=False, default='email'

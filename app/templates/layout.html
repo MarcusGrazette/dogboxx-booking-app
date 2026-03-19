@@ -76,10 +76,17 @@
                     <a href="#" class="nav-link lh-1 p-0 d-flex align-items-center justify-content-center"
                        data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu"
                        style="width:48px; height:48px; outline:none;">
-                        <div class="rounded-circle fw-bold d-flex align-items-center justify-content-center"
+                        {% if current_user.profile_pic %}
+                        <img id="nav-avatar"
+                             src="{{ url_for('static', filename='uploads/profiles/' + current_user.profile_pic) }}"
+                             alt="{{ current_user.firstname }}"
+                             style="width:48px; height:48px; border-radius:50%; object-fit:cover; border:2.5px solid #E02FAC; pointer-events:none;">
+                        {% else %}
+                        <div id="nav-avatar" class="rounded-circle fw-bold d-flex align-items-center justify-content-center"
                              style="width:48px; height:48px; background:#E02FAC; font-size:1rem; color:#fff; pointer-events:none;">
                             {{ current_user.firstname[0] | upper }}{{ current_user.lastname[0] | upper if current_user.lastname else '' }}
                         </div>
+                        {% endif %}
                     </a>
                     <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2"
                         style="min-width:200px; border-radius:0.75rem; overflow:hidden;">
