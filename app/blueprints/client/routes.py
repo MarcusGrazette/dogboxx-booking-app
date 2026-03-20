@@ -717,7 +717,7 @@ def recurring_booking():
 
     POST body (JSON):
         start_date  (str)  'YYYY-MM-DD' — must be tomorrow or later
-        end_date    (str)  'YYYY-MM-DD' — max 4 weeks from today (client limit)
+        end_date    (str)  'YYYY-MM-DD' — max 4 weeks from start_date (client limit)
         slot        (str)  'Morning' or 'Afternoon'
         frequency   (str)  'daily' (weekdays only) or 'weekly'
 
@@ -753,12 +753,12 @@ def recurring_booking():
 
         today = datetime.now(timezone.utc).date()
         tomorrow = today + timedelta(days=1)
-        max_end = today + timedelta(weeks=4)
+        max_end = start_date + timedelta(weeks=4)
 
         if start_date < tomorrow:
             return jsonify(success=False, message="Start date must be in the future"), 400
         if end_date > max_end:
-            return jsonify(success=False, message="End date must be within 4 weeks from today"), 400
+            return jsonify(success=False, message="End date must be within 4 weeks of the start date"), 400
         if end_date < start_date:
             return jsonify(success=False, message="End date must be after start date"), 400
         if slot not in ('Morning', 'Afternoon'):
