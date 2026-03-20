@@ -79,21 +79,29 @@ self.addEventListener('install', function (event) {
 
 self.addEventListener('activate', function (event) {
   event.waitUntil(
-    // Delete any caches from previous SW versions
-    caches.keys()
-      .then(function (keys) {
-        return Promise.all(
-          keys
-            .filter(function (key) { return key !== CACHE_NAME; })
-            .map(function (key) {
-              console.log('[SW] Removing old cache:', key);
-              return caches.delete(key);
-            })
-        );
-      })
-      .then(function () {
-        return self.clients.claim();
-      })
+    Promise.all([
+      // Delete any caches from previous SW versions
+      caches.keys()
+        .then(function (keys) {
+          return Promise.all(
+            keys
+              .filter(function (key) { return key !== CACHE_NAME; })
+              .map(function (key) {
+                console.log('[SW] Removing old cache:', key);
+                return caches.delete(key);
+              })
+          );
+        }),
+      // Enable Navigation Preload — fires the network request while the SW
+      // is booting, eliminating the SW startup latency on every page navigation
+      // (Chrome on Android can add 100-300ms without this)
+      self.registration.navigationPreload
+        ? self.registration.navigationPreload.enable()
+        : Promise.resolve(),
+    ])
+    .then(function () {
+      return self.clients.claim();
+    })
   );
 });
 
@@ -159,15 +167,26 @@ self.addEventListener('fetch', function (event) {
   var acceptsHTML = req.headers.get('accept') || '';
   if (acceptsHTML.indexOf('text/html') !== -1) {
     event.respondWith(
-      fetch(req)
-        .then(function (response) {
-          if (response.ok) {
-            var clone = response.clone();
-            caches.open(CACHE_NAME).then(function (cache) {
-              cache.put(req, clone);
-            });
+      // Use the preloaded response if Navigation Preload fired it — this
+      // means the network request was already in-flight while the SW booted,
+      // so we get the response immediately with zero extra latency.
+      Promise.resolve(event.preloadResponse || null)
+        .then(function (preloaded) {
+          if (preloaded) {
+            // Cache the preloaded response for offline fallback
+            var clone = preloaded.clone();
+            caches.open(CACHE_NAME).then(function (cache) { cache.put(req, clone); });
+            return preloaded;
           }
-          return response;
+          // No preload — fall back to normal fetch
+          return fetch(req)
+            .then(function (response) {
+              if (response.ok) {
+                var clone = response.clone();
+                caches.open(CACHE_NAME).then(function (cache) { cache.put(req, clone); });
+              }
+              return response;
+            });
         })
         .catch(function () {
           // Network unavailable — serve cached page if we have one
