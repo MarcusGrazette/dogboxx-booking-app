@@ -142,9 +142,22 @@
 
                     {# Avatar + name + email #}
                     <div class="d-flex align-items-center gap-3 mb-4">
-                        <div class="profile-avatar rounded-circle fw-bold d-flex align-items-center justify-content-center"
-                             style="background:#E02FAC; font-size:1.1rem; color:#fff;">
-                            {{ current_user.firstname[0] | upper }}{{ current_user.lastname[0] | upper if current_user.lastname else '' }}
+                        <div class="dog-photo-wrap" id="user-avatar-clickable" title="Update profile photo"
+                             data-upload-url="{{ url_for('client.upload_profile_photo') }}">
+                            {% if current_user.profile_pic %}
+                            <img src="{{ url_for('static', filename='uploads/profiles/' + current_user.profile_pic) }}"
+                                 alt="{{ current_user.firstname }}" id="user-avatar-preview"
+                                 style="width:64px; height:64px; border-radius:50%; object-fit:cover; border:3px solid #E02FAC; display:block;">
+                            {% else %}
+                            <div id="user-avatar-preview"
+                                 class="rounded-circle fw-bold d-flex align-items-center justify-content-center"
+                                 style="width:64px; height:64px; background:#E02FAC; font-size:1.1rem; color:#fff; border:3px solid #E02FAC;">
+                                {{ current_user.firstname[0] | upper }}{{ current_user.lastname[0] | upper if current_user.lastname else '' }}
+                            </div>
+                            {% endif %}
+                            <div class="dog-photo-edit-overlay">
+                                <i class="bi bi-pencil-fill"></i>
+                            </div>
                         </div>
                         <div>
                             <div class="fw-bold lh-sm">{{ current_user.firstname }} {{ current_user.lastname }}</div>
@@ -184,7 +197,8 @@
 
                     {# Photo (hover to edit) + name + breed/gender #}
                     <div class="d-flex align-items-center gap-3 mb-3">
-                        <div class="dog-photo-wrap" id="dog-photo-clickable" title="Update photo">
+                        <div class="dog-photo-wrap" id="dog-photo-clickable" title="Update photo"
+                             data-upload-url="{{ url_for('client.upload_dog_photo') }}">
                             <img src="{{ url_for('static', filename='uploads/dogs/' + dog.pic) if dog and dog.pic else url_for('static', filename='uploads/dogs/default-dog.png') }}"
                                  onerror="this.onerror=null;this.src='{{ url_for('static', filename='uploads/dogs/default-dog.png') }}'"
                                  alt="{{ dog.name if dog else 'Dog' }}" id="dog-photo-preview">
@@ -421,25 +435,31 @@
 
     // ── Cropper.js photo upload ───────────────────────────────────────────────
     //
+    // Shared modal handles two upload targets:
+    //   #dog-photo-clickable  → uploads/dogs/     → updates #dog-photo-preview
+    //   #user-avatar-clickable → uploads/profiles/ → updates #user-avatar-preview
+    //
+    // Each trigger carries a data-upload-url attribute pointing to its endpoint.
+    // The active target is tracked in `activeTarget` so the save button knows
+    // which preview element and endpoint to use.
+    //
     // Flow:
-    //   1. Client taps dog photo circle → hidden file input opens
-    //   2. Selected image loads into #crop-image inside the Bootstrap modal
-    //   3. Cropper.js initialises with a locked 1:1 crop box; client drags/
-    //      pinches to frame the shot
-    //   4. "Save photo" → getCroppedCanvas(400×400).toBlob() → fetch POST to
-    //      /profile/upload-dog-photo → server saves → preview updates in place
+    //   1. Client taps a photo circle → hidden file input opens
+    //   2. Selected image loads into the crop modal
+    //   3. Client drags/pinches to frame the shot
+    //   4. "Save photo" → getCroppedCanvas(400×400).toBlob() → fetch POST →
+    //      server saves → preview updates in place, navbar img updated if profile
 
-    const fileInput    = document.getElementById('dog-photo-input');
-    const photoWrap    = document.getElementById('dog-photo-clickable');
-    const cropImageEl  = document.getElementById('crop-image');
-    const cropSaveBtn  = document.getElementById('crop-save-btn');
-    const cropSpinner  = document.getElementById('crop-spinner');
-    const csrfToken    = document.querySelector('meta[name="csrf-token"]').content;
+    const fileInput   = document.getElementById('dog-photo-input');
+    const cropImageEl = document.getElementById('crop-image');
+    const cropSaveBtn = document.getElementById('crop-save-btn');
+    const cropSpinner = document.getElementById('crop-spinner');
+    const csrfToken   = document.querySelector('meta[name="csrf-token"]').content;
 
     let cropper     = null;
     let cropModal   = null;
+    let activeTarget = null; // the trigger element that opened the modal
 
-    // Lazy-init the Bootstrap modal on first use
     function getCropModal() {
         if (!cropModal) {
             cropModal = new bootstrap.Modal(document.getElementById('cropModal'));
@@ -447,10 +467,13 @@
         return cropModal;
     }
 
-    // Clicking the photo circle opens the file picker
-    photoWrap.addEventListener('click', function () {
-        fileInput.value = '';   // reset so the same file can be re-selected
-        fileInput.click();
+    // Wire any element with a data-upload-url to open the shared file picker
+    document.querySelectorAll('[data-upload-url]').forEach(function (trigger) {
+        trigger.addEventListener('click', function () {
+            activeTarget = trigger;
+            fileInput.value = '';
+            fileInput.click();
+        });
     });
 
     // File selected → load into cropper and open modal
@@ -458,7 +481,6 @@
         const file = this.files[0];
         if (!file) return;
 
-        // Validate type client-side before bothering the server
         if (!file.type.startsWith('image/')) {
             alert('Please choose an image file (JPG, PNG, or GIF).');
             return;
@@ -466,29 +488,21 @@
 
         const reader = new FileReader();
         reader.onload = function (e) {
-            // Destroy any previous Cropper instance before re-using the element
-            if (cropper) {
-                cropper.destroy();
-                cropper = null;
-            }
+            if (cropper) { cropper.destroy(); cropper = null; }
 
             cropImageEl.src = e.target.result;
             cropImageEl.style.opacity = '1';
-
             getCropModal().show();
 
-            // Initialise Cropper.js once the modal is visible (avoids zero-size canvas)
             document.getElementById('cropModal').addEventListener('shown.bs.modal', function initCropper() {
-                // Remove listener so it only fires once per open
                 document.getElementById('cropModal').removeEventListener('shown.bs.modal', initCropper);
-
                 cropper = new Cropper(cropImageEl, {
-                    aspectRatio: 1,          // force square output
-                    viewMode: 1,             // keep image inside container
-                    dragMode: 'move',        // drag the image, not the box
-                    autoCropArea: 0.85,      // initial crop covers 85% of view
-                    cropBoxMovable: false,   // fixed crop box — client moves image under it
-                    cropBoxResizable: false, // consistent UX on mobile
+                    aspectRatio: 1,
+                    viewMode: 1,
+                    dragMode: 'move',
+                    autoCropArea: 0.85,
+                    cropBoxMovable: false,
+                    cropBoxResizable: false,
                     toggleDragModeOnDblClick: false,
                     guides: false,
                     center: false,
@@ -503,19 +517,21 @@
         reader.readAsDataURL(file);
     });
 
-    // "Save photo" → crop → POST blob → update preview
+    // "Save photo" → crop → POST blob → update preview(s)
     cropSaveBtn.addEventListener('click', function () {
-        if (!cropper) return;
+        if (!cropper || !activeTarget) return;
 
-        // Disable button and show spinner during upload
         cropSaveBtn.disabled = true;
         cropSpinner.style.display = 'inline-block';
 
+        const uploadUrl  = activeTarget.dataset.uploadUrl;
+        const previewId  = activeTarget.querySelector('img, div[id]').id;
+
         cropper.getCroppedCanvas({ width: 400, height: 400 }).toBlob(function (blob) {
             const formData = new FormData();
-            formData.append('file', blob, 'dog-photo.jpg');
+            formData.append('file', blob, 'photo.jpg');
 
-            fetch('{{ url_for("client.upload_dog_photo") }}', {
+            fetch(uploadUrl, {
                 method: 'POST',
                 headers: { 'X-CSRFToken': csrfToken },
                 body: formData,
@@ -523,10 +539,39 @@
             .then(function (res) { return res.json(); })
             .then(function (data) {
                 if (data.success) {
-                    // Update the photo circle with the freshly saved image
-                    // Bust the browser cache with a timestamp param
-                    const preview = document.getElementById('dog-photo-preview');
-                    preview.src = data.url + '?t=' + Date.now();
+                    const newUrl = data.url + '?t=' + Date.now();
+                    const preview = document.getElementById(previewId);
+
+                    // If the preview is a div (initials fallback), replace with an img
+                    if (preview.tagName === 'DIV') {
+                        const img = document.createElement('img');
+                        img.id  = previewId;
+                        img.alt = preview.textContent.trim();
+                        img.src = newUrl;
+                        img.style.cssText = preview.style.cssText;
+                        img.style.objectFit = 'cover';
+                        preview.replaceWith(img);
+                    } else {
+                        preview.src = newUrl;
+                    }
+
+                    // Also update the navbar avatar if this was a profile photo upload
+                    if (uploadUrl.includes('upload-profile-photo')) {
+                        const navAvatar = document.getElementById('nav-avatar');
+                        if (navAvatar) {
+                            if (navAvatar.tagName === 'IMG') {
+                                navAvatar.src = newUrl;
+                            } else {
+                                // Replace initials div with img in navbar
+                                const img = document.createElement('img');
+                                img.id  = 'nav-avatar';
+                                img.src = newUrl;
+                                img.style.cssText = 'width:48px;height:48px;border-radius:50%;object-fit:cover;border:2.5px solid #E02FAC;pointer-events:none;';
+                                navAvatar.replaceWith(img);
+                            }
+                        }
+                    }
+
                     getCropModal().hide();
                 } else {
                     alert('Could not save photo: ' + (data.error || 'Unknown error'));
@@ -542,14 +587,12 @@
         }, 'image/jpeg', 0.88);
     });
 
-    // Clean up Cropper when modal is closed (frees memory, resets state)
+    // Clean up on modal close
     document.getElementById('cropModal').addEventListener('hidden.bs.modal', function () {
-        if (cropper) {
-            cropper.destroy();
-            cropper = null;
-        }
+        if (cropper) { cropper.destroy(); cropper = null; }
         cropImageEl.src = '';
         cropImageEl.style.opacity = '0';
+        activeTarget = null;
     });
 
 }());

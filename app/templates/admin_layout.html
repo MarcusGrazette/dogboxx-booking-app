@@ -233,18 +233,7 @@
         </div>
 
         <!-- Flash messages -->
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        <div id="flash-container" style="position: fixed; top: 20px; right: 20px; z-index: 1050; max-width: 400px;">
-            {% for category, message in messages %}
-            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show shadow-sm" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
-        {% endwith %}
+        {% include 'partials/flash_toasts.html' %}
 
         <div class="app-content">
             <div class="container-fluid py-3">
@@ -257,20 +246,6 @@
 
 <!-- AdminLTE 4 JS -->
 <script src="https://cdn.jsdelivr.net/npm/admin-lte@4.0.0-rc6/dist/js/adminlte.min.js"></script>
-
-<script>
-  // Flash message auto-dismiss
-  document.addEventListener('DOMContentLoaded', function () {
-    const alerts = document.querySelectorAll('.alert-dismissible.fade.show');
-    if (!alerts || alerts.length === 0) return;
-    alerts.forEach(function (alert) {
-      const bsAlert = bootstrap.Alert.getOrCreateInstance(alert);
-      let timeout = setTimeout(() => bsAlert.close(), 5000);
-      alert.addEventListener('mouseenter', () => clearTimeout(timeout));
-      alert.addEventListener('mouseleave', () => { timeout = setTimeout(() => bsAlert.close(), 2000); });
-    });
-  });
-</script>
 
 {% block scripts %}{% endblock %}
 </body>

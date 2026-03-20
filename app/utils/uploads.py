@@ -72,8 +72,8 @@ def process_dog_photo(file_storage):
     return unique_filename
 
 
-def process_cropped_photo(file_storage):
-    """Process and save a pre-cropped dog photo from a Cropper.js canvas blob.
+def process_cropped_photo(file_storage, subfolder='dogs'):
+    """Process and save a pre-cropped photo from a Cropper.js canvas blob.
 
     The canvas always outputs a square JPEG blob with no EXIF metadata.
     This function resizes to CROPPED_SIZE, converts RGBA→RGB if needed,
@@ -81,6 +81,8 @@ def process_cropped_photo(file_storage):
 
     Args:
         file_storage: A werkzeug FileStorage object (blob from canvas.toBlob).
+        subfolder:    Upload sub-directory under static/uploads/ (default 'dogs').
+                      Use 'profiles' for user profile photos.
 
     Returns:
         The saved filename (e.g. 'abc123.jpg'), or None if no file provided.
@@ -113,10 +115,14 @@ def process_cropped_photo(file_storage):
     # Resize to square output size
     img = img.resize(CROPPED_SIZE, Image.LANCZOS)
 
-    # Save as JPEG with a UUID filename
+    # Resolve the target directory from UPLOAD_FOLDER base + subfolder
+    base_dir = os.path.dirname(current_app.config["UPLOAD_FOLDER"])
+    target_dir = os.path.join(base_dir, subfolder)
+    os.makedirs(target_dir, exist_ok=True)
+
     unique_filename = f"{uuid.uuid4()}.jpg"
-    upload_path = os.path.join(current_app.config["UPLOAD_FOLDER"], unique_filename)
+    upload_path = os.path.join(target_dir, unique_filename)
     img.save(upload_path, 'JPEG', quality=88, optimize=True)
 
-    logging.info(f"Saved cropped dog photo: {unique_filename}")
+    logging.info(f"Saved cropped photo ({subfolder}): {unique_filename}")
     return unique_filename

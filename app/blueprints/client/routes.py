@@ -345,6 +345,36 @@ def upload_dog_photo():
         return jsonify(success=False, error="Server error saving photo"), 500
 
 
+@client_bp.route("/profile/upload-profile-photo", methods=["POST"])
+@login_required
+def upload_profile_photo():
+    """AJAX endpoint: accept a cropped image blob and save it as the user's profile photo.
+
+    Returns JSON {success, url} or {success, error}.
+    """
+    if 'file' not in request.files:
+        return jsonify(success=False, error="No file provided"), 400
+
+    try:
+        filename = process_cropped_photo(request.files['file'], subfolder='profiles')
+        if not filename:
+            return jsonify(success=False, error="Empty file"), 400
+
+        current_user.profile_pic = filename
+        db.session.commit()
+
+        url = url_for('static', filename=f'uploads/profiles/{filename}')
+        logging.info(f"Profile photo updated for user {current_user.email}: {filename}")
+        return jsonify(success=True, url=url)
+
+    except ValueError as e:
+        return jsonify(success=False, error=str(e)), 400
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error saving profile photo for {current_user.email}: {e}")
+        return jsonify(success=False, error="Server error saving photo"), 500
+
+
 @client_bp.route("/onboard", methods=["GET", "POST"])
 @login_required
 def onboard():

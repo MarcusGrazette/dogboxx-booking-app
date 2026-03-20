@@ -76,10 +76,17 @@
                     <a href="#" class="nav-link lh-1 p-0 d-flex align-items-center justify-content-center"
                        data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu"
                        style="width:48px; height:48px; outline:none;">
-                        <div class="rounded-circle fw-bold d-flex align-items-center justify-content-center"
+                        {% if current_user.profile_pic %}
+                        <img id="nav-avatar"
+                             src="{{ url_for('static', filename='uploads/profiles/' + current_user.profile_pic) }}"
+                             alt="{{ current_user.firstname }}"
+                             style="width:48px; height:48px; border-radius:50%; object-fit:cover; border:2.5px solid #E02FAC; pointer-events:none;">
+                        {% else %}
+                        <div id="nav-avatar" class="rounded-circle fw-bold d-flex align-items-center justify-content-center"
                              style="width:48px; height:48px; background:#E02FAC; font-size:1rem; color:#fff; pointer-events:none;">
                             {{ current_user.firstname[0] | upper }}{{ current_user.lastname[0] | upper if current_user.lastname else '' }}
                         </div>
+                        {% endif %}
                     </a>
                     <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2"
                         style="min-width:200px; border-radius:0.75rem; overflow:hidden;">
@@ -132,18 +139,7 @@
         </div>
     </nav>{% endblock %}
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-    <div id="flash-container" style="position: fixed; top: 20px; right: 20px; z-index: 1050; max-width: 400px;">
-        {% for category, message in messages %}
-        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show shadow-sm" role="alert">
-            {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-    {% endwith %}
+    {% include 'partials/flash_toasts.html' %}
 
     <main class="{% block main_class %}container py-3 text-center{% endblock %}">
         {% block main %}{% endblock %}
@@ -152,19 +148,6 @@
     <footer class="mb-5">
     </footer>
     
-    <script>
-      document.addEventListener('DOMContentLoaded', function () {
-        const alerts = document.querySelectorAll('.alert-dismissible.fade.show');
-        if (!alerts || alerts.length === 0) return; // nothing to do
-
-        alerts.forEach(function (alert) {
-          const bsAlert = bootstrap.Alert.getOrCreateInstance(alert);
-          let timeout = setTimeout(() => bsAlert.close(), 5000);
-          alert.addEventListener('mouseenter', () => clearTimeout(timeout));
-          alert.addEventListener('mouseleave', () => { timeout = setTimeout(() => bsAlert.close(), 2000); });
-        });
-      });
-    </script>
     
     {% block scripts %}{% endblock %}
 </body>

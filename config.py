@@ -12,7 +12,7 @@ class Config:
     VAPID_CLAIMS_EMAIL  = os.environ.get('VAPID_CLAIMS_EMAIL', 'admin@dogboxx.org')
     SESSION_TYPE = "sqlalchemy"          # store sessions in the app DB (works on Railway)
     SESSION_SQLALCHEMY_TABLE = "sessions" # table name in Postgres/SQLite
-    SESSION_PERMANENT = False
+    SESSION_PERMANENT = True
     
     # Logging configuration
     LOG_LEVEL = "INFO"
