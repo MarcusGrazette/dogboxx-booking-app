@@ -196,16 +196,17 @@ self.addEventListener('push', function (event) {
 
   var APP_NAME    = 'Dogboxx';
   var DEFAULT_ICON  = '/static/android-chrome-192x192.png';
-  var DEFAULT_BADGE = '/static/favicon-32x32.png';
+  var DEFAULT_BADGE = '/static/badge-mono.png';
 
   var title   = payload.title  || APP_NAME;
   var options = {
     body:     payload.body   || '',
     icon:     payload.icon   || DEFAULT_ICON,
-    badge:    DEFAULT_BADGE,
+    badge:    payload.badge  || DEFAULT_BADGE,
     data:     { link: payload.link || '/' },
     tag:      payload.tag    || 'dogboxx-notification', // replaces stale notification of same type
     renotify: false,
+    vibrate:  [200, 100, 200],  // short-pause-short pulse
   };
 
   var unreadCount = payload.unread_count || 1;
