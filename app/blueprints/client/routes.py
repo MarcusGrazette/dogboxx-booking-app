@@ -167,6 +167,126 @@ def index():
     return render_template("index.html", user=user, client=user.client, dogs=user_dogs, bookings=upcoming_bookings, form=form) # type: ignore
 
 
+@client_bp.route("/book", methods=["POST"])
+@login_required
+def book():
+    """AJAX single booking endpoint — returns JSON, no page reload.
+
+    Accepts JSON body: { "date": "YYYY-MM-DD", "slot": "Morning"|"Afternoon" }
+    Returns: { "success": bool, "message": str, "booking": {...} }
+    """
+    data = request.get_json(silent=True) or {}
+    booking_date_str = data.get('date', '').strip()
+    booking_slot     = data.get('slot', '').strip()
+
+    # ── Validate inputs ───────────────────────────────────────────────────────
+    if not booking_date_str or not booking_slot:
+        return jsonify({'success': False, 'message': 'Date and slot are required.'}), 400
+
+    try:
+        booking_date = date_type.fromisoformat(booking_date_str)
+    except ValueError:
+        return jsonify({'success': False, 'message': 'Invalid date format.'}), 400
+
+    today   = datetime.now(timezone.utc).date()
+    max_date = (datetime.now(timezone.utc) + timedelta(days=90)).date()
+
+    if booking_date < today:
+        return jsonify({'success': False, 'message': 'Booking date cannot be in the past.'}), 400
+    if booking_date > max_date:
+        return jsonify({'success': False, 'message': 'Booking date cannot be more than 90 days in the future.'}), 400
+    if booking_slot not in ('Morning', 'Afternoon'):
+        return jsonify({'success': False, 'message': 'Invalid slot selected.'}), 400
+
+    user_dogs = Dog.query.join(DogOwner).filter(DogOwner.user_id == current_user.id).all()
+    if not user_dogs:
+        return jsonify({'success': False, 'message': 'No dog found on your account. Please add a dog before booking.'}), 400
+
+    dog    = user_dogs[0]
+    dog_id = dog.id
+
+    # ── Duplicate / cap checks ────────────────────────────────────────────────
+    active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
+    existing = Booking.query.filter(
+        Booking.dog_id   == dog_id,
+        Booking.date     == booking_date,
+        Booking.slot     == booking_slot,
+        Booking.status.in_(active_statuses),
+    ).first()
+    if existing:
+        return jsonify({'success': False, 'message': 'This dog already has a booking for that slot on that date.'}), 409
+
+    day_count = Booking.query.filter(
+        Booking.dog_id == dog_id,
+        Booking.date   == booking_date,
+        Booking.status.in_(active_statuses),
+    ).count()
+    if day_count >= 2:
+        return jsonify({'success': False, 'message': 'This dog already has two bookings on that date.'}), 409
+
+    # ── Capacity check + create ───────────────────────────────────────────────
+    try:
+        default_service = ServiceType.query.filter_by(slug='group-walk', active=True).first()
+        if not default_service:
+            return jsonify({'success': False, 'message': 'No service type available. Please contact support.'}), 500
+
+        available, can_waitlist, capacity_msg = check_availability(default_service, booking_date, booking_slot)
+
+        if not available and not can_waitlist:
+            return jsonify({'success': False, 'message': capacity_msg}), 409
+
+        booking_status = 'waitlisted' if (not available and can_waitlist) else 'requested'
+
+        new_booking = Booking(
+            user_id         = current_user.id,
+            dog_id          = dog_id,
+            service_type_id = default_service.id,
+            date            = booking_date,
+            slot            = booking_slot,
+            status          = booking_status,
+        )
+        db.session.add(new_booking)
+        db.session.commit()
+
+        # Notify all admins
+        admins       = User.query.filter_by(is_admin=True).all()
+        date_str_fmt = booking_date.strftime('%a %-d %b')
+        for admin in admins:
+            create_notification(
+                recipient_id      = admin.id,
+                notification_type = 'booking_requested',
+                title             = f'New booking request for {date_str_fmt}',
+                body              = f'{current_user.firstname} requested {booking_slot} for {dog.name}',
+                link              = '/admin',
+                sender_id         = current_user.id,
+            )
+
+        if booking_status == 'waitlisted':
+            message = (f"All slots are full — you've been added to the waitlist "
+                       f"for {booking_slot} on {booking_date.strftime('%d %b')}.")
+        else:
+            message = 'Booking request submitted!'
+
+        return jsonify({
+            'success': True,
+            'status':  booking_status,
+            'message': message,
+            'booking': {
+                'id':           new_booking.id,
+                'date_display': booking_date.strftime('%a %-d %b'),
+                'date_iso':     booking_date.isoformat(),
+                'slot':         booking_slot,
+                'status':       booking_status,
+                'dog_id':       dog_id,
+            },
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f'AJAX booking error for user {current_user.id}: {e}')
+        return jsonify({'success': False, 'message': 'An error occurred. Please try again.'}), 500
+
+
 @client_bp.route("/profile", methods=["GET", "POST"])
 @login_required
 def profile():
