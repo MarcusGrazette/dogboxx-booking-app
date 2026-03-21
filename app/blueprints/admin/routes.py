@@ -932,6 +932,15 @@ def join_dog_access(client_id):
 
     try:
         db.session.add(DogOwner(dog_id=dog_id, user_id=secondary_user_id, role='secondary'))
+
+        # If the secondary user hasn't completed onboarding yet (e.g. admin created
+        # their account without a dog), mark it complete — they'll use the shared dog
+        # and don't need to go through the onboarding flow.
+        secondary_client = Client.query.filter_by(user_id=secondary_user_id).first()
+        if secondary_client and not secondary_client.onboarding_completed:
+            secondary_client.onboarding_completed = True
+            secondary_client.onboarding_completed_at = datetime.now(timezone.utc)
+
         db.session.commit()
         logging.info(
             f"Admin {current_user.id} granted {secondary_user.email} secondary access "

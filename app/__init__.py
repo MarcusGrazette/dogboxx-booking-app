@@ -160,14 +160,20 @@ def create_app(config_name=None):
         if current_user.must_change_password:
             return redirect('/auth/change-password')
 
-        # Redirect clients who haven't completed onboarding
+        # Redirect clients who haven't completed onboarding.
+        # Exception: secondary owners have shared access to another client's dog —
+        # they don't need to onboard themselves.
         if current_user.role == 'client':
             if request.endpoint not in ['client.onboard', 'auth.logout', 'auth.change_password', 'static']:
-                from app.models import Client
+                from app.models import Client, DogOwner
                 client = Client.query.filter_by(user_id=current_user.id).first()
                 if not client or not client.onboarding_completed:
-                    from flask import url_for
-                    return redirect(url_for('client.onboard'))
+                    has_secondary_dog = DogOwner.query.filter_by(
+                        user_id=current_user.id, role='secondary'
+                    ).first() is not None
+                    if not has_secondary_dog:
+                        from flask import url_for
+                        return redirect(url_for('client.onboard'))
 
     @app.after_request
     def add_security_headers(response):
