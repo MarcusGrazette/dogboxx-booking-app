@@ -300,9 +300,20 @@ def profile():
     if not client or not client.onboarding_completed:
         return redirect(url_for('client.onboard'))
 
-    # Get primary dog
+    # Get primary dog (user is the main owner — can edit photo/details)
     dog_owner = DogOwner.query.filter_by(user_id=current_user.id, role='primary').first()
     dog = Dog.query.get(dog_owner.dog_id) if dog_owner else None
+
+    # Get secondary dogs (user has shared access — read-only on the profile)
+    secondary_ownerships = DogOwner.query.filter_by(user_id=current_user.id, role='secondary').all()
+    secondary_dogs = []
+    for so in secondary_ownerships:
+        secondary_dog = Dog.query.get(so.dog_id)
+        if not secondary_dog:
+            continue
+        primary_o = DogOwner.query.filter_by(dog_id=so.dog_id, role='primary').first()
+        primary_user = User.query.get(primary_o.user_id) if primary_o else None
+        secondary_dogs.append({'dog': secondary_dog, 'primary_owner': primary_user})
 
     # Booking stats for the profile sidebar
     # Use dog_ids so secondary owners see all bookings for their shared dog,
@@ -389,11 +400,11 @@ def profile():
                             dog.pic = pic_filename
                     except ValueError as e:
                         flash(f"Upload error: {str(e)}", "error")
-                        return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, today=datetime.now().strftime('%Y-%m-%d'))
+                        return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=datetime.now().strftime("%Y-%m-%d"))
                     except Exception as e:
                         logging.error(f"Error processing uploaded file: {e}")
                         flash("Error processing your image. Please try a different file.", "error")
-                        return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, today=datetime.now().strftime('%Y-%m-%d'))
+                        return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=datetime.now().strftime("%Y-%m-%d"))
 
             db.session.commit()
             flash("Profile updated successfully!", "success")
@@ -432,7 +443,7 @@ def profile():
             form.dog_dob.data = dog.date_of_birth
             form.dog_allergies.data = dog.allergies
 
-    return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, today=datetime.now().strftime('%Y-%m-%d'))
+    return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=datetime.now().strftime("%Y-%m-%d"))
 
 
 @client_bp.route("/profile/upload-dog-photo", methods=["POST"])

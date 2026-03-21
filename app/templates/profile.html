@@ -191,7 +191,8 @@
                 </div>
             </div>
 
-            {# ─── DOG CARD ─── #}
+            {# ─── PRIMARY DOG CARD (user is the owner — can update photo) ─── #}
+            {% if dog %}
             <div class="card shadow-sm profile-card mb-4" style="background:#f2f2f2;">
                 <div class="card-body p-4">
 
@@ -199,25 +200,23 @@
                     <div class="d-flex align-items-center gap-3 mb-3">
                         <div class="dog-photo-wrap" id="dog-photo-clickable" title="Update photo"
                              data-upload-url="{{ url_for('client.upload_dog_photo') }}">
-                            <img src="{{ url_for('static', filename='uploads/dogs/' + dog.pic) if dog and dog.pic else url_for('static', filename='uploads/dogs/default-dog.png') }}"
+                            <img src="{{ url_for('static', filename='uploads/dogs/' + dog.pic) if dog.pic else url_for('static', filename='uploads/dogs/default-dog.png') }}"
                                  onerror="this.onerror=null;this.src='{{ url_for('static', filename='uploads/dogs/default-dog.png') }}'"
-                                 alt="{{ dog.name if dog else 'Dog' }}" id="dog-photo-preview">
+                                 alt="{{ dog.name }}" id="dog-photo-preview">
                             <div class="dog-photo-edit-overlay">
                                 <i class="bi bi-pencil-fill"></i>
                             </div>
                         </div>
                         <div>
-                            <div class="fw-bold lh-sm">{% if dog %}{{ dog.name }}{% else %}Your Dog{% endif %}</div>
-                            {% if dog %}
+                            <div class="fw-bold lh-sm">{{ dog.name }}</div>
                             <div class="text-muted small">
                                 {{ dog.gender | capitalize if dog.gender }}{% if dog.breed %} · {{ dog.breed }}{% endif %}
                             </div>
-                            {% endif %}
                         </div>
                     </div>
 
                     {# DOB + age #}
-                    {% if dog and dog.date_of_birth %}
+                    {% if dog.date_of_birth %}
                     <div class="detail-row mb-3">
                         <i class="bi bi-calendar3 detail-icon"></i>
                         <div>
@@ -238,6 +237,72 @@
 
                 </div>
             </div>
+            {% endif %}
+
+            {# ─── SECONDARY DOG CARDS (shared access — read-only) ─── #}
+            {% for entry in secondary_dogs %}
+            {% set sdog = entry.dog %}
+            {% set primary_owner = entry.primary_owner %}
+            <div class="card shadow-sm profile-card mb-4" style="background:#f2f2f2;">
+                <div class="card-body p-4">
+
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        {# Photo — no click handler, read-only #}
+                        <div class="profile-avatar">
+                            <img src="{{ url_for('static', filename='uploads/dogs/' + sdog.pic) if sdog.pic else url_for('static', filename='uploads/dogs/default-dog.png') }}"
+                                 onerror="this.onerror=null;this.src='{{ url_for('static', filename='uploads/dogs/default-dog.png') }}'"
+                                 alt="{{ sdog.name }}"
+                                 style="width:64px; height:64px; border-radius:50%; object-fit:cover; border:3px solid var(--db-primary-subtle); display:block;">
+                        </div>
+                        <div>
+                            <div class="fw-bold lh-sm">
+                                {{ sdog.name }}
+                                <span class="badge ms-1 fw-normal"
+                                      style="font-size:.65rem; background:#e8f4fd; color:#0a6ebd; border:1px solid #b8d9f5;">
+                                    <i class="bi bi-people me-1"></i>Shared access
+                                </span>
+                            </div>
+                            <div class="text-muted small">
+                                {{ sdog.gender | capitalize if sdog.gender }}{% if sdog.breed %} · {{ sdog.breed }}{% endif %}
+                            </div>
+                            {% if primary_owner %}
+                            <div class="text-muted" style="font-size:0.72rem; margin-top:2px;">
+                                <i class="bi bi-person me-1"></i>Owner: {{ primary_owner.full_name }}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {% if sdog.date_of_birth %}
+                    <div class="detail-row mb-2">
+                        <i class="bi bi-calendar3 detail-icon"></i>
+                        <div>{{ sdog.date_of_birth.strftime('%d %b %Y') }}</div>
+                    </div>
+                    {% endif %}
+
+                    <p class="text-muted mb-0" style="font-size:0.75rem;">
+                        <i class="bi bi-info-circle me-1"></i>
+                        You can book and manage walks for {{ sdog.name }}. Contact Dogboxx to update dog details.
+                    </p>
+
+                </div>
+            </div>
+            {% endfor %}
+
+            {# ─── Fallback if no dog at all ─── #}
+            {% if not dog and not secondary_dogs %}
+            <div class="card shadow-sm profile-card mb-4" style="background:#f2f2f2;">
+                <div class="card-body p-4">
+                    <div class="text-muted small fst-italic">
+                        <i class="bi bi-exclamation-circle me-1 text-warning"></i>
+                        No dog on file yet — contact Dogboxx to get started.
+                    </div>
+                    {# Keep the hidden file input so JS doesn't error #}
+                    <input type="file" id="dog-photo-input" accept="image/png,image/jpeg,image/gif"
+                           style="display:none;" aria-hidden="true">
+                </div>
+            </div>
+            {% endif %}
 
             {# ─── BOOKING STATS ─── #}
             <div class="card shadow-sm profile-card mb-4">
@@ -425,13 +490,13 @@
         return years === 1 ? `1 year, ${months}mo old` : `${years} years, ${months}mo old`;
     }
 
+    {% if dog and dog.date_of_birth %}
     const ageEl = document.getElementById('dog-age-display');
     if (ageEl) {
-        {% if dog and dog.date_of_birth %}
         const age = calcDogAge('{{ dog.date_of_birth.strftime("%Y-%m-%d") }}');
         if (age) ageEl.textContent = age;
-        {% endif %}
     }
+    {% endif %}
 
     // ── Cropper.js photo upload ───────────────────────────────────────────────
     //
@@ -450,7 +515,7 @@
     //   4. "Save photo" → getCroppedCanvas(400×400).toBlob() → fetch POST →
     //      server saves → preview updates in place, navbar img updated if profile
 
-    const fileInput   = document.getElementById('dog-photo-input');
+    const fileInput   = document.getElementById('dog-photo-input');  // null for secondary-only owners
     const cropImageEl = document.getElementById('crop-image');
     const cropSaveBtn = document.getElementById('crop-save-btn');
     const cropSpinner = document.getElementById('crop-spinner');
@@ -459,6 +524,9 @@
     let cropper     = null;
     let cropModal   = null;
     let activeTarget = null; // the trigger element that opened the modal
+
+    // No primary dog → photo upload not available; skip all cropper wiring
+    if (!fileInput) return;
 
     function getCropModal() {
         if (!cropModal) {
