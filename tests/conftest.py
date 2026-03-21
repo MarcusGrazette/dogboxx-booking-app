@@ -103,7 +103,7 @@ def dog(client_user):
     dog = Dog(name='Buddy', breed='Labrador')
     _db.session.add(dog)
     _db.session.flush()
-    assoc = DogOwner(dog_id=dog.id, user_id=client_user.id, is_primary=True)
+    assoc = DogOwner(dog_id=dog.id, user_id=client_user.id, role='primary')
     _db.session.add(assoc)
     _db.session.flush()
     return dog
