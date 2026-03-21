@@ -13,6 +13,7 @@ from app.models import User, Client, Dog, Booking, DogOwner, ServiceType, Walker
 from app import db
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
 from app.utils.uploads import process_dog_photo, process_cropped_photo
+from app.utils.booking_access import get_accessible_dog_ids, user_can_access_booking
 from app.capacity import check_availability, get_slot_availability_summary
 from app.forms import OnboardingForm, BookingForm, ProfileForm
 import logging
@@ -40,12 +41,13 @@ def index():
     # Get user's dogs through DogOwner relationship
     user_dogs = Dog.query.join(DogOwner).filter(DogOwner.user_id == current_user.id).all()
 
-    # Return upcoming bookings
+    # Return upcoming bookings for all dogs the user has access to
     today = datetime.now(timezone.utc).date()
+    _index_dog_ids = get_accessible_dog_ids(current_user.id)
     upcoming_bookings_query = Booking.query.options(
         joinedload(Booking.walker).joinedload(Walker.user)
     ).filter(
-        Booking.user_id == current_user.id,
+        Booking.dog_id.in_(_index_dog_ids),
         Booking.status != 'cancelled',
         Booking.date >= today
     ).order_by(Booking.date.asc())
@@ -303,6 +305,8 @@ def profile():
     dog = Dog.query.get(dog_owner.dog_id) if dog_owner else None
 
     # Booking stats for the profile sidebar
+    # Use dog_ids so secondary owners see all bookings for their shared dog,
+    # not just bookings they personally created.
     from datetime import date
     today_date = date.today()
     month_start = date(today_date.year, today_date.month, 1)
@@ -311,8 +315,10 @@ def profile():
     else:
         month_end = date(today_date.year, today_date.month + 1, 1)
 
+    accessible_dog_ids = get_accessible_dog_ids(current_user.id)
+
     month_bookings = Booking.query.filter(
-        Booking.user_id == current_user.id,
+        Booking.dog_id.in_(accessible_dog_ids),
         Booking.date >= month_start,
         Booking.date < month_end,
         Booking.status.notin_(['cancelled', 'rejected'])
@@ -321,13 +327,13 @@ def profile():
     pending_this_month = sum(1 for b in month_bookings if b.status in ('requested', 'waitlisted'))
 
     next_booking = Booking.query.filter(
-        Booking.user_id == current_user.id,
+        Booking.dog_id.in_(accessible_dog_ids),
         Booking.date >= today_date,
         Booking.status == 'confirmed'
     ).order_by(Booking.date).first()
 
     total_completed = Booking.query.filter(
-        Booking.user_id == current_user.id,
+        Booking.dog_id.in_(accessible_dog_ids),
         Booking.status == 'completed'
     ).count()
 
@@ -651,10 +657,10 @@ def cancel_booking():
         if not booking:
             return jsonify(success=False, message="Booking not found"), 404
             
-        # Check authorization - only allow users to cancel their own bookings or admins to cancel any
-        if booking.user_id != current_user.id and not current_user.is_admin:
+        # Check authorization — allow booking creator, any dog owner, or admins
+        if not user_can_access_booking(current_user, booking):
             return jsonify(success=False, message="You are not authorized to cancel this booking"), 403
-            
+
         is_admin_cancel = current_user.is_admin and booking.user_id != current_user.id
         booking.status = "cancelled"
         booking.walker_id = None  # Unassign walker
@@ -691,8 +697,9 @@ def calendar_data(year, month):
     except ValueError:
         return jsonify(success=False, message="Invalid date"), 400
 
+    accessible_dog_ids = get_accessible_dog_ids(current_user.id)
     bookings = Booking.query.filter(
-        Booking.user_id == current_user.id,
+        Booking.dog_id.in_(accessible_dog_ids),
         Booking.date >= start_date,
         Booking.date < end_date,
         Booking.status.notin_(['cancelled', 'rejected'])
@@ -870,7 +877,7 @@ def update_booking_note(booking_id):
     if not booking:
         return jsonify(success=False, message="Booking not found"), 404
 
-    if booking.user_id != current_user.id and not current_user.is_admin:
+    if not user_can_access_booking(current_user, booking):
         return jsonify(success=False, message="Not your booking"), 403
 
     data = request.get_json(silent=True) or {}
