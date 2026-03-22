@@ -5,10 +5,28 @@
   "description": "Dog walking bookings",
   "start_url": "/",
   "scope": "/",
+  "lang": "en-GB",
+  "dir": "ltr",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait",
   "theme_color": "#1B1B1B",
   "background_color": "#1B1B1B",
+  "shortcuts": [
+    {
+      "name": "My Pickups",
+      "short_name": "Pickups",
+      "description": "View today's pickup list",
+      "url": "/walker/pickups",
+      "icons": [{ "src": "/static/android-chrome-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Book a Walk",
+      "short_name": "Book Walk",
+      "url": "/client/",
+      "icons": [{ "src": "/static/android-chrome-192x192.png", "sizes": "192x192" }]
+    }
+  ],
   "icons": [
     {
       "src": "/static/android-chrome-192x192.png",

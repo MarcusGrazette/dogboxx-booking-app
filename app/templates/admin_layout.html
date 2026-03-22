@@ -240,6 +240,23 @@
         </div>
 
         <!-- Flash messages -->
+        <!-- Custom A2HS Install Banner -->
+        <div id="a2hs-banner" class="d-none position-fixed bottom-0 start-0 w-100 p-3 shadow-lg" style="z-index: 1070; background: rgba(28, 28, 30, 0.98); backdrop-filter: blur(14px); border-top: 2px solid #E02FAC; transform: translateY(100%); transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);">
+          <div class="container-fluid d-flex align-items-center justify-content-between px-1">
+            <div class="d-flex align-items-center text-white gap-3">
+              <img src="{{ url_for('static', filename='android-chrome-192x192.png') }}" width="44" height="44" class="rounded-3 shadow-sm" alt="Dogboxx Icon">
+              <div>
+                <div class="fw-bold mb-0 lh-1" style="font-size: 0.95rem;">Dogboxx Admin</div>
+                <div class="text-white-50 lh-1 mt-1" style="font-size: 0.8rem;">Install for the best experience</div>
+              </div>
+            </div>
+            <div class="d-flex gap-2">
+              <button class="btn btn-sm text-white-50 border-0 fs-6 px-2" id="a2hs-dismiss" aria-label="Dismiss">&times;</button>
+              <button class="btn btn-sm btn-primary fw-semibold px-3 rounded-pill" id="a2hs-install">Install</button>
+            </div>
+          </div>
+        </div>
+
         {% include 'partials/flash_toasts.html' %}
 
         <div class="app-content">
@@ -253,6 +270,54 @@
 
 <!-- AdminLTE 4 JS -->
 <script src="https://cdn.jsdelivr.net/npm/admin-lte@4.0.0-rc6/dist/js/adminlte.min.js"></script>
+
+<script>
+// Register Service Worker for PWA (offline caching & installability)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function(err) {
+      console.warn('SW registration failed:', err);
+    });
+  });
+}
+
+// Handle Custom "Add to Home Screen" (A2HS) Prompt
+let deferredPrompt;
+const a2hsBanner = document.getElementById('a2hs-banner');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  // Prevent Chrome from automatically showing the mini-infobar
+  e.preventDefault();
+  deferredPrompt = e;
+  
+  // Show our custom banner if not dismissed previously
+  if (!localStorage.getItem('dismissedA2HSAdmin')) {
+    a2hsBanner.classList.remove('d-none');
+    setTimeout(() => {
+      a2hsBanner.style.transform = 'translateY(0)';
+    }, 10);
+  }
+});
+
+if (a2hsBanner) {
+  document.getElementById('a2hs-install').addEventListener('click', async () => {
+    a2hsBanner.style.transform = 'translateY(100%)';
+    setTimeout(() => a2hsBanner.classList.add('d-none'), 400);
+    
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      deferredPrompt = null;
+    }
+  });
+
+  document.getElementById('a2hs-dismiss').addEventListener('click', () => {
+    a2hsBanner.style.transform = 'translateY(100%)';
+    setTimeout(() => a2hsBanner.classList.add('d-none'), 400);
+    localStorage.setItem('dismissedA2HSAdmin', 'true');
+  });
+}
+</script>
 
 {% block scripts %}{% endblock %}
 </body>
