@@ -679,10 +679,11 @@ def cancel_booking():
         booking.walker_id = None  # Unassign walker
         db.session.commit()
 
-        # 22c: notify the client when an admin cancels their booking
+        date_str_fmt = booking.date.strftime('%a %-d %b')
+        dog_name = booking.dog.name if booking.dog else 'Unknown dog'
+
         if is_admin_cancel:
-            date_str_fmt = booking.date.strftime('%a %-d %b')
-            dog_name = booking.dog.name if booking.dog else 'your dog'
+            # Notify the client their walk was cancelled by admin
             create_notification(
                 recipient_id=booking.user_id,
                 notification_type='booking_cancelled',
@@ -691,6 +692,19 @@ def cancel_booking():
                 link=f'/bookings/{booking.id}',
                 sender_id=current_user.id,
             )
+        else:
+            # Notify all admins that a client cancelled
+            admins = User.query.filter_by(is_admin=True).all()
+            client_name = current_user.full_name
+            for admin in admins:
+                create_notification(
+                    recipient_id=admin.id,
+                    notification_type='booking_cancelled',
+                    title=f"{client_name} cancelled {dog_name}'s walk",
+                    body=f"{date_str_fmt} · {booking.slot}",
+                    link=f'/admin/clients/{booking.user_id}',
+                    sender_id=current_user.id,
+                )
 
         return jsonify(success=True, message="Booking successfully cancelled")
         
