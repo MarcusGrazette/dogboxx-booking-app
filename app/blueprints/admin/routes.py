@@ -1117,6 +1117,11 @@ def edit_client(client_id):
 
     form = ClientCreateForm()
 
+    # In edit mode the email field is rendered as a disabled (non-submitted) input,
+    # so inject the existing email before validation to satisfy DataRequired.
+    if request.method == 'POST':
+        form.email.data = user.email
+
     if form.validate_on_submit():
         try:
             user.firstname = form.firstname.data.strip().title()
