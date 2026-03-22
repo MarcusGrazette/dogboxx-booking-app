@@ -1065,6 +1065,7 @@ def new_client():
                     breed=form.dog_breed.data.strip() if form.dog_breed.data else "",
                     allergies=form.dog_allergies.data.strip() if form.dog_allergies.data else "",
                     date_of_birth=form.dog_dob.data,
+                    whatsapp_group_url=(form.dog_whatsapp_group_url.data.strip() or None) if form.dog_whatsapp_group_url.data else None,
                 )
                 db.session.add(new_dog)
                 db.session.flush()
@@ -1155,6 +1156,7 @@ def edit_client(client_id):
                     dog.breed = form.dog_breed.data.strip() if form.dog_breed.data else ""
                     dog.allergies = form.dog_allergies.data.strip() if form.dog_allergies.data else ""
                     dog.date_of_birth = form.dog_dob.data
+                    dog.whatsapp_group_url = (form.dog_whatsapp_group_url.data.strip() or None) if form.dog_whatsapp_group_url.data else None
                 else:
                     new_dog = Dog(
                         name=form.dog_name.data.strip(),
@@ -1162,6 +1164,7 @@ def edit_client(client_id):
                         breed=form.dog_breed.data.strip() if form.dog_breed.data else "",
                         allergies=form.dog_allergies.data.strip() if form.dog_allergies.data else "",
                         date_of_birth=form.dog_dob.data,
+                        whatsapp_group_url=(form.dog_whatsapp_group_url.data.strip() or None) if form.dog_whatsapp_group_url.data else None,
                     )
                     db.session.add(new_dog)
                     db.session.flush()
@@ -1204,6 +1207,7 @@ def edit_client(client_id):
             form.dog_breed.data = dog.breed
             form.dog_dob.data = dog.date_of_birth
             form.dog_allergies.data = dog.allergies
+            form.dog_whatsapp_group_url.data = dog.whatsapp_group_url
 
     return render_template(
         "admin_client_form.html",

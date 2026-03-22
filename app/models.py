@@ -132,6 +132,7 @@ class Dog(db.Model):
     allergies = db.Column(db.String(200), nullable=True)
     other_info = db.Column(db.String(500), nullable=True)
     pic = db.Column(db.String(300), nullable=True)
+    whatsapp_group_url = db.Column(db.String(2048), nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Many-to-many relationship with owners via DogOwner

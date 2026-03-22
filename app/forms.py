@@ -325,6 +325,11 @@ class ClientCreateForm(FlaskForm):
         validators=[Optional()],
         render_kw={"rows": 2, "placeholder": "Allergies, medical notes, special needs…"}
     )
+    dog_whatsapp_group_url = StringField(
+        'WhatsApp Group URL',
+        validators=[Optional(), Length(max=2048)],
+        render_kw={"placeholder": "https://chat.whatsapp.com/…"}
+    )
 
     submit = SubmitField('Save Client')
 

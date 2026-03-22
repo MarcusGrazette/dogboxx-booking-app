@@ -65,7 +65,16 @@
                     {% endif %}
 
                     <!-- Row 5: WhatsApp buttons -->
-                    {% if b.user and b.user.phone %}
+                    {% if b.dog and b.dog.whatsapp_group_url %}
+                    <div class="d-flex gap-2 mt-2">
+                        <a href="{{ b.dog.whatsapp_group_url }}"
+                           target="_blank" rel="noopener"
+                           class="btn btn-sm fw-semibold flex-fill"
+                           style="background:#25D366;color:#fff;font-size:0.78rem;">
+                            <i class="bi bi-whatsapp me-1"></i>Group chat
+                        </a>
+                    </div>
+                    {% elif b.user and b.user.phone %}
                     {% set wa_num = b.user.phone | wa_number %}
                     <div class="d-flex gap-2 mt-2">
                         <a href="https://wa.me/{{ wa_num }}?text=Hi%2C%20I'm%205%20mins%20away%21"
