@@ -533,7 +533,7 @@ def board_data(date_str):
             'id': b.id,
             'dog_name': b.dog.name if b.dog else 'Unknown',
             'dog_pic': b.dog.pic if b.dog and b.dog.pic else None,
-            'owner_name': b.user.full_name if b.user else '',
+            'owner_name': b.dog.owners_display if b.dog else (b.user.full_name if b.user else ''),
             'slot': b.slot,
             'status': b.status,
             'pickup_order': b.pickup_order,
@@ -833,10 +833,51 @@ def clients():
 @login_required
 @admin_required
 def client_detail(client_id):
-    """Show client detail with dog info and notification audit trail (admin only)"""
+    """Show client detail with dog info, shared access, and notification audit trail (admin only)"""
     user = User.query.filter(User.role == 'client', User.id == client_id).first_or_404()
-    dog_owner = DogOwner.query.filter_by(user_id=user.id, role='primary').first()
-    dog = Dog.query.get(dog_owner.dog_id) if dog_owner else None
+
+    # Dogs where this user is the primary owner
+    primary_ownerships = DogOwner.query.filter_by(user_id=user.id, role='primary').all()
+    primary_dogs = []
+    for ownership in primary_ownerships:
+        dog = Dog.query.get(ownership.dog_id)
+        if not dog:
+            continue
+        secondary_ownerships = DogOwner.query.filter_by(dog_id=dog.id, role='secondary').all()
+        secondary_users = [User.query.get(so.user_id) for so in secondary_ownerships]
+        secondary_users = [u for u in secondary_users if u]  # filter None
+        primary_dogs.append({'dog': dog, 'secondary_owners': secondary_users})
+
+    # Dogs where this user is a secondary owner (joined from another account)
+    secondary_ownerships = DogOwner.query.filter_by(user_id=user.id, role='secondary').all()
+    secondary_dogs = []
+    for ownership in secondary_ownerships:
+        dog = Dog.query.get(ownership.dog_id)
+        if not dog:
+            continue
+        primary_o = DogOwner.query.filter_by(dog_id=dog.id, role='primary').first()
+        primary_user = User.query.get(primary_o.user_id) if primary_o else None
+        secondary_dogs.append({'dog': dog, 'primary_owner': primary_user})
+
+    # Clients available to join — exclude self and anyone already linked
+    already_linked_ids = {user.id}
+    for pd in primary_dogs:
+        for so in pd['secondary_owners']:
+            already_linked_ids.add(so.id)
+    for sd in secondary_dogs:
+        if sd['primary_owner']:
+            already_linked_ids.add(sd['primary_owner'].id)
+    available_clients = (
+        User.query
+        .filter(User.role == 'client', User.active == True)
+        .filter(~User.id.in_(already_linked_ids))
+        .order_by(User.lastname, User.firstname)
+        .all()
+    )
+
+    # Backward-compat: keep `dog` pointing at first primary dog for old template sections
+    dog = primary_dogs[0]['dog'] if primary_dogs else None
+
     notifications = (
         Notification.query
         .filter_by(recipient_id=user.id)
@@ -844,7 +885,118 @@ def client_detail(client_id):
         .limit(20)
         .all()
     )
-    return render_template("admin_client_detail.html", client=user, dog=dog, notifications=notifications)
+    return render_template(
+        "admin_client_detail.html",
+        client=user,
+        dog=dog,
+        primary_dogs=primary_dogs,
+        secondary_dogs=secondary_dogs,
+        available_clients=available_clients,
+        notifications=notifications,
+    )
+
+
+@admin_bp.route("/clients/<int:client_id>/join", methods=["POST"])
+@login_required
+@admin_required
+def join_dog_access(client_id):
+    """Grant a secondary client shared access to the primary client's dog.
+
+    Expects JSON: { "dog_id": int, "secondary_user_id": int }
+    The secondary user gains read/book/cancel access to the dog but is not
+    the primary owner — they cannot modify the dog's profile.
+    """
+    primary_user = User.query.filter(User.role == 'client', User.id == client_id).first_or_404()
+    data = request.get_json(silent=True) or {}
+    dog_id = data.get('dog_id')
+    secondary_user_id = data.get('secondary_user_id')
+
+    if not dog_id or not secondary_user_id:
+        return jsonify(success=False, message="Missing dog_id or secondary_user_id"), 400
+
+    # Verify dog belongs to this primary client
+    ownership = DogOwner.query.filter_by(dog_id=dog_id, user_id=primary_user.id, role='primary').first()
+    if not ownership:
+        return jsonify(success=False, message="Dog not found for this client"), 404
+
+    secondary_user = User.query.filter(User.role == 'client', User.id == secondary_user_id).first()
+    if not secondary_user:
+        return jsonify(success=False, message="Secondary client not found"), 404
+
+    if secondary_user_id == client_id:
+        return jsonify(success=False, message="Cannot join an account to itself"), 400
+
+    existing = DogOwner.query.filter_by(dog_id=dog_id, user_id=secondary_user_id).first()
+    if existing:
+        return jsonify(success=False, message=f"{secondary_user.full_name} already has access to this dog"), 409
+
+    try:
+        db.session.add(DogOwner(dog_id=dog_id, user_id=secondary_user_id, role='secondary'))
+
+        # If the secondary user hasn't completed onboarding yet (e.g. admin created
+        # their account without a dog), mark it complete — they'll use the shared dog
+        # and don't need to go through the onboarding flow.
+        secondary_client = Client.query.filter_by(user_id=secondary_user_id).first()
+        if secondary_client and not secondary_client.onboarding_completed:
+            secondary_client.onboarding_completed = True
+            secondary_client.onboarding_completed_at = datetime.now(timezone.utc)
+
+        db.session.commit()
+        logging.info(
+            f"Admin {current_user.id} granted {secondary_user.email} secondary access "
+            f"to dog {dog_id} (primary: {primary_user.email})"
+        )
+        return jsonify(
+            success=True,
+            message=f"{secondary_user.full_name} now has access to {ownership.dog.name}",
+            secondary_user={'id': secondary_user.id, 'full_name': secondary_user.full_name, 'email': secondary_user.email},
+        )
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error joining accounts: {e}")
+        return jsonify(success=False, message="An error occurred"), 500
+
+
+@admin_bp.route("/clients/<int:client_id>/revoke-access", methods=["POST"])
+@login_required
+@admin_required
+def revoke_dog_access(client_id):
+    """Remove a secondary client's shared access to a dog.
+
+    Expects JSON: { "dog_id": int, "secondary_user_id": int }
+    Can be called from either the primary or secondary client's detail page.
+    Will not remove primary ownership.
+    """
+    User.query.filter(User.role == 'client', User.id == client_id).first_or_404()
+    data = request.get_json(silent=True) or {}
+    dog_id = data.get('dog_id')
+    secondary_user_id = data.get('secondary_user_id')
+
+    if not dog_id or not secondary_user_id:
+        return jsonify(success=False, message="Missing dog_id or secondary_user_id"), 400
+
+    record = DogOwner.query.filter_by(dog_id=dog_id, user_id=secondary_user_id, role='secondary').first()
+    if not record:
+        return jsonify(success=False, message="No secondary access record found"), 404
+
+    secondary_user = User.query.get(secondary_user_id)
+    dog = Dog.query.get(dog_id)
+
+    try:
+        db.session.delete(record)
+        db.session.commit()
+        logging.info(
+            f"Admin {current_user.id} revoked secondary access for user {secondary_user_id} "
+            f"from dog {dog_id}"
+        )
+        return jsonify(
+            success=True,
+            message=f"Access revoked for {secondary_user.full_name if secondary_user else secondary_user_id}",
+        )
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error revoking dog access: {e}")
+        return jsonify(success=False, message="An error occurred"), 500
 
 
 @admin_bp.route("/clients/new", methods=["GET", "POST"])
@@ -913,6 +1065,7 @@ def new_client():
                     breed=form.dog_breed.data.strip() if form.dog_breed.data else "",
                     allergies=form.dog_allergies.data.strip() if form.dog_allergies.data else "",
                     date_of_birth=form.dog_dob.data,
+                    whatsapp_group_url=(form.dog_whatsapp_group_url.data.strip() or None) if form.dog_whatsapp_group_url.data else None,
                 )
                 db.session.add(new_dog)
                 db.session.flush()
@@ -964,6 +1117,11 @@ def edit_client(client_id):
 
     form = ClientCreateForm()
 
+    # In edit mode the email field is rendered as a disabled (non-submitted) input,
+    # so inject the existing email before validation to satisfy DataRequired.
+    if request.method == 'POST':
+        form.email.data = user.email
+
     if form.validate_on_submit():
         try:
             user.firstname = form.firstname.data.strip().title()
@@ -1003,6 +1161,7 @@ def edit_client(client_id):
                     dog.breed = form.dog_breed.data.strip() if form.dog_breed.data else ""
                     dog.allergies = form.dog_allergies.data.strip() if form.dog_allergies.data else ""
                     dog.date_of_birth = form.dog_dob.data
+                    dog.whatsapp_group_url = (form.dog_whatsapp_group_url.data.strip() or None) if form.dog_whatsapp_group_url.data else None
                 else:
                     new_dog = Dog(
                         name=form.dog_name.data.strip(),
@@ -1010,6 +1169,7 @@ def edit_client(client_id):
                         breed=form.dog_breed.data.strip() if form.dog_breed.data else "",
                         allergies=form.dog_allergies.data.strip() if form.dog_allergies.data else "",
                         date_of_birth=form.dog_dob.data,
+                        whatsapp_group_url=(form.dog_whatsapp_group_url.data.strip() or None) if form.dog_whatsapp_group_url.data else None,
                     )
                     db.session.add(new_dog)
                     db.session.flush()
@@ -1052,6 +1212,7 @@ def edit_client(client_id):
             form.dog_breed.data = dog.breed
             form.dog_dob.data = dog.date_of_birth
             form.dog_allergies.data = dog.allergies
+            form.dog_whatsapp_group_url.data = dog.whatsapp_group_url
 
     return render_template(
         "admin_client_form.html",

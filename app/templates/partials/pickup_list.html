@@ -40,9 +40,9 @@
                         <span class="fw-bold" style="font-size:1.2rem;">{{ b.dog.name if b.dog else 'Unknown' }}</span>
                     </div>
 
-                    <!-- Row 2: Owner name -->
+                    <!-- Row 2: Owner name(s) -->
                     <div class="mt-1">
-                        <span class="text-muted small"><i class="bi bi-person me-1"></i>{{ b.user.full_name if b.user else 'Unknown client' }}</span>
+                        <span class="text-muted small"><i class="bi bi-person me-1"></i>{{ b.dog.owners_display if b.dog else (b.user.full_name if b.user else 'Unknown client') }}</span>
                     </div>
 
                     <!-- Row 3: Address -->
@@ -65,7 +65,16 @@
                     {% endif %}
 
                     <!-- Row 5: WhatsApp buttons -->
-                    {% if b.user and b.user.phone %}
+                    {% if b.dog and b.dog.whatsapp_group_url %}
+                    <div class="d-flex gap-2 mt-2">
+                        <a href="{{ b.dog.whatsapp_group_url }}"
+                           target="_blank" rel="noopener"
+                           class="btn btn-sm fw-semibold flex-fill"
+                           style="background:#25D366;color:#fff;font-size:0.78rem;">
+                            <i class="bi bi-whatsapp me-1"></i>Group chat
+                        </a>
+                    </div>
+                    {% elif b.user and b.user.phone %}
                     {% set wa_num = b.user.phone | wa_number %}
                     <div class="d-flex gap-2 mt-2">
                         <a href="https://wa.me/{{ wa_num }}?text=Hi%2C%20I'm%205%20mins%20away%21"

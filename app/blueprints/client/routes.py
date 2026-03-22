@@ -13,6 +13,7 @@ from app.models import User, Client, Dog, Booking, DogOwner, ServiceType, Walker
 from app import db
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
 from app.utils.uploads import process_dog_photo, process_cropped_photo
+from app.utils.booking_access import get_accessible_dog_ids, user_can_access_booking
 from app.capacity import check_availability, get_slot_availability_summary
 from app.forms import OnboardingForm, BookingForm, ProfileForm
 import logging
@@ -40,12 +41,13 @@ def index():
     # Get user's dogs through DogOwner relationship
     user_dogs = Dog.query.join(DogOwner).filter(DogOwner.user_id == current_user.id).all()
 
-    # Return upcoming bookings
+    # Return upcoming bookings for all dogs the user has access to
     today = datetime.now(timezone.utc).date()
+    _index_dog_ids = get_accessible_dog_ids(current_user.id)
     upcoming_bookings_query = Booking.query.options(
         joinedload(Booking.walker).joinedload(Walker.user)
     ).filter(
-        Booking.user_id == current_user.id,
+        Booking.dog_id.in_(_index_dog_ids),
         Booking.status != 'cancelled',
         Booking.date >= today
     ).order_by(Booking.date.asc())
@@ -167,6 +169,126 @@ def index():
     return render_template("index.html", user=user, client=user.client, dogs=user_dogs, bookings=upcoming_bookings, form=form) # type: ignore
 
 
+@client_bp.route("/book", methods=["POST"])
+@login_required
+def book():
+    """AJAX single booking endpoint — returns JSON, no page reload.
+
+    Accepts JSON body: { "date": "YYYY-MM-DD", "slot": "Morning"|"Afternoon" }
+    Returns: { "success": bool, "message": str, "booking": {...} }
+    """
+    data = request.get_json(silent=True) or {}
+    booking_date_str = data.get('date', '').strip()
+    booking_slot     = data.get('slot', '').strip()
+
+    # ── Validate inputs ───────────────────────────────────────────────────────
+    if not booking_date_str or not booking_slot:
+        return jsonify({'success': False, 'message': 'Date and slot are required.'}), 400
+
+    try:
+        booking_date = date_type.fromisoformat(booking_date_str)
+    except ValueError:
+        return jsonify({'success': False, 'message': 'Invalid date format.'}), 400
+
+    today   = datetime.now(timezone.utc).date()
+    max_date = (datetime.now(timezone.utc) + timedelta(days=90)).date()
+
+    if booking_date < today:
+        return jsonify({'success': False, 'message': 'Booking date cannot be in the past.'}), 400
+    if booking_date > max_date:
+        return jsonify({'success': False, 'message': 'Booking date cannot be more than 90 days in the future.'}), 400
+    if booking_slot not in ('Morning', 'Afternoon'):
+        return jsonify({'success': False, 'message': 'Invalid slot selected.'}), 400
+
+    user_dogs = Dog.query.join(DogOwner).filter(DogOwner.user_id == current_user.id).all()
+    if not user_dogs:
+        return jsonify({'success': False, 'message': 'No dog found on your account. Please add a dog before booking.'}), 400
+
+    dog    = user_dogs[0]
+    dog_id = dog.id
+
+    # ── Duplicate / cap checks ────────────────────────────────────────────────
+    active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
+    existing = Booking.query.filter(
+        Booking.dog_id   == dog_id,
+        Booking.date     == booking_date,
+        Booking.slot     == booking_slot,
+        Booking.status.in_(active_statuses),
+    ).first()
+    if existing:
+        return jsonify({'success': False, 'message': 'This dog already has a booking for that slot on that date.'}), 409
+
+    day_count = Booking.query.filter(
+        Booking.dog_id == dog_id,
+        Booking.date   == booking_date,
+        Booking.status.in_(active_statuses),
+    ).count()
+    if day_count >= 2:
+        return jsonify({'success': False, 'message': 'This dog already has two bookings on that date.'}), 409
+
+    # ── Capacity check + create ───────────────────────────────────────────────
+    try:
+        default_service = ServiceType.query.filter_by(slug='group-walk', active=True).first()
+        if not default_service:
+            return jsonify({'success': False, 'message': 'No service type available. Please contact support.'}), 500
+
+        available, can_waitlist, capacity_msg = check_availability(default_service, booking_date, booking_slot)
+
+        if not available and not can_waitlist:
+            return jsonify({'success': False, 'message': capacity_msg}), 409
+
+        booking_status = 'waitlisted' if (not available and can_waitlist) else 'requested'
+
+        new_booking = Booking(
+            user_id         = current_user.id,
+            dog_id          = dog_id,
+            service_type_id = default_service.id,
+            date            = booking_date,
+            slot            = booking_slot,
+            status          = booking_status,
+        )
+        db.session.add(new_booking)
+        db.session.commit()
+
+        # Notify all admins
+        admins       = User.query.filter_by(is_admin=True).all()
+        date_str_fmt = booking_date.strftime('%a %-d %b')
+        for admin in admins:
+            create_notification(
+                recipient_id      = admin.id,
+                notification_type = 'booking_requested',
+                title             = f'New booking request for {date_str_fmt}',
+                body              = f'{current_user.firstname} requested {booking_slot} for {dog.name}',
+                link              = '/admin',
+                sender_id         = current_user.id,
+            )
+
+        if booking_status == 'waitlisted':
+            message = (f"All slots are full — you've been added to the waitlist "
+                       f"for {booking_slot} on {booking_date.strftime('%d %b')}.")
+        else:
+            message = 'Booking request submitted!'
+
+        return jsonify({
+            'success': True,
+            'status':  booking_status,
+            'message': message,
+            'booking': {
+                'id':           new_booking.id,
+                'date_display': booking_date.strftime('%a %-d %b'),
+                'date_iso':     booking_date.isoformat(),
+                'slot':         booking_slot,
+                'status':       booking_status,
+                'dog_id':       dog_id,
+            },
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f'AJAX booking error for user {current_user.id}: {e}')
+        return jsonify({'success': False, 'message': 'An error occurred. Please try again.'}), 500
+
+
 @client_bp.route("/profile", methods=["GET", "POST"])
 @login_required
 def profile():
@@ -175,14 +297,33 @@ def profile():
         return redirect(url_for('client.index'))
 
     client = Client.query.filter_by(user_id=current_user.id).first()
-    if not client or not client.onboarding_completed:
-        return redirect(url_for('client.onboard'))
 
-    # Get primary dog
+    # Get primary dog (user is the main owner — can edit photo/details)
     dog_owner = DogOwner.query.filter_by(user_id=current_user.id, role='primary').first()
+
+    # Secondary-only owners (co-owners with no primary dog of their own) should be
+    # allowed to view/edit their profile without going through onboarding.
+    is_secondary_only = (dog_owner is None and
+                         DogOwner.query.filter_by(user_id=current_user.id, role='secondary').count() > 0)
+
+    if not is_secondary_only and (not client or not client.onboarding_completed):
+        return redirect(url_for('client.onboard'))
     dog = Dog.query.get(dog_owner.dog_id) if dog_owner else None
 
+    # Get secondary dogs (user has shared access — read-only on the profile)
+    secondary_ownerships = DogOwner.query.filter_by(user_id=current_user.id, role='secondary').all()
+    secondary_dogs = []
+    for so in secondary_ownerships:
+        secondary_dog = Dog.query.get(so.dog_id)
+        if not secondary_dog:
+            continue
+        primary_o = DogOwner.query.filter_by(dog_id=so.dog_id, role='primary').first()
+        primary_user = User.query.get(primary_o.user_id) if primary_o else None
+        secondary_dogs.append({'dog': secondary_dog, 'primary_owner': primary_user})
+
     # Booking stats for the profile sidebar
+    # Use dog_ids so secondary owners see all bookings for their shared dog,
+    # not just bookings they personally created.
     from datetime import date
     today_date = date.today()
     month_start = date(today_date.year, today_date.month, 1)
@@ -191,8 +332,10 @@ def profile():
     else:
         month_end = date(today_date.year, today_date.month + 1, 1)
 
+    accessible_dog_ids = get_accessible_dog_ids(current_user.id)
+
     month_bookings = Booking.query.filter(
-        Booking.user_id == current_user.id,
+        Booking.dog_id.in_(accessible_dog_ids),
         Booking.date >= month_start,
         Booking.date < month_end,
         Booking.status.notin_(['cancelled', 'rejected'])
@@ -201,13 +344,13 @@ def profile():
     pending_this_month = sum(1 for b in month_bookings if b.status in ('requested', 'waitlisted'))
 
     next_booking = Booking.query.filter(
-        Booking.user_id == current_user.id,
+        Booking.dog_id.in_(accessible_dog_ids),
         Booking.date >= today_date,
         Booking.status == 'confirmed'
     ).order_by(Booking.date).first()
 
     total_completed = Booking.query.filter(
-        Booking.user_id == current_user.id,
+        Booking.dog_id.in_(accessible_dog_ids),
         Booking.status == 'completed'
     ).count()
 
@@ -227,6 +370,12 @@ def profile():
             # Personal info
             current_user.firstname = form.firstname.data.strip()
             current_user.lastname = form.lastname.data.strip()
+
+            # Create a Client record on first save if this is a secondary-only owner
+            if not client:
+                client = Client(user_id=current_user.id, onboarding_completed=True,
+                                onboarding_completed_at=datetime.now(timezone.utc))
+                db.session.add(client)
 
             # Address
             client.street_address = form.address_line_1.data.strip()
@@ -263,11 +412,11 @@ def profile():
                             dog.pic = pic_filename
                     except ValueError as e:
                         flash(f"Upload error: {str(e)}", "error")
-                        return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, today=datetime.now().strftime('%Y-%m-%d'))
+                        return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=datetime.now().strftime("%Y-%m-%d"))
                     except Exception as e:
                         logging.error(f"Error processing uploaded file: {e}")
                         flash("Error processing your image. Please try a different file.", "error")
-                        return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, today=datetime.now().strftime('%Y-%m-%d'))
+                        return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=datetime.now().strftime("%Y-%m-%d"))
 
             db.session.commit()
             flash("Profile updated successfully!", "success")
@@ -284,14 +433,15 @@ def profile():
         form.lastname.data = current_user.lastname
 
         # Split street_address back into lines
-        if client.street_address:
+        if client and client.street_address:
             address_lines = client.street_address.split('\n')
             form.address_line_1.data = address_lines[0] if len(address_lines) > 0 else ''
             form.address_line_2.data = address_lines[1] if len(address_lines) > 1 else ''
             form.address_line_3.data = address_lines[2] if len(address_lines) > 2 else ''
-        form.postcode.data = client.postal_code
-        form.pickup_instructions.data = client.pickup_instructions
-        form.maps_url.data = client.maps_url
+        if client:
+            form.postcode.data = client.postal_code
+            form.pickup_instructions.data = client.pickup_instructions
+            form.maps_url.data = client.maps_url
 
         # Notifications
         form.phone.data = current_user.phone
@@ -306,7 +456,7 @@ def profile():
             form.dog_dob.data = dog.date_of_birth
             form.dog_allergies.data = dog.allergies
 
-    return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, today=datetime.now().strftime('%Y-%m-%d'))
+    return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=datetime.now().strftime("%Y-%m-%d"))
 
 
 @client_bp.route("/profile/upload-dog-photo", methods=["POST"])
@@ -531,10 +681,10 @@ def cancel_booking():
         if not booking:
             return jsonify(success=False, message="Booking not found"), 404
             
-        # Check authorization - only allow users to cancel their own bookings or admins to cancel any
-        if booking.user_id != current_user.id and not current_user.is_admin:
+        # Check authorization — allow booking creator, any dog owner, or admins
+        if not user_can_access_booking(current_user, booking):
             return jsonify(success=False, message="You are not authorized to cancel this booking"), 403
-            
+
         is_admin_cancel = current_user.is_admin and booking.user_id != current_user.id
         booking.status = "cancelled"
         booking.walker_id = None  # Unassign walker
@@ -571,8 +721,9 @@ def calendar_data(year, month):
     except ValueError:
         return jsonify(success=False, message="Invalid date"), 400
 
+    accessible_dog_ids = get_accessible_dog_ids(current_user.id)
     bookings = Booking.query.filter(
-        Booking.user_id == current_user.id,
+        Booking.dog_id.in_(accessible_dog_ids),
         Booking.date >= start_date,
         Booking.date < end_date,
         Booking.status.notin_(['cancelled', 'rejected'])
@@ -597,7 +748,7 @@ def recurring_booking():
 
     POST body (JSON):
         start_date  (str)  'YYYY-MM-DD' — must be tomorrow or later
-        end_date    (str)  'YYYY-MM-DD' — max 4 weeks from today (client limit)
+        end_date    (str)  'YYYY-MM-DD' — max 4 weeks from start_date (client limit)
         slot        (str)  'Morning' or 'Afternoon'
         frequency   (str)  'daily' (weekdays only) or 'weekly'
 
@@ -633,12 +784,12 @@ def recurring_booking():
 
         today = datetime.now(timezone.utc).date()
         tomorrow = today + timedelta(days=1)
-        max_end = today + timedelta(weeks=4)
+        max_end = start_date + timedelta(weeks=4)
 
         if start_date < tomorrow:
             return jsonify(success=False, message="Start date must be in the future"), 400
         if end_date > max_end:
-            return jsonify(success=False, message="End date must be within 4 weeks from today"), 400
+            return jsonify(success=False, message="End date must be within 4 weeks of the start date"), 400
         if end_date < start_date:
             return jsonify(success=False, message="End date must be after start date"), 400
         if slot not in ('Morning', 'Afternoon'):
@@ -750,7 +901,7 @@ def update_booking_note(booking_id):
     if not booking:
         return jsonify(success=False, message="Booking not found"), 404
 
-    if booking.user_id != current_user.id and not current_user.is_admin:
+    if not user_can_access_booking(current_user, booking):
         return jsonify(success=False, message="Not your booking"), 403
 
     data = request.get_json(silent=True) or {}

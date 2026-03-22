@@ -73,6 +73,11 @@ def register():
 def logout():
     """Log user out"""
     logout_user()
+    # Clear any stale flash messages left in the session before adding ours.
+    # With SESSION_PERMANENT=True sessions persist for 14 days, so unconsumed
+    # flashes from previous requests can accumulate and cause double messages.
+    from flask import session as flask_session
+    flask_session.pop('_flashes', None)
     flash("You have been logged out.", "info")
     return redirect(url_for("auth.login"))
 
