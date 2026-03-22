@@ -158,6 +158,14 @@ class Dog(db.Model):
         do = DogOwner.query.filter_by(dog_id=self.id, role='primary').first()
         return do.user if do else None
 
+    @property
+    def owners_display(self):
+        """Return owners' first names joined with ' & ', primary first.
+        E.g. 'Hugh' for a single owner, 'Hugh & Gillian' for two owners."""
+        ownerships = self.owners.order_by(DogOwner.role).all()  # 'primary' < 'secondary' alphabetically
+        names = [o.user.firstname for o in ownerships if o.user and o.user.firstname]
+        return ' & '.join(names) if names else ''
+
 
 class DogOwner(db.Model):
     """Many-to-many join table: one dog can have multiple owners,

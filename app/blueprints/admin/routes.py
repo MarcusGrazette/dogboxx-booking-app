@@ -533,7 +533,7 @@ def board_data(date_str):
             'id': b.id,
             'dog_name': b.dog.name if b.dog else 'Unknown',
             'dog_pic': b.dog.pic if b.dog and b.dog.pic else None,
-            'owner_name': b.user.full_name if b.user else '',
+            'owner_name': b.dog.owners_display if b.dog else (b.user.full_name if b.user else ''),
             'slot': b.slot,
             'status': b.status,
             'pickup_order': b.pickup_order,
