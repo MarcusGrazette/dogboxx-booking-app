@@ -297,11 +297,17 @@ def profile():
         return redirect(url_for('client.index'))
 
     client = Client.query.filter_by(user_id=current_user.id).first()
-    if not client or not client.onboarding_completed:
-        return redirect(url_for('client.onboard'))
 
     # Get primary dog (user is the main owner — can edit photo/details)
     dog_owner = DogOwner.query.filter_by(user_id=current_user.id, role='primary').first()
+
+    # Secondary-only owners (co-owners with no primary dog of their own) should be
+    # allowed to view/edit their profile without going through onboarding.
+    is_secondary_only = (dog_owner is None and
+                         DogOwner.query.filter_by(user_id=current_user.id, role='secondary').count() > 0)
+
+    if not is_secondary_only and (not client or not client.onboarding_completed):
+        return redirect(url_for('client.onboard'))
     dog = Dog.query.get(dog_owner.dog_id) if dog_owner else None
 
     # Get secondary dogs (user has shared access — read-only on the profile)
@@ -365,6 +371,12 @@ def profile():
             current_user.firstname = form.firstname.data.strip()
             current_user.lastname = form.lastname.data.strip()
 
+            # Create a Client record on first save if this is a secondary-only owner
+            if not client:
+                client = Client(user_id=current_user.id, onboarding_completed=True,
+                                onboarding_completed_at=datetime.now(timezone.utc))
+                db.session.add(client)
+
             # Address
             client.street_address = form.address_line_1.data.strip()
             if form.address_line_2.data:
@@ -421,14 +433,15 @@ def profile():
         form.lastname.data = current_user.lastname
 
         # Split street_address back into lines
-        if client.street_address:
+        if client and client.street_address:
             address_lines = client.street_address.split('\n')
             form.address_line_1.data = address_lines[0] if len(address_lines) > 0 else ''
             form.address_line_2.data = address_lines[1] if len(address_lines) > 1 else ''
             form.address_line_3.data = address_lines[2] if len(address_lines) > 2 else ''
-        form.postcode.data = client.postal_code
-        form.pickup_instructions.data = client.pickup_instructions
-        form.maps_url.data = client.maps_url
+        if client:
+            form.postcode.data = client.postal_code
+            form.pickup_instructions.data = client.pickup_instructions
+            form.maps_url.data = client.maps_url
 
         # Notifications
         form.phone.data = current_user.phone

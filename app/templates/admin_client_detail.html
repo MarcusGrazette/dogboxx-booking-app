@@ -94,6 +94,17 @@
 
             <dt class="col-sm-3">Allergies / notes</dt>
             <dd class="col-sm-9">{{ dog.allergies if dog.allergies else '—' }}</dd>
+
+            <dt class="col-sm-3">WhatsApp group</dt>
+            <dd class="col-sm-9">
+                {% if dog.whatsapp_group_url %}
+                <a href="{{ dog.whatsapp_group_url }}" target="_blank" rel="noopener"
+                   class="btn btn-sm fw-semibold"
+                   style="background:#25D366;color:#fff;font-size:0.78rem;">
+                    <i class="bi bi-whatsapp me-1"></i>Open group
+                </a>
+                {% else %}—{% endif %}
+            </dd>
         </dl>
 
         {# Shared access list #}

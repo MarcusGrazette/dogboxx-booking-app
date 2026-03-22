@@ -533,7 +533,7 @@ def board_data(date_str):
             'id': b.id,
             'dog_name': b.dog.name if b.dog else 'Unknown',
             'dog_pic': b.dog.pic if b.dog and b.dog.pic else None,
-            'owner_name': b.user.full_name if b.user else '',
+            'owner_name': b.dog.owners_display if b.dog else (b.user.full_name if b.user else ''),
             'slot': b.slot,
             'status': b.status,
             'pickup_order': b.pickup_order,
@@ -1065,6 +1065,7 @@ def new_client():
                     breed=form.dog_breed.data.strip() if form.dog_breed.data else "",
                     allergies=form.dog_allergies.data.strip() if form.dog_allergies.data else "",
                     date_of_birth=form.dog_dob.data,
+                    whatsapp_group_url=(form.dog_whatsapp_group_url.data.strip() or None) if form.dog_whatsapp_group_url.data else None,
                 )
                 db.session.add(new_dog)
                 db.session.flush()
@@ -1116,6 +1117,11 @@ def edit_client(client_id):
 
     form = ClientCreateForm()
 
+    # In edit mode the email field is rendered as a disabled (non-submitted) input,
+    # so inject the existing email before validation to satisfy DataRequired.
+    if request.method == 'POST':
+        form.email.data = user.email
+
     if form.validate_on_submit():
         try:
             user.firstname = form.firstname.data.strip().title()
@@ -1155,6 +1161,7 @@ def edit_client(client_id):
                     dog.breed = form.dog_breed.data.strip() if form.dog_breed.data else ""
                     dog.allergies = form.dog_allergies.data.strip() if form.dog_allergies.data else ""
                     dog.date_of_birth = form.dog_dob.data
+                    dog.whatsapp_group_url = (form.dog_whatsapp_group_url.data.strip() or None) if form.dog_whatsapp_group_url.data else None
                 else:
                     new_dog = Dog(
                         name=form.dog_name.data.strip(),
@@ -1162,6 +1169,7 @@ def edit_client(client_id):
                         breed=form.dog_breed.data.strip() if form.dog_breed.data else "",
                         allergies=form.dog_allergies.data.strip() if form.dog_allergies.data else "",
                         date_of_birth=form.dog_dob.data,
+                        whatsapp_group_url=(form.dog_whatsapp_group_url.data.strip() or None) if form.dog_whatsapp_group_url.data else None,
                     )
                     db.session.add(new_dog)
                     db.session.flush()
@@ -1204,6 +1212,7 @@ def edit_client(client_id):
             form.dog_breed.data = dog.breed
             form.dog_dob.data = dog.date_of_birth
             form.dog_allergies.data = dog.allergies
+            form.dog_whatsapp_group_url.data = dog.whatsapp_group_url
 
     return render_template(
         "admin_client_form.html",
