@@ -280,3 +280,35 @@ footer {
   from { opacity: 1; transform: translateY(0) scale(1); }
   to   { opacity: 0; transform: translateY(1.25rem) scale(0.92); }
 }
+
+/* ── Android Native UX Touch & Gesture Optimizations ──────── */
+body {
+  /* Remove the grey/blue tap highlight box on iOS and Android Chrome */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent accidental text selection on interactive UI elements */
+.btn, .nav-link, .badge, .navbar-brand {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Add an active scale-down state to simulate physical button presses */
+.btn {
+  transition: transform 0.1s cubic-bezier(0.2, 0, 0.2, 1), background-color 0.15s ease-in-out, border-color 0.15s ease-in-out;
+}
+
+.btn:active, .nav-link:active {
+  transform: scale(0.96);
+}
+
+/* ── Page Transitions (Masking HTTP loads to feel like SPA/Native) ──────── */
+@keyframes db-page-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Animate the main content container on both client and admin layouts */
+main.container, main.app-main .app-content {
+  animation: db-page-fade-in 0.25s cubic-bezier(0.2, 0, 0, 1) forwards;
+}
