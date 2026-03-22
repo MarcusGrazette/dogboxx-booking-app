@@ -289,6 +289,123 @@ def book():
         return jsonify({'success': False, 'message': 'An error occurred. Please try again.'}), 500
 
 
+@client_bp.route("/book_both", methods=["POST"])
+@login_required
+def book_both():
+    """AJAX endpoint: request both Morning and Afternoon for a single date.
+
+    Accepts JSON: { "date": "YYYY-MM-DD" }
+    Each slot is booked independently — one can be requested while the other
+    is waitlisted if capacity is tight. Returns both results.
+    """
+    data             = request.get_json(silent=True) or {}
+    booking_date_str = data.get('date', '').strip()
+
+    if not booking_date_str:
+        return jsonify({'success': False, 'message': 'Date is required.'}), 400
+
+    try:
+        booking_date = date_type.fromisoformat(booking_date_str)
+    except ValueError:
+        return jsonify({'success': False, 'message': 'Invalid date format.'}), 400
+
+    today    = datetime.now(timezone.utc).date()
+    max_date = (datetime.now(timezone.utc) + timedelta(days=90)).date()
+    if booking_date < today:
+        return jsonify({'success': False, 'message': 'Booking date cannot be in the past.'}), 400
+    if booking_date > max_date:
+        return jsonify({'success': False, 'message': 'Booking date is too far in the future.'}), 400
+
+    user_dogs = Dog.query.join(DogOwner).filter(DogOwner.user_id == current_user.id).all()
+    if not user_dogs:
+        return jsonify({'success': False, 'message': 'No dog found on your account.'}), 400
+
+    dog    = user_dogs[0]
+    dog_id = dog.id
+
+    default_service = ServiceType.query.filter_by(slug='group-walk', active=True).first()
+    if not default_service:
+        return jsonify({'success': False, 'message': 'No service type available.'}), 500
+
+    active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
+    created = []   # (slot, status, booking_obj)
+    skipped = []   # slot names skipped (duplicate / no walkers)
+
+    for slot in ('Morning', 'Afternoon'):
+        # Skip if already booked for this slot
+        if Booking.query.filter(
+            Booking.dog_id == dog_id,
+            Booking.date   == booking_date,
+            Booking.slot   == slot,
+            Booking.status.in_(active_statuses),
+        ).first():
+            skipped.append(slot)
+            continue
+
+        available, can_waitlist, _ = check_availability(default_service, booking_date, slot)
+        if not available and not can_waitlist:
+            skipped.append(slot)
+            continue
+
+        status = 'waitlisted' if (not available and can_waitlist) else 'requested'
+        b = Booking(
+            user_id         = current_user.id,
+            dog_id          = dog_id,
+            service_type_id = default_service.id,
+            date            = booking_date,
+            slot            = slot,
+            status          = status,
+        )
+        db.session.add(b)
+        created.append((slot, status, b))
+
+    if not created:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': 'No new bookings created — slots may already be booked.'}), 409
+
+    db.session.flush()  # get IDs before commit
+    db.session.commit()
+
+    # Single combined admin notification
+    date_str_fmt  = booking_date.strftime('%a %-d %b')
+    slots_created = [s for s, _, _ in created]
+    slot_desc     = 'both walks' if len(slots_created) == 2 else slots_created[0]
+    for admin in User.query.filter_by(is_admin=True).all():
+        create_notification(
+            recipient_id      = admin.id,
+            notification_type = 'booking_requested',
+            title             = f'New booking request for {date_str_fmt}',
+            body              = f'{current_user.firstname} requested {slot_desc} for {dog.name}',
+            link              = '/admin',
+            sender_id         = current_user.id,
+        )
+
+    # Build response
+    booking_payload = []
+    for slot, status, b in created:
+        booking_payload.append({
+            'id':           b.id,
+            'date_display': booking_date.strftime('%a %-d %b'),
+            'date_iso':     booking_date.isoformat(),
+            'slot':         slot,
+            'status':       status,
+            'dog_id':       dog_id,
+        })
+
+    parts = []
+    for slot, status, _ in created:
+        label = 'AM' if slot == 'Morning' else 'PM'
+        parts.append(f'{label} {"waitlisted" if status == "waitlisted" else "requested"}')
+    if skipped:
+        parts.append(f'{", ".join(skipped)} skipped (already booked)')
+
+    return jsonify({
+        'success':  True,
+        'bookings': booking_payload,
+        'message':  ', '.join(parts) + '.',
+    })
+
+
 @client_bp.route("/profile", methods=["GET", "POST"])
 @login_required
 def profile():

@@ -92,7 +92,17 @@
                         <span id="selected-date-text">Select a date above and pick morning or afternoon below</span>
                     </p>
 
-                    <div class="mb-3">
+                    {# Book both walks toggle #}
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                               id="both-toggle" style="cursor:pointer;">
+                        <label class="form-check-label small fw-semibold" for="both-toggle">
+                            Book both walks
+                        </label>
+                    </div>
+
+                    {# Slot row — hidden when "Book both" is checked #}
+                    <div class="mb-3" id="slot-row">
                         <div class="d-flex align-items-center gap-2">
                             {{ form.slot(class="form-select", id="booking-slot", style="max-width:160px;") }}
                             <span id="slot-availability" class="small text-nowrap"></span>
@@ -344,6 +354,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const recurFreq    = document.getElementById('recurring-frequency');
     const recurEnd     = document.getElementById('recurring-end-date');
     const recurPreview = document.getElementById('recurring-preview');
+    const bothToggle   = document.getElementById('both-toggle');
+    const slotRow      = document.getElementById('slot-row');
     let slotData       = null;
     let selectedDate   = null;   // 'YYYY-MM-DD'
 
@@ -430,8 +442,22 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // ─── Recurring panel ─────────────────────────────────────
+    // ─── Both-walks toggle ───────────────────────────────────────────────
+    bothToggle.addEventListener('change', function () {
+        slotRow.style.display = this.checked ? 'none' : '';
+        if (this.checked && recurToggle.checked) {
+            recurToggle.checked = false;
+            recurPanel.style.display = 'none';
+        }
+        updateSubmitState();
+    });
+
     recurToggle.addEventListener('change', function () {
         recurPanel.style.display = this.checked ? 'block' : 'none';
+        if (this.checked && bothToggle.checked) {
+            bothToggle.checked = false;
+            slotRow.style.display = '';
+        }
         updateSubmitState();
         renderRecurPreview();
     });
@@ -530,6 +556,45 @@ document.addEventListener('DOMContentLoaded', function () {
                 showToast('Network error — please try again.', 'danger');
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Request recurring walks';
+            });
+
+        } else if (bothToggle.checked) {
+            // ── Book both walks: AM + PM in one request ────────
+            if (!selectedDate) { showToast('Please select a date.', 'warning'); return; }
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Requesting…';
+
+            fetch('{{ url_for("client.book_both") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                body: JSON.stringify({ date: selectedDate }),
+            })
+            .then(r => r.json())
+            .then(data => {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Request walk';
+                if (data.success) {
+                    const hasWaitlist = data.bookings.some(b => b.status === 'waitlisted');
+                    showToast(data.message, hasWaitlist ? 'info' : 'success');
+                    data.bookings.forEach(b => injectBooking(b));
+                    loadCalendarData(cal.year, cal.month);
+                    // Reset
+                    selectedDate = null;
+                    dateHidden.value = '';
+                    dateText.textContent = 'Select a date above and pick morning or afternoon below';
+                    availHint.textContent = '';
+                    bothToggle.checked = false;
+                    slotRow.style.display = '';
+                    submitBtn.disabled = true;
+                } else {
+                    showToast(data.message || 'Something went wrong.', 'danger');
+                }
+            })
+            .catch(() => {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Request walk';
+                showToast('Network error — please try again.', 'danger');
             });
 
         } else {

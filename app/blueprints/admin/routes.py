@@ -528,6 +528,18 @@ def board_data(date_str):
         .all()
     ) if walker_available_slots else []
 
+    # Dogs that have active bookings in BOTH Morning and Afternoon today — used for the
+    # double-walk icon on board cards (whether booked via "both walks" or manually).
+    from collections import defaultdict
+    _dog_slots = defaultdict(set)
+    for b in all_bookings:
+        if b.status not in ('cancelled', 'rejected'):
+            _dog_slots[b.dog_id].add(b.slot)
+    both_slots_dog_ids = {
+        dog_id for dog_id, slots in _dog_slots.items()
+        if 'Morning' in slots and 'Afternoon' in slots
+    }
+
     def booking_dict(b, include_walker=False):
         d = {
             'id': b.id,
@@ -538,6 +550,7 @@ def board_data(date_str):
             'status': b.status,
             'pickup_order': b.pickup_order,
             'walker_id': b.walker_id,
+            'has_both_slots': b.dog_id in both_slots_dog_ids,
         }
         return d
 
