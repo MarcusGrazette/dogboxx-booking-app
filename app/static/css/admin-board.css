@@ -188,9 +188,32 @@
 /* ── Slot badge on pending cards ───────────────────────────────────────────── */
 .slot-pill {
     font-size: 0.65rem;
+    font-weight: 600;
     padding: 2px 5px;
     border-radius: 8px;
     flex-shrink: 0;
+}
+
+/* ── Modifier pills (waitlist, both-walks) — sit to the left of the slot pill ── */
+.modifier-pill {
+    font-size: 0.65rem;
+    padding: 2px 5px;
+    border-radius: 8px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+}
+
+.modifier-waitlisted {
+    background: rgba(108, 117, 125, 0.12);
+    color: #6c757d;
+    border: 1px solid #adb5bd;
+}
+
+.modifier-both {
+    background: rgba(255, 193, 7, 0.15);
+    color: #997404;
+    border: 1px solid #ffc107;
 }
 
 /* ── Empty lane placeholder ────────────────────────────────────────────────── */

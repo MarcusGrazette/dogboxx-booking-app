@@ -137,9 +137,11 @@
                 <div class="board-card-name">${b.dog_name}</div>
                 <div class="board-card-owner">${b.owner_name}</div>
             </div>
-            <span class="slot-pill bg-${slotColor} bg-opacity-10 text-${slotColor} border border-${slotColor}">
-                ${b.status === 'waitlisted' ? '<i class="bi bi-clock-history me-1"></i>' : ''}${b.slot === 'Morning' ? 'AM' : 'PM'}${b.has_both_slots ? ' <i class="bi bi-layers-fill text-warning" title="Both walks requested"></i>' : ''}
-            </span>`;
+            <div class="d-flex gap-1 align-items-center flex-shrink-0">
+                ${b.status === 'waitlisted' ? '<span class="modifier-pill modifier-waitlisted" title="Waitlisted"><i class="bi bi-clock-history"></i></span>' : ''}
+                ${b.has_both_slots ? '<span class="modifier-pill modifier-both" title="Both walks requested"><i class="bi bi-layers-fill"></i></span>' : ''}
+                <span class="slot-pill bg-${slotColor} bg-opacity-10 text-${slotColor} border border-${slotColor}">${b.slot === 'Morning' ? 'AM' : 'PM'}</span>
+            </div>`;
 
         el.addEventListener('click', () => selectBooking(b.id));
         return el;
@@ -156,9 +158,10 @@
             <img src="${imgSrc(b.dog_pic)}" class="board-dog-img"
                  onerror="this.src='/static/uploads/dogs/default-dog.png'">
             <div class="board-card-info">
-                <div class="board-card-name">${b.dog_name}${b.has_both_slots ? ' <i class="bi bi-layers-fill text-warning" style="font-size:0.75rem;" title="Both walks requested"></i>' : ''}</div>
+                <div class="board-card-name">${b.dog_name}</div>
                 <div class="board-card-owner">${b.owner_name}</div>
-            </div>`;
+            </div>
+            ${b.has_both_slots ? '<div class="d-flex gap-1 align-items-center flex-shrink-0"><span class="modifier-pill modifier-both" title="Both walks requested"><i class="bi bi-layers-fill"></i></span></div>' : ''}`;
 
         el.addEventListener('click', () => selectBooking(b.id));
         return el;
