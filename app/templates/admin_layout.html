@@ -158,6 +158,13 @@
                             <span>Revenue</span>
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('admin.invoicing') }}"
+                           class="nav-link {% if request.endpoint in ['admin.invoicing', 'admin.invoicing_detail'] %}active{% endif %}">
+                            <i class="bi bi-receipt me-2"></i>
+                            <span>Invoicing</span>
+                        </a>
+                    </li>
 
                     <!-- Group Walks -->
                     <li class="nav-header">Group Walks</li>

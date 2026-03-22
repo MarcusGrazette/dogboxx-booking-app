@@ -1688,3 +1688,259 @@ def recurring_for_dog():
         db.session.rollback()
         logging.error(f"Error in admin recurring_for_dog: {e}")
         return jsonify(success=False, message="Server error"), 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Invoicing
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _invoice_for_client(user_id, month_start, month_end, all_configs):
+    """Return invoice data dict for a single client in the given month.
+
+    Billable items:
+      - confirmed / completed bookings
+      - cancelled bookings where notice < 5 days  (booking.date - cancelled_at.date() < 5)
+
+    Pricing mirrors _revenue_for_range: per-walk price from PricingConfig,
+    minus double_slot_discount for any day where the dog has both Morning + Afternoon.
+    """
+    from datetime import date as date_type
+    from collections import defaultdict
+
+    def config_for(d):
+        for c in all_configs:
+            if c.effective_from <= d:
+                return c
+        return None
+
+    # All bookings for this client's dogs in the month
+    dog_owner_ids = [
+        do.dog_id
+        for do in DogOwner.query.filter_by(user_id=user_id, role='primary').all()
+    ]
+    if not dog_owner_ids:
+        return None
+
+    bookings = (
+        Booking.query
+        .options(joinedload(Booking.dog))
+        .filter(
+            Booking.dog_id.in_(dog_owner_ids),
+            Booking.date >= month_start,
+            Booking.date < month_end,
+            Booking.status.in_(['confirmed', 'completed', 'cancelled']),
+        )
+        .order_by(Booking.date, Booking.slot)
+        .all()
+    )
+
+    confirmed   = [b for b in bookings if b.status in ('confirmed', 'completed')]
+    late_cancels = [
+        b for b in bookings
+        if b.status == 'cancelled'
+        and b.cancelled_at is not None
+        and (b.date - b.cancelled_at.date()).days < 5
+    ]
+    all_billable = confirmed + late_cancels
+
+    # Group billable items by date → slot set (for double-slot discount)
+    date_slots = defaultdict(set)
+    for b in all_billable:
+        date_slots[b.date].add(b.slot)
+
+    # Calculate subtotal
+    subtotal = 0.0
+    for b in all_billable:
+        cfg = config_for(b.date)
+        if cfg:
+            subtotal += float(cfg.price_per_walk)
+    for d, slots in date_slots.items():
+        if 'Morning' in slots and 'Afternoon' in slots:
+            cfg = config_for(d)
+            if cfg:
+                subtotal -= float(cfg.double_slot_discount)
+
+    return {
+        'confirmed':      confirmed,
+        'late_cancels':   late_cancels,
+        'all_billable':   all_billable,
+        'total_walks':    len(confirmed),
+        'total_cancels':  len(late_cancels),
+        'total_billable': len(all_billable),
+        'doubles':        sum(1 for s in date_slots.values()
+                              if 'Morning' in s and 'Afternoon' in s),
+        'subtotal':       round(subtotal, 2),
+    }
+
+
+@admin_bp.route("/invoicing")
+@login_required
+@admin_required
+def invoicing():
+    """Monthly invoicing summary — one row per client."""
+    from datetime import date
+    from calendar import monthrange
+
+    # ── Month selection ───────────────────────────────────────────────────
+    today = date.today()
+    month_str = request.args.get('month', f'{today.year}-{today.month:02d}')
+    try:
+        year, month = int(month_str[:4]), int(month_str[5:7])
+        if not (1 <= month <= 12):
+            raise ValueError
+    except (ValueError, IndexError):
+        year, month = today.year, today.month
+
+    month_start = date(year, month, 1)
+    month_end   = date(year + (month // 12), (month % 12) + 1, 1)
+
+    # Prev / next month helpers for navigation
+    if month == 1:
+        prev_month = f'{year - 1}-12'
+    else:
+        prev_month = f'{year}-{month - 1:02d}'
+    if month == 12:
+        next_month = f'{year + 1}-01'
+    else:
+        next_month = f'{year}-{month + 1:02d}'
+
+    # ── Pricing configs (loaded once) ─────────────────────────────────────
+    from app.models import PricingConfig
+    all_configs = (
+        PricingConfig.query
+        .filter(PricingConfig.effective_from <= month_end)
+        .order_by(PricingConfig.effective_from.desc())
+        .all()
+    )
+
+    # ── Clients ───────────────────────────────────────────────────────────
+    clients = (
+        User.query
+        .options(joinedload(User.client))
+        .filter(User.role == 'client')
+        .order_by(User.lastname, User.firstname)
+        .all()
+    )
+
+    rows = []
+    for u in clients:
+        inv = _invoice_for_client(u.id, month_start, month_end, all_configs)
+        if inv is None or inv['total_billable'] == 0:
+            continue
+        # Primary dog
+        do = DogOwner.query.filter_by(user_id=u.id, role='primary').first()
+        dog = Dog.query.get(do.dog_id) if do else None
+        rows.append({
+            'client':  u,
+            'dog':     dog,
+            **inv,
+        })
+
+    grand_total = round(sum(r['subtotal'] for r in rows), 2)
+
+    return render_template(
+        'admin_invoicing.html',
+        rows=rows,
+        grand_total=grand_total,
+        month_start=month_start,
+        prev_month=prev_month,
+        next_month=next_month,
+        today=today,
+    )
+
+
+@admin_bp.route("/invoicing/<int:client_id>")
+@login_required
+@admin_required
+def invoicing_detail(client_id):
+    """Per-client invoice detail — line items for the selected month."""
+    from datetime import date
+    from itertools import groupby
+
+    client_user = User.query.filter(
+        User.role == 'client', User.id == client_id
+    ).first_or_404()
+
+    today = date.today()
+    month_str = request.args.get('month', f'{today.year}-{today.month:02d}')
+    try:
+        year, month = int(month_str[:4]), int(month_str[5:7])
+        if not (1 <= month <= 12):
+            raise ValueError
+    except (ValueError, IndexError):
+        year, month = today.year, today.month
+
+    month_start = date(year, month, 1)
+    month_end   = date(year + (month // 12), (month % 12) + 1, 1)
+
+    from app.models import PricingConfig
+    all_configs = (
+        PricingConfig.query
+        .filter(PricingConfig.effective_from <= month_end)
+        .order_by(PricingConfig.effective_from.desc())
+        .all()
+    )
+
+    def config_for(d):
+        for c in all_configs:
+            if c.effective_from <= d:
+                return c
+        return None
+
+    inv = _invoice_for_client(client_user.id, month_start, month_end, all_configs)
+    if inv is None:
+        inv = {'confirmed': [], 'late_cancels': [], 'all_billable': [],
+               'total_walks': 0, 'total_cancels': 0, 'total_billable': 0,
+               'doubles': 0, 'subtotal': 0.0}
+
+    # Build line items with unit price
+    line_items = []
+    late_cancel_ids = {b.id for b in inv['late_cancels']}
+    for b in sorted(inv['all_billable'], key=lambda x: (x.date, x.slot)):
+        cfg = config_for(b.date)
+        line_items.append({
+            'booking':      b,
+            'unit_price':   float(cfg.price_per_walk) if cfg else 0.0,
+            'is_cancel':    b.id in late_cancel_ids,
+        })
+
+    # Double-slot discount line items
+    from collections import defaultdict
+    date_slots = defaultdict(set)
+    for b in inv['all_billable']:
+        date_slots[b.date].add(b.slot)
+    discount_days = sorted(
+        d for d, slots in date_slots.items()
+        if 'Morning' in slots and 'Afternoon' in slots
+    )
+    discounts = []
+    for d in discount_days:
+        cfg = config_for(d)
+        if cfg and cfg.double_slot_discount:
+            discounts.append({'date': d, 'amount': float(cfg.double_slot_discount)})
+
+    do = DogOwner.query.filter_by(user_id=client_user.id, role='primary').first()
+    dog = Dog.query.get(do.dog_id) if do else None
+
+    # Prev/next month nav
+    if month == 1:
+        prev_month = f'{year - 1}-12'
+    else:
+        prev_month = f'{year}-{month - 1:02d}'
+    if month == 12:
+        next_month = f'{year + 1}-01'
+    else:
+        next_month = f'{year}-{month + 1:02d}'
+
+    return render_template(
+        'admin_invoicing_detail.html',
+        client_user=client_user,
+        dog=dog,
+        inv=inv,
+        line_items=line_items,
+        discounts=discounts,
+        month_start=month_start,
+        prev_month=prev_month,
+        next_month=next_month,
+        today=today,
+    )
