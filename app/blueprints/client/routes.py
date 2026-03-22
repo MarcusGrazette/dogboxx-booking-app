@@ -674,6 +674,8 @@ def cancel_booking():
 
         is_admin_cancel = current_user.is_admin and booking.user_id != current_user.id
         booking.status = "cancelled"
+        booking.cancelled_at = datetime.now(timezone.utc)
+        booking.cancelled_by = 'admin' if is_admin_cancel else 'client'
         booking.walker_id = None  # Unassign walker
         db.session.commit()
 

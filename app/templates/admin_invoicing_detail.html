@@ -95,6 +95,68 @@
     </div>
   </div>
 
+  {# ── Weekly breakdown ─────────────────────────────────────────────────── #}
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <h6 class="mb-0 fw-semibold">Weekly summary</h6>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Week commencing</th>
+                <th class="text-center">Walks</th>
+                <th class="text-center">Charged cancels</th>
+                <th class="text-center">Double-walk discount</th>
+                <th class="text-end">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for w in weeks %}
+              <tr {% if not w.has_activity %}class="text-muted"{% endif %}>
+                <td class="fw-semibold {% if not w.has_activity %}text-muted{% endif %}">
+                  {{ w.commencing.strftime('%-d %b') }}
+                </td>
+                <td class="text-center">
+                  {% if w.confirmed %}
+                  <span class="badge bg-success-subtle text-success fw-semibold">{{ w.confirmed }}</span>
+                  {% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td class="text-center">
+                  {% if w.cancels %}
+                  <span class="badge bg-warning-subtle text-warning fw-semibold">{{ w.cancels }}</span>
+                  {% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td class="text-center">
+                  {% if w.discount_total %}
+                  <span class="text-danger small fw-semibold">−£{{ '%.2f' | format(w.discount_total) }}</span>
+                  {% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td class="text-end {% if w.has_activity %}fw-semibold{% else %}text-muted{% endif %}">
+                  {% if w.has_activity %}£{{ '%.2f' | format(w.subtotal) }}{% else %}—{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot class="table-light">
+              <tr>
+                <td class="fw-bold text-end">Total</td>
+                <td class="text-center fw-bold">{{ inv.total_walks }}</td>
+                <td class="text-center fw-bold">{{ inv.total_cancels }}</td>
+                <td class="text-center {% if inv.doubles %}text-danger fw-bold{% else %}text-muted{% endif %}">
+                  {% if inv.doubles %}−£{{ '%.2f' | format(discounts | sum(attribute='amount')) }}{% else %}—{% endif %}
+                </td>
+                <td class="text-end fw-bold fs-6">£{{ '%.2f' | format(inv.subtotal) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
   {# ── Line items ───────────────────────────────────────────────────────── #}
   <div class="col-12">
     <div class="card">

@@ -92,6 +92,11 @@
                 <td>
                   <a href="{{ url_for('admin.client_detail', client_id=r.client.id) }}"
                      class="text-decoration-none fw-semibold">{{ r.client.full_name }}</a>
+                  {% for s in r.secondary_owners %}
+                  <div class="small text-muted">
+                    <i class="bi bi-person-fill-add me-1" style="font-size:0.7rem;"></i>{{ s.full_name }}
+                  </div>
+                  {% endfor %}
                 </td>
                 <td class="text-muted small">{{ r.dog.name if r.dog else '—' }}</td>
                 <td class="text-center">

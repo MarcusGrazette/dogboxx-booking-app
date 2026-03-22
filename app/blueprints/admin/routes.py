@@ -1827,12 +1827,20 @@ def invoicing():
         inv = _invoice_for_client(u.id, month_start, month_end, all_configs)
         if inv is None or inv['total_billable'] == 0:
             continue
-        # Primary dog
+        # Primary dog + secondary owners
         do = DogOwner.query.filter_by(user_id=u.id, role='primary').first()
         dog = Dog.query.get(do.dog_id) if do else None
+        secondary_owners = []
+        if dog:
+            secondary_owners = [
+                User.query.get(so.user_id)
+                for so in DogOwner.query.filter_by(dog_id=dog.id, role='secondary').all()
+            ]
+            secondary_owners = [s for s in secondary_owners if s]
         rows.append({
-            'client':  u,
-            'dog':     dog,
+            'client':           u,
+            'dog':              dog,
+            'secondary_owners': secondary_owners,
             **inv,
         })
 
@@ -1922,6 +1930,36 @@ def invoicing_detail(client_id):
     do = DogOwner.query.filter_by(user_id=client_user.id, role='primary').first()
     dog = Dog.query.get(do.dog_id) if do else None
 
+    # ── Weekly breakdown ──────────────────────────────────────────────────
+    # Find all Mon-commencing weeks that overlap the month
+    from datetime import timedelta
+    # First Monday on or before month_start
+    first_monday = month_start - timedelta(days=month_start.weekday())
+    weeks = []
+    wk_start = first_monday
+    while wk_start < month_end:
+        wk_end = wk_start + timedelta(days=7)  # exclusive
+
+        # Line items in this week
+        wk_items = [li for li in line_items if wk_start <= li['booking'].date < wk_end]
+        wk_discounts = [d for d in discounts if wk_start <= d['date'] < wk_end]
+
+        wk_confirmed = sum(1 for li in wk_items if not li['is_cancel'])
+        wk_cancels   = sum(1 for li in wk_items if li['is_cancel'])
+        wk_discount_total = sum(d['amount'] for d in wk_discounts)
+        wk_gross     = sum(li['unit_price'] for li in wk_items)
+        wk_subtotal  = round(wk_gross - wk_discount_total, 2)
+
+        weeks.append({
+            'commencing':      wk_start,
+            'confirmed':       wk_confirmed,
+            'cancels':         wk_cancels,
+            'discount_total':  wk_discount_total,
+            'subtotal':        wk_subtotal,
+            'has_activity':    bool(wk_items),
+        })
+        wk_start = wk_end
+
     # Prev/next month nav
     if month == 1:
         prev_month = f'{year - 1}-12'
@@ -1939,6 +1977,7 @@ def invoicing_detail(client_id):
         inv=inv,
         line_items=line_items,
         discounts=discounts,
+        weeks=weeks,
         month_start=month_start,
         prev_month=prev_month,
         next_month=next_month,
