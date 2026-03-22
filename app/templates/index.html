@@ -207,6 +207,7 @@
                                         data-booking-id="{{ booking.id }}"
                                         data-booking-slot="{{ booking.slot }}"
                                         data-booking-date="{{ booking.date_display }}"
+                                        data-booking-date-iso="{{ booking.date.isoformat() }}"
                                         title="Cancel booking"
                                         style="line-height: 1; font-size: 1.1rem;">
                                     <i class="bi bi-x-circle"></i>
@@ -276,6 +277,10 @@
             </div>
             <div class="modal-body pt-1">
                 <p class="mb-0" id="cancel-modal-body" style="font-size: 0.92rem;"></p>
+                <div id="cancel-late-warning" class="alert alert-warning mt-3 mb-0 py-2 small d-none">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                    This walk is within 5 days — it will still be charged under our cancellation policy.
+                </div>
             </div>
             <div class="modal-footer border-0 pt-1 gap-2">
                 <button type="button" class="btn btn-outline-secondary btn-sm flex-fill" data-bs-dismiss="modal">No, keep it</button>
@@ -608,6 +613,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // Using delegation so dynamically-injected bookings get the handler too
     const cancelModal      = new bootstrap.Modal(document.getElementById('cancelModal'));
     const cancelModalBody  = document.getElementById('cancel-modal-body');
+    const cancelLateWarn   = document.getElementById('cancel-late-warning');
     const cancelConfirmBtn = document.getElementById('cancel-confirm-btn');
     let pendingCancelId    = null;
     let pendingCancelBtn   = null;
@@ -618,9 +624,19 @@ document.addEventListener('DOMContentLoaded', function () {
         e.preventDefault();
         pendingCancelId  = btn.getAttribute('data-booking-id');
         pendingCancelBtn = btn;
-        const slot = btn.getAttribute('data-booking-slot');
-        const date = btn.getAttribute('data-booking-date');
+        const slot    = btn.getAttribute('data-booking-slot');
+        const date    = btn.getAttribute('data-booking-date');
+        const dateIso = btn.getAttribute('data-booking-date-iso');
+
         cancelModalBody.textContent = `Are you sure you want to cancel the ${slot} walk on ${date}?`;
+
+        // Show late-cancel warning if within 5 days
+        const walkDate = new Date(dateIso);
+        const today    = new Date();
+        today.setHours(0, 0, 0, 0);
+        const noticeDays = Math.round((walkDate - today) / 86400000);
+        cancelLateWarn.classList.toggle('d-none', noticeDays >= 5);
+
         cancelModal.show();
     });
 
