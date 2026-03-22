@@ -9,7 +9,7 @@
   "dir": "ltr",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
-  "orientation": "portrait",
+  "orientation": "any",
   "theme_color": "#1B1B1B",
   "background_color": "#1B1B1B",
   "shortcuts": [
