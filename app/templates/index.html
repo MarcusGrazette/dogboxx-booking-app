@@ -165,6 +165,7 @@
 
                     {% set dog_bookings = bookings | selectattr('dog_id', 'equalto', dog.id) | list if bookings else [] %}
 
+                    <div id="dog-bookings-{{ dog.id }}" data-dog-id="{{ dog.id }}">
                     {% if dog_bookings %}
                     <ul class="list-group list-group-flush" id="bookings-list-{{ dog.id }}"
                         data-dog-id="{{ dog.id }}" data-total="{{ dog_bookings | length }}">
@@ -239,11 +240,12 @@
                     {% endif %}
 
                     {% else %}
-                    <div class="text-center py-4">
+                    <div class="text-center py-4" id="dog-empty-{{ dog.id }}">
                         <i class="bi bi-calendar2-x fs-2 text-muted mb-2 d-block"></i>
                         <p class="text-muted small mb-0">No upcoming walks for {{ dog.name }}.<br>Use the form to request one!</p>
                     </div>
                     {% endif %}
+                    </div>{# /dog-bookings-{id} #}
                 </div>
 
             </div>
@@ -481,61 +483,87 @@ document.addEventListener('DOMContentLoaded', function () {
     // ─── Form submit — single vs recurring ───────────────────
     const bookingForm = document.getElementById('BookingForm');
     bookingForm.addEventListener('submit', function (e) {
-        if (!recurToggle.checked) return; // let normal POST through
-
-        e.preventDefault();
-
-        if (!selectedDate) {
-            alert('Please select a start date on the calendar.');
-            return;
-        }
-        if (!recurEnd.value) {
-            alert('Please choose an end date.');
-            return;
-        }
-        if (!slotSelect.value) {
-            alert('Please choose a slot.');
-            return;
-        }
-
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Requesting…';
+        e.preventDefault(); // Always intercept — both paths are AJAX now
 
         const csrfToken = document.querySelector('input[name=csrf_token]')?.value;
 
-        fetch('{{ url_for("client.recurring_booking") }}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken,
-            },
-            body: JSON.stringify({
-                start_date: selectedDate,
-                end_date:   recurEnd.value,
-                slot:       slotSelect.value,
-                frequency:  recurFreq.value,
-            }),
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                const parts = [];
-                if (data.created)    parts.push(`${data.created} requested`);
-                if (data.waitlisted) parts.push(`${data.waitlisted} waitlisted`);
-                if (data.skipped)    parts.push(`${data.skipped} skipped (already booked)`);
-                alert(`Done! ${parts.join(', ')}.`);
-                window.location.reload();
-            } else {
-                alert('Error: ' + (data.message || 'Something went wrong'));
+        if (recurToggle.checked) {
+            // ── Recurring: existing AJAX path ─────────────────
+            if (!selectedDate)    { showToast('Please select a start date.', 'warning'); return; }
+            if (!recurEnd.value)  { showToast('Please choose an end date.', 'warning'); return; }
+            if (!slotSelect.value){ showToast('Please choose a slot.', 'warning'); return; }
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Requesting…';
+
+            fetch('{{ url_for("client.recurring_booking") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                body: JSON.stringify({
+                    start_date: selectedDate,
+                    end_date:   recurEnd.value,
+                    slot:       slotSelect.value,
+                    frequency:  recurFreq.value,
+                }),
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    const parts = [];
+                    if (data.created)    parts.push(`${data.created} requested`);
+                    if (data.waitlisted) parts.push(`${data.waitlisted} waitlisted`);
+                    if (data.skipped)    parts.push(`${data.skipped} skipped (already booked)`);
+                    showToast(`Done! ${parts.join(', ')}.`, 'success');
+                    window.location.reload();
+                } else {
+                    showToast(data.message || 'Something went wrong.', 'danger');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Request recurring walks';
+                }
+            })
+            .catch(() => {
+                showToast('Network error — please try again.', 'danger');
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Request recurring walks';
-            }
-        })
-        .catch(() => {
-            alert('Network error — please try again.');
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Request recurring walks';
-        });
+            });
+
+        } else {
+            // ── Single booking: AJAX, no page reload ──────────
+            if (!selectedDate)     { showToast('Please select a date.', 'warning'); return; }
+            if (!slotSelect.value) { showToast('Please choose a slot.', 'warning'); return; }
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Requesting…';
+
+            fetch('{{ url_for("client.book") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                body: JSON.stringify({ date: selectedDate, slot: slotSelect.value }),
+            })
+            .then(r => r.json())
+            .then(data => {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Request walk';
+                if (data.success) {
+                    showToast(data.message, data.status === 'waitlisted' ? 'info' : 'success');
+                    injectBooking(data.booking);
+                    loadCalendarData(cal.year, cal.month);
+                    // Reset form state
+                    selectedDate = null;
+                    dateHidden.value = '';
+                    dateText.textContent = 'Select a date above and pick morning or afternoon below';
+                    availHint.textContent = '';
+                    submitBtn.disabled = true;
+                } else {
+                    showToast(data.message || 'Something went wrong.', 'danger');
+                }
+            })
+            .catch(() => {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Request walk';
+                showToast('Network error — please try again.', 'danger');
+            });
+        }
     });
 
     // ─── Walk pagination ──────────────────────────────────────
@@ -576,23 +604,24 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    // ─── Cancel booking ──────────────────────────────────────
-    const cancelModal     = new bootstrap.Modal(document.getElementById('cancelModal'));
-    const cancelModalBody = document.getElementById('cancel-modal-body');
+    // ─── Cancel booking — event delegation ──────────────────
+    // Using delegation so dynamically-injected bookings get the handler too
+    const cancelModal      = new bootstrap.Modal(document.getElementById('cancelModal'));
+    const cancelModalBody  = document.getElementById('cancel-modal-body');
     const cancelConfirmBtn = document.getElementById('cancel-confirm-btn');
-    let pendingCancelId  = null;
-    let pendingCancelBtn = null;
+    let pendingCancelId    = null;
+    let pendingCancelBtn   = null;
 
-    document.querySelectorAll('.cancel-booking-btn').forEach(button => {
-        button.addEventListener('click', function (e) {
-            e.preventDefault();
-            pendingCancelId  = this.getAttribute('data-booking-id');
-            pendingCancelBtn = this;
-            const slot = this.getAttribute('data-booking-slot');
-            const date = this.getAttribute('data-booking-date');
-            cancelModalBody.textContent = `Are you sure you want to cancel the ${slot} walk on ${date}?`;
-            cancelModal.show();
-        });
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('.cancel-booking-btn');
+        if (!btn) return;
+        e.preventDefault();
+        pendingCancelId  = btn.getAttribute('data-booking-id');
+        pendingCancelBtn = btn;
+        const slot = btn.getAttribute('data-booking-slot');
+        const date = btn.getAttribute('data-booking-date');
+        cancelModalBody.textContent = `Are you sure you want to cancel the ${slot} walk on ${date}?`;
+        cancelModal.show();
     });
 
     cancelConfirmBtn.addEventListener('click', function () {
@@ -603,6 +632,71 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
 }); // DOMContentLoaded
+
+// ─── Inject a new booking row into the DOM ───────────────────────────────────
+function injectBooking(booking) {
+    const container = document.getElementById(`dog-bookings-${booking.dog_id}`);
+    if (!container) { window.location.reload(); return; }
+
+    // If showing empty state, replace it with a fresh list
+    const empty = document.getElementById(`dog-empty-${booking.dog_id}`);
+    if (empty) {
+        empty.remove();
+        const ul = document.createElement('ul');
+        ul.className = 'list-group list-group-flush';
+        ul.id = `bookings-list-${booking.dog_id}`;
+        ul.setAttribute('data-dog-id', booking.dog_id);
+        ul.setAttribute('data-total', '0');
+        container.appendChild(ul);
+    }
+
+    const list = document.getElementById(`bookings-list-${booking.dog_id}`);
+    if (!list) { window.location.reload(); return; }
+
+    // Build status badge
+    const badgeHtml = booking.status === 'waitlisted'
+        ? `<span class="badge rounded-pill text-bg-info py-2 text-center" style="min-width:90px;">Waitlisted</span>`
+        : `<span class="badge rounded-pill py-2 text-center" style="min-width:90px; background-color:#fff3cd; color:#856404;">Pending</span>`;
+
+    // Re-index existing items (shift up by 1 to make room at top)
+    list.querySelectorAll('li[data-walk-idx]').forEach(el => {
+        el.setAttribute('data-walk-idx', String(parseInt(el.getAttribute('data-walk-idx'), 10) + 1));
+    });
+
+    const li = document.createElement('li');
+    li.className = 'list-group-item px-0 py-3 border-bottom d-flex align-items-center justify-content-between gap-2';
+    li.setAttribute('data-walk-idx', '0');
+    li.innerHTML = `
+        <div class="d-flex align-items-center gap-3">
+            ${badgeHtml}
+            <div>
+                <div class="fw-semibold small">${booking.date_display}</div>
+                <div class="text-muted" style="font-size:0.78rem;">${booking.slot}</div>
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <button class="btn btn-link p-1 cancel-booking-btn text-danger"
+                    data-booking-id="${booking.id}"
+                    data-booking-slot="${booking.slot}"
+                    data-booking-date="${booking.date_display}"
+                    title="Cancel booking"
+                    style="line-height:1;font-size:1.1rem;">
+                <i class="bi bi-x-circle"></i>
+            </button>
+        </div>`;
+
+    // Animate in
+    li.style.opacity = '0';
+    li.style.transition = 'opacity 0.3s ease';
+    list.insertBefore(li, list.firstChild);
+    requestAnimationFrame(() => { li.style.opacity = '1'; });
+
+    // Update total count
+    list.setAttribute('data-total', String(parseInt(list.getAttribute('data-total'), 10) + 1));
+
+    // Remove the cancellation policy note if absent (it might not be there for empty→first booking)
+    // No action needed — it's conditionally rendered server-side
+}
 
 // ─── Booking notes ───────────────────────────────────────────────────────────
 (function () {
@@ -695,19 +789,21 @@ function cancelBooking(bookingId, buttonElement) {
         if (data.success) {
             const item = buttonElement.closest('li');
             if (item) {
-                item.style.transition = 'opacity 0.4s ease';
+                item.style.transition = 'opacity 0.3s ease';
                 item.style.opacity = '0';
-                setTimeout(() => item.remove(), 400);
+                setTimeout(() => item.remove(), 300);
             }
+            showToast('Booking cancelled.', 'info');
         } else {
             buttonElement.disabled = false;
-            buttonElement.innerHTML = '<i class="bi bi-x-lg"></i>';
+            buttonElement.innerHTML = '<i class="bi bi-x-circle"></i>';
+            showToast(data.message || 'Could not cancel booking.', 'danger');
         }
     })
     .catch(() => {
         buttonElement.disabled = false;
-        buttonElement.innerHTML = '<i class="bi bi-x-lg"></i>';
-        alert('Network error — could not cancel booking. Please try again.');
+        buttonElement.innerHTML = '<i class="bi bi-x-circle"></i>';
+        showToast('Network error — could not cancel booking. Please try again.', 'danger');
     });
 }
 </script>

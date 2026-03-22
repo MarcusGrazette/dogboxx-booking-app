@@ -45,11 +45,14 @@ def send_web_push(user_id, title, body='', link='/', icon=None, unread_count=1, 
     if not subscriptions:
         return
 
+    base_url = current_app.config.get('APP_BASE_URL', '').rstrip('/')
+
     payload = json.dumps({
         'title':        title,
         'body':         body,
         'link':         link,
-        'icon':         icon or '/static/android-chrome-192x192.png',
+        'icon':         icon or f'{base_url}/static/android-chrome-192x192.png',
+        'badge':        f'{base_url}/static/badge-mono.png',
         'tag':          'dogboxx-notification',
         'unread_count': unread_count,
     })

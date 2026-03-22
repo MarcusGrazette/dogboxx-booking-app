@@ -59,20 +59,30 @@
     </div>
 </div>
 
-{# --- Dog details --- #}
+{# --- Primary dogs (this client owns) --- #}
+{% for entry in primary_dogs %}
+{% set dog = entry.dog %}
+{% set shared_with = entry.secondary_owners %}
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="bi bi-heart"></i> Dog</h5>
-        <a href="{{ url_for('admin.edit_client', client_id=client.id) }}" class="btn btn-sm btn-outline-primary">
-            <i class="bi bi-pencil me-1"></i>Edit
-        </a>
+        <h5 class="mb-0">
+            <i class="bi bi-heart"></i> {{ dog.name }}
+            <span class="badge bg-secondary ms-2 fw-normal" style="font-size:.7rem;">Primary owner</span>
+        </h5>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-success"
+                    data-dog-id="{{ dog.id }}"
+                    data-dog-name="{{ dog.name }}"
+                    onclick="openJoinModal(this)">
+                <i class="bi bi-person-plus me-1"></i>Share access
+            </button>
+            <a href="{{ url_for('admin.edit_client', client_id=client.id) }}" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-pencil me-1"></i>Edit
+            </a>
+        </div>
     </div>
     <div class="card-body">
-        {% if dog %}
         <dl class="row mb-0">
-            <dt class="col-sm-3">Name</dt>
-            <dd class="col-sm-9">{{ dog.name }}</dd>
-
             <dt class="col-sm-3">Gender</dt>
             <dd class="col-sm-9">{{ dog.gender | capitalize if dog.gender else '—' }}</dd>
 
@@ -85,16 +95,103 @@
             <dt class="col-sm-3">Allergies / notes</dt>
             <dd class="col-sm-9">{{ dog.allergies if dog.allergies else '—' }}</dd>
         </dl>
-        {% else %}
+
+        {# Shared access list #}
+        {% if shared_with %}
+        <hr class="my-3">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+            <p class="mb-0 fw-semibold small text-muted text-uppercase" style="letter-spacing:.04em;">
+                <i class="bi bi-people me-1"></i>Shared with
+            </p>
+        </div>
+        <ul class="list-group list-group-flush" id="shared-list-{{ dog.id }}">
+            {% for secondary_user in shared_with %}
+            <li class="list-group-item px-0 d-flex align-items-center justify-content-between"
+                id="shared-row-{{ dog.id }}-{{ secondary_user.id }}">
+                <div>
+                    <span class="fw-semibold">{{ secondary_user.full_name }}</span>
+                    <span class="text-muted small ms-2">{{ secondary_user.email }}</span>
+                    <a href="{{ url_for('admin.client_detail', client_id=secondary_user.id) }}"
+                       class="ms-2 small text-decoration-none">
+                        <i class="bi bi-box-arrow-up-right"></i>
+                    </a>
+                </div>
+                <button class="btn btn-sm btn-outline-danger"
+                        onclick="revokeAccess({{ client.id }}, {{ dog.id }}, {{ secondary_user.id }}, '{{ secondary_user.full_name|e }}', 'shared-row-{{ dog.id }}-{{ secondary_user.id }}')">
+                    <i class="bi bi-person-dash me-1"></i>Revoke
+                </button>
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+</div>
+{% else %}
+{# No primary dogs — show the old "no dog" placeholder unless they're a secondary owner #}
+{% if not secondary_dogs %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-heart"></i> Dog</h5>
+    </div>
+    <div class="card-body">
         <div class="text-muted d-flex align-items-center gap-2 py-1">
             <i class="bi bi-exclamation-circle text-warning"></i>
             No dog added yet.
             <a href="{{ url_for('admin.edit_client', client_id=client.id) }}" class="ms-1">Add dog info</a>
             so the client's profile is ready when they log in.
         </div>
-        {% endif %}
     </div>
 </div>
+{% endif %}
+{% endfor %}
+
+{# --- Secondary dogs (this client has shared access to) --- #}
+{% for entry in secondary_dogs %}
+{% set dog = entry.dog %}
+{% set primary_owner = entry.primary_owner %}
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">
+            <i class="bi bi-heart"></i> {{ dog.name }}
+            <span class="badge bg-info text-dark ms-2 fw-normal" style="font-size:.7rem;">Shared access</span>
+        </h5>
+        {% if primary_owner %}
+        <button class="btn btn-sm btn-outline-danger"
+                onclick="revokeAccess({{ primary_owner.id }}, {{ dog.id }}, {{ client.id }}, '{{ client.full_name|e }}', null)">
+            <i class="bi bi-person-dash me-1"></i>Revoke access
+        </button>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        <dl class="row mb-2">
+            <dt class="col-sm-3">Primary owner</dt>
+            <dd class="col-sm-9">
+                {% if primary_owner %}
+                <a href="{{ url_for('admin.client_detail', client_id=primary_owner.id) }}">
+                    {{ primary_owner.full_name }}
+                </a>
+                <span class="text-muted small ms-2">{{ primary_owner.email }}</span>
+                {% else %}
+                <span class="text-muted">Unknown</span>
+                {% endif %}
+            </dd>
+
+            <dt class="col-sm-3">Gender</dt>
+            <dd class="col-sm-9">{{ dog.gender | capitalize if dog.gender else '—' }}</dd>
+
+            <dt class="col-sm-3">Breed</dt>
+            <dd class="col-sm-9">{{ dog.breed if dog.breed else '—' }}</dd>
+
+            <dt class="col-sm-3">Date of birth</dt>
+            <dd class="col-sm-9">{{ dog.date_of_birth.strftime('%d %b %Y') if dog.date_of_birth else '—' }}</dd>
+        </dl>
+        <p class="text-muted small mb-0">
+            <i class="bi bi-info-circle me-1"></i>
+            This client can view, book, and cancel walks for {{ dog.name }}, but cannot edit {{ dog.name }}'s profile.
+        </p>
+    </div>
+</div>
+{% endfor %}
 
 {# --- Pickup details --- #}
 <div class="card mb-4">
@@ -197,11 +294,55 @@
     </div>
 </div>
 
+{# ============================================================
+   JOIN ACCESS MODAL
+   ============================================================ #}
+<div class="modal fade" id="joinAccessModal" tabindex="-1" aria-labelledby="joinAccessModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="joinAccessModalLabel">
+                    <i class="bi bi-person-plus me-2"></i>Share access to <span id="modal-dog-name"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">
+                    The selected client will be able to view, book, and cancel walks for this dog.
+                    They will not be able to edit the dog's profile.
+                </p>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold" for="join-client-select">Select client</label>
+                    {% if available_clients %}
+                    <select class="form-select" id="join-client-select">
+                        <option value="">— Choose a client —</option>
+                        {% for c in available_clients %}
+                        <option value="{{ c.id }}">{{ c.full_name }} ({{ c.email }})</option>
+                        {% endfor %}
+                    </select>
+                    {% else %}
+                    <p class="text-muted small fst-italic">No other active clients to link to.</p>
+                    {% endif %}
+                </div>
+                <div id="join-modal-error" class="alert alert-danger d-none" role="alert"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success fw-semibold" id="join-confirm-btn"
+                        {% if not available_clients %}disabled{% endif %}>
+                    <i class="bi bi-person-plus me-1"></i>Share access
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
 (function () {
+    // ── Pickup details inline edit ──────────────────────────────────────────
     const editBtn    = document.getElementById('pickup-edit-btn');
     const saveBtn    = document.getElementById('pickup-save-btn');
     const cancelBtn  = document.getElementById('pickup-cancel-btn');
@@ -233,24 +374,15 @@
 
         fetch('{{ url_for("admin.update_client_pickup_details", client_id=client.id) }}', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token() }}'
-            },
-            body: JSON.stringify({
-                pickup_instructions: instrEl.value,
-                maps_url: mapsEl.value
-            })
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
+            body: JSON.stringify({ pickup_instructions: instrEl.value, maps_url: mapsEl.value })
         })
         .then(r => r.json())
         .then(data => {
             saveBtn.disabled = false;
             saveBtn.textContent = 'Save';
-            if (data.success) {
-                window.location.reload();
-            } else {
-                errorEl.textContent = data.message || 'Could not save.';
-            }
+            if (data.success) { window.location.reload(); }
+            else { errorEl.textContent = data.message || 'Could not save.'; }
         })
         .catch(() => {
             saveBtn.disabled = false;
@@ -258,6 +390,87 @@
             errorEl.textContent = 'Network error — please try again.';
         });
     });
+
+    // ── Join access modal ───────────────────────────────────────────────────
+    let activeDogId   = null;
+    const joinModal   = new bootstrap.Modal(document.getElementById('joinAccessModal'));
+    const joinConfirm = document.getElementById('join-confirm-btn');
+    const joinSelect  = document.getElementById('join-client-select');
+    const joinError   = document.getElementById('join-modal-error');
+
+    window.openJoinModal = function (btn) {
+        activeDogId = btn.dataset.dogId;
+        document.getElementById('modal-dog-name').textContent = btn.dataset.dogName;
+        if (joinSelect) joinSelect.value = '';
+        joinError.classList.add('d-none');
+        joinError.textContent = '';
+        joinModal.show();
+    };
+
+    if (joinConfirm) {
+        joinConfirm.addEventListener('click', () => {
+            const secondaryUserId = joinSelect ? joinSelect.value : null;
+            if (!secondaryUserId) {
+                joinError.textContent = 'Please select a client.';
+                joinError.classList.remove('d-none');
+                return;
+            }
+
+            joinConfirm.disabled = true;
+            joinConfirm.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+            joinError.classList.add('d-none');
+
+            fetch('{{ url_for("admin.join_dog_access", client_id=client.id) }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
+                body: JSON.stringify({ dog_id: parseInt(activeDogId), secondary_user_id: parseInt(secondaryUserId) })
+            })
+            .then(r => r.json())
+            .then(data => {
+                joinConfirm.disabled = false;
+                joinConfirm.innerHTML = '<i class="bi bi-person-plus me-1"></i>Share access';
+                if (data.success) {
+                    joinModal.hide();
+                    window.location.reload();
+                } else {
+                    joinError.textContent = data.message || 'Could not share access.';
+                    joinError.classList.remove('d-none');
+                }
+            })
+            .catch(() => {
+                joinConfirm.disabled = false;
+                joinConfirm.innerHTML = '<i class="bi bi-person-plus me-1"></i>Share access';
+                joinError.textContent = 'Network error — please try again.';
+                joinError.classList.remove('d-none');
+            });
+        });
+    }
+
+    // ── Revoke access ───────────────────────────────────────────────────────
+    window.revokeAccess = function (primaryClientId, dogId, secondaryUserId, userName, rowId) {
+        if (!confirm(`Remove ${userName}'s access to this dog?`)) return;
+
+        fetch(`/admin/clients/${primaryClientId}/revoke-access`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
+            body: JSON.stringify({ dog_id: dogId, secondary_user_id: secondaryUserId })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                if (rowId) {
+                    const row = document.getElementById(rowId);
+                    if (row) row.remove();
+                } else {
+                    window.location.reload();
+                }
+            } else {
+                alert(data.message || 'Could not revoke access.');
+            }
+        })
+        .catch(() => alert('Network error — please try again.'));
+    };
+
 })();
 </script>
 {% endblock %}

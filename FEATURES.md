@@ -15,6 +15,7 @@
 | 5 | P1 | M | ✅ | **Prevent duplicate bookings** | Block same dog+date+slot. Max 2 bookings per dog per day (one per slot). DB partial unique index. |
 | 6 | P1 | M | 🔲 | **Password reset** | "Forgot password?" → token email → set new password. |
 | 7 | P1 | M | 🔲 | **Booking capacity display for clients** | Show remaining slots when client is booking, not just accept/reject. |
+| 8 | P2 | L | 🔲 | **"Book both walks" option (client)** | Tick box above recurring toggle. Ticking it books AM + PM in one action. Confirmation modal before submit. Allocation board should show a double-walk icon (similar to waitlist indicator). |
 
 ## Walker
 
@@ -25,6 +26,8 @@
 | 12 | P2 | M | ✅ | **Walker unavailability** | Date-specific exceptions (per slot). Admin marks unavailability. Reduces capacity for that slot automatically. |
 | 13 | P3 | L | 🔲 | **Walker self-manage availability** | Walkers flag their own exceptions (holidays, sick days) rather than admin doing it. |
 | 14 | P3 | L | 🔲 | **Google Maps pickup directions** | Link from pickup list to Google Maps directions for each address. |
+| 15 | P2 | M | 🔲 | **Walker ad hoc available days** | Walkers can add one-off available days outside their default schedule. Inverse of the existing unavailability model. New `walker_adhoc_availability` table (or reuse existing with a flag). Capacity checks need updating to include these. |
+| 16 | P2 | M | 🔲 | **Admin override walker unavailability on allocation board** | Admin can assign dogs to a slot even if walker has marked themselves unavailable. Override shown visually (warning state). Booking creation bypasses the unavailability block when admin-initiated. |
 
 ## Admin
 
@@ -36,6 +39,9 @@
 | 23 | P2 | M | 🔲 | **Admin dashboard stats** | Booking counts, utilisation, revenue summary. Currently shows upcoming bookings only. |
 | 24 | P3 | L | 🔲 | **Dental cleans service type** | Admin: manage available date+time slots. Client: book from available slots. Stubbed in nav. |
 | 25 | P3 | L | 🔲 | **Invoicing** | Generate invoices per client based on confirmed walks. Cancellation policy enforcement (<5 days notice = billable). |
+| 26 | P2 | L | 🔲 | **Invoicing view (admin)** | Monthly summary per client: walks per week + cancellations within 5 days of walk date (still charged). Listed in admin dashboard. |
+| 27 | P2 | L | 🔲 | **Multiple clients per dog** | One dog can be linked to multiple user accounts. Admin can "join" accounts via modal (select from existing users). All joined accounts can view/manage/book for that dog. Requires new `dog_owners` join table and permission checks throughout booking + client flows. Client profile should indicate the account is joined. |
+| 28 | P3 | M | 🔲 | **CSV client/dog import** | Upload CSV matching the create-client form fields. Bulk create client + dog records. Validation with error report on bad rows. No need to handle joined accounts — those are done manually post-import. |
 
 ## Client
 
