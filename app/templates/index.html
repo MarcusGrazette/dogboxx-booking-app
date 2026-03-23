@@ -929,6 +929,7 @@ function cancelBooking(bookingId, buttonElement) {
     const dateEl   = document.getElementById('dropin-date');
     const slotEl   = document.getElementById('dropin-slot');
     const feedback = document.getElementById('dropin-feedback');
+    const csrfToken = document.querySelector('input[name=csrf_token]')?.value;
 
     if (!btn) return;
 
