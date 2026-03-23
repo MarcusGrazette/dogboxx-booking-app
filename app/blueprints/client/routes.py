@@ -45,7 +45,8 @@ def index():
     today = datetime.now(timezone.utc).date()
     _index_dog_ids = get_accessible_dog_ids(current_user.id)
     upcoming_bookings_query = Booking.query.options(
-        joinedload(Booking.walker).joinedload(Walker.user)
+        joinedload(Booking.walker).joinedload(Walker.user),
+        joinedload(Booking.service_type),
     ).filter(
         Booking.dog_id.in_(_index_dog_ids),
         Booking.status != 'cancelled',
@@ -58,6 +59,7 @@ def index():
             b.date_display = b.date.strftime("%a %d %b")
         else:
             b.date_display = None
+        b.is_drop_in = b.service_type and b.service_type.slug == 'drop-in'
 
     form = BookingForm()
     if form.validate_on_submit():
@@ -403,6 +405,111 @@ def book_both():
         'success':  True,
         'bookings': booking_payload,
         'message':  ', '.join(parts) + '.',
+    })
+
+
+@client_bp.route("/book_drop_in", methods=["POST"])
+@login_required
+def book_drop_in():
+    """AJAX endpoint: request a drop-in visit for a given date + slot.
+
+    Accepts JSON: { "date": "YYYY-MM-DD", "slot": "Morning"|"Afternoon" }
+    Returns JSON response (success/failure + booking info).
+    """
+    from app.capacity import check_availability as _check
+
+    data             = request.get_json(silent=True) or {}
+    booking_date_str = data.get('date', '').strip()
+    booking_slot     = data.get('slot', '').strip()
+
+    if not booking_date_str:
+        return jsonify({'success': False, 'message': 'Date is required.'}), 400
+    if booking_slot not in ('Morning', 'Afternoon'):
+        return jsonify({'success': False, 'message': 'Invalid slot. Choose Morning or Afternoon.'}), 400
+
+    try:
+        booking_date = date_type.fromisoformat(booking_date_str)
+    except ValueError:
+        return jsonify({'success': False, 'message': 'Invalid date format.'}), 400
+
+    today    = datetime.now(timezone.utc).date()
+    max_date = (datetime.now(timezone.utc) + timedelta(days=90)).date()
+    if booking_date < today:
+        return jsonify({'success': False, 'message': 'Booking date cannot be in the past.'}), 400
+    if booking_date > max_date:
+        return jsonify({'success': False, 'message': 'Booking date is too far in the future.'}), 400
+
+    user_dogs = Dog.query.join(DogOwner).filter(DogOwner.user_id == current_user.id).all()
+    if not user_dogs:
+        return jsonify({'success': False, 'message': 'No dog found on your account.'}), 400
+
+    dog    = user_dogs[0]
+    dog_id = dog.id
+
+    drop_in_service = ServiceType.query.filter_by(slug='drop-in', active=True).first()
+    if not drop_in_service:
+        return jsonify({'success': False, 'message': 'Drop-in service is not currently available.'}), 503
+
+    # Prevent duplicate
+    active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
+    existing = Booking.query.filter(
+        Booking.dog_id   == dog_id,
+        Booking.date     == booking_date,
+        Booking.slot     == booking_slot,
+        Booking.status.in_(active_statuses),
+        Booking.service_type_id == drop_in_service.id,
+    ).first()
+    if existing:
+        return jsonify({'success': False, 'message': 'A drop-in is already booked for that slot.'}), 409
+
+    available, can_waitlist, capacity_msg = _check(drop_in_service, booking_date, booking_slot)
+    if not available and not can_waitlist:
+        return jsonify({'success': False, 'message': capacity_msg}), 409
+
+    booking_status = 'waitlisted' if (not available and can_waitlist) else 'requested'
+
+    new_booking = Booking(
+        user_id         = current_user.id,
+        dog_id          = dog_id,
+        service_type_id = drop_in_service.id,
+        date            = booking_date,
+        slot            = booking_slot,
+        status          = booking_status,
+    )
+    db.session.add(new_booking)
+    db.session.flush()
+    db.session.commit()
+
+    # Notify admins
+    date_str_fmt = booking_date.strftime('%a %-d %b')
+    for admin in User.query.filter_by(is_admin=True).all():
+        create_notification(
+            recipient_id      = admin.id,
+            notification_type = 'booking_requested',
+            title             = f'New drop-in request for {date_str_fmt}',
+            body              = f'{current_user.firstname} requested {booking_slot} drop-in for {dog.name}',
+            link              = '/admin/drop-in-board',
+            sender_id         = current_user.id,
+        )
+
+    if booking_status == 'waitlisted':
+        message = (f"All drop-in slots are full for {booking_slot} on "
+                   f"{booking_date.strftime('%d %b')}. You've been added to the waitlist.")
+    else:
+        message = "Drop-in request submitted — we'll confirm shortly."
+
+    return jsonify({
+        'success':  True,
+        'status':   booking_status,
+        'message':  message,
+        'booking':  {
+            'id':           new_booking.id,
+            'date_display': booking_date.strftime('%a %-d %b'),
+            'date_iso':     booking_date.isoformat(),
+            'slot':         booking_slot,
+            'status':       booking_status,
+            'is_drop_in':   True,
+        },
     })
 
 

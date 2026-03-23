@@ -1,0 +1,421 @@
+{% extends "admin_layout.html" %}
+{% from "partials/calendar_component.html" import calendar_widget %}
+
+{% block title %}Drop-In Board{% endblock %}
+{% block page_title %}Drop-In Board{% endblock %}
+{% block page_subtitle %}Click a dog to select, then click a walker slot to assign{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin-board.css') }}">
+{% endblock %}
+
+{% block page_actions %}{% endblock %}
+
+{% block main %}
+
+<div class="row mb-3">
+    <div class="{{ 'col-6' if is_mobile else 'col-3' }}">
+        {{ calendar_widget('dropin-cal', config={
+            'selectable': true,
+            'highlight_today': true,
+            'allow_other_month_nav': true,
+            'autoSelectToday': true
+        }, show_loading=false, footer_text='Drop-in bookings board.') }}
+    </div>
+</div>
+
+<!-- Selection hint bar -->
+<div id="selection-hint" class="alert alert-info d-flex align-items-center gap-2 py-2 mb-3" style="display:none!important;">
+    <i class="bi bi-house-door me-1"></i>
+    <span id="hint-text">Select a dog, then click a walker slot to assign</span>
+    <button id="hint-deselect" class="btn btn-sm btn-outline-secondary ms-auto">Deselect</button>
+</div>
+
+<!-- Board -->
+<div id="board-placeholder" class="text-center text-muted py-5" style="display:none;">
+    <div class="spinner-border spinner-border-sm text-primary"></div>
+</div>
+<div id="board-columns" class="d-flex gap-3 overflow-auto pb-3 align-items-start" style="display:none!important;"></div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/reusable-calendar.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+<script>
+(function () {
+    'use strict';
+
+    const CSRF        = document.querySelector('meta[name="csrf-token"]')?.content;
+    const ASSIGN_URL  = '{{ url_for("admin.assign_walker") }}';
+    const REORDER_URL = '{{ url_for("admin.reorder_pickups") }}';
+
+    let state = {
+        date: null,
+        selectedId: null,
+        pending: [],
+        assigned: [],
+        walkers: [],
+        maxCap: 6,
+    };
+
+    function imgSrc(pic) {
+        return pic ? `/static/uploads/dogs/${pic}` : '/static/uploads/dogs/default-dog.png';
+    }
+
+    function getAssignedForLane(walkerId, slot) {
+        return state.assigned
+            .filter(b => b.walker_id === walkerId && b.slot === slot)
+            .sort((a, b) => (a.pickup_order || 999) - (b.pickup_order || 999));
+    }
+
+    function getLaneCapacity(walkerId, slot) {
+        return getAssignedForLane(walkerId, slot).length;
+    }
+
+    function findBooking(id) {
+        return state.pending.find(b => b.id === id) || state.assigned.find(b => b.id === id);
+    }
+
+    // ── Card rendering ───────────────────────────────────────────────────────
+    function makePendingCard(b) {
+        const el = document.createElement('div');
+        el.className = 'board-card' +
+            (b.status === 'waitlisted' ? ' card-waitlisted' : '') +
+            (state.selectedId === b.id ? ' card-selected' : '');
+        el.dataset.id = b.id;
+
+        const slotColor = b.slot === 'Morning' ? 'success' : 'danger';
+        el.innerHTML = `
+            <img src="${imgSrc(b.dog_pic)}" class="board-dog-img"
+                 onerror="this.src='/static/uploads/dogs/default-dog.png'">
+            <div class="board-card-info">
+                <div class="board-card-name">${b.dog_name}</div>
+                <div class="board-card-owner">${b.owner_name}</div>
+            </div>
+            <div class="d-flex gap-1 align-items-center flex-shrink-0">
+                ${b.status === 'waitlisted' ? '<span class="modifier-pill modifier-waitlisted" title="Waitlisted"><i class="bi bi-clock-history"></i></span>' : ''}
+                <span class="modifier-pill" style="background:#e8f4fd;color:#0c63e4;border:1px solid #9ec5fe;" title="Drop-in"><i class="bi bi-house-door-fill"></i></span>
+                <span class="slot-pill bg-${slotColor} bg-opacity-10 text-${slotColor} border border-${slotColor}">${b.slot === 'Morning' ? 'AM' : 'PM'}</span>
+            </div>`;
+
+        el.addEventListener('click', () => selectBooking(b.id));
+        return el;
+    }
+
+    function makeAssignedCard(b) {
+        const el = document.createElement('div');
+        el.className = 'board-card' + (state.selectedId === b.id ? ' card-selected' : '');
+        el.dataset.id = b.id;
+
+        el.innerHTML = `
+            <span class="drag-handle bi bi-grip-vertical"></span>
+            <span class="pickup-num">${b.pickup_order || '?'}</span>
+            <img src="${imgSrc(b.dog_pic)}" class="board-dog-img"
+                 onerror="this.src='/static/uploads/dogs/default-dog.png'">
+            <div class="board-card-info">
+                <div class="board-card-name">${b.dog_name}</div>
+                <div class="board-card-owner">${b.owner_name}</div>
+            </div>
+            <div class="d-flex gap-1 align-items-center flex-shrink-0 ms-auto">
+                <span class="modifier-pill" style="background:#e8f4fd;color:#0c63e4;border:1px solid #9ec5fe;" title="Drop-in"><i class="bi bi-house-door-fill"></i></span>
+            </div>`;
+
+        el.addEventListener('click', () => selectBooking(b.id));
+        return el;
+    }
+
+    // ── Render ───────────────────────────────────────────────────────────────
+    function render() {
+        const wrap = document.getElementById('board-columns');
+        const placeholder = document.getElementById('board-placeholder');
+        wrap.innerHTML = '';
+
+        if (!state.walkers.length && !state.pending.length && !state.assigned.length) {
+            placeholder.style.display = '';
+            wrap.style.display = 'none';
+            placeholder.innerHTML = `<i class="bi bi-house-door fs-3 d-block mb-2 text-muted"></i>No drop-in bookings for this date`;
+            return;
+        }
+        placeholder.style.display = 'none';
+        wrap.style.display = 'flex';
+
+        wrap.appendChild(makePendingColumn());
+        state.walkers.forEach(w => wrap.appendChild(makeWalkerColumn(w)));
+
+        document.querySelectorAll('.sortable-lane').forEach(el => {
+            const { walkerId, slot } = el.dataset;
+            Sortable.create(el, {
+                animation: 150,
+                handle: '.drag-handle',
+                ghostClass: 'sortable-ghost',
+                chosenClass: 'sortable-chosen',
+                onEnd(evt) {
+                    const ids = [...el.querySelectorAll('.board-card')].map(c => parseInt(c.dataset.id));
+                    reorderLane(parseInt(walkerId), slot, ids);
+                }
+            });
+        });
+
+        updateSelectionUI();
+    }
+
+    function makePendingColumn() {
+        const col = document.createElement('div');
+        col.className = 'board-column pending-column';
+
+        const header = document.createElement('div');
+        header.className = 'board-col-header pending-header';
+        header.innerHTML = `<span><i class="bi bi-hourglass me-1"></i>Pending</span>
+                            <span class="badge bg-white text-dark">${state.pending.length}</span>`;
+        col.appendChild(header);
+
+        ['Morning', 'Afternoon'].forEach(slot => {
+            if (!state.pending.length) return;
+            const slotPending = state.pending.filter(b => b.slot === slot);
+            if (!slotPending.length) return;
+
+            const lane = makeLane(null, slot, false);
+            slotPending.forEach(b => lane.querySelector('.sortable-lane').appendChild(makePendingCard(b)));
+            col.appendChild(lane);
+        });
+
+        if (!state.pending.length) {
+            const empty = document.createElement('div');
+            empty.className = 'text-muted text-center py-3 small';
+            empty.innerHTML = '<i class="bi bi-check-circle text-success"></i> All assigned';
+            col.appendChild(empty);
+        }
+
+        return col;
+    }
+
+    function makeWalkerColumn(walker) {
+        const col = document.createElement('div');
+        col.className = 'board-column';
+
+        const header = document.createElement('div');
+        header.className = 'board-col-header';
+        header.innerHTML = `<span><i class="bi bi-person-walking me-1"></i>${walker.name}</span>`;
+        col.appendChild(header);
+
+        walker.available_slots.forEach(slot => {
+            const lane = makeLane(walker.id, slot, true);
+            getAssignedForLane(walker.id, slot).forEach(b => {
+                lane.querySelector('.sortable-lane').appendChild(makeAssignedCard(b));
+            });
+            col.appendChild(lane);
+        });
+
+        return col;
+    }
+
+    function makeLane(walkerId, slot, isWalkerLane) {
+        const cap    = walkerId ? getLaneCapacity(walkerId, slot) : null;
+        const isFull = cap !== null && cap >= state.maxCap;
+        const isTarget = state.selectedId !== null && isWalkerLane && !isFull;
+
+        const wrap = document.createElement('div');
+        wrap.className = 'board-lane' +
+            (isFull ? ' lane-full' : '') +
+            (isTarget ? ' lane-target' : '');
+
+        const header = document.createElement('div');
+        header.className = 'lane-header';
+        header.innerHTML = `
+            <span class="lane-title">${slot}</span>
+            ${cap !== null ? `<span class="capacity-badge${isFull ? ' cap-full' : ''}">${cap}/${state.maxCap}</span>` : ''}`;
+        wrap.appendChild(header);
+
+        const cardsEl = document.createElement('div');
+        cardsEl.className = 'sortable-lane';
+        if (walkerId) {
+            cardsEl.dataset.walkerId = walkerId;
+            cardsEl.dataset.slot = slot;
+        }
+        wrap.appendChild(cardsEl);
+
+        if (isWalkerLane && cap === 0) {
+            const hint = document.createElement('div');
+            hint.className = 'lane-empty';
+            hint.textContent = 'Empty';
+            cardsEl.appendChild(hint);
+        }
+
+        if (isWalkerLane && walkerId) {
+            wrap.addEventListener('click', (e) => {
+                if (e.target.closest('.board-card')) return;
+                if (state.selectedId && !isFull) {
+                    assignCard(state.selectedId, walkerId, slot);
+                }
+            });
+        }
+
+        return wrap;
+    }
+
+    // ── Selection ────────────────────────────────────────────────────────────
+    function selectBooking(id) {
+        if (state.selectedId === id) {
+            const booking = findBooking(id);
+            if (booking && booking.walker_id) {
+                unassignCard(id);
+                return;
+            }
+            state.selectedId = null;
+        } else {
+            state.selectedId = id;
+        }
+        render();
+        updateSelectionUI();
+    }
+
+    function updateSelectionUI() {
+        const hint = document.getElementById('selection-hint');
+        const hintText = document.getElementById('hint-text');
+        if (state.selectedId) {
+            const b = findBooking(state.selectedId);
+            hint.style.removeProperty('display');
+            hintText.textContent = b
+                ? `${b.dog_name} selected — click a walker's ${b.slot} slot to assign${b.walker_id ? ', or click again to unassign' : ''}`
+                : 'Click a walker slot to assign';
+        } else {
+            hint.style.setProperty('display', 'none', 'important');
+        }
+    }
+
+    document.getElementById('hint-deselect').addEventListener('click', () => {
+        state.selectedId = null;
+        render();
+        updateSelectionUI();
+    });
+
+    // ── API calls ─────────────────────────────────────────────────────────────
+    async function assignCard(bookingId, walkerId, slot) {
+        const booking = findBooking(bookingId);
+        if (!booking) return;
+
+        const prevState = JSON.parse(JSON.stringify(state));
+        state.pending  = state.pending.filter(b => b.id !== bookingId);
+        state.assigned = state.assigned.filter(b => b.id !== bookingId);
+        booking.walker_id = walkerId;
+        booking.slot = slot;
+        booking.pickup_order = getLaneCapacity(walkerId, slot) + 1;
+        state.assigned.push(booking);
+        state.selectedId = null;
+        render();
+
+        try {
+            const res = await fetch(ASSIGN_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+                body: JSON.stringify({ booking_id: bookingId, walker_id: walkerId, slot }),
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.message || 'Assignment failed');
+        } catch (err) {
+            console.error(err);
+            Object.assign(state, prevState);
+            render();
+            showToast(err.message || 'Could not assign — please try again.', 'danger');
+        }
+    }
+
+    async function unassignCard(bookingId) {
+        const booking = findBooking(bookingId);
+        if (!booking) return;
+
+        const prevState = JSON.parse(JSON.stringify(state));
+        state.assigned = state.assigned.filter(b => b.id !== bookingId);
+        booking.walker_id = null;
+        booking.pickup_order = null;
+        state.pending.push(booking);
+        state.selectedId = null;
+        render();
+
+        try {
+            const res = await fetch(ASSIGN_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+                body: JSON.stringify({ booking_id: bookingId, walker_id: null, slot: booking.slot }),
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.message || 'Unassign failed');
+        } catch (err) {
+            console.error(err);
+            Object.assign(state, prevState);
+            render();
+            showToast(err.message || 'Could not unassign — please try again.', 'danger');
+        }
+    }
+
+    async function reorderLane(walkerId, slot, newIds) {
+        newIds.forEach((id, idx) => {
+            const b = state.assigned.find(b => b.id === id);
+            if (b) b.pickup_order = idx + 1;
+        });
+        document.querySelectorAll(`.sortable-lane[data-walker-id="${walkerId}"][data-slot="${slot}"] .pickup-num`)
+            .forEach((el, idx) => { el.textContent = idx + 1; });
+
+        try {
+            await fetch(REORDER_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+                body: JSON.stringify({ walker_id: walkerId, slot, date: state.date, pickup_order: newIds }),
+            });
+        } catch (err) {
+            console.error('Reorder failed:', err);
+        }
+    }
+
+    // ── Load board ────────────────────────────────────────────────────────────
+    async function loadBoard(dateStr) {
+        state.date = dateStr;
+        state.selectedId = null;
+        document.getElementById('board-placeholder').style.display = '';
+        document.getElementById('board-placeholder').innerHTML =
+            '<div class="spinner-border spinner-border-sm text-primary"></div>';
+        document.getElementById('board-columns').style.display = 'none';
+
+        try {
+            const res  = await fetch(`{{ url_for("admin.drop_in_board_data", date_str="DATE") }}`.replace('DATE', dateStr));
+            const data = await res.json();
+            if (!data.success) throw new Error('Failed to load board');
+            state.pending  = data.pending;
+            state.assigned = data.assigned;
+            state.walkers  = data.walkers;
+            state.maxCap   = data.max_capacity;
+            render();
+        } catch (err) {
+            console.error(err);
+            document.getElementById('board-placeholder').innerHTML =
+                '<p class="text-danger">Could not load board. Please try again.</p>';
+        }
+    }
+
+    function showToast(msg, type = 'info') {
+        const el = document.createElement('div');
+        el.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+        el.style.cssText = 'top:20px;right:20px;z-index:1055;max-width:380px;';
+        el.innerHTML = `${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+        document.body.appendChild(el);
+        setTimeout(() => el.parentNode?.removeChild(el), 4000);
+    }
+
+    // ── Calendar ──────────────────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', () => {
+        const todayStr = new Date().toISOString().slice(0, 10);
+
+        const cal = createCalendar('dropin-cal', {
+            onDateClick(year, month, day, dateStr) {
+                loadBoard(dateStr);
+            }
+        });
+
+        cal.selectDate(todayStr);
+        loadBoard(todayStr);
+    });
+
+})();
+</script>
+{% endblock %}

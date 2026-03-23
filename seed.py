@@ -1,7 +1,7 @@
 """Seed the database with initial data (service types, admin account)."""
 
 from app import create_app, db
-from app.models import ServiceType, User
+from app.models import ServiceType, User, Walker
 from werkzeug.security import generate_password_hash
 
 
@@ -49,6 +49,25 @@ def seed():
             )
             db.session.add(daycare)
             print("✓ Created service type: Doggy Day Care")
+
+        if not ServiceType.query.filter_by(slug='drop-in').first():
+            drop_in = ServiceType(
+                name='Drop In',
+                slug='drop-in',
+                description='Short comfort-break visit at home. Morning or afternoon slots.',
+                capacity_model='walker_assigned',
+                slot_type='morning_afternoon',
+                requires_walker=True,
+                requires_compatibility_check=False,
+                default_max_capacity=6,  # per walker
+                active=True,
+                settings={
+                    'cancellation_notice_days': 5,
+                    'max_booking_days_ahead': 90,
+                },
+            )
+            db.session.add(drop_in)
+            print("✓ Created service type: Drop In")
 
         # Admin account
         if not User.query.filter_by(role='admin').first():

@@ -150,6 +150,34 @@
                 </p>
             </div>
         </div>
+
+        <!-- Drop-in booking card -->
+        <div class="card shadow-sm border-0 mt-3" style="border-radius: 1rem;">
+            <div class="card-body p-3">
+                <h6 class="fw-bold text-uppercase text-muted small mb-3 letter-spacing-1">
+                    <i class="bi bi-house-door-fill me-1 text-primary"></i>
+                    Request a drop-in
+                </h6>
+                <p class="text-muted small mb-3">A short comfort-break visit at home — morning or afternoon.</p>
+
+                <div class="mb-2">
+                    <label class="form-label small fw-semibold mb-1">Date</label>
+                    <input type="date" id="dropin-date" class="form-control form-control-sm"
+                           min="{{ now.date().isoformat() if now is defined else '' }}">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold mb-1">Slot</label>
+                    <select id="dropin-slot" class="form-select form-select-sm" style="max-width:160px;">
+                        <option value="Morning">Morning</option>
+                        <option value="Afternoon">Afternoon</option>
+                    </select>
+                </div>
+                <button id="dropin-submit" class="btn btn-primary btn-sm w-100">
+                    <i class="bi bi-house-door me-1"></i>Request drop-in
+                </button>
+                <div id="dropin-feedback" class="mt-2 small" style="display:none;"></div>
+            </div>
+        </div>
     </div>
 
     <!-- RIGHT: Dog diaries -->
@@ -191,10 +219,13 @@
                                 {% elif booking.status == 'waitlisted' %}
                                 <span class="badge rounded-pill text-bg-info py-2 text-center" style="min-width:90px;">Waitlisted</span>
                                 {% endif %}
-                                <!-- Date + slot -->
+                                <!-- Date + slot + service type -->
                                 <div>
                                     <div class="fw-semibold small">{{ booking.date_display }}</div>
                                     <div class="text-muted" style="font-size: 0.78rem;">
+                                        {% if booking.is_drop_in %}
+                                        <i class="bi bi-house-door-fill text-primary me-1" title="Drop-in visit"></i>Drop-in ·
+                                        {% endif %}
                                         {{ booking.slot | capitalize }}
                                         {% if booking.status == 'confirmed' and booking.walker %}
                                         <span class="text-muted">({{ booking.walker.user.firstname }})</span>
@@ -747,12 +778,16 @@ function injectBooking(booking) {
     const li = document.createElement('li');
     li.className = 'list-group-item px-0 py-3 border-bottom d-flex align-items-center justify-content-between gap-2';
     li.setAttribute('data-walk-idx', '0');
+    const dropInLabel = booking.is_drop_in
+        ? `<i class="bi bi-house-door-fill text-primary me-1"></i>Drop-in · `
+        : '';
+
     li.innerHTML = `
         <div class="d-flex align-items-center gap-3">
             ${badgeHtml}
             <div>
                 <div class="fw-semibold small">${booking.date_display}</div>
-                <div class="text-muted" style="font-size:0.78rem;">${booking.slot}</div>
+                <div class="text-muted" style="font-size:0.78rem;">${dropInLabel}${booking.slot}</div>
             </div>
         </div>
         <div class="d-flex align-items-center gap-3">
@@ -887,5 +922,66 @@ function cancelBooking(bookingId, buttonElement) {
         showToast('Network error — could not cancel booking. Please try again.', 'danger');
     });
 }
+
+// ── Drop-in booking ──────────────────────────────────────────────────────────
+(function () {
+    const btn      = document.getElementById('dropin-submit');
+    const dateEl   = document.getElementById('dropin-date');
+    const slotEl   = document.getElementById('dropin-slot');
+    const feedback = document.getElementById('dropin-feedback');
+
+    if (!btn) return;
+
+    // Default date to today
+    dateEl.value = new Date().toISOString().slice(0, 10);
+
+    btn.addEventListener('click', function () {
+        const date = dateEl.value;
+        const slot = slotEl.value;
+
+        if (!date) {
+            showDropInFeedback('Please select a date.', 'warning');
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Requesting…';
+
+        fetch('{{ url_for("client.book_drop_in") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ date, slot }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-house-door me-1"></i>Request drop-in';
+            if (data.success) {
+                showDropInFeedback(data.message, data.status === 'waitlisted' ? 'info' : 'success');
+                // Inject the new booking into the dog's list
+                if (data.booking) {
+                    data.booking.is_drop_in = true;
+                    injectBooking(data.booking);
+                }
+                // Reset date to today
+                dateEl.value = new Date().toISOString().slice(0, 10);
+            } else {
+                showDropInFeedback(data.message || 'Something went wrong.', 'danger');
+            }
+        })
+        .catch(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-house-door me-1"></i>Request drop-in';
+            showDropInFeedback('Network error — please try again.', 'danger');
+        });
+    });
+
+    function showDropInFeedback(msg, type) {
+        feedback.style.display = '';
+        feedback.className = `mt-2 small alert alert-${type} py-1 px-2`;
+        feedback.textContent = msg;
+        setTimeout(() => { feedback.style.display = 'none'; }, 6000);
+    }
+})();
 </script>
 {% endblock %}

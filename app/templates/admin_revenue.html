@@ -102,6 +102,7 @@
                 <th>Effective from</th>
                 <th>Price / walk</th>
                 <th>Double-slot discount</th>
+                <th>Price / drop-in</th>
               </tr>
             </thead>
             <tbody>
@@ -112,9 +113,10 @@
                 </td>
                 <td>£{{ "%.2f"|format(p.price_per_walk) }}</td>
                 <td>£{{ "%.2f"|format(p.double_slot_discount) }}</td>
+                <td>£{{ "%.2f"|format(p.price_per_drop_in) }}</td>
               </tr>
               {% else %}
-              <tr><td colspan="3" class="text-muted text-center py-3">No pricing configured.</td></tr>
+              <tr><td colspan="4" class="text-muted text-center py-3">No pricing configured.</td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -134,19 +136,25 @@
           <form method="POST" action="{{ url_for('admin.update_pricing') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="row g-3">
-              <div class="col-sm-4">
+              <div class="col-sm-3">
                 <label class="form-label small fw-semibold">Price per walk (£)</label>
                 <input type="number" name="price_per_walk" class="form-control"
                        step="0.01" min="0" required
                        value="{{ "%.2f"|format(current_pricing.price_per_walk) if current_pricing else '20.00' }}">
               </div>
-              <div class="col-sm-4">
+              <div class="col-sm-3">
                 <label class="form-label small fw-semibold">Double-slot discount (£)</label>
                 <input type="number" name="double_slot_discount" class="form-control"
                        step="0.01" min="0" required
                        value="{{ "%.2f"|format(current_pricing.double_slot_discount) if current_pricing else '0.00' }}">
               </div>
-              <div class="col-sm-4">
+              <div class="col-sm-3">
+                <label class="form-label small fw-semibold">Price per drop-in (£)</label>
+                <input type="number" name="price_per_drop_in" class="form-control"
+                       step="0.01" min="0" required
+                       value="{{ "%.2f"|format(current_pricing.price_per_drop_in) if current_pricing else '5.00' }}">
+              </div>
+              <div class="col-sm-3">
                 <label class="form-label small fw-semibold">Effective from</label>
                 <input type="date" name="effective_from" class="form-control" required
                        value="{{ today_iso }}">
