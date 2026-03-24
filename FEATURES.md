@@ -76,7 +76,7 @@
 | 53 | P1 | M | ✅ | **Git branching** | `develop` for ongoing work, `main` for production. PRs required to merge to main. |
 | 54 | P1 | L | ✅ | **Unit test suite** | 140 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing. All passing, no deprecation warnings. |
 | 55 | P2 | M | 🔲 | **Password reset flow** | Email-based token reset. Blocked on no-reply@dogboxx.org + Resend setup. |
-| 56 | P3 | L | 🔲 | **CI/CD pipeline** | GitHub Actions: run tests on push to develop, block PRs to main if tests fail. |
+| 56 | P3 | S | ✅ | **CI/CD pipeline** | GitHub Actions (test.yml): runs pytest on push to main/develop and all PRs. All runs green. |
 
 ---
 
