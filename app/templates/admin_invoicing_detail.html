@@ -112,6 +112,7 @@
               <tr>
                 <th>Week commencing</th>
                 <th class="text-center">Walks</th>
+                <th class="text-center">Drop-ins</th>
                 <th class="text-center">Charged cancels</th>
                 <th class="text-center">Double-walk discount</th>
                 <th class="text-end">Subtotal</th>
@@ -126,6 +127,11 @@
                 <td class="text-center">
                   {% if w.confirmed %}
                   <span class="badge bg-success-subtle text-success fw-semibold">{{ w.confirmed }}</span>
+                  {% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td class="text-center">
+                  {% if w.drop_ins %}
+                  <span class="badge bg-primary-subtle text-primary fw-semibold">{{ w.drop_ins }}</span>
                   {% else %}<span class="text-muted">—</span>{% endif %}
                 </td>
                 <td class="text-center">
@@ -148,6 +154,7 @@
               <tr>
                 <td class="fw-bold text-end">Total</td>
                 <td class="text-center fw-bold">{{ inv.total_walks }}</td>
+                <td class="text-center fw-bold">{{ inv.total_drop_ins }}</td>
                 <td class="text-center fw-bold">{{ inv.total_cancels }}</td>
                 <td class="text-center {% if inv.doubles %}text-danger fw-bold{% else %}text-muted{% endif %}">
                   {% if inv.doubles %}−£{{ '%.2f' | format(discounts | sum(attribute='amount')) }}{% else %}—{% endif %}

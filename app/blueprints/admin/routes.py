@@ -2125,15 +2125,17 @@ def invoicing_detail(client_id):
         wk_items = [li for li in line_items if wk_start <= li['booking'].date < wk_end]
         wk_discounts = [d for d in discounts if wk_start <= d['date'] < wk_end]
 
-        wk_confirmed = sum(1 for li in wk_items if not li['is_cancel'])
-        wk_cancels   = sum(1 for li in wk_items if li['is_cancel'])
+        wk_confirmed  = sum(1 for li in wk_items if not li['is_cancel'] and not (li['booking'].service_type and li['booking'].service_type.slug == 'drop-in'))
+        wk_drop_ins   = sum(1 for li in wk_items if not li['is_cancel'] and li['booking'].service_type and li['booking'].service_type.slug == 'drop-in')
+        wk_cancels    = sum(1 for li in wk_items if li['is_cancel'])
         wk_discount_total = sum(d['amount'] for d in wk_discounts)
-        wk_gross     = sum(li['unit_price'] for li in wk_items)
-        wk_subtotal  = round(wk_gross - wk_discount_total, 2)
+        wk_gross      = sum(li['unit_price'] for li in wk_items)
+        wk_subtotal   = round(wk_gross - wk_discount_total, 2)
 
         weeks.append({
             'commencing':      wk_start,
             'confirmed':       wk_confirmed,
+            'drop_ins':        wk_drop_ins,
             'cancels':         wk_cancels,
             'discount_total':  wk_discount_total,
             'subtotal':        wk_subtotal,
