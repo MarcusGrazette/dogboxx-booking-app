@@ -37,6 +37,15 @@
     opacity: 0.7;
 }
 
+.board-lane.lane-unavailable {
+    border-color: #ffc107;
+    background: #fffdf0;
+}
+
+.lane-header.lane-header-unavailable .lane-title {
+    color: #856404;
+}
+
 .board-lane.lane-target:hover {
     background: #f7ceee;
 }
@@ -171,6 +180,10 @@
 
 .board-col-header.pending-header {
     background: #C0258F;
+}
+
+.board-col-header.header-unavailable {
+    background: #856404;
 }
 
 /* ── Drag handle hint ──────────────────────────────────────────────────────── */

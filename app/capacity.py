@@ -4,11 +4,12 @@ from app.models import WalkerSchedule, WalkerUnavailability, Booking, ServiceTyp
 from app import db
 
 
-def get_available_walkers(date, slot, drop_in=False):
+def get_available_walkers(date, slot, drop_in=False, ignore_unavailability=False):
     """Return list of active walkers scheduled for a given date + slot.
 
     If drop_in=True, only returns walkers with does_drop_ins=True.
-    Excludes walkers with unavailability exceptions for this date/slot.
+    By default excludes walkers with unavailability exceptions for this date/slot.
+    Pass ignore_unavailability=True to include them (e.g. for admin override checks).
     """
     day_of_week = date.weekday()  # 0=Monday, 6=Sunday
 
@@ -18,12 +19,14 @@ def get_available_walkers(date, slot, drop_in=False):
         .all()
     )
 
-    unavail = (
-        WalkerUnavailability.query
-        .filter_by(date=date, slot=slot)
-        .all()
-    )
-    unavail_walker_ids = {u.walker_id for u in unavail}
+    unavail_walker_ids = set()
+    if not ignore_unavailability:
+        unavail = (
+            WalkerUnavailability.query
+            .filter_by(date=date, slot=slot)
+            .all()
+        )
+        unavail_walker_ids = {u.walker_id for u in unavail}
 
     walkers = [
         s.walker for s in schedules
@@ -123,14 +126,25 @@ def get_daycare_capacity(date):
     return total, booked, max(0, total - booked)
 
 
-def check_availability(service_type, date, slot=None):
+def check_availability(service_type, date, slot=None, admin_override=False):
     """Check if a booking can be made for the given service, date, and slot.
-    Returns (available: bool, can_waitlist: bool, message: str)."""
+    Returns (available: bool, can_waitlist: bool, message: str).
+
+    Pass admin_override=True to bypass the "no available walkers" block when all
+    walkers are marked unavailable. Admin-created bookings are assigned manually
+    on the board, so capacity is not a hard constraint. The slot must still have
+    at least one walker scheduled (ignoring unavailability) to allow override.
+    """
     if service_type.slug == 'group-walk':
         if not slot:
             return False, False, "Slot is required for walk bookings."
         total, booked, available = get_walk_capacity(date, slot)
         if total == 0:
+            if admin_override:
+                # Allow if walkers are scheduled but all marked unavailable
+                scheduled = get_available_walkers(date, slot, ignore_unavailability=True)
+                if scheduled:
+                    return True, False, "Admin override: walkers are marked unavailable but booking created."
             return False, False, f"No walkers are scheduled for {slot} on {date.strftime('%A %d %b')}."
         if available <= 0:
             return False, True, f"All {total} walk slots are booked for {slot} on {date.strftime('%d %b')}. You can join the waitlist."
@@ -141,6 +155,10 @@ def check_availability(service_type, date, slot=None):
             return False, False, "Slot is required for drop-in bookings."
         total, booked, available = get_drop_in_capacity(date, slot)
         if total == 0:
+            if admin_override:
+                scheduled = get_available_walkers(date, slot, drop_in=True, ignore_unavailability=True)
+                if scheduled:
+                    return True, False, "Admin override: drop-in walkers are marked unavailable but booking created."
             return False, False, f"No drop-in visits are available for {slot} on {date.strftime('%A %d %b')}."
         if available <= 0:
             return False, True, f"All {total} drop-in slots are booked for {slot} on {date.strftime('%d %b')}. You can join the waitlist."

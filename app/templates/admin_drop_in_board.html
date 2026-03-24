@@ -194,13 +194,20 @@
         const col = document.createElement('div');
         col.className = 'board-column';
 
+        const unavailSlots = walker.unavailable_slots || [];
+        const allUnavail   = unavailSlots.length > 0 && unavailSlots.length >= walker.available_slots.length;
+
         const header = document.createElement('div');
-        header.className = 'board-col-header';
-        header.innerHTML = `<span><i class="bi bi-person-walking me-1"></i>${walker.name}</span>`;
+        header.className = 'board-col-header' + (allUnavail ? ' header-unavailable' : '');
+        header.innerHTML = `<span><i class="bi bi-person-walking me-1"></i>${walker.name}</span>`
+            + (unavailSlots.length > 0
+                ? `<span class="badge bg-warning text-dark ms-1" title="Marked unavailable — admin override active"><i class="bi bi-exclamation-triangle-fill me-1"></i>Unavailable</span>`
+                : '');
         col.appendChild(header);
 
         walker.available_slots.forEach(slot => {
-            const lane = makeLane(walker.id, slot, true);
+            const isUnavail = unavailSlots.includes(slot);
+            const lane = makeLane(walker.id, slot, true, isUnavail);
             getAssignedForLane(walker.id, slot).forEach(b => {
                 lane.querySelector('.sortable-lane').appendChild(makeAssignedCard(b));
             });
@@ -210,20 +217,21 @@
         return col;
     }
 
-    function makeLane(walkerId, slot, isWalkerLane) {
+    function makeLane(walkerId, slot, isWalkerLane, isUnavail = false) {
         const cap    = walkerId ? getLaneCapacity(walkerId, slot) : null;
         const isFull = cap !== null && cap >= state.maxCap;
         const isTarget = state.selectedId !== null && isWalkerLane && !isFull;
 
         const wrap = document.createElement('div');
         wrap.className = 'board-lane' +
-            (isFull ? ' lane-full' : '') +
-            (isTarget ? ' lane-target' : '');
+            (isFull    ? ' lane-full'        : '') +
+            (isTarget  ? ' lane-target'      : '') +
+            (isUnavail ? ' lane-unavailable' : '');
 
         const header = document.createElement('div');
-        header.className = 'lane-header';
+        header.className = 'lane-header' + (isUnavail ? ' lane-header-unavailable' : '');
         header.innerHTML = `
-            <span class="lane-title">${slot}</span>
+            <span class="lane-title">${slot}${isUnavail ? ' <i class="bi bi-exclamation-triangle-fill text-warning ms-1" title="Walker unavailable — override active"></i>' : ''}</span>
             ${cap !== null ? `<span class="capacity-badge${isFull ? ' cap-full' : ''}">${cap}/${state.maxCap}</span>` : ''}`;
         wrap.appendChild(header);
 
