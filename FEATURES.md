@@ -36,7 +36,7 @@
 | 20 | P1 | M | ✅ | **Client management** | Create, view, edit client accounts. Notification audit trail per client. |
 | 21 | P1 | M | ✅ | **Walker management** | Create walkers. Set/edit default schedule. Mark unavailability. |
 | 22 | P2 | S | ✅ | **Admin is also a walker** | is_admin flag on User. Admin can be a walker. "My Pickup List" in admin sidebar. |
-| 23 | P2 | M | 🔲 | **Admin dashboard stats** | Booking counts, utilisation, revenue summary. Currently shows upcoming bookings only. |
+| 23 | P2 | M | ✅ | **Admin dashboard stats** | Stat cards (pending, clients, dogs, walkers), 4-week booking chart by slot+status, walker availability grid. Revenue on /admin/revenue. |
 | 24 | P3 | L | 🔲 | **Dental cleans service type** | Admin: manage available date+time slots. Client: book from available slots. Stubbed in nav. |
 | 25 | P3 | L | ❌ | **Invoicing (standalone)** | Superseded by #26. |
 | 26 | P2 | L | ✅ | **Invoicing view (admin)** | /admin/invoicing: monthly summary per client. /admin/invoicing/<id>: line items + weekly breakdown. Billable cancels (<5 days notice), double-slot discount, drop-in pricing. PricingConfig history. |
