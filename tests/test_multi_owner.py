@@ -329,7 +329,7 @@ class TestSecondaryOwnerCancelBooking:
             data = resp.get_json()
             assert data['success'] is True
 
-            updated = Booking.query.get(booking_id)
+            updated = db.session.get(Booking, booking_id)
             assert updated.status == 'cancelled'
 
     def test_unrelated_client_cannot_cancel(self, app, db, client):

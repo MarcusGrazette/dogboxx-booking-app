@@ -149,7 +149,7 @@ def index():
                 # 22b: notify all admins of the new booking request
                 admins = User.query.filter_by(is_admin=True).all()
                 date_str_fmt = booking_date.strftime('%a %-d %b')
-                dog = Dog.query.get(dog_id)
+                dog = db.session.get(Dog, dog_id)
                 dog_name = dog.name if dog else 'a dog'
                 for admin in admins:
                     create_notification(
@@ -532,17 +532,17 @@ def profile():
 
     if not is_secondary_only and (not client or not client.onboarding_completed):
         return redirect(url_for('client.onboard'))
-    dog = Dog.query.get(dog_owner.dog_id) if dog_owner else None
+    dog = db.session.get(Dog, dog_owner.dog_id) if dog_owner else None
 
     # Get secondary dogs (user has shared access — read-only on the profile)
     secondary_ownerships = DogOwner.query.filter_by(user_id=current_user.id, role='secondary').all()
     secondary_dogs = []
     for so in secondary_ownerships:
-        secondary_dog = Dog.query.get(so.dog_id)
+        secondary_dog = db.session.get(Dog, so.dog_id)
         if not secondary_dog:
             continue
         primary_o = DogOwner.query.filter_by(dog_id=so.dog_id, role='primary').first()
-        primary_user = User.query.get(primary_o.user_id) if primary_o else None
+        primary_user = db.session.get(User, primary_o.user_id) if primary_o else None
         secondary_dogs.append({'dog': secondary_dog, 'primary_owner': primary_user})
 
     # Booking stats for the profile sidebar
@@ -692,7 +692,7 @@ def upload_dog_photo():
     from Cropper.js. Returns JSON {success, url} or {success, error}.
     """
     dog_owner = DogOwner.query.filter_by(user_id=current_user.id, role='primary').first()
-    dog = Dog.query.get(dog_owner.dog_id) if dog_owner else None
+    dog = db.session.get(Dog, dog_owner.dog_id) if dog_owner else None
     if not dog:
         return jsonify(success=False, error="Dog profile not found"), 404
 
@@ -771,7 +771,7 @@ def onboard():
 
     # Check for a dog already created by the admin
     existing_dog_owner = DogOwner.query.filter_by(user_id=current_user.id, role='primary').first()
-    existing_dog = Dog.query.get(existing_dog_owner.dog_id) if existing_dog_owner else None
+    existing_dog = db.session.get(Dog, existing_dog_owner.dog_id) if existing_dog_owner else None
 
     form = OnboardingForm()
 
@@ -901,7 +901,7 @@ def cancel_booking():
         if not booking_id:
             return jsonify(success=False, message="No booking ID provided"), 400
             
-        booking = Booking.query.get(booking_id)
+        booking = db.session.get(Booking, booking_id)
         if not booking:
             return jsonify(success=False, message="Booking not found"), 404
             
@@ -1137,7 +1137,7 @@ def update_booking_note(booking_id):
     if current_user.role != 'client' and not current_user.is_admin:
         return jsonify(success=False, message="Unauthorized"), 403
 
-    booking = Booking.query.get(booking_id)
+    booking = db.session.get(Booking, booking_id)
     if not booking:
         return jsonify(success=False, message="Booking not found"), 404
 
