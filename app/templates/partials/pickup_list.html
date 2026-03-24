@@ -105,10 +105,15 @@
 <div class="card">
     <div class="card-body text-center py-5">
         <i class="bi bi-emoji-smile display-4 text-muted"></i>
-        <p class="mt-3 text-muted fs-5">No walks scheduled for this day.</p>
+        <p class="mt-3 text-muted fs-5">No walks or drop-ins scheduled for this day.</p>
     </div>
 </div>
 {% else %}
-{{ pickup_card(morning_pickups, 'Morning', 'sunrise', 'success') }}
-{{ pickup_card(afternoon_pickups, 'Afternoon', 'sunset', 'danger') }}
+{# Order: AM drop-ins → AM walks → PM walks → PM drop-ins #}
+{% set morning_drop_ins   = morning_drop_ins   if morning_drop_ins   is defined else [] %}
+{% set afternoon_drop_ins = afternoon_drop_ins if afternoon_drop_ins is defined else [] %}
+{{ pickup_card(morning_drop_ins,   'Morning Drop-ins',   'house-door',  'primary') }}
+{{ pickup_card(morning_pickups,    'Morning Walks',       'sunrise',     'success') }}
+{{ pickup_card(afternoon_pickups,  'Afternoon Walks',     'sunset',      'danger') }}
+{{ pickup_card(afternoon_drop_ins, 'Afternoon Drop-ins',  'house-door',  'primary') }}
 {% endif %}

@@ -72,15 +72,19 @@
     <div class="card h-100">
       <div class="card-body">
         <div class="row g-3 text-center">
-          <div class="col-4">
+          <div class="col-3">
             <div class="fs-3 fw-bold text-success">{{ inv.total_walks }}</div>
             <div class="small text-muted">Walks</div>
           </div>
-          <div class="col-4">
+          <div class="col-3">
+            <div class="fs-3 fw-bold text-primary">{{ inv.total_drop_ins }}</div>
+            <div class="small text-muted">Drop-ins</div>
+          </div>
+          <div class="col-3">
             <div class="fs-3 fw-bold text-warning">{{ inv.total_cancels }}</div>
             <div class="small text-muted">Billable cancels</div>
           </div>
-          <div class="col-4">
+          <div class="col-3">
             <div class="fs-3 fw-bold">£{{ '%.2f' | format(inv.subtotal) }}</div>
             <div class="small text-muted">Total due</div>
           </div>
@@ -108,6 +112,7 @@
               <tr>
                 <th>Week commencing</th>
                 <th class="text-center">Walks</th>
+                <th class="text-center">Drop-ins</th>
                 <th class="text-center">Charged cancels</th>
                 <th class="text-center">Double-walk discount</th>
                 <th class="text-end">Subtotal</th>
@@ -122,6 +127,11 @@
                 <td class="text-center">
                   {% if w.confirmed %}
                   <span class="badge bg-success-subtle text-success fw-semibold">{{ w.confirmed }}</span>
+                  {% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td class="text-center">
+                  {% if w.drop_ins %}
+                  <span class="badge bg-primary-subtle text-primary fw-semibold">{{ w.drop_ins }}</span>
                   {% else %}<span class="text-muted">—</span>{% endif %}
                 </td>
                 <td class="text-center">
@@ -144,6 +154,7 @@
               <tr>
                 <td class="fw-bold text-end">Total</td>
                 <td class="text-center fw-bold">{{ inv.total_walks }}</td>
+                <td class="text-center fw-bold">{{ inv.total_drop_ins }}</td>
                 <td class="text-center fw-bold">{{ inv.total_cancels }}</td>
                 <td class="text-center {% if inv.doubles %}text-danger fw-bold{% else %}text-muted{% endif %}">
                   {% if inv.doubles %}−£{{ '%.2f' | format(discounts | sum(attribute='amount')) }}{% else %}—{% endif %}
@@ -172,16 +183,25 @@
                 <th>Date</th>
                 <th>Day</th>
                 <th>Slot</th>
+                <th>Service</th>
                 <th>Status</th>
                 <th class="text-end">Unit price</th>
               </tr>
             </thead>
             <tbody>
               {% for item in line_items %}
+              {% set is_drop_in = item.booking.service_type and item.booking.service_type.slug == 'drop-in' %}
               <tr>
                 <td class="fw-semibold">{{ item.booking.date.strftime('%d %b %Y') }}</td>
                 <td class="text-muted small">{{ item.booking.date.strftime('%A') }}</td>
                 <td>{{ item.booking.slot }}</td>
+                <td>
+                  {% if is_drop_in %}
+                  <span class="badge bg-primary-subtle text-primary"><i class="bi bi-house-door me-1"></i>Drop-in</span>
+                  {% else %}
+                  <span class="badge bg-success-subtle text-success"><i class="bi bi-person-walking me-1"></i>Walk</span>
+                  {% endif %}
+                </td>
                 <td>
                   {% if item.is_cancel %}
                   <span class="badge bg-warning-subtle text-warning">

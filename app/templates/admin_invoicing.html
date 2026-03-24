@@ -47,6 +47,14 @@
       <div class="col-6 col-md-3">
         <div class="card text-center h-100">
           <div class="card-body py-3">
+            <div class="fs-2 fw-bold text-primary">{{ rows | sum(attribute='total_drop_ins') }}</div>
+            <div class="small text-muted">Drop-ins</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card text-center h-100">
+          <div class="card-body py-3">
             <div class="fs-2 fw-bold text-warning">{{ rows | sum(attribute='total_cancels') }}</div>
             <div class="small text-muted">Billable cancels</div>
           </div>
@@ -75,6 +83,7 @@
                 <th>Client</th>
                 <th>Dog</th>
                 <th class="text-center">Walks</th>
+                <th class="text-center">Drop-ins</th>
                 <th class="text-center">
                   Billable cancels
                   <i class="bi bi-info-circle text-muted ms-1"
@@ -101,6 +110,13 @@
                 <td class="text-muted small">{{ r.dog.name if r.dog else '—' }}</td>
                 <td class="text-center">
                   <span class="badge bg-success-subtle text-success fw-semibold">{{ r.total_walks }}</span>
+                </td>
+                <td class="text-center">
+                  {% if r.total_drop_ins %}
+                  <span class="badge bg-primary-subtle text-primary fw-semibold">{{ r.total_drop_ins }}</span>
+                  {% else %}
+                  <span class="text-muted">—</span>
+                  {% endif %}
                 </td>
                 <td class="text-center">
                   {% if r.total_cancels %}
