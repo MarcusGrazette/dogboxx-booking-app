@@ -13,9 +13,9 @@
 | 3 | P1 | M | ✅ | **Admin booking board** | Calendar + slot view. Confirm/cancel requests. Drag-to-reorder pickup order per walker. |
 | 4 | P1 | M | ✅ | **Admin dogs view** | Searchable table of all dogs. Book on owner's behalf (one-off or recurring) via modal. Same pending flow as client-initiated. |
 | 5 | P1 | M | ✅ | **Prevent duplicate bookings** | Block same dog+date+slot. Max 2 bookings per dog per day (one per slot). DB partial unique index. |
-| 6 | P1 | M | 🔲 | **Password reset** | "Forgot password?" → token email → set new password. |
-| 7 | P1 | M | 🔲 | **Booking capacity display for clients** | Show remaining slots when client is booking, not just accept/reject. |
-| 8 | P2 | L | 🔲 | **"Book both walks" option (client)** | Tick box above recurring toggle. Ticking it books AM + PM in one action. Confirmation modal before submit. Allocation board should show a double-walk icon (similar to waitlist indicator). |
+| 6 | P1 | M | 🔲 | **Password reset** | "Forgot password?" → token email → set new password. Blocked on no-reply@dogboxx.org + Resend setup. |
+| 7 | P1 | M | ❌ | **Booking capacity display for clients** | Dropped — "available" indicator in UI is sufficient. Exact slot counts not needed. |
+| 8 | P2 | L | ✅ | **"Book both walks" option (client)** | Checkbox books AM + PM in one action via /client/book_both. Admin board shows layered-icon modifier pill. |
 
 ## Walker
 
@@ -38,9 +38,10 @@
 | 22 | P2 | S | ✅ | **Admin is also a walker** | is_admin flag on User. Admin can be a walker. "My Pickup List" in admin sidebar. |
 | 23 | P2 | M | 🔲 | **Admin dashboard stats** | Booking counts, utilisation, revenue summary. Currently shows upcoming bookings only. |
 | 24 | P3 | L | 🔲 | **Dental cleans service type** | Admin: manage available date+time slots. Client: book from available slots. Stubbed in nav. |
-| 25 | P3 | L | 🔲 | **Invoicing** | Generate invoices per client based on confirmed walks. Cancellation policy enforcement (<5 days notice = billable). |
-| 26 | P2 | L | 🔲 | **Invoicing view (admin)** | Monthly summary per client: walks per week + cancellations within 5 days of walk date (still charged). Listed in admin dashboard. |
-| 27 | P2 | L | 🔲 | **Multiple clients per dog** | One dog can be linked to multiple user accounts. Admin can "join" accounts via modal (select from existing users). All joined accounts can view/manage/book for that dog. Requires new `dog_owners` join table and permission checks throughout booking + client flows. Client profile should indicate the account is joined. |
+| 25 | P3 | L | ❌ | **Invoicing (standalone)** | Superseded by #26. |
+| 26 | P2 | L | ✅ | **Invoicing view (admin)** | /admin/invoicing: monthly summary per client. /admin/invoicing/<id>: line items + weekly breakdown. Billable cancels (<5 days notice), double-slot discount, drop-in pricing. PricingConfig history. |
+| 27 | P2 | L | ✅ | **Multiple clients per dog** | dog_owners join table with primary/secondary roles. Admin join/revoke modal. Secondary owners can book and view shared dogs. |
+| 29 | P2 | L | ✅ | **Drop-in service type** | Client books AM/PM drop-in visits. Admin drop-in board (assign walkers, confirm/cancel, reorder). Walker pickup list includes drop-ins. Invoicing tracks drop-ins separately at price_per_drop_in. does_drop_ins flag on walkers. |
 | 28 | P3 | M | 🔲 | **CSV client/dog import** | Upload CSV matching the create-client form fields. Bulk create client + dog records. Validation with error report on bad rows. No need to handle joined accounts — those are done manually post-import. |
 
 ## Client
@@ -73,8 +74,8 @@
 | 51 | P1 | M | ✅ | **Security hardening** | CSRF, rate limiting, CSP headers, secure cookies, UUID file uploads, session hardening. |
 | 52 | P1 | S | ✅ | **DB indexes** | Indexes on date, walker_id, user_id, dog_id, status for query performance. |
 | 53 | P1 | M | ✅ | **Git branching** | `develop` for ongoing work, `main` for production. PRs required to merge to main. |
-| 54 | P1 | L | 🔧 | **Unit test suite** | pytest + pytest-flask. T1 (infrastructure) → T2 (capacity) → T3 (bookings) → T4 (auth) → T5 (notifications). See HEARTBEAT.md. |
-| 55 | P2 | M | 🔲 | **Password reset flow** | Email-based token reset. Requires email notifications (#46) to be wired first. |
+| 54 | P1 | L | ✅ | **Unit test suite** | 140 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing. All passing, no deprecation warnings. |
+| 55 | P2 | M | 🔲 | **Password reset flow** | Email-based token reset. Blocked on no-reply@dogboxx.org + Resend setup. |
 | 56 | P3 | L | 🔲 | **CI/CD pipeline** | GitHub Actions: run tests on push to develop, block PRs to main if tests fail. |
 
 ---
