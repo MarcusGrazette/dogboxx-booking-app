@@ -131,7 +131,7 @@ def delete_unavailability(id):
     if not walker:
         return jsonify(success=False, message="Walker profile not found"), 404
 
-    unavail = WalkerUnavailability.query.get(id)
+    unavail = db.session.get(WalkerUnavailability, id)
     if not unavail:
         return jsonify(success=False, message="Not found"), 404
 

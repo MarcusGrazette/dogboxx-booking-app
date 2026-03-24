@@ -752,7 +752,7 @@ def assign_walker():
         if not booking_id:
             return jsonify(success=False, message="No booking ID provided"), 400
 
-        booking = Booking.query.get(booking_id)
+        booking = db.session.get(Booking, booking_id)
         if not booking:
             return jsonify(success=False, message="Booking not found"), 404
 
@@ -839,7 +839,7 @@ def assign_walker():
         pickup_order = data.get("pickup_order")  # list of booking IDs in order
         if pickup_order and isinstance(pickup_order, list):
             for idx, bid in enumerate(pickup_order, start=1):
-                b = Booking.query.get(int(bid))
+                b = db.session.get(Booking, int(bid))
                 if b and b.walker_id == walker.id and b.date == booking.date and b.slot == booking.slot:
                     b.pickup_order = idx
 
@@ -890,7 +890,7 @@ def reorder_pickups():
         selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
 
         for idx, bid in enumerate(pickup_order, start=1):
-            b = Booking.query.get(int(bid))
+            b = db.session.get(Booking, int(bid))
             if b and b.walker_id == int(walker_id) and b.date == selected_date and b.slot == slot:
                 b.pickup_order = idx
 
@@ -994,11 +994,11 @@ def client_detail(client_id):
     primary_ownerships = DogOwner.query.filter_by(user_id=user.id, role='primary').all()
     primary_dogs = []
     for ownership in primary_ownerships:
-        dog = Dog.query.get(ownership.dog_id)
+        dog = db.session.get(Dog, ownership.dog_id)
         if not dog:
             continue
         secondary_ownerships = DogOwner.query.filter_by(dog_id=dog.id, role='secondary').all()
-        secondary_users = [User.query.get(so.user_id) for so in secondary_ownerships]
+        secondary_users = [db.session.get(User, so.user_id) for so in secondary_ownerships]
         secondary_users = [u for u in secondary_users if u]  # filter None
         primary_dogs.append({'dog': dog, 'secondary_owners': secondary_users})
 
@@ -1006,11 +1006,11 @@ def client_detail(client_id):
     secondary_ownerships = DogOwner.query.filter_by(user_id=user.id, role='secondary').all()
     secondary_dogs = []
     for ownership in secondary_ownerships:
-        dog = Dog.query.get(ownership.dog_id)
+        dog = db.session.get(Dog, ownership.dog_id)
         if not dog:
             continue
         primary_o = DogOwner.query.filter_by(dog_id=dog.id, role='primary').first()
-        primary_user = User.query.get(primary_o.user_id) if primary_o else None
+        primary_user = db.session.get(User, primary_o.user_id) if primary_o else None
         secondary_dogs.append({'dog': dog, 'primary_owner': primary_user})
 
     # Clients available to join — exclude self and anyone already linked
@@ -1133,8 +1133,8 @@ def revoke_dog_access(client_id):
     if not record:
         return jsonify(success=False, message="No secondary access record found"), 404
 
-    secondary_user = User.query.get(secondary_user_id)
-    dog = Dog.query.get(dog_id)
+    secondary_user = db.session.get(User, secondary_user_id)
+    dog = db.session.get(Dog, dog_id)
 
     try:
         db.session.delete(record)
@@ -1267,7 +1267,7 @@ def edit_client(client_id):
     user = User.query.filter(User.role == 'client', User.id == client_id).first_or_404()
     client = Client.query.filter_by(user_id=user.id).first()
     dog_owner = DogOwner.query.filter_by(user_id=user.id, role='primary').first()
-    dog = Dog.query.get(dog_owner.dog_id) if dog_owner else None
+    dog = db.session.get(Dog, dog_owner.dog_id) if dog_owner else None
 
     form = ClientCreateForm()
 
@@ -1699,7 +1699,7 @@ def book_for_dog():
         if slot not in ('Morning', 'Afternoon'):
             return jsonify(success=False, message="Invalid slot"), 400
 
-        dog = Dog.query.get(dog_id)
+        dog = db.session.get(Dog, dog_id)
         if not dog:
             return jsonify(success=False, message="Dog not found"), 404
 
@@ -1780,7 +1780,7 @@ def recurring_for_dog():
         if frequency not in ('daily', 'weekly'):
             return jsonify(success=False, message="Invalid frequency"), 400
 
-        dog = Dog.query.get(dog_id)
+        dog = db.session.get(Dog, dog_id)
         if not dog:
             return jsonify(success=False, message="Dog not found"), 404
 
@@ -2004,11 +2004,11 @@ def invoicing():
             continue
         # Primary dog + secondary owners
         do = DogOwner.query.filter_by(user_id=u.id, role='primary').first()
-        dog = Dog.query.get(do.dog_id) if do else None
+        dog = db.session.get(Dog, do.dog_id) if do else None
         secondary_owners = []
         if dog:
             secondary_owners = [
-                User.query.get(so.user_id)
+                db.session.get(User, so.user_id)
                 for so in DogOwner.query.filter_by(dog_id=dog.id, role='secondary').all()
             ]
             secondary_owners = [s for s in secondary_owners if s]
@@ -2109,7 +2109,7 @@ def invoicing_detail(client_id):
             discounts.append({'date': d, 'amount': float(cfg.double_slot_discount)})
 
     do = DogOwner.query.filter_by(user_id=client_user.id, role='primary').first()
-    dog = Dog.query.get(do.dog_id) if do else None
+    dog = db.session.get(Dog, do.dog_id) if do else None
 
     # ── Weekly breakdown ──────────────────────────────────────────────────
     # Find all Mon-commencing weeks that overlap the month
