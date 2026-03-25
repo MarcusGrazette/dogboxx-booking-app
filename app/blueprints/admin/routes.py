@@ -567,21 +567,21 @@ def drop_in_board_data(date_str):
         )
         .all()
     )
-    walker_available_slots = {}
+    walker_sched_slots = {}
     for s in schedules:
-        walker_available_slots.setdefault(s.walker_id, set()).add(s.slot)
+        walker_sched_slots.setdefault(s.walker_id, set()).add(s.slot)
 
     unavailabilities = WalkerUnavailability.query.filter_by(date=selected_date).all()
+    walker_unavail_slots = {}
     for u in unavailabilities:
-        if u.walker_id in walker_available_slots:
-            walker_available_slots[u.walker_id].discard(u.slot)
-    walker_available_slots = {wid: slots for wid, slots in walker_available_slots.items() if slots}
+        if u.walker_id in walker_sched_slots:
+            walker_unavail_slots.setdefault(u.walker_id, set()).add(u.slot)
 
     walkers = (
         Walker.query.options(joinedload(Walker.user))
-        .filter(Walker.id.in_(walker_available_slots.keys()))
+        .filter(Walker.id.in_(walker_sched_slots.keys()))
         .all()
-    ) if walker_available_slots else []
+    ) if walker_sched_slots else []
 
     def booking_dict(b):
         return {
@@ -598,14 +598,13 @@ def drop_in_board_data(date_str):
     pending  = [booking_dict(b) for b in all_bookings if b.status in ('requested', 'waitlisted')]
     assigned = [booking_dict(b) for b in all_bookings if b.walker_id and b.status == 'confirmed']
 
+    slot_order = lambda s: 0 if s == 'Morning' else 1
     walkers_data = [
         {
             'id': w.id,
             'name': w.user.firstname if w.user else 'Walker',
-            'available_slots': sorted(
-                walker_available_slots.get(w.id, []),
-                key=lambda s: 0 if s == 'Morning' else 1
-            ),
+            'available_slots':   sorted(walker_sched_slots.get(w.id, []),   key=slot_order),
+            'unavailable_slots': sorted(walker_unavail_slots.get(w.id, []), key=slot_order),
         }
         for w in walkers
     ]
@@ -650,21 +649,24 @@ def board_data(date_str):
 
     day_of_week = selected_date.weekday()
     schedules = WalkerSchedule.query.filter_by(day_of_week=day_of_week, active=True).all()
-    walker_available_slots = {}
+    walker_sched_slots = {}   # all scheduled slots regardless of unavailability
     for s in schedules:
-        walker_available_slots.setdefault(s.walker_id, set()).add(s.slot)
+        walker_sched_slots.setdefault(s.walker_id, set()).add(s.slot)
 
+    # Track which slots each walker has marked unavailable
     unavailabilities = WalkerUnavailability.query.filter_by(date=selected_date).all()
+    walker_unavail_slots = {}
     for u in unavailabilities:
-        if u.walker_id in walker_available_slots:
-            walker_available_slots[u.walker_id].discard(u.slot)
-    walker_available_slots = {wid: slots for wid, slots in walker_available_slots.items() if slots}
+        if u.walker_id in walker_sched_slots:
+            walker_unavail_slots.setdefault(u.walker_id, set()).add(u.slot)
 
+    # Include all scheduled walkers — unavailable ones appear with a warning on the board
+    all_scheduled_walker_ids = walker_sched_slots.keys()
     walkers = (
         Walker.query.options(joinedload(Walker.user))
-        .filter(Walker.id.in_(walker_available_slots.keys()))
+        .filter(Walker.id.in_(all_scheduled_walker_ids))
         .all()
-    ) if walker_available_slots else []
+    ) if all_scheduled_walker_ids else []
 
     # Dogs that have active bookings in BOTH Morning and Afternoon today — used for the
     # double-walk icon on board cards (whether booked via "both walks" or manually).
@@ -695,11 +697,13 @@ def board_data(date_str):
     pending   = [booking_dict(b) for b in all_bookings if b.status in ('requested', 'waitlisted')]
     assigned  = [booking_dict(b) for b in all_bookings if b.walker_id and b.status == 'confirmed']
 
+    slot_order = lambda s: 0 if s == 'Morning' else 1
     walkers_data = [
         {
             'id': w.id,
             'name': w.user.firstname if w.user else 'Walker',
-            'available_slots': sorted(walker_available_slots.get(w.id, []), key=lambda s: 0 if s == 'Morning' else 1),
+            'available_slots':   sorted(walker_sched_slots.get(w.id, []),       key=slot_order),
+            'unavailable_slots': sorted(walker_unavail_slots.get(w.id, []),     key=slot_order),
         }
         for w in walkers
     ]
@@ -1718,7 +1722,9 @@ def book_for_dog():
         if not default_service:
             return jsonify(success=False, message="No service type available"), 400
 
-        available, can_waitlist, capacity_msg = check_availability(default_service, booking_date, slot)
+        available, can_waitlist, capacity_msg = check_availability(
+            default_service, booking_date, slot, admin_override=True
+        )
         if not available and not can_waitlist:
             return jsonify(success=False, message=capacity_msg), 400
 
@@ -1825,7 +1831,7 @@ def recurring_for_dog():
                 skipped += 1
                 continue
 
-            available, can_waitlist, _ = check_availability(default_service, d, slot)
+            available, can_waitlist, _ = check_availability(default_service, d, slot, admin_override=True)
             if not available and not can_waitlist:
                 skipped += 1
                 continue
