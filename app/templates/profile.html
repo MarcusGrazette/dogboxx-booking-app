@@ -424,6 +424,10 @@
 </form>
 </div>
 
+
+{% endblock %}
+
+{% block scripts %}
 {# ── Crop modal ────────────────────────────────────────────────────────────── #}
 <div class="modal fade" id="cropModal" tabindex="-1" aria-labelledby="cropModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" style="max-width:360px;">
@@ -457,11 +461,6 @@
         </div>
     </div>
 </div>
-
-
-{% endblock %}
-
-{% block scripts %}
 {{ super() }}
 <script>
 (function () {
