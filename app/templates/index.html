@@ -16,13 +16,20 @@
     }
 
     #service-tabs .nav-link {
-        color: var(--db-dark);
+        /* !important needed: Bootstrap's --bs-nav-link-color inherits brand.css's
+           --bs-link-color (#E02FAC), making inactive pills pink on a light bg.
+           One targeted override beats the old three-rule !important chain. */
+        color: #495057 !important;
         transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
     }
 
     #service-tabs .nav-link:hover:not(.active) {
         background-color: #e9ecef;
-        color: var(--db-dark);
+        color: #212529 !important;
+    }
+
+    #service-tabs .nav-link.active {
+        color: #fff !important;
     }
 
     /* ── Booking type segmented control ───────────────────────────────────── */
