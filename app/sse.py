@@ -64,13 +64,20 @@ def broadcast(user_id: int, event_type: str, data: dict) -> int:
 def stream_generator(user_id: int, q: queue.Queue):
     """Generator yielding SSE-formatted strings from a user's queue.
 
-    Sends a keepalive ping every 25 s to prevent proxy/browser timeouts.
+    Sends an immediate flush comment on connect so that reverse proxies
+    (e.g. Tailscale Serve) don't close the connection before the first
+    real ping arrives.  Keepalive pings fire every 15 s thereafter.
     Cleans up the queue registration when the client disconnects.
     """
     try:
+        # Flush the HTTP headers immediately — this is critical for proxies
+        # that buffer responses until they see data.  Without this, Tailscale
+        # Serve closes the connection in ~2 s because nothing has been sent.
+        yield ": connected\n\n"
+
         while True:
             try:
-                msg = q.get(timeout=25)
+                msg = q.get(timeout=15)
                 yield msg
             except queue.Empty:
                 # SSE comment line — keeps the connection alive, ignored by clients
