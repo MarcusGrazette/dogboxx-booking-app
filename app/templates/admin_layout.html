@@ -166,25 +166,25 @@
                         </a>
                     </li>
 
-                    <!-- Group Walks -->
-                    <li class="nav-header">Group Walks</li>
+                    <!-- Bookings -->
+                    <li class="nav-header">Bookings</li>
                     <li class="nav-item">
                         <a href="{{ url_for('admin.board') }}"
                            class="nav-link {% if request.endpoint == 'admin.board' %}active{% endif %}">
                             <i class="bi bi-calendar-check me-2"></i>
-                            <span>Bookings</span>
+                            <span>Group Walks</span>
                         </a>
                     </li>
-
-                    <!-- Drop Ins -->
-                    <li class="nav-header">Drop Ins</li>
                     <li class="nav-item">
                         <a href="{{ url_for('admin.drop_in_board') }}"
                            class="nav-link {% if request.endpoint == 'admin.drop_in_board' %}active{% endif %}">
                             <i class="bi bi-house-door me-2"></i>
-                            <span>Bookings</span>
+                            <span>Drop Ins</span>
                         </a>
                     </li>
+
+                    <!-- Rosters -->
+                    <li class="nav-header">Rosters</li>
                     <li class="nav-item">
                         <a href="{{ url_for('admin.dogs') }}"
                            class="nav-link {% if request.endpoint == 'admin.dogs' %}active{% endif %}">
@@ -192,9 +192,6 @@
                             <span>Dogs</span>
                         </a>
                     </li>
-
-                    <!-- People -->
-                    <li class="nav-header">People</li>
                     <li class="nav-item">
                         <a href="{{ url_for('admin.clients') }}"
                            class="nav-link {% if request.endpoint in ['admin.clients', 'admin.new_client', 'admin.edit_client'] %}active{% endif %}">
@@ -221,15 +218,6 @@
                         </a>
                     </li>
                     {% endif %}
-
-                    <!-- Coming Soon -->
-                    <li class="nav-header">Coming Soon</li>
-                    <li class="nav-item disabled">
-                        <a href="#" class="nav-link">
-                            <i class="bi bi-tooth me-2"></i>
-                            <span>Dental Cleans</span>
-                        </a>
-                    </li>
 
                 </ul>
             </nav>
