@@ -298,6 +298,33 @@ def create_app(config_name=None):
         )
 
     @app.context_processor
+    def inject_pending_counts():
+        """Inject pending booking counts for sidebar badges (admin only)."""
+        from flask_login import current_user
+        if current_user.is_authenticated and current_user.is_admin:
+            from app.models import Booking, ServiceType
+            PENDING = ('requested', 'waitlisted')
+            gw = ServiceType.query.filter_by(slug='group-walk').first()
+            di = ServiceType.query.filter_by(slug='drop-in').first()
+            pending_group_walks = (
+                Booking.query
+                .filter(Booking.status.in_(PENDING),
+                        Booking.service_type_id == gw.id)
+                .count()
+            ) if gw else 0
+            pending_drop_ins = (
+                Booking.query
+                .filter(Booking.status.in_(PENDING),
+                        Booking.service_type_id == di.id)
+                .count()
+            ) if di else 0
+            return dict(
+                pending_group_walks=pending_group_walks,
+                pending_drop_ins=pending_drop_ins,
+            )
+        return dict(pending_group_walks=0, pending_drop_ins=0)
+
+    @app.context_processor
     def inject_notifications():
         """Inject unread notification count + recent notifications into all templates.
         Also exposes the VAPID public key for Web Push registration.

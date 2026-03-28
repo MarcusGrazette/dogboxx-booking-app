@@ -170,16 +170,20 @@
                     <li class="nav-header">Bookings</li>
                     <li class="nav-item">
                         <a href="{{ url_for('admin.board') }}"
-                           class="nav-link {% if request.endpoint == 'admin.board' %}active{% endif %}">
-                            <i class="bi bi-calendar-check me-2"></i>
-                            <span>Group Walks</span>
+                           class="nav-link d-flex align-items-center justify-content-between {% if request.endpoint == 'admin.board' %}active{% endif %}">
+                            <span><i class="bi bi-calendar-check me-2"></i>Group Walks</span>
+                            {% if pending_group_walks > 0 %}
+                            <span class="badge rounded-pill ms-1" style="background:#E02FAC; font-size:0.65rem;">{{ pending_group_walks }}</span>
+                            {% endif %}
                         </a>
                     </li>
                     <li class="nav-item">
                         <a href="{{ url_for('admin.drop_in_board') }}"
-                           class="nav-link {% if request.endpoint == 'admin.drop_in_board' %}active{% endif %}">
-                            <i class="bi bi-house-door me-2"></i>
-                            <span>Drop Ins</span>
+                           class="nav-link d-flex align-items-center justify-content-between {% if request.endpoint == 'admin.drop_in_board' %}active{% endif %}">
+                            <span><i class="bi bi-house-door me-2"></i>Drop Ins</span>
+                            {% if pending_drop_ins > 0 %}
+                            <span class="badge rounded-pill ms-1" style="background:#E02FAC; font-size:0.65rem;">{{ pending_drop_ins }}</span>
+                            {% endif %}
                         </a>
                     </li>
 
