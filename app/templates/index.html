@@ -13,12 +13,16 @@
        (#E02FAC) via brand.css — no override needed.                         */
     #service-tabs {
         font-size: 0.85rem;
+        /* Bootstrap 5.3 hardcodes --bs-nav-pills-link-active-bg: #0d6efd directly
+           on .nav-pills (not via var(--bs-primary)), so overriding --bs-primary in
+           brand.css has no effect here. Set the component variable directly. */
+        --bs-nav-pills-link-active-bg: #E02FAC;
+        --bs-nav-pills-link-active-color: #fff;
     }
 
     #service-tabs .nav-link {
-        /* !important needed: Bootstrap's --bs-nav-link-color inherits brand.css's
-           --bs-link-color (#E02FAC), making inactive pills pink on a light bg.
-           One targeted override beats the old three-rule !important chain. */
+        /* !important needed: --bs-link-color is #E02FAC in brand.css, which bleeds
+           into --bs-nav-link-color, making inactive pills pink on a light bg. */
         color: #495057 !important;
         transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
     }
@@ -26,10 +30,6 @@
     #service-tabs .nav-link:hover:not(.active) {
         background-color: #e9ecef;
         color: #212529 !important;
-    }
-
-    #service-tabs .nav-link.active {
-        color: #fff !important;
     }
 
     /* ── Booking type segmented control ───────────────────────────────────── */
