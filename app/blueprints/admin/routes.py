@@ -526,6 +526,27 @@ def drop_in_board():
     return render_template("admin_drop_in_board.html")
 
 
+@admin_bp.route("/api/pending-counts")
+@login_required
+@admin_required
+def pending_counts():
+    """Return pending booking counts for sidebar badge updates."""
+    PENDING = ('requested', 'waitlisted')
+    gw = ServiceType.query.filter_by(slug='group-walk').first()
+    di = ServiceType.query.filter_by(slug='drop-in').first()
+    group_walks = (
+        Booking.query
+        .filter(Booking.status.in_(PENDING), Booking.service_type_id == gw.id)
+        .count()
+    ) if gw else 0
+    drop_ins = (
+        Booking.query
+        .filter(Booking.status.in_(PENDING), Booking.service_type_id == di.id)
+        .count()
+    ) if di else 0
+    return jsonify(group_walks=group_walks, drop_ins=drop_ins)
+
+
 @admin_bp.route("/api/drop-in-board-data/<date_str>")
 @login_required
 @admin_required

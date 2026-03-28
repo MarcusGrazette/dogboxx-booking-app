@@ -172,18 +172,16 @@
                         <a href="{{ url_for('admin.board') }}"
                            class="nav-link d-flex align-items-center justify-content-between {% if request.endpoint == 'admin.board' %}active{% endif %}">
                             <span><i class="bi bi-calendar-check me-2"></i>Group Walks</span>
-                            {% if pending_group_walks > 0 %}
-                            <span class="badge rounded-pill ms-1" style="background:#E02FAC; font-size:0.65rem;">{{ pending_group_walks }}</span>
-                            {% endif %}
+                            <span class="badge rounded-pill ms-1" id="pending-badge-group-walks"
+                                  style="background:#E02FAC; font-size:0.65rem; {% if pending_group_walks == 0 %}display:none;{% endif %}">{{ pending_group_walks }}</span>
                         </a>
                     </li>
                     <li class="nav-item">
                         <a href="{{ url_for('admin.drop_in_board') }}"
                            class="nav-link d-flex align-items-center justify-content-between {% if request.endpoint == 'admin.drop_in_board' %}active{% endif %}">
                             <span><i class="bi bi-house-door me-2"></i>Drop Ins</span>
-                            {% if pending_drop_ins > 0 %}
-                            <span class="badge rounded-pill ms-1" style="background:#E02FAC; font-size:0.65rem;">{{ pending_drop_ins }}</span>
-                            {% endif %}
+                            <span class="badge rounded-pill ms-1" id="pending-badge-drop-ins"
+                                  style="background:#E02FAC; font-size:0.65rem; {% if pending_drop_ins == 0 %}display:none;{% endif %}">{{ pending_drop_ins }}</span>
                         </a>
                     </li>
 
@@ -318,6 +316,27 @@ if (a2hsBanner) {
     setTimeout(() => a2hsBanner.classList.add('d-none'), 400);
     localStorage.setItem('dismissedA2HSAdmin', 'true');
   });
+}
+</script>
+
+<script>
+// Refresh sidebar pending-booking badge counts after board actions.
+// Called by the group-walks and drop-in board templates.
+function refreshPendingBadges() {
+    fetch('/admin/api/pending-counts')
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+            if (!d) return;
+            _setPendingBadge('pending-badge-group-walks', d.group_walks);
+            _setPendingBadge('pending-badge-drop-ins',   d.drop_ins);
+        })
+        .catch(() => {});
+}
+function _setPendingBadge(id, count) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (count > 0) { el.textContent = count; el.style.display = ''; }
+    else           { el.style.display = 'none'; }
 }
 </script>
 
