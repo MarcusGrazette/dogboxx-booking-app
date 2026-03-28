@@ -131,7 +131,7 @@ def delete_unavailability(id):
     if not walker:
         return jsonify(success=False, message="Walker profile not found"), 404
 
-    unavail = WalkerUnavailability.query.get(id)
+    unavail = db.session.get(WalkerUnavailability, id)
     if not unavail:
         return jsonify(success=False, message="Not found"), 404
 
@@ -172,6 +172,7 @@ def pickups(date_str=None):
         .options(
             joinedload(Booking.dog),
             joinedload(Booking.user).joinedload(User.client),
+            joinedload(Booking.service_type),
         )
         .filter(
             Booking.walker_id == walker.id,
@@ -186,16 +187,23 @@ def pickups(date_str=None):
         .all()
     )
 
-    # Group by slot
-    morning_pickups = [b for b in bookings if b.slot == 'Morning']
-    afternoon_pickups = [b for b in bookings if b.slot == 'Afternoon']
+    def _is_drop_in(b):
+        return b.service_type and b.service_type.slug == 'drop-in'
+
+    # Order: AM drop-ins → AM walks → PM walks → PM drop-ins
+    morning_drop_ins   = [b for b in bookings if b.slot == 'Morning'   and     _is_drop_in(b)]
+    morning_pickups    = [b for b in bookings if b.slot == 'Morning'   and not _is_drop_in(b)]
+    afternoon_pickups  = [b for b in bookings if b.slot == 'Afternoon' and not _is_drop_in(b)]
+    afternoon_drop_ins = [b for b in bookings if b.slot == 'Afternoon' and     _is_drop_in(b)]
 
     return render_template("walker_pickups.html",
                            walker=walker,
                            selected_date=selected_date,
                            today=today,
+                           morning_drop_ins=morning_drop_ins,
                            morning_pickups=morning_pickups,
                            afternoon_pickups=afternoon_pickups,
+                           afternoon_drop_ins=afternoon_drop_ins,
                            has_pickups=len(bookings) > 0)
 
 
@@ -251,6 +259,7 @@ def api_pickup_list(date_str):
         .options(
             joinedload(Booking.dog),
             joinedload(Booking.user).joinedload(User.client),
+            joinedload(Booking.service_type),
         )
         .filter(
             Booking.walker_id == walker.id,
@@ -265,13 +274,20 @@ def api_pickup_list(date_str):
         .all()
     )
 
-    morning_pickups = [b for b in bookings if b.slot == 'Morning']
-    afternoon_pickups = [b for b in bookings if b.slot == 'Afternoon']
+    def _is_drop_in(b):
+        return b.service_type and b.service_type.slug == 'drop-in'
+
+    morning_drop_ins   = [b for b in bookings if b.slot == 'Morning'   and     _is_drop_in(b)]
+    morning_pickups    = [b for b in bookings if b.slot == 'Morning'   and not _is_drop_in(b)]
+    afternoon_pickups  = [b for b in bookings if b.slot == 'Afternoon' and not _is_drop_in(b)]
+    afternoon_drop_ins = [b for b in bookings if b.slot == 'Afternoon' and     _is_drop_in(b)]
 
     return render_template("partials/pickup_list.html",
                            selected_date=selected_date,
+                           morning_drop_ins=morning_drop_ins,
                            morning_pickups=morning_pickups,
                            afternoon_pickups=afternoon_pickups,
+                           afternoon_drop_ins=afternoon_drop_ins,
                            has_pickups=len(bookings) > 0)
 
 

@@ -96,7 +96,7 @@ class TestCreateNotification:
             )
             db.session.commit()
 
-            fetched = Notification.query.get(notif.id)
+            fetched = db.session.get(Notification, notif.id)
             assert fetched is not None
             assert fetched.recipient_id == user.id
             assert fetched.notification_type == 'booking_confirmed'
@@ -111,7 +111,7 @@ class TestCreateNotification:
             db.session.commit()
             notif = create_notification(user.id, 'system', 'Hello')
             db.session.commit()
-            assert Notification.query.get(notif.id).created_at is not None
+            assert db.session.get(Notification, notif.id).created_at is not None
 
     def test_optional_fields_can_be_none(self, app):
         with app.app_context():
@@ -119,7 +119,7 @@ class TestCreateNotification:
             db.session.commit()
             notif = create_notification(user.id, 'system', 'No body or link')
             db.session.commit()
-            fetched = Notification.query.get(notif.id)
+            fetched = db.session.get(Notification, notif.id)
             assert fetched.body is None
             assert fetched.link is None
 
@@ -227,7 +227,7 @@ class TestMarkRead:
         with app.app_context():
             result = mark_read(notif_id, user_id)
             assert result is True
-            fetched = Notification.query.get(notif_id)
+            fetched = db.session.get(Notification, notif_id)
             assert fetched.read_at is not None
 
     def test_mark_read_is_idempotent(self, app):
@@ -241,12 +241,12 @@ class TestMarkRead:
 
         with app.app_context():
             mark_read(notif_id, user_id)
-            first_read_at = Notification.query.get(notif_id).read_at
+            first_read_at = db.session.get(Notification, notif_id).read_at
             result = mark_read(notif_id, user_id)
             # Returns False the second time (already read)
             assert result is False
             # read_at timestamp unchanged
-            assert Notification.query.get(notif_id).read_at == first_read_at
+            assert db.session.get(Notification, notif_id).read_at == first_read_at
 
     def test_mark_read_rejects_wrong_user(self, app):
         with app.app_context():
@@ -261,7 +261,7 @@ class TestMarkRead:
         with app.app_context():
             result = mark_read(notif_id, other_id)
             assert result is False
-            assert Notification.query.get(notif_id).read_at is None
+            assert db.session.get(Notification, notif_id).read_at is None
 
     def test_mark_all_read_clears_unread(self, app):
         with app.app_context():

@@ -11,7 +11,7 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError
 from app.models import User, Booking, Walker, Dog, Client, WalkerSchedule, DogOwner, WalkerUnavailability, ServiceType, Notification
 from app import db
-from app.capacity import get_max_per_walker, get_walker_slot_count
+from app.capacity import get_max_per_walker, get_walker_slot_count, get_drop_in_capacity
 from app.utils.db_error_handler import handle_db_errors
 from app.forms import ClientCreateForm, WalkerCreateForm, WalkerScheduleForm
 from app.utils.uploads import process_dog_photo
@@ -283,19 +283,19 @@ def board_chart_data():
 def _revenue_for_range(start, end):
     """Return a list of daily revenue dicts for start..end (inclusive).
 
-    Each dict: {date, revenue, walks, doubles, price_per_walk, discount}
+    Each dict: {date, revenue, walks, drop_ins, doubles, price_per_walk,
+                price_per_drop_in, discount}
 
     Logic per day:
-      - Count confirmed bookings by (dog_id, slot)
-      - A dog with BOTH Morning + Afternoon on the same day gets one discount
-      - revenue = walks * price_per_walk - doubles * double_slot_discount
+      - Group walks: count confirmed bookings by (dog_id, slot); discount for
+        dogs with BOTH Morning + Afternoon on the same day
+      - Drop-ins: counted separately, priced at price_per_drop_in (no double discount)
+      - revenue = (walks * price_per_walk - doubles * discount) + (drop_ins * price_per_drop_in)
     Uses the PricingConfig with the highest effective_from <= that day.
     """
     from datetime import timedelta
-    from sqlalchemy import func
-    from app.models import PricingConfig, Booking, DogOwner
+    from app.models import PricingConfig, Booking, ServiceType
 
-    # Load all relevant pricing configs once
     all_configs = (
         PricingConfig.query
         .filter(PricingConfig.effective_from <= end)
@@ -307,47 +307,73 @@ def _revenue_for_range(start, end):
         for c in all_configs:
             if c.effective_from <= d:
                 return c
-        return None  # no pricing configured before this date
+        return None
 
-    # Query confirmed bookings in range — get (date, dog_id, slot) tuples
-    rows = (
+    # Group walk bookings: (date, dog_id, slot)
+    walk_rows = (
         Booking.query
+        .join(ServiceType)
         .filter(
             Booking.date >= start,
             Booking.date <= end,
             Booking.status == 'confirmed',
             Booking.slot.in_(['Morning', 'Afternoon']),
+            ServiceType.slug == 'group-walk',
         )
         .with_entities(Booking.date, Booking.dog_id, Booking.slot)
         .all()
     )
 
-    # Build lookup: {date: {dog_id: set(slots)}}
+    # Drop-in bookings: (date,)
+    drop_in_rows = (
+        Booking.query
+        .join(ServiceType)
+        .filter(
+            Booking.date >= start,
+            Booking.date <= end,
+            Booking.status == 'confirmed',
+            ServiceType.slug == 'drop-in',
+        )
+        .with_entities(Booking.date)
+        .all()
+    )
+
+    # Build lookups
     day_dog_slots = {}
-    for r in rows:
+    for r in walk_rows:
         day_dog_slots.setdefault(r.date, {}).setdefault(r.dog_id, set()).add(r.slot)
+
+    day_drop_ins = {}
+    for r in drop_in_rows:
+        day_drop_ins[r.date] = day_drop_ins.get(r.date, 0) + 1
 
     results = []
     d = start
     while d <= end:
-        dog_slots = day_dog_slots.get(d, {})
-        walks   = sum(len(slots) for slots in dog_slots.values())
-        doubles = sum(1 for slots in dog_slots.values()
-                      if 'Morning' in slots and 'Afternoon' in slots)
+        dog_slots  = day_dog_slots.get(d, {})
+        walks      = sum(len(slots) for slots in dog_slots.values())
+        doubles    = sum(1 for slots in dog_slots.values()
+                         if 'Morning' in slots and 'Afternoon' in slots)
+        drop_ins   = day_drop_ins.get(d, 0)
         cfg = config_for(d)
         if cfg:
-            price    = float(cfg.price_per_walk)
-            discount = float(cfg.double_slot_discount)
-            revenue  = round(walks * price - doubles * discount, 2)
+            price          = float(cfg.price_per_walk)
+            drop_in_price  = float(cfg.price_per_drop_in)
+            discount       = float(cfg.double_slot_discount)
+            revenue        = round(
+                walks * price - doubles * discount + drop_ins * drop_in_price, 2
+            )
         else:
-            price = discount = revenue = 0.0
+            price = drop_in_price = discount = revenue = 0.0
         results.append({
-            'date':           d,
-            'revenue':        revenue,
-            'walks':          walks,
-            'doubles':        doubles,
-            'price_per_walk': price,
-            'discount':       discount,
+            'date':              d,
+            'revenue':           revenue,
+            'walks':             walks,
+            'drop_ins':          drop_ins,
+            'doubles':           doubles,
+            'price_per_walk':    price,
+            'price_per_drop_in': drop_in_price,
+            'discount':          discount,
         })
         d += timedelta(days=1)
     return results
@@ -456,9 +482,10 @@ def update_pricing():
     from app.models import PricingConfig
 
     try:
-        price    = float(request.form['price_per_walk'])
-        discount = float(request.form['double_slot_discount'])
-        eff_from = date.fromisoformat(request.form['effective_from'])
+        price          = float(request.form['price_per_walk'])
+        discount       = float(request.form['double_slot_discount'])
+        drop_in_price  = float(request.form.get('price_per_drop_in', 5))
+        eff_from       = date.fromisoformat(request.form['effective_from'])
     except (KeyError, ValueError) as e:
         flash(f"Invalid pricing data: {e}", "danger")
         return redirect(url_for('admin.revenue'))
@@ -468,11 +495,13 @@ def update_pricing():
     if existing:
         existing.price_per_walk       = price
         existing.double_slot_discount = discount
+        existing.price_per_drop_in    = drop_in_price
         flash(f"Pricing for {eff_from} updated.", "success")
     else:
         db.session.add(PricingConfig(
             price_per_walk=price,
             double_slot_discount=discount,
+            price_per_drop_in=drop_in_price,
             effective_from=eff_from,
         ))
         flash(f"New pricing tier effective from {eff_from} added.", "success")
@@ -485,8 +514,111 @@ def update_pricing():
 @login_required
 @admin_required
 def board():
-    """New assignment board — click-to-assign + drag-to-reorder."""
+    """Group walk assignment board — click-to-assign + drag-to-reorder."""
     return render_template("admin_board.html")
+
+
+@admin_bp.route("/drop-in-board")
+@login_required
+@admin_required
+def drop_in_board():
+    """Drop-in assignment board."""
+    return render_template("admin_drop_in_board.html")
+
+
+@admin_bp.route("/api/drop-in-board-data/<date_str>")
+@login_required
+@admin_required
+def drop_in_board_data(date_str):
+    """JSON board data for drop-in bookings on a given date."""
+    try:
+        selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify(success=False, message="Invalid date"), 400
+
+    drop_in_service = ServiceType.query.filter_by(slug='drop-in').first()
+    if not drop_in_service:
+        return jsonify(success=False, message="Drop-in service type not configured"), 500
+
+    all_bookings = (
+        Booking.query
+        .options(
+            joinedload(Booking.dog),
+            joinedload(Booking.walker).joinedload(Walker.user),
+            joinedload(Booking.user),
+        )
+        .filter(
+            Booking.date == selected_date,
+            Booking.status != 'cancelled',
+            Booking.service_type_id == drop_in_service.id,
+        )
+        .all()
+    )
+
+    # Only walkers with does_drop_ins=True, scheduled for this day/slot
+    day_of_week = selected_date.weekday()
+    schedules = (
+        WalkerSchedule.query
+        .join(Walker)
+        .filter(
+            WalkerSchedule.day_of_week == day_of_week,
+            WalkerSchedule.active == True,
+            Walker.does_drop_ins == True,
+        )
+        .all()
+    )
+    walker_sched_slots = {}
+    for s in schedules:
+        walker_sched_slots.setdefault(s.walker_id, set()).add(s.slot)
+
+    unavailabilities = WalkerUnavailability.query.filter_by(date=selected_date).all()
+    walker_unavail_slots = {}
+    for u in unavailabilities:
+        if u.walker_id in walker_sched_slots:
+            walker_unavail_slots.setdefault(u.walker_id, set()).add(u.slot)
+
+    walkers = (
+        Walker.query.options(joinedload(Walker.user))
+        .filter(Walker.id.in_(walker_sched_slots.keys()))
+        .all()
+    ) if walker_sched_slots else []
+
+    def booking_dict(b):
+        return {
+            'id': b.id,
+            'dog_name': b.dog.name if b.dog else 'Unknown',
+            'dog_pic': b.dog.pic if b.dog and b.dog.pic else None,
+            'owner_name': b.dog.owners_display if b.dog else (b.user.full_name if b.user else ''),
+            'slot': b.slot,
+            'status': b.status,
+            'pickup_order': b.pickup_order,
+            'walker_id': b.walker_id,
+        }
+
+    pending  = [booking_dict(b) for b in all_bookings if b.status in ('requested', 'waitlisted')]
+    assigned = [booking_dict(b) for b in all_bookings if b.walker_id and b.status == 'confirmed']
+
+    slot_order = lambda s: 0 if s == 'Morning' else 1
+    walkers_data = [
+        {
+            'id': w.id,
+            'name': w.user.firstname if w.user else 'Walker',
+            'available_slots':   sorted(walker_sched_slots.get(w.id, []),   key=slot_order),
+            'unavailable_slots': sorted(walker_unavail_slots.get(w.id, []), key=slot_order),
+        }
+        for w in walkers
+    ]
+
+    max_capacity = get_max_per_walker('drop-in')
+
+    return jsonify(
+        success=True,
+        date=date_str,
+        pending=pending,
+        assigned=assigned,
+        walkers=walkers_data,
+        max_capacity=max_capacity,
+    )
 
 
 @admin_bp.route("/api/board-data/<date_str>")
@@ -499,6 +631,7 @@ def board_data(date_str):
     except ValueError:
         return jsonify(success=False, message="Invalid date"), 400
 
+    group_walk_service = ServiceType.query.filter_by(slug='group-walk').first()
     all_bookings = (
         Booking.query
         .options(
@@ -506,27 +639,46 @@ def board_data(date_str):
             joinedload(Booking.walker).joinedload(Walker.user),
             joinedload(Booking.user),
         )
-        .filter(Booking.date == selected_date, Booking.status != 'cancelled')
+        .filter(
+            Booking.date == selected_date,
+            Booking.status != 'cancelled',
+            Booking.service_type_id == group_walk_service.id if group_walk_service else True,
+        )
         .all()
     )
 
     day_of_week = selected_date.weekday()
     schedules = WalkerSchedule.query.filter_by(day_of_week=day_of_week, active=True).all()
-    walker_available_slots = {}
+    walker_sched_slots = {}   # all scheduled slots regardless of unavailability
     for s in schedules:
-        walker_available_slots.setdefault(s.walker_id, set()).add(s.slot)
+        walker_sched_slots.setdefault(s.walker_id, set()).add(s.slot)
 
+    # Track which slots each walker has marked unavailable
     unavailabilities = WalkerUnavailability.query.filter_by(date=selected_date).all()
+    walker_unavail_slots = {}
     for u in unavailabilities:
-        if u.walker_id in walker_available_slots:
-            walker_available_slots[u.walker_id].discard(u.slot)
-    walker_available_slots = {wid: slots for wid, slots in walker_available_slots.items() if slots}
+        if u.walker_id in walker_sched_slots:
+            walker_unavail_slots.setdefault(u.walker_id, set()).add(u.slot)
 
+    # Include all scheduled walkers — unavailable ones appear with a warning on the board
+    all_scheduled_walker_ids = walker_sched_slots.keys()
     walkers = (
         Walker.query.options(joinedload(Walker.user))
-        .filter(Walker.id.in_(walker_available_slots.keys()))
+        .filter(Walker.id.in_(all_scheduled_walker_ids))
         .all()
-    ) if walker_available_slots else []
+    ) if all_scheduled_walker_ids else []
+
+    # Dogs that have active bookings in BOTH Morning and Afternoon today — used for the
+    # double-walk icon on board cards (whether booked via "both walks" or manually).
+    from collections import defaultdict
+    _dog_slots = defaultdict(set)
+    for b in all_bookings:
+        if b.status not in ('cancelled', 'rejected'):
+            _dog_slots[b.dog_id].add(b.slot)
+    both_slots_dog_ids = {
+        dog_id for dog_id, slots in _dog_slots.items()
+        if 'Morning' in slots and 'Afternoon' in slots
+    }
 
     def booking_dict(b, include_walker=False):
         d = {
@@ -538,17 +690,20 @@ def board_data(date_str):
             'status': b.status,
             'pickup_order': b.pickup_order,
             'walker_id': b.walker_id,
+            'has_both_slots': b.dog_id in both_slots_dog_ids,
         }
         return d
 
     pending   = [booking_dict(b) for b in all_bookings if b.status in ('requested', 'waitlisted')]
     assigned  = [booking_dict(b) for b in all_bookings if b.walker_id and b.status == 'confirmed']
 
+    slot_order = lambda s: 0 if s == 'Morning' else 1
     walkers_data = [
         {
             'id': w.id,
             'name': w.user.firstname if w.user else 'Walker',
-            'available_slots': sorted(walker_available_slots.get(w.id, []), key=lambda s: 0 if s == 'Morning' else 1),
+            'available_slots':   sorted(walker_sched_slots.get(w.id, []),       key=slot_order),
+            'unavailable_slots': sorted(walker_unavail_slots.get(w.id, []),     key=slot_order),
         }
         for w in walkers
     ]
@@ -601,7 +756,7 @@ def assign_walker():
         if not booking_id:
             return jsonify(success=False, message="No booking ID provided"), 400
 
-        booking = Booking.query.get(booking_id)
+        booking = db.session.get(Booking, booking_id)
         if not booking:
             return jsonify(success=False, message="Booking not found"), 404
 
@@ -639,17 +794,19 @@ def assign_walker():
         if not schedule_exists:
             return jsonify(success=False, message=f"{walker.user.firstname} is not scheduled for {assign_slot} on this day"), 400
 
-        # Check walker capacity for the given slot and date
+        # Check walker capacity for the given slot and date (scoped to same service type)
         if slot:
-            max_capacity = get_max_per_walker('group-walk')
-            same_slot_bookings = Booking.query.filter(
+            service_slug = booking.service_type.slug if booking.service_type else 'group-walk'
+            max_capacity = get_max_per_walker(service_slug)
+            same_slot_bookings = Booking.query.join(ServiceType).filter(
                 Booking.walker_id == walker.id,
                 Booking.date == booking.date,
                 Booking.slot == slot,
                 Booking.status != 'cancelled',
-                Booking.id != booking.id  # Exclude current booking if reassigning
+                Booking.id != booking.id,
+                ServiceType.slug == service_slug,
             ).count()
-            
+
             if same_slot_bookings >= max_capacity:
                 return jsonify(success=False, message=f"Walker already has maximum bookings ({max_capacity}) for {slot} slot"), 400
 
@@ -659,23 +816,24 @@ def assign_walker():
         if slot:
             booking.slot = slot
 
-        # 22a: notify client that their booking has been confirmed
+        # Notify client + walker — label differs by service type
         date_str_fmt = booking.date.strftime('%a %-d %b')
         dog_name = booking.dog.name if booking.dog else 'your dog'
+        service_label = 'drop-in visit' if (booking.service_type and booking.service_type.slug == 'drop-in') else 'walk'
+
         create_notification(
             recipient_id=booking.user_id,
             notification_type='booking_confirmed',
-            title=f"{dog_name}'s walk on {date_str_fmt} has been confirmed",
+            title=f"{dog_name}'s {service_label} on {date_str_fmt} has been confirmed",
             body=booking.slot,
             link=f'/bookings/{booking.id}',
             sender_id=current_user.id,
         )
 
-        # 22d: notify walker they've been assigned to a booking
         create_notification(
             recipient_id=walker.user_id,
             notification_type='walker_assigned',
-            title=f'You have been assigned a walk on {date_str_fmt}',
+            title=f'You have been assigned a {service_label} on {date_str_fmt}',
             body=f'{dog_name} — {booking.slot}',
             link=f'/walker/pickups?date={booking.date.isoformat()}',
             sender_id=current_user.id,
@@ -685,7 +843,7 @@ def assign_walker():
         pickup_order = data.get("pickup_order")  # list of booking IDs in order
         if pickup_order and isinstance(pickup_order, list):
             for idx, bid in enumerate(pickup_order, start=1):
-                b = Booking.query.get(int(bid))
+                b = db.session.get(Booking, int(bid))
                 if b and b.walker_id == walker.id and b.date == booking.date and b.slot == booking.slot:
                     b.pickup_order = idx
 
@@ -736,7 +894,7 @@ def reorder_pickups():
         selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
 
         for idx, bid in enumerate(pickup_order, start=1):
-            b = Booking.query.get(int(bid))
+            b = db.session.get(Booking, int(bid))
             if b and b.walker_id == int(walker_id) and b.date == selected_date and b.slot == slot:
                 b.pickup_order = idx
 
@@ -840,11 +998,11 @@ def client_detail(client_id):
     primary_ownerships = DogOwner.query.filter_by(user_id=user.id, role='primary').all()
     primary_dogs = []
     for ownership in primary_ownerships:
-        dog = Dog.query.get(ownership.dog_id)
+        dog = db.session.get(Dog, ownership.dog_id)
         if not dog:
             continue
         secondary_ownerships = DogOwner.query.filter_by(dog_id=dog.id, role='secondary').all()
-        secondary_users = [User.query.get(so.user_id) for so in secondary_ownerships]
+        secondary_users = [db.session.get(User, so.user_id) for so in secondary_ownerships]
         secondary_users = [u for u in secondary_users if u]  # filter None
         primary_dogs.append({'dog': dog, 'secondary_owners': secondary_users})
 
@@ -852,11 +1010,11 @@ def client_detail(client_id):
     secondary_ownerships = DogOwner.query.filter_by(user_id=user.id, role='secondary').all()
     secondary_dogs = []
     for ownership in secondary_ownerships:
-        dog = Dog.query.get(ownership.dog_id)
+        dog = db.session.get(Dog, ownership.dog_id)
         if not dog:
             continue
         primary_o = DogOwner.query.filter_by(dog_id=dog.id, role='primary').first()
-        primary_user = User.query.get(primary_o.user_id) if primary_o else None
+        primary_user = db.session.get(User, primary_o.user_id) if primary_o else None
         secondary_dogs.append({'dog': dog, 'primary_owner': primary_user})
 
     # Clients available to join — exclude self and anyone already linked
@@ -979,8 +1137,8 @@ def revoke_dog_access(client_id):
     if not record:
         return jsonify(success=False, message="No secondary access record found"), 404
 
-    secondary_user = User.query.get(secondary_user_id)
-    dog = Dog.query.get(dog_id)
+    secondary_user = db.session.get(User, secondary_user_id)
+    dog = db.session.get(Dog, dog_id)
 
     try:
         db.session.delete(record)
@@ -1113,7 +1271,7 @@ def edit_client(client_id):
     user = User.query.filter(User.role == 'client', User.id == client_id).first_or_404()
     client = Client.query.filter_by(user_id=user.id).first()
     dog_owner = DogOwner.query.filter_by(user_id=user.id, role='primary').first()
-    dog = Dog.query.get(dog_owner.dog_id) if dog_owner else None
+    dog = db.session.get(Dog, dog_owner.dog_id) if dog_owner else None
 
     form = ClientCreateForm()
 
@@ -1545,7 +1703,7 @@ def book_for_dog():
         if slot not in ('Morning', 'Afternoon'):
             return jsonify(success=False, message="Invalid slot"), 400
 
-        dog = Dog.query.get(dog_id)
+        dog = db.session.get(Dog, dog_id)
         if not dog:
             return jsonify(success=False, message="Dog not found"), 404
 
@@ -1564,7 +1722,9 @@ def book_for_dog():
         if not default_service:
             return jsonify(success=False, message="No service type available"), 400
 
-        available, can_waitlist, capacity_msg = check_availability(default_service, booking_date, slot)
+        available, can_waitlist, capacity_msg = check_availability(
+            default_service, booking_date, slot, admin_override=True
+        )
         if not available and not can_waitlist:
             return jsonify(success=False, message=capacity_msg), 400
 
@@ -1626,7 +1786,7 @@ def recurring_for_dog():
         if frequency not in ('daily', 'weekly'):
             return jsonify(success=False, message="Invalid frequency"), 400
 
-        dog = Dog.query.get(dog_id)
+        dog = db.session.get(Dog, dog_id)
         if not dog:
             return jsonify(success=False, message="Dog not found"), 404
 
@@ -1671,7 +1831,7 @@ def recurring_for_dog():
                 skipped += 1
                 continue
 
-            available, can_waitlist, _ = check_availability(default_service, d, slot)
+            available, can_waitlist, _ = check_availability(default_service, d, slot, admin_override=True)
             if not available and not can_waitlist:
                 skipped += 1
                 continue
@@ -1697,3 +1857,318 @@ def recurring_for_dog():
         db.session.rollback()
         logging.error(f"Error in admin recurring_for_dog: {e}")
         return jsonify(success=False, message="Server error"), 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Invoicing
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _invoice_for_client(user_id, month_start, month_end, all_configs):
+    """Return invoice data dict for a single client in the given month.
+
+    Billable items:
+      - confirmed / completed bookings (walks + drop-ins)
+      - cancelled bookings where notice < 5 days  (booking.date - cancelled_at.date() < 5)
+
+    Pricing:
+      - Group walks: price_per_walk; double_slot_discount for same-day AM+PM
+      - Drop-ins: price_per_drop_in; no double discount
+    """
+    from datetime import date as date_type
+    from collections import defaultdict
+
+    def config_for(d):
+        for c in all_configs:
+            if c.effective_from <= d:
+                return c
+        return None
+
+    dog_owner_ids = [
+        do.dog_id
+        for do in DogOwner.query.filter_by(user_id=user_id, role='primary').all()
+    ]
+    if not dog_owner_ids:
+        return None
+
+    bookings = (
+        Booking.query
+        .options(joinedload(Booking.dog), joinedload(Booking.service_type))
+        .filter(
+            Booking.dog_id.in_(dog_owner_ids),
+            Booking.date >= month_start,
+            Booking.date < month_end,
+            Booking.status.in_(['confirmed', 'completed', 'cancelled']),
+        )
+        .order_by(Booking.date, Booking.slot)
+        .all()
+    )
+
+    confirmed    = [b for b in bookings if b.status in ('confirmed', 'completed')]
+    late_cancels = [
+        b for b in bookings
+        if b.status == 'cancelled'
+        and b.cancelled_at is not None
+        and (b.date - b.cancelled_at.date()).days < 5
+    ]
+    all_billable = confirmed + late_cancels
+
+    # Split by service type
+    def is_drop_in(b):
+        return b.service_type and b.service_type.slug == 'drop-in'
+
+    # Group walk items by date → slot set (for double-slot discount)
+    date_slots = defaultdict(set)
+    for b in all_billable:
+        if not is_drop_in(b):
+            date_slots[b.date].add(b.slot)
+
+    # Calculate subtotal
+    subtotal = 0.0
+    for b in all_billable:
+        cfg = config_for(b.date)
+        if cfg:
+            if is_drop_in(b):
+                subtotal += float(cfg.price_per_drop_in)
+            else:
+                subtotal += float(cfg.price_per_walk)
+    for d, slots in date_slots.items():
+        if 'Morning' in slots and 'Afternoon' in slots:
+            cfg = config_for(d)
+            if cfg:
+                subtotal -= float(cfg.double_slot_discount)
+
+    walk_confirmed   = [b for b in confirmed if not is_drop_in(b)]
+    drop_in_confirmed = [b for b in confirmed if is_drop_in(b)]
+
+    return {
+        'confirmed':         confirmed,
+        'late_cancels':      late_cancels,
+        'all_billable':      all_billable,
+        'total_walks':       len(walk_confirmed),
+        'total_drop_ins':    len(drop_in_confirmed),
+        'total_cancels':     len(late_cancels),
+        'total_billable':    len(all_billable),
+        'doubles':           sum(1 for s in date_slots.values()
+                                 if 'Morning' in s and 'Afternoon' in s),
+        'subtotal':          round(subtotal, 2),
+    }
+
+
+@admin_bp.route("/invoicing")
+@login_required
+@admin_required
+def invoicing():
+    """Monthly invoicing summary — one row per client."""
+    from datetime import date
+    from calendar import monthrange
+
+    # ── Month selection ───────────────────────────────────────────────────
+    today = date.today()
+    month_str = request.args.get('month', f'{today.year}-{today.month:02d}')
+    try:
+        year, month = int(month_str[:4]), int(month_str[5:7])
+        if not (1 <= month <= 12):
+            raise ValueError
+    except (ValueError, IndexError):
+        year, month = today.year, today.month
+
+    month_start = date(year, month, 1)
+    month_end   = date(year + (month // 12), (month % 12) + 1, 1)
+
+    # Prev / next month helpers for navigation
+    if month == 1:
+        prev_month = f'{year - 1}-12'
+    else:
+        prev_month = f'{year}-{month - 1:02d}'
+    if month == 12:
+        next_month = f'{year + 1}-01'
+    else:
+        next_month = f'{year}-{month + 1:02d}'
+
+    # ── Pricing configs (loaded once) ─────────────────────────────────────
+    from app.models import PricingConfig
+    all_configs = (
+        PricingConfig.query
+        .filter(PricingConfig.effective_from <= month_end)
+        .order_by(PricingConfig.effective_from.desc())
+        .all()
+    )
+
+    # ── Clients ───────────────────────────────────────────────────────────
+    clients = (
+        User.query
+        .options(joinedload(User.client))
+        .filter(User.role == 'client')
+        .order_by(User.lastname, User.firstname)
+        .all()
+    )
+
+    rows = []
+    for u in clients:
+        inv = _invoice_for_client(u.id, month_start, month_end, all_configs)
+        if inv is None or inv['total_billable'] == 0:
+            continue
+        # Primary dog + secondary owners
+        do = DogOwner.query.filter_by(user_id=u.id, role='primary').first()
+        dog = db.session.get(Dog, do.dog_id) if do else None
+        secondary_owners = []
+        if dog:
+            secondary_owners = [
+                db.session.get(User, so.user_id)
+                for so in DogOwner.query.filter_by(dog_id=dog.id, role='secondary').all()
+            ]
+            secondary_owners = [s for s in secondary_owners if s]
+        rows.append({
+            'client':           u,
+            'dog':              dog,
+            'secondary_owners': secondary_owners,
+            **inv,
+        })
+
+    grand_total = round(sum(r['subtotal'] for r in rows), 2)
+
+    return render_template(
+        'admin_invoicing.html',
+        rows=rows,
+        grand_total=grand_total,
+        month_start=month_start,
+        prev_month=prev_month,
+        next_month=next_month,
+        today=today,
+    )
+
+
+@admin_bp.route("/invoicing/<int:client_id>")
+@login_required
+@admin_required
+def invoicing_detail(client_id):
+    """Per-client invoice detail — line items for the selected month."""
+    from datetime import date
+    from itertools import groupby
+
+    client_user = User.query.filter(
+        User.role == 'client', User.id == client_id
+    ).first_or_404()
+
+    today = date.today()
+    month_str = request.args.get('month', f'{today.year}-{today.month:02d}')
+    try:
+        year, month = int(month_str[:4]), int(month_str[5:7])
+        if not (1 <= month <= 12):
+            raise ValueError
+    except (ValueError, IndexError):
+        year, month = today.year, today.month
+
+    month_start = date(year, month, 1)
+    month_end   = date(year + (month // 12), (month % 12) + 1, 1)
+
+    from app.models import PricingConfig
+    all_configs = (
+        PricingConfig.query
+        .filter(PricingConfig.effective_from <= month_end)
+        .order_by(PricingConfig.effective_from.desc())
+        .all()
+    )
+
+    def config_for(d):
+        for c in all_configs:
+            if c.effective_from <= d:
+                return c
+        return None
+
+    inv = _invoice_for_client(client_user.id, month_start, month_end, all_configs)
+    if inv is None:
+        inv = {'confirmed': [], 'late_cancels': [], 'all_billable': [],
+               'total_walks': 0, 'total_drop_ins': 0, 'total_cancels': 0,
+               'total_billable': 0, 'doubles': 0, 'subtotal': 0.0}
+
+    # Build line items with unit price (drop-ins priced separately)
+    line_items = []
+    late_cancel_ids = {b.id for b in inv['late_cancels']}
+    for b in sorted(inv['all_billable'], key=lambda x: (x.date, x.slot)):
+        cfg = config_for(b.date)
+        is_drop_in_booking = b.service_type and b.service_type.slug == 'drop-in'
+        if cfg:
+            unit_price = float(cfg.price_per_drop_in) if is_drop_in_booking else float(cfg.price_per_walk)
+        else:
+            unit_price = 0.0
+        line_items.append({
+            'booking':      b,
+            'unit_price':   unit_price,
+            'is_cancel':    b.id in late_cancel_ids,
+        })
+
+    # Double-slot discount line items (group walks only — drop-ins don't qualify)
+    from collections import defaultdict
+    date_slots = defaultdict(set)
+    for b in inv['all_billable']:
+        if not (b.service_type and b.service_type.slug == 'drop-in'):
+            date_slots[b.date].add(b.slot)
+    discount_days = sorted(
+        d for d, slots in date_slots.items()
+        if 'Morning' in slots and 'Afternoon' in slots
+    )
+    discounts = []
+    for d in discount_days:
+        cfg = config_for(d)
+        if cfg and cfg.double_slot_discount:
+            discounts.append({'date': d, 'amount': float(cfg.double_slot_discount)})
+
+    do = DogOwner.query.filter_by(user_id=client_user.id, role='primary').first()
+    dog = db.session.get(Dog, do.dog_id) if do else None
+
+    # ── Weekly breakdown ──────────────────────────────────────────────────
+    # Find all Mon-commencing weeks that overlap the month
+    from datetime import timedelta
+    # First Monday on or before month_start
+    first_monday = month_start - timedelta(days=month_start.weekday())
+    weeks = []
+    wk_start = first_monday
+    while wk_start < month_end:
+        wk_end = wk_start + timedelta(days=7)  # exclusive
+
+        # Line items in this week
+        wk_items = [li for li in line_items if wk_start <= li['booking'].date < wk_end]
+        wk_discounts = [d for d in discounts if wk_start <= d['date'] < wk_end]
+
+        wk_confirmed  = sum(1 for li in wk_items if not li['is_cancel'] and not (li['booking'].service_type and li['booking'].service_type.slug == 'drop-in'))
+        wk_drop_ins   = sum(1 for li in wk_items if not li['is_cancel'] and li['booking'].service_type and li['booking'].service_type.slug == 'drop-in')
+        wk_cancels    = sum(1 for li in wk_items if li['is_cancel'])
+        wk_discount_total = sum(d['amount'] for d in wk_discounts)
+        wk_gross      = sum(li['unit_price'] for li in wk_items)
+        wk_subtotal   = round(wk_gross - wk_discount_total, 2)
+
+        weeks.append({
+            'commencing':      wk_start,
+            'confirmed':       wk_confirmed,
+            'drop_ins':        wk_drop_ins,
+            'cancels':         wk_cancels,
+            'discount_total':  wk_discount_total,
+            'subtotal':        wk_subtotal,
+            'has_activity':    bool(wk_items),
+        })
+        wk_start = wk_end
+
+    # Prev/next month nav
+    if month == 1:
+        prev_month = f'{year - 1}-12'
+    else:
+        prev_month = f'{year}-{month - 1:02d}'
+    if month == 12:
+        next_month = f'{year + 1}-01'
+    else:
+        next_month = f'{year}-{month + 1:02d}'
+
+    return render_template(
+        'admin_invoicing_detail.html',
+        client_user=client_user,
+        dog=dog,
+        inv=inv,
+        line_items=line_items,
+        discounts=discounts,
+        weeks=weeks,
+        month_start=month_start,
+        prev_month=prev_month,
+        next_month=next_month,
+        today=today,
+    )
