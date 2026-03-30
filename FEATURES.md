@@ -54,6 +54,13 @@
 | 33 | P3 | L | 🔲 | **Online payments** | Stripe integration for invoice payment. |
 | 34 | P3 | M | 🔲 | **Multi-dog support** | Client adds multiple dogs. Share dog profile with another registered user (e.g. partner). |
 
+## Newsletter
+
+| # | Priority | Effort | Status | Feature | Notes |
+|---|----------|--------|--------|---------|-------|
+| 60 | P2 | L | 🔲 | **Client newsletter (admin)** | `/admin/newsletter` — Quill WYSIWYG compose, merge tags ({{firstname}}, {{dog_name}}), preview mode, send to all active + opted-in clients via Resend batch API. Send log. |
+| 61 | P2 | S | 🔲 | **Email marketing opt-out** | `email_marketing` boolean on User (default True). One-click unsubscribe link in every newsletter email via `/unsubscribe/<token>`. GDPR compliance. |
+
 ## Notifications
 
 | # | Priority | Effort | Status | Feature | Notes |
