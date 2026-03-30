@@ -248,3 +248,30 @@ def reset_password(token):
             flash("Something went wrong. Please try again.", "error")
 
     return render_template("reset_password.html", form=form, token=token)
+
+
+# ── Newsletter unsubscribe ────────────────────────────────────────────────────
+
+@auth_bp.route("/unsubscribe/<token>")
+def unsubscribe(token):
+    """One-click unsubscribe from newsletter emails."""
+    user = User.verify_unsubscribe_token(token)
+    if not user:
+        flash("This unsubscribe link is invalid or has expired.", "error")
+        return redirect(url_for('auth.login'))
+
+    if not user.email_marketing:
+        flash("You're already unsubscribed from newsletter emails.", "info")
+        return redirect(url_for('auth.login'))
+
+    try:
+        user.email_marketing = False
+        db.session.commit()
+        logging.info(f"User {user.id} unsubscribed from newsletter")
+        flash("You've been unsubscribed from newsletter emails.", "success")
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error unsubscribing user {user.id}: {e}")
+        flash("Something went wrong. Please try again.", "error")
+
+    return redirect(url_for('auth.login'))
