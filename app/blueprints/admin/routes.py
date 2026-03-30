@@ -2193,3 +2193,57 @@ def invoicing_detail(client_id):
         next_month=next_month,
         today=today,
     )
+
+
+# ── Newsletter ────────────────────────────────────────────────────────────────
+
+@admin_bp.route("/newsletter", methods=["GET", "POST"])
+@login_required
+@admin_required
+def newsletter():
+    """Compose and send a newsletter to all active, opted-in clients."""
+    from app.utils.email import send_newsletter_batch
+    from flask import current_app
+
+    # Build recipient list: active clients who have opted in
+    clients = User.query.filter_by(role='client', active=True, email_marketing=True).all()
+
+    result = None  # {'sent': int, 'failed': int} after a send
+
+    if request.method == "POST":
+        subject = request.form.get("subject", "").strip()
+        html_body = request.form.get("html_body", "").strip()
+
+        if not subject or not html_body:
+            flash("Subject and body are required.", "error")
+        else:
+            base_url = current_app.config.get("APP_BASE_URL", "").rstrip("/")
+            recipients = []
+            for u in clients:
+                token = u.make_unsubscribe_token()
+                # Best-effort dog name: first primary dog
+                dog_name = "your dog"
+                if u.client and u.client.dogs:
+                    dog_name = u.client.dogs[0].name
+                recipients.append({
+                    "email": u.email,
+                    "firstname": u.firstname,
+                    "dog_name": dog_name,
+                    "unsubscribe_url": f"{base_url}/auth/unsubscribe/{token}",
+                })
+
+            result = send_newsletter_batch(
+                subject=subject,
+                html_template=html_body,
+                recipients=recipients,
+            )
+            if result["failed"] == 0:
+                flash(f"Newsletter sent to {result['sent']} client(s).", "success")
+            else:
+                flash(f"Sent {result['sent']}, failed {result['failed']}. Check logs.", "warning")
+
+    return render_template(
+        "admin_newsletter.html",
+        clients=clients,
+        result=result,
+    )

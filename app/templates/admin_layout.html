@@ -210,6 +210,14 @@
                         </a>
                     </li>
 
+                    <li class="nav-item">
+                        <a href="{{ url_for('admin.newsletter') }}"
+                           class="nav-link {% if request.endpoint == 'admin.newsletter' %}active{% endif %}">
+                            <i class="bi bi-envelope-paper me-2"></i>
+                            <span>Newsletter</span>
+                        </a>
+                    </li>
+
                     {% if current_user.walker %}
                     <!-- My Walker View -->
                     <li class="nav-header">My Walker View</li>
