@@ -13,7 +13,7 @@
 | 3 | P1 | M | ✅ | **Admin booking board** | Calendar + slot view. Confirm/cancel requests. Drag-to-reorder pickup order per walker. |
 | 4 | P1 | M | ✅ | **Admin dogs view** | Searchable table of all dogs. Book on owner's behalf (one-off or recurring) via modal. Same pending flow as client-initiated. |
 | 5 | P1 | M | ✅ | **Prevent duplicate bookings** | Block same dog+date+slot. Max 2 bookings per dog per day (one per slot). DB partial unique index. |
-| 6 | P1 | M | 🔲 | **Password reset** | "Forgot password?" → token email → set new password. Blocked on no-reply@dogboxx.org + Resend setup. |
+| 6 | P1 | M | ✅ | **Password reset** | "Forgot password?" → token email → set new password. Resend API, itsdangerous token (1hr expiry, invalidated on use). |
 | 7 | P1 | M | ❌ | **Booking capacity display for clients** | Dropped — "available" indicator in UI is sufficient. Exact slot counts not needed. |
 | 8 | P2 | L | ✅ | **"Book both walks" option (client)** | Checkbox books AM + PM in one action via /client/book_both. Admin board shows layered-icon modifier pill. |
 
@@ -75,7 +75,7 @@
 | 52 | P1 | S | ✅ | **DB indexes** | Indexes on date, walker_id, user_id, dog_id, status for query performance. |
 | 53 | P1 | M | ✅ | **Git branching** | `develop` for ongoing work, `main` for production. PRs required to merge to main. |
 | 54 | P1 | L | ✅ | **Unit test suite** | 140 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing. All passing, no deprecation warnings. |
-| 55 | P2 | M | 🔲 | **Password reset flow** | Email-based token reset. Blocked on no-reply@dogboxx.org + Resend setup. |
+| 55 | P2 | M | ✅ | **Password reset flow** | Email-based token reset via Resend. noreply@dogboxx.org verified. RESEND_API_KEY + APP_BASE_URL needed in prod env. |
 | 56 | P3 | S | ✅ | **CI/CD pipeline** | GitHub Actions (test.yml): runs pytest on push to main/develop and all PRs. All runs green. |
 
 ---
