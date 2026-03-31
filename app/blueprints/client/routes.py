@@ -37,6 +37,9 @@ def _maybe_auto_confirm(booking, dog, service_slug='group-walk'):
         booking.walker_id = walker.id
         booking.status = 'confirmed'
         booking.confirmed_at = datetime.now(timezone.utc)
+        # Set pickup_order to next available position in this walker's slot
+        from app.capacity import get_walker_slot_count
+        booking.pickup_order = get_walker_slot_count(walker.id, booking.date, booking.slot, service_slug=service_slug)
         date_str = booking.date.strftime('%a %-d %b')
         create_notification(
             recipient_id=booking.user_id,
