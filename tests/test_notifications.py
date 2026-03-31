@@ -347,7 +347,8 @@ class TestBookingNotifications:
             return client_u.id, admin.id, w.id, tom
 
     def test_booking_request_notifies_admins(self, app, client):
-        """When a client makes a booking, admins receive a booking_requested notification."""
+        """When a client makes a booking with a walker available, it auto-confirms
+        and the client receives a booking_confirmed notification (not admin)."""
         client_email  = 'notif_cl_br@test.com'
         admin_email   = 'notif_adm_br@test.com'
         walker_email  = 'notif_wlk_br@test.com'
@@ -363,15 +364,15 @@ class TestBookingNotifications:
         }, follow_redirects=True)
 
         with app.app_context():
-            admin_notifs = Notification.query.filter_by(
-                recipient_id=admin_id,
-                notification_type='booking_requested',
+            # Auto-assign fires: client gets confirmed notification, not admin request
+            client_notifs = Notification.query.filter_by(
+                recipient_id=client_id,
+                notification_type='booking_confirmed',
             ).all()
-            assert len(admin_notifs) >= 1, "Admin should receive a booking_requested notification"
+            assert len(client_notifs) >= 1, "Client should receive a booking_confirmed notification on auto-assign"
 
     def test_booking_confirm_notifies_client(self, app, client):
-        """When admin assigns a walker, the client receives a booking_confirmed notification."""
-        import json
+        """Client receives a booking_confirmed notification — via auto-assign on creation."""
         client_email = 'notif_cl_bc@test.com'
         admin_email  = 'notif_adm_bc@test.com'
         walker_email = 'notif_wlk_bc@test.com'
@@ -380,7 +381,7 @@ class TestBookingNotifications:
             app, client_email, admin_email, walker_email
         )
 
-        # Client makes a booking
+        # Client makes a booking — auto-assign fires immediately
         login(client, client_email)
         client.post('/', data={
             'date': tom.isoformat(),
@@ -388,25 +389,12 @@ class TestBookingNotifications:
         }, follow_redirects=True)
 
         with app.app_context():
-            booking = Booking.query.filter_by(status='requested').first()
+            # Booking should be confirmed with walker assigned
+            booking = Booking.query.filter_by(status='confirmed').first()
             assert booking is not None
-            booking_id = booking.id
+            assert booking.walker_id is not None
 
-        # Switch to admin session before assigning
-        client.get('/auth/logout', follow_redirects=True)
-        login(client, admin_email)
-        resp = client.post(
-            '/admin/assign_walker',
-            data=json.dumps({
-                'booking_id': booking_id,
-                'walker_id': walker_id,
-                'slot': 'Morning',
-            }),
-            content_type='application/json',
-        )
-        assert resp.get_json()['success'] is True
-
-        with app.app_context():
+            # Client should have received a confirmed notification
             client_notifs = Notification.query.filter_by(
                 recipient_id=client_id,
                 notification_type='booking_confirmed',

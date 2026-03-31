@@ -14,7 +14,7 @@ from app import db
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
 from app.utils.uploads import process_dog_photo, process_cropped_photo
 from app.utils.booking_access import get_accessible_dog_ids, user_can_access_booking
-from app.capacity import check_availability, get_slot_availability_summary
+from app.capacity import check_availability, get_slot_availability_summary, auto_assign_walker
 from app.forms import OnboardingForm, BookingForm, ProfileForm
 import logging
 import traceback
@@ -22,6 +22,44 @@ from datetime import datetime, timezone, timedelta, date as date_type
 
 from app.blueprints.client import client_bp
 from app.utils.notifications import create_notification
+
+
+def _maybe_auto_confirm(booking, dog, service_slug='group-walk'):
+    """Try to auto-assign a walker to a newly-created 'requested' booking.
+
+    If a walker with capacity is available, sets the booking to confirmed,
+    assigns the walker, and notifies the client. Otherwise notifies admins
+    of the pending request. Must be called before db.session.commit().
+    Returns True if auto-confirmed, False if left as requested.
+    """
+    walker = auto_assign_walker(booking.date, booking.slot, service_slug=service_slug)
+    if walker:
+        booking.walker_id = walker.id
+        booking.status = 'confirmed'
+        booking.confirmed_at = datetime.now(timezone.utc)
+        date_str = booking.date.strftime('%a %-d %b')
+        create_notification(
+            recipient_id=booking.user_id,
+            notification_type='booking_confirmed',
+            title=f'Your walk on {date_str} is confirmed',
+            body=f'{dog.name} is booked for the {booking.slot} slot.',
+            link='/profile',
+        )
+        return True
+    else:
+        # Notify admins — needs manual assignment
+        admins = User.query.filter_by(is_admin=True).all()
+        date_str = booking.date.strftime('%a %-d %b')
+        for admin in admins:
+            create_notification(
+                recipient_id=admin.id,
+                notification_type='booking_requested',
+                title=f'New booking request for {date_str}',
+                body=f'{booking.user.firstname} requested {booking.slot} for {dog.name}',
+                link='/admin',
+                sender_id=booking.user_id,
+            )
+        return False
 
 
 @client_bp.route("/", methods=["GET", "POST"])
@@ -135,6 +173,7 @@ def index():
                 if not available and can_waitlist:
                     booking_status = 'waitlisted'
 
+                dog = db.session.get(Dog, dog_id)
                 new_booking = Booking(
                     user_id=user.id,
                     dog_id=dog_id,
@@ -144,28 +183,31 @@ def index():
                     status=booking_status
                 )
                 db.session.add(new_booking)
-                db.session.commit()
-
-                # 22b: notify all admins of the new booking request
-                admins = User.query.filter_by(is_admin=True).all()
-                date_str_fmt = booking_date.strftime('%a %-d %b')
-                dog = db.session.get(Dog, dog_id)
-                dog_name = dog.name if dog else 'a dog'
-                for admin in admins:
-                    create_notification(
-                        recipient_id=admin.id,
-                        notification_type='booking_requested',
-                        title=f'New booking request for {date_str_fmt}',
-                        body=f'{current_user.firstname} requested {booking_slot} for {dog_name}',
-                        link=f'/admin',
-                        sender_id=current_user.id,
-                    )
+                db.session.flush()  # get ID before notifications
 
                 if booking_status == 'waitlisted':
+                    admins = User.query.filter_by(is_admin=True).all()
+                    date_str_fmt = booking_date.strftime('%a %-d %b')
+                    dog_name = dog.name if dog else 'a dog'
+                    for admin in admins:
+                        create_notification(
+                            recipient_id=admin.id,
+                            notification_type='booking_requested',
+                            title=f'New booking request for {date_str_fmt}',
+                            body=f'{current_user.firstname} requested {booking_slot} for {dog_name}',
+                            link='/admin',
+                            sender_id=current_user.id,
+                        )
+                    db.session.commit()
                     flash(f"All slots are currently full for {booking_slot} on {booking_date.strftime('%d %b')}. "
                           f"You've been added to the waitlist — we'll let you know if a spot opens up.", "info")
                 else:
-                    flash("Success - booking request submitted", "success")
+                    auto_confirmed = _maybe_auto_confirm(new_booking, dog)
+                    db.session.commit()
+                    if auto_confirmed:
+                        flash(f"Booking confirmed for {booking_slot} on {booking_date.strftime('%d %b')}!", "success")
+                    else:
+                        flash("Booking request submitted — we'll confirm it shortly.", "success")
                 return redirect(url_for("client.index"))
     
     return render_template("index.html", user=user, client=user.client, dogs=user_dogs, bookings=upcoming_bookings, form=form) # type: ignore
@@ -250,26 +292,31 @@ def book():
             status          = booking_status,
         )
         db.session.add(new_booking)
-        db.session.commit()
-
-        # Notify all admins
-        admins       = User.query.filter_by(is_admin=True).all()
-        date_str_fmt = booking_date.strftime('%a %-d %b')
-        for admin in admins:
-            create_notification(
-                recipient_id      = admin.id,
-                notification_type = 'booking_requested',
-                title             = f'New booking request for {date_str_fmt}',
-                body              = f'{current_user.firstname} requested {booking_slot} for {dog.name}',
-                link              = '/admin',
-                sender_id         = current_user.id,
-            )
+        db.session.flush()  # get ID before notifications
 
         if booking_status == 'waitlisted':
+            admins = User.query.filter_by(is_admin=True).all()
+            date_str_fmt = booking_date.strftime('%a %-d %b')
+            for admin in admins:
+                create_notification(
+                    recipient_id      = admin.id,
+                    notification_type = 'booking_requested',
+                    title             = f'New booking request for {date_str_fmt}',
+                    body              = f'{current_user.firstname} requested {booking_slot} for {dog.name}',
+                    link              = '/admin',
+                    sender_id         = current_user.id,
+                )
+            db.session.commit()
             message = (f"All slots are full — you've been added to the waitlist "
                        f"for {booking_slot} on {booking_date.strftime('%d %b')}.")
         else:
-            message = 'Booking request submitted!'
+            auto_confirmed = _maybe_auto_confirm(new_booking, dog)
+            db.session.commit()
+            if auto_confirmed:
+                booking_status = 'confirmed'
+                message = f"Booking confirmed for {booking_slot} on {booking_date.strftime('%d %b')}!"
+            else:
+                message = 'Booking request submitted — we\'ll confirm it shortly.'
 
         return jsonify({
             'success': True,
@@ -280,7 +327,7 @@ def book():
                 'date_display': booking_date.strftime('%a %-d %b'),
                 'date_iso':     booking_date.isoformat(),
                 'slot':         booking_slot,
-                'status':       booking_status,
+                'status':       new_booking.status,
                 'dog_id':       dog_id,
             },
         })
@@ -365,22 +412,37 @@ def book_both():
         db.session.rollback()
         return jsonify({'success': False, 'message': 'No new bookings created — slots may already be booked.'}), 409
 
-    db.session.flush()  # get IDs before commit
-    db.session.commit()
+    db.session.flush()  # get IDs before notifications
 
-    # Single combined admin notification
-    date_str_fmt  = booking_date.strftime('%a %-d %b')
-    slots_created = [s for s, _, _ in created]
-    slot_desc     = 'both walks' if len(slots_created) == 2 else slots_created[0]
-    for admin in User.query.filter_by(is_admin=True).all():
-        create_notification(
-            recipient_id      = admin.id,
-            notification_type = 'booking_requested',
-            title             = f'New booking request for {date_str_fmt}',
-            body              = f'{current_user.firstname} requested {slot_desc} for {dog.name}',
-            link              = '/admin',
-            sender_id         = current_user.id,
-        )
+    # Auto-assign or notify admins for each booking independently
+    date_str_fmt = booking_date.strftime('%a %-d %b')
+    final_created = []
+    pending_slots = []
+    for slot, status, b in created:
+        if status == 'waitlisted':
+            pending_slots.append((slot, status, b))
+        else:
+            auto_confirmed = _maybe_auto_confirm(b, dog)
+            final_created.append((slot, b.status, b))
+            if not auto_confirmed:
+                pending_slots.append((slot, status, b))
+
+    # Single combined admin notification for any unconfirmed slots
+    if pending_slots:
+        pending_slot_names = [s for s, _, _ in pending_slots]
+        slot_desc = 'both walks' if len(pending_slot_names) == 2 else pending_slot_names[0]
+        for admin in User.query.filter_by(is_admin=True).all():
+            create_notification(
+                recipient_id      = admin.id,
+                notification_type = 'booking_requested',
+                title             = f'New booking request for {date_str_fmt}',
+                body              = f'{current_user.firstname} requested {slot_desc} for {dog.name}',
+                link              = '/admin',
+                sender_id         = current_user.id,
+            )
+
+    db.session.commit()
+    created = final_created if final_created else created
 
     # Build response
     booking_payload = []
