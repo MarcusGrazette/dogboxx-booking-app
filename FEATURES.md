@@ -58,8 +58,8 @@
 
 | # | Priority | Effort | Status | Feature | Notes |
 |---|----------|--------|--------|---------|-------|
-| 60 | P2 | L | 🔲 | **Client newsletter (admin)** | `/admin/newsletter` — Quill WYSIWYG compose, merge tags ({{firstname}}, {{dog_name}}), preview mode, send to all active + opted-in clients via Resend batch API. Send log. |
-| 61 | P2 | S | 🔲 | **Email marketing opt-out** | `email_marketing` boolean on User (default True). One-click unsubscribe link in every newsletter email via `/unsubscribe/<token>`. GDPR compliance. |
+| 60 | P2 | L | ✅ | **Client newsletter (admin)** | `/admin/newsletter` — Quill WYSIWYG, merge tags ({{firstname}}, {{dog_name}}), recipient sidebar, test send to lydia@dogboxx.org, confirm modal. Resend batch API. |
+| 61 | P2 | S | ✅ | **Email marketing opt-out** | `email_marketing` boolean on User (default True). One-click `/auth/unsubscribe/<token>` link in every newsletter. GDPR compliant. |
 
 ## Notifications
 
