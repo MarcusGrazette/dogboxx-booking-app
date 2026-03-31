@@ -2270,7 +2270,7 @@ def newsletter_test():
         recipients=[{
             "email": "lydia@dogboxx.org",
             "firstname": "Lydia",
-            "dog_name": "Buddy",
+            "dog_name": "Luna",
             "unsubscribe_url": f"{base_url}/auth/unsubscribe/test",
         }],
     )
