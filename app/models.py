@@ -17,6 +17,7 @@ class User(db.Model):
     active = db.Column(db.Boolean, default=True, nullable=False)
     hashed_password = db.Column(db.String(256), nullable=False)
     must_change_password = db.Column(db.Boolean, default=False, nullable=False)
+    email_marketing = db.Column(db.Boolean, default=True, nullable=False)
     phone = db.Column(db.String(20), nullable=True)
     profile_pic = db.Column(db.String(256), nullable=True)
     notification_preference = db.Column(
@@ -55,6 +56,26 @@ class User(db.Model):
     @property
     def full_name(self):
         return f"{self.firstname} {self.lastname}"
+
+    def make_unsubscribe_token(self):
+        """Return a signed token for one-click newsletter unsubscribe."""
+        from itsdangerous import URLSafeTimedSerializer
+        from flask import current_app
+        s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+        return s.dumps({'user_id': self.id}, salt='newsletter-unsubscribe')
+
+    @staticmethod
+    def verify_unsubscribe_token(token, max_age=60 * 60 * 24 * 30):
+        """Verify an unsubscribe token (valid for 30 days). Returns User or None."""
+        from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
+        from flask import current_app
+        s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+        try:
+            data = s.loads(token, salt='newsletter-unsubscribe', max_age=max_age)
+        except (SignatureExpired, BadSignature):
+            return None
+        from . import db
+        return db.session.get(User, data.get('user_id'))
 
     @staticmethod
     def validate_password(password):

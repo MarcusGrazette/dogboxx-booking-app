@@ -1,0 +1,261 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}Newsletter{% endblock %}
+{% block page_title %}Newsletter{% endblock %}
+{% block page_subtitle %}Send a message to your clients{% endblock %}
+
+{% block head_extra %}
+<link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+<style>
+  #quill-editor {
+    height: 340px;
+    font-size: 1rem;
+    background: #fff;
+    border-radius: 0 0 0.375rem 0.375rem;
+  }
+  .ql-toolbar {
+    border-radius: 0.375rem 0.375rem 0 0;
+    border-color: #dee2e6 !important;
+  }
+  .ql-container {
+    border-color: #dee2e6 !important;
+    border-radius: 0 0 0.375rem 0.375rem;
+  }
+  .merge-tag { cursor: pointer; }
+  .recipient-list { max-height: 480px; overflow-y: auto; }
+</style>
+{% endblock %}
+
+{% block main %}
+<div class="row g-4">
+
+  {# ── Compose ───────────────────────────────────────────────────────────── #}
+  <div class="col-12 col-lg-8">
+    <div class="card">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <h5 class="card-title mb-0"><i class="bi bi-envelope me-2"></i>Compose</h5>
+        <span class="text-muted small">
+          <i class="bi bi-people me-1"></i>
+          Sending to <strong>{{ clients|length }}</strong> client{{ 's' if clients|length != 1 }}
+        </span>
+      </div>
+      <div class="card-body">
+
+        {# Shared hidden inputs — populated by JS before either form submits #}
+        <input type="hidden" id="subject_val">
+        <input type="hidden" id="html_body_val">
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Subject</label>
+          <input type="text" id="subject"
+                 class="form-control"
+                 placeholder="e.g. April update from Dogboxx 🐾"
+                 value="{{ request.form.get('subject', '') }}"
+                 required>
+        </div>
+
+        <div class="mb-1 d-flex align-items-center justify-content-between">
+          <label class="form-label fw-semibold mb-0">Body</label>
+          <div class="d-flex gap-2 align-items-center">
+            <span class="text-muted small me-1">Insert:</span>
+            <span class="badge bg-secondary merge-tag"
+                  data-tag="{{ '{{firstname}}' }}"
+                  style="cursor:pointer;font-family:monospace;">
+              {{ '{{firstname}}' }}
+            </span>
+            <span class="badge bg-secondary merge-tag"
+                  data-tag="{{ '{{dog_name}}' }}"
+                  style="cursor:pointer;font-family:monospace;">
+              {{ '{{dog_name}}' }}
+            </span>
+          </div>
+        </div>
+        <div id="quill-editor"></div>
+
+        <div class="mt-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+          {% if clients|length == 0 %}
+          <span class="text-warning small">
+            <i class="bi bi-exclamation-triangle me-1"></i>No subscribed clients — nothing will be sent.
+          </span>
+          {% else %}
+          <span class="text-muted small">
+            <i class="bi bi-info-circle me-1"></i>Unsubscribe link added automatically.
+          </span>
+          {% endif %}
+
+          <div class="d-flex gap-2">
+            {# Test send button — submits to /newsletter/test #}
+            <button type="button" class="btn btn-outline-secondary fw-semibold"
+                    onclick="submitTest()">
+              <i class="bi bi-send-check me-2"></i>Send test
+            </button>
+
+            {# Main send — opens confirm modal #}
+            <button type="button" class="btn btn-primary fw-semibold px-4"
+                    {% if clients|length == 0 %}disabled{% endif %}
+                    onclick="openSendModal()">
+              <i class="bi bi-send me-2"></i>Send to {{ clients|length }} client{{ 's' if clients|length != 1 }}
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  {# ── Sidebar: recipient list ───────────────────────────────────────────── #}
+  <div class="col-12 col-lg-4">
+    <div class="card h-100">
+      <div class="card-header">
+        <h6 class="card-title mb-0">
+          <i class="bi bi-people me-2"></i>Recipients
+          <span class="badge rounded-pill ms-1"
+                style="background:#E02FAC;font-size:0.75em;">{{ clients|length }}</span>
+        </h6>
+      </div>
+      <div class="card-body p-0">
+        {% if clients %}
+        <ul class="list-group list-group-flush recipient-list">
+          {% for c in clients %}
+          <li class="list-group-item px-3 py-2">
+            <div class="fw-semibold small">{{ c.firstname }} {{ c.lastname }}</div>
+            <div class="text-muted" style="font-size:0.75em;">{{ c.email }}</div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div class="p-3 text-muted small">
+          No active clients are currently subscribed to the newsletter.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{# ── Hidden forms (submitted by JS) ───────────────────────────────────────── #}
+
+{# Full send form #}
+<form method="POST" action="{{ url_for('admin.newsletter') }}" id="send-form" class="d-none">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="subject" id="send-subject">
+  <input type="hidden" name="html_body" id="send-html-body">
+</form>
+
+{# Test send form #}
+<form method="POST" action="{{ url_for('admin.newsletter_test') }}" id="test-form" class="d-none">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="subject" id="test-subject">
+  <input type="hidden" name="html_body" id="test-html-body">
+</form>
+
+{# ── Confirm send modal ────────────────────────────────────────────────────── #}
+<div class="modal fade" id="confirmSendModal" tabindex="-1" aria-labelledby="confirmSendModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold" id="confirmSendModalLabel">
+          <i class="bi bi-send me-2" style="color:#E02FAC;"></i>Confirm send
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">You're about to send:</p>
+        <div class="bg-light rounded p-3 mb-3">
+          <div class="small text-muted mb-1">Subject</div>
+          <div class="fw-semibold" id="modal-subject-preview"></div>
+        </div>
+        <p class="mb-0">
+          This will be delivered to
+          <strong style="color:#E02FAC;">{{ clients|length }} client{{ 's' if clients|length != 1 }}</strong>.
+          This can't be undone.
+        </p>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary fw-semibold px-4" onclick="confirmSend()">
+          <i class="bi bi-send me-2"></i>Send now
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+<script>
+  const quill = new Quill('#quill-editor', {
+    theme: 'snow',
+    placeholder: 'Write your newsletter here…',
+    modules: {
+      toolbar: [
+        [{ header: [1, 2, 3, false] }],
+        ['bold', 'italic', 'underline'],
+        [{ color: [] }],
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        ['link'],
+        ['clean'],
+      ]
+    }
+  });
+
+  // Merge tag insert at cursor
+  document.querySelectorAll('.merge-tag').forEach(function(el) {
+    el.addEventListener('click', function() {
+      const tag = this.dataset.tag;
+      const range = quill.getSelection(true);
+      quill.insertText(range ? range.index : quill.getLength(), tag, 'user');
+      quill.focus();
+    });
+  });
+
+  function getSubject() {
+    return document.getElementById('subject').value.trim();
+  }
+
+  function getHtmlBody() {
+    return quill.root.innerHTML;
+  }
+
+  // Open confirm modal — validates first
+  function openSendModal() {
+    const subject = getSubject();
+    if (!subject) {
+      document.getElementById('subject').reportValidity();
+      return;
+    }
+    if (quill.getText().trim().length === 0) {
+      alert('Please write a message body before sending.');
+      return;
+    }
+    document.getElementById('modal-subject-preview').textContent = subject;
+    new bootstrap.Modal(document.getElementById('confirmSendModal')).show();
+  }
+
+  // Confirmed — populate and submit the send form
+  function confirmSend() {
+    document.getElementById('send-subject').value = getSubject();
+    document.getElementById('send-html-body').value = getHtmlBody();
+    document.getElementById('send-form').submit();
+  }
+
+  // Test send — validate then submit
+  function submitTest() {
+    const subject = getSubject();
+    if (!subject) {
+      document.getElementById('subject').reportValidity();
+      return;
+    }
+    if (quill.getText().trim().length === 0) {
+      alert('Please write a message body before sending a test.');
+      return;
+    }
+    document.getElementById('test-subject').value = subject;
+    document.getElementById('test-html-body').value = getHtmlBody();
+    document.getElementById('test-form').submit();
+  }
+</script>
+{% endblock %}
