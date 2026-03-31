@@ -2221,7 +2221,6 @@ def newsletter():
             recipients = []
             for u in clients:
                 token = u.make_unsubscribe_token()
-                # Best-effort dog name: first primary dog
                 dog_name = "your dog"
                 if u.client and u.client.dogs:
                     dog_name = u.client.dogs[0].name
@@ -2247,3 +2246,37 @@ def newsletter():
         clients=clients,
         result=result,
     )
+
+
+@admin_bp.route("/newsletter/test", methods=["POST"])
+@login_required
+@admin_required
+def newsletter_test():
+    """Send a test newsletter to lydia@dogboxx.org."""
+    from app.utils.email import send_newsletter_batch
+    from flask import current_app
+
+    subject = request.form.get("subject", "").strip()
+    html_body = request.form.get("html_body", "").strip()
+
+    if not subject or not html_body:
+        flash("Write a subject and body before sending a test.", "error")
+        return redirect(url_for('admin.newsletter'))
+
+    base_url = current_app.config.get("APP_BASE_URL", "").rstrip("/")
+    result = send_newsletter_batch(
+        subject=f"[TEST] {subject}",
+        html_template=html_body,
+        recipients=[{
+            "email": "lydia@dogboxx.org",
+            "firstname": "Lydia",
+            "dog_name": "Buddy",
+            "unsubscribe_url": f"{base_url}/auth/unsubscribe/test",
+        }],
+    )
+    if result["sent"]:
+        flash("Test email sent to lydia@dogboxx.org.", "success")
+    else:
+        flash("Test email failed — check logs.", "error")
+
+    return redirect(url_for('admin.newsletter'))
