@@ -13,7 +13,7 @@
 | 3 | P1 | M | ✅ | **Admin booking board** | Calendar + slot view. Confirm/cancel requests. Drag-to-reorder pickup order per walker. |
 | 4 | P1 | M | ✅ | **Admin dogs view** | Searchable table of all dogs. Book on owner's behalf (one-off or recurring) via modal. Same pending flow as client-initiated. |
 | 5 | P1 | M | ✅ | **Prevent duplicate bookings** | Block same dog+date+slot. Max 2 bookings per dog per day (one per slot). DB partial unique index. |
-| 6 | P1 | M | 🔲 | **Password reset** | "Forgot password?" → token email → set new password. Blocked on no-reply@dogboxx.org + Resend setup. |
+| 6 | P1 | M | ✅ | **Password reset** | "Forgot password?" → token email → set new password. Resend API, itsdangerous token (1hr expiry, invalidated on use). |
 | 7 | P1 | M | ❌ | **Booking capacity display for clients** | Dropped — "available" indicator in UI is sufficient. Exact slot counts not needed. |
 | 8 | P2 | L | ✅ | **"Book both walks" option (client)** | Checkbox books AM + PM in one action via /client/book_both. Admin board shows layered-icon modifier pill. |
 
@@ -27,7 +27,7 @@
 | 13 | P3 | L | 🔲 | **Walker self-manage availability** | Walkers flag their own exceptions (holidays, sick days) rather than admin doing it. |
 | 14 | P3 | S | ✅ | **Google Maps pickup directions** | Maps button on each pickup card in /walker/pickups. |
 | 15 | P2 | M | 🔲 | **Walker ad hoc available days** | Walkers can add one-off available days outside their default schedule. Inverse of the existing unavailability model. New `walker_adhoc_availability` table (or reuse existing with a flag). Capacity checks need updating to include these. |
-| 16 | P2 | M | 🔲 | **Admin override walker unavailability on allocation board** | Admin can assign dogs to a slot even if walker has marked themselves unavailable. Override shown visually (warning state). Booking creation bypasses the unavailability block when admin-initiated. |
+| 16 | P2 | M | ✅ | **Admin override walker unavailability on allocation board** | Admin can assign dogs to a slot even if walker has marked themselves unavailable. Override shown visually (warning state). Booking creation bypasses the unavailability block when admin-initiated. |
 
 ## Admin
 
@@ -54,6 +54,13 @@
 | 33 | P3 | L | 🔲 | **Online payments** | Stripe integration for invoice payment. |
 | 34 | P3 | M | 🔲 | **Multi-dog support** | Client adds multiple dogs. Share dog profile with another registered user (e.g. partner). |
 
+## Newsletter
+
+| # | Priority | Effort | Status | Feature | Notes |
+|---|----------|--------|--------|---------|-------|
+| 60 | P2 | L | ✅ | **Client newsletter (admin)** | `/admin/newsletter` — Quill WYSIWYG, merge tags ({{firstname}}, {{dog_name}}), recipient sidebar, test send to lydia@dogboxx.org, confirm modal. Resend batch API. |
+| 61 | P2 | S | ✅ | **Email marketing opt-out** | `email_marketing` boolean on User (default True). One-click `/auth/unsubscribe/<token>` link in every newsletter. GDPR compliant. |
+
 ## Notifications
 
 | # | Priority | Effort | Status | Feature | Notes |
@@ -75,7 +82,7 @@
 | 52 | P1 | S | ✅ | **DB indexes** | Indexes on date, walker_id, user_id, dog_id, status for query performance. |
 | 53 | P1 | M | ✅ | **Git branching** | `develop` for ongoing work, `main` for production. PRs required to merge to main. |
 | 54 | P1 | L | ✅ | **Unit test suite** | 140 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing. All passing, no deprecation warnings. |
-| 55 | P2 | M | 🔲 | **Password reset flow** | Email-based token reset. Blocked on no-reply@dogboxx.org + Resend setup. |
+| 55 | P2 | M | ✅ | **Password reset flow** | Email-based token reset via Resend. noreply@dogboxx.org verified. RESEND_API_KEY + APP_BASE_URL needed in prod env. |
 | 56 | P3 | S | ✅ | **CI/CD pipeline** | GitHub Actions (test.yml): runs pytest on push to main/develop and all PRs. All runs green. |
 
 ---

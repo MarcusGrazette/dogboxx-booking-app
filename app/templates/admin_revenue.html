@@ -273,7 +273,7 @@
   }
 
   function updateButtons() {
-    prevBtn.disabled = currentStart <= todayFirstOfMonth();
+    nextBtn.disabled = currentStart >= todayFirstOfMonth();
   }
 
   async function loadMonth(startIso) {

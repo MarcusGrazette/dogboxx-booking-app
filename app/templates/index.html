@@ -5,14 +5,53 @@
 
 {% block head_extra %}
 <style>
-    /* Recurring panel */
-    #recurring-panel {
-        border-top: 1px solid #e9ecef;
-        padding-top: 0.75rem;
-        margin-top: 0.75rem;
+    /* ── Service tabs ─────────────────────────────────────────────────────────
+       Pill tabs sit on a light background. Override Bootstrap's default
+       link colour (which inherits brand pink via --bs-link-color) with a
+       readable dark-grey for the inactive state.
+       Active state: Bootstrap's nav-pills already picks up --bs-primary
+       (#E02FAC) via brand.css — no override needed.                         */
+    #service-tabs {
+        font-size: 0.85rem;
+        /* Bootstrap 5.3 hardcodes --bs-nav-pills-link-active-bg: #0d6efd directly
+           on .nav-pills (not via var(--bs-primary)), so overriding --bs-primary in
+           brand.css has no effect here. Set the component variable directly. */
+        --bs-nav-pills-link-active-bg: #E02FAC;
+        --bs-nav-pills-link-active-color: #fff;
     }
 
-    /* Calendar legend dots */
+    #service-tabs .nav-link {
+        /* !important needed: --bs-link-color is #E02FAC in brand.css, which bleeds
+           into --bs-nav-link-color, making inactive pills pink on a light bg. */
+        color: #495057 !important;
+        transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
+    }
+
+    #service-tabs .nav-link.active {
+        color: #fff !important;
+    }
+
+    #service-tabs .nav-link:hover:not(.active) {
+        background-color: #e9ecef;
+        color: #212529 !important;
+    }
+
+    /* ── Booking type segmented control ───────────────────────────────────── */
+    .booking-type-group .btn {
+        font-size: 0.8rem;
+    }
+
+    /* ── Slot select ──────────────────────────────────────────────────────── */
+    .slot-select {
+        max-width: 160px;
+    }
+
+    /* ── Info note below booking form ─────────────────────────────────────── */
+    .booking-info-note {
+        font-size: 0.75rem;
+    }
+
+    /* ── Calendar legend dots ─────────────────────────────────────────────── */
     .cal-legend {
         display: flex;
         gap: 0.75rem;
@@ -41,7 +80,7 @@
         border: 1px solid #a3cfbb;
     }
 
-    /* Recurring date preview chips */
+    /* ── Recurring date preview chips ─────────────────────────────────────── */
     #recurring-preview {
         display: flex;
         flex-wrap: wrap;
@@ -60,21 +99,6 @@
     .recurring-chip.skipped {
         text-decoration: line-through;
         opacity: 0.5;
-    }
-
-    /* Custom tab pill colors for high contrast on light backgrounds */
-    #service-tabs .nav-link {
-        color: #495057 !important;
-        transition: all 0.2s ease-in-out;
-    }
-
-    #service-tabs .nav-link:hover {
-        background-color: #e9ecef;
-    }
-
-    #service-tabs .nav-link.active {
-        background-color: #212529 !important; /* Dark theme contrast against white/light backgrounds */
-        color: #ffffff !important;
     }
 </style>
 {% endblock %}
@@ -114,8 +138,7 @@
                 </p>
 
                 {# Service Tabs #}
-                <ul class="nav nav-pills mb-3 nav-fill bg-light p-1 rounded" id="service-tabs" role="tablist"
-                    style="font-size: 0.85rem;">
+                <ul class="nav nav-pills mb-3 nav-fill bg-light p-1 rounded" id="service-tabs" role="tablist">
                     <li class="nav-item" role="presentation">
                         <button class="nav-link active py-1 fw-semibold" id="walk-tab" data-bs-toggle="pill"
                             data-bs-target="#walk-pane" type="button" role="tab">Walk</button>
@@ -136,20 +159,20 @@
                             <input type="hidden" name="date" id="booking-date-hidden">
 
                             {# Booking Type Segmented Control #}
-                            <div class="btn-group w-100 mb-3" role="group">
+                            <div class="btn-group w-100 mb-3 booking-type-group" role="group">
                                 <input type="radio" class="btn-check" name="booking_type" id="type-single"
                                     value="single" autocomplete="off" checked>
-                                <label class="btn btn-outline-secondary btn-sm fw-semibold"
+                                <label class="btn btn-outline-dark btn-sm fw-semibold"
                                     for="type-single">Single</label>
 
                                 <input type="radio" class="btn-check" name="booking_type" id="type-both" value="both"
                                     autocomplete="off">
-                                <label class="btn btn-outline-secondary btn-sm fw-semibold" for="type-both">Both
+                                <label class="btn btn-outline-dark btn-sm fw-semibold" for="type-both">Both
                                     walks</label>
 
                                 <input type="radio" class="btn-check" name="booking_type" id="type-recurring"
                                     value="recurring" autocomplete="off">
-                                <label class="btn btn-outline-secondary btn-sm fw-semibold"
+                                <label class="btn btn-outline-dark btn-sm fw-semibold"
                                     for="type-recurring">Recurring</label>
                             </div>
 
@@ -157,8 +180,7 @@
                             <div class="mb-3" id="slot-row">
                                 <label class="form-label small fw-semibold mb-1">Time Slot</label>
                                 <div class="d-flex align-items-center gap-2">
-                                    {{ form.slot(class="form-select form-select-sm", id="booking-slot",
-                                    style="max-width:160px;") }}
+                                    {{ form.slot(class="form-select form-select-sm slot-select", id="booking-slot") }}
                                     <span id="slot-availability" class="small text-nowrap"></span>
                                 </div>
                                 {% for error in form.slot.errors %}
@@ -189,7 +211,7 @@
                                 Request walk
                             </button>
                         </form>
-                        <p class="text-muted small mt-3 mb-0" style="font-size: 0.75rem;">
+                        <p class="text-muted small mt-3 mb-0 booking-info-note">
                             <i class="bi bi-info-circle me-1"></i>
                             We review all requests to ensure dogs walk with friends they get on with.
                         </p>
@@ -201,7 +223,7 @@
 
                         <div class="mb-3">
                             <label class="form-label small fw-semibold mb-1">Time Slot</label>
-                            <select id="dropin-slot" class="form-select form-select-sm" style="max-width:160px;">
+                            <select id="dropin-slot" class="form-select form-select-sm slot-select">
                                 <option value="Morning">Morning</option>
                                 <option value="Afternoon">Afternoon</option>
                             </select>
