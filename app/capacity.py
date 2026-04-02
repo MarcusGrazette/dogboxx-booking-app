@@ -126,6 +126,30 @@ def get_daycare_capacity(date):
     return total, booked, max(0, total - booked)
 
 
+def auto_assign_walker(date, slot, service_slug='group-walk'):
+    """Return the least-loaded available walker for a date+slot who still has capacity.
+
+    Picks the walker with the fewest confirmed/requested bookings for that slot,
+    as long as they're under max_per_walker. Returns None if no walker has space.
+    """
+    drop_in = (service_slug == 'drop-in')
+    walkers = get_available_walkers(date, slot, drop_in=drop_in)
+    if not walkers:
+        return None
+
+    max_cap = get_max_per_walker(service_slug)
+    best_walker = None
+    best_count = max_cap  # only accept walkers strictly under capacity
+
+    for walker in walkers:
+        count = get_walker_slot_count(walker.id, date, slot, service_slug=service_slug)
+        if count < best_count:
+            best_count = count
+            best_walker = walker
+
+    return best_walker
+
+
 def check_availability(service_type, date, slot=None, admin_override=False):
     """Check if a booking can be made for the given service, date, and slot.
     Returns (available: bool, can_waitlist: bool, message: str).

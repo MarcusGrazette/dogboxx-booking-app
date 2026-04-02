@@ -614,6 +614,7 @@ def drop_in_board_data(date_str):
             'status': b.status,
             'pickup_order': b.pickup_order,
             'walker_id': b.walker_id,
+            'has_notes': bool(b.user and b.user.client and b.user.client.pickup_instructions),
         }
 
     pending  = [booking_dict(b) for b in all_bookings if b.status in ('requested', 'waitlisted')]
@@ -712,6 +713,7 @@ def board_data(date_str):
             'pickup_order': b.pickup_order,
             'walker_id': b.walker_id,
             'has_both_slots': b.dog_id in both_slots_dog_ids,
+            'has_notes': bool(b.user and b.user.client and b.user.client.pickup_instructions),
         }
         return d
 

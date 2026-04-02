@@ -844,6 +844,8 @@
         // Build status badge
         const badgeHtml = booking.status === 'waitlisted'
             ? `<span class="badge rounded-pill text-bg-info py-2 text-center" style="min-width:90px;">Waitlisted</span>`
+            : booking.status === 'confirmed'
+            ? `<span class="badge rounded-pill text-bg-success py-2 text-center" style="min-width:90px;">Confirmed</span>`
             : `<span class="badge rounded-pill py-2 text-center" style="min-width:90px; background-color:#fff3cd; color:#856404;">Pending</span>`;
 
         // Re-index existing items (shift up by 1 to make room at top)
