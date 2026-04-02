@@ -1,0 +1,156 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}Import Preview{% endblock %}
+{% block page_title %}Import Preview{% endblock %}
+{% block page_subtitle %}Review before importing{% endblock %}
+
+{% block page_actions %}
+<a href="{{ url_for('admin.csv_import') }}" class="btn btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Upload different file
+</a>
+{% endblock %}
+
+{% block main %}
+
+{# ── Summary bar ───────────────────────────────────────────────────────────── #}
+<div class="row g-3 mb-4">
+  <div class="col-auto">
+    <div class="card text-center px-4 py-3">
+      <div class="fs-3 fw-bold" style="color:#E02FAC;">{{ valid_count }}</div>
+      <div class="small text-muted">Ready to import</div>
+    </div>
+  </div>
+  {% if invalid_count %}
+  <div class="col-auto">
+    <div class="card text-center px-4 py-3 border-warning">
+      <div class="fs-3 fw-bold text-warning">{{ invalid_count }}</div>
+      <div class="small text-muted">Skipped (errors)</div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{# ── Preview table ─────────────────────────────────────────────────────────── #}
+<div class="card mb-4">
+  <div class="card-header">
+    <h5 class="card-title mb-0"><i class="bi bi-table me-2"></i>Row preview</h5>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th>Address</th>
+            <th>Dog</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr class="{{ 'table-warning' if r.errors else '' }}">
+            <td class="text-muted small">{{ r.row_num }}</td>
+            <td>{{ r.firstname }} {{ r.lastname }}</td>
+            <td class="small">{{ r.email }}</td>
+            <td class="small text-muted">{{ r.phone or '—' }}</td>
+            <td class="small text-muted">
+              {% if r.address_line_1 %}
+                {{ r.address_line_1 }}{% if r.postcode %}, {{ r.postcode }}{% endif %}
+              {% else %}—{% endif %}
+            </td>
+            <td class="small">
+              {% if r.dog_name %}
+                <span class="fw-semibold">{{ r.dog_name }}</span>
+                <span class="text-muted">
+                  ({{ 'M' if r.dog_gender == 'M' else 'F' if r.dog_gender == 'F' else '?' }})
+                  {% if r.dog_breed %} · {{ r.dog_breed }}{% endif %}
+                </span>
+              {% else %}
+                <span class="text-muted">No dog</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.errors %}
+                {% for err in r.errors %}
+                <span class="badge bg-warning text-dark d-block mb-1" style="font-size:0.7em;white-space:normal;">
+                  {{ err }}
+                </span>
+                {% endfor %}
+              {% else %}
+                <span class="badge bg-success">Ready</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{# ── Action bar ────────────────────────────────────────────────────────────── #}
+{% if valid_count > 0 %}
+<div class="d-flex align-items-center gap-3 flex-wrap">
+  <span class="text-muted small">
+    <i class="bi bi-info-circle me-1"></i>
+    Rows with errors will be skipped. Duplicate emails are always skipped.
+  </span>
+  <button type="button" class="btn btn-primary fw-semibold ms-auto"
+          onclick="document.getElementById('confirm-modal-trigger').click()">
+    <i class="bi bi-cloud-upload me-2"></i>Import {{ valid_count }} client{{ 's' if valid_count != 1 }}
+  </button>
+</div>
+{% else %}
+<div class="alert alert-warning">
+  <i class="bi bi-exclamation-triangle me-2"></i>
+  No valid rows to import. Please fix the errors and re-upload.
+</div>
+{% endif %}
+
+{# Hidden form for the confirmed import #}
+<form method="POST" action="{{ url_for('admin.csv_import_confirm') }}" id="confirm-form" class="d-none">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="import_payload" value="{{ import_payload }}">
+</form>
+<button id="confirm-modal-trigger" class="d-none" data-bs-toggle="modal" data-bs-target="#confirmImportModal"></button>
+
+{% endblock %}
+
+{% block modals %}
+<div class="modal fade" id="confirmImportModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold">
+          <i class="bi bi-cloud-upload me-2" style="color:#E02FAC;"></i>Confirm import
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-0">
+          This will create
+          <strong style="color:#E02FAC;">{{ valid_count }} client account{{ 's' if valid_count != 1 }}</strong>.
+          {% if invalid_count %}
+          <span class="text-warning">{{ invalid_count }} row{{ 's' if invalid_count != 1 }} with errors will be skipped.</span>
+          {% endif %}
+        </p>
+        <p class="text-muted small mt-2 mb-0">
+          Each account is created with a temporary password and
+          <strong>must_change_password</strong> set — clients will be prompted
+          to set their own password on first login.
+        </p>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary fw-semibold"
+                onclick="document.getElementById('confirm-form').submit()">
+          <i class="bi bi-cloud-upload me-2"></i>Import now
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

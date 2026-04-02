@@ -197,7 +197,7 @@
                     </li>
                     <li class="nav-item">
                         <a href="{{ url_for('admin.clients') }}"
-                           class="nav-link {% if request.endpoint in ['admin.clients', 'admin.new_client', 'admin.edit_client'] %}active{% endif %}">
+                           class="nav-link {% if request.endpoint in ['admin.clients', 'admin.new_client', 'admin.edit_client', 'admin.csv_import', 'admin.csv_import_preview', 'admin.csv_import_confirm'] %}active{% endif %}">
                             <i class="bi bi-people me-2"></i>
                             <span>Clients</span>
                         </a>
