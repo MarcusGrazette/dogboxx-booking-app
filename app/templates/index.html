@@ -848,7 +848,22 @@
             ? `<span class="badge rounded-pill text-bg-success py-2 text-center" style="min-width:90px;">Confirmed</span>`
             : `<span class="badge rounded-pill py-2 text-center" style="min-width:90px; background-color:#fff3cd; color:#856404;">Pending</span>`;
 
-        // Re-index existing items (shift up by 1 to make room at top)
+        // "New" badge — fades out after 4s
+        const newBadge = `<span class="badge bg-pink ms-1 new-booking-badge"
+            style="background:#E02FAC;font-size:0.7em;vertical-align:middle;
+                   transition:opacity 0.6s ease;">New</span>`;
+
+        // Walker name (confirmed bookings)
+        const walkerLabel = (booking.status === 'confirmed' && booking.walker_name)
+            ? ` <span class="text-muted">(${booking.walker_name})</span>` : '';
+
+        // Drop-in label
+        const dropInLabel = booking.is_drop_in
+            ? `<i class="bi bi-house-door-fill text-primary me-1"></i>Drop-in · ` : '';
+
+        // (pickup notes icon intentionally omitted — pencil button handles this)
+
+        // Re-index existing items
         list.querySelectorAll('li[data-walk-idx]').forEach(el => {
             el.setAttribute('data-walk-idx', String(parseInt(el.getAttribute('data-walk-idx'), 10) + 1));
         });
@@ -856,23 +871,30 @@
         const li = document.createElement('li');
         li.className = 'list-group-item px-0 py-3 border-bottom d-flex align-items-center justify-content-between gap-2';
         li.setAttribute('data-walk-idx', '0');
-        const dropInLabel = booking.is_drop_in
-            ? `<i class="bi bi-house-door-fill text-primary me-1"></i>Drop-in · `
-            : '';
 
         li.innerHTML = `
         <div class="d-flex align-items-center gap-3">
             ${badgeHtml}
             <div>
-                <div class="fw-semibold small">${booking.date_display}</div>
-                <div class="text-muted" style="font-size:0.78rem;">${dropInLabel}${booking.slot}</div>
+                <div class="fw-semibold small">${booking.date_display}${newBadge}</div>
+                <div class="text-muted" style="font-size:0.78rem;">${dropInLabel}${booking.slot}${walkerLabel}</div>
             </div>
         </div>
         <div class="d-flex align-items-center gap-3">
+            <button class="btn btn-link p-1 note-booking-btn text-secondary"
+                    data-booking-id="${booking.id}"
+                    data-booking-slot="${booking.slot}"
+                    data-booking-date="${booking.date_display}"
+                    data-current-note=""
+                    title="Add note"
+                    style="line-height:1;font-size:1.1rem;">
+                <i class="bi bi-pencil-square"></i>
+            </button>
             <button class="btn btn-link p-1 cancel-booking-btn text-danger"
                     data-booking-id="${booking.id}"
                     data-booking-slot="${booking.slot}"
                     data-booking-date="${booking.date_display}"
+                    data-booking-date-iso="${booking.date_iso}"
                     title="Cancel booking"
                     style="line-height:1;font-size:1.1rem;">
                 <i class="bi bi-x-circle"></i>
@@ -885,11 +907,17 @@
         list.insertBefore(li, list.firstChild);
         requestAnimationFrame(() => { li.style.opacity = '1'; });
 
+        // Fade out "New" badge after 4s
+        setTimeout(() => {
+            const badge = li.querySelector('.new-booking-badge');
+            if (badge) {
+                badge.style.opacity = '0';
+                setTimeout(() => badge.remove(), 600);
+            }
+        }, 4000);
+
         // Update total count
         list.setAttribute('data-total', String(parseInt(list.getAttribute('data-total'), 10) + 1));
-
-        // Remove the cancellation policy note if absent (it might not be there for empty→first booking)
-        // No action needed — it's conditionally rendered server-side
     }
 
     // ─── Booking notes ───────────────────────────────────────────────────────────
@@ -907,22 +935,21 @@
             charCount.textContent = `${textarea.value.length} / 500`;
         });
 
-        document.querySelectorAll('.note-booking-btn').forEach(btn => {
-            btn.addEventListener('click', function () {
-                activeBookingId = this.getAttribute('data-booking-id');
-                activeNoteBtn = this;
-                const slot = this.getAttribute('data-booking-slot');
-                const dateDisp = this.getAttribute('data-booking-date');
-                const current = this.getAttribute('data-current-note');
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.note-booking-btn');
+            if (!btn) return;
+            activeBookingId = btn.getAttribute('data-booking-id');
+            activeNoteBtn = btn;
+            const slot = btn.getAttribute('data-booking-slot');
+            const dateDisp = btn.getAttribute('data-booking-date');
+            const current = btn.getAttribute('data-current-note') || '';
 
-                subtitle.textContent = `${slot} · ${dateDisp}`;
-                textarea.value = current;
-                charCount.textContent = `${current.length} / 500`;
-                errorEl.textContent = '';
-                modal.show();
-                // Focus textarea after transition
-                document.getElementById('noteModal').addEventListener('shown.bs.modal', () => textarea.focus(), { once: true });
-            });
+            subtitle.textContent = `${slot} · ${dateDisp}`;
+            textarea.value = current;
+            charCount.textContent = `${current.length} / 500`;
+            errorEl.textContent = '';
+            modal.show();
+            document.getElementById('noteModal').addEventListener('shown.bs.modal', () => textarea.focus(), { once: true });
         });
 
         saveBtn.addEventListener('click', function () {
