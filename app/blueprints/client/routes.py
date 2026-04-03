@@ -321,17 +321,27 @@ def book():
             else:
                 message = 'Booking request submitted — we\'ll confirm it shortly.'
 
+        walker_name = None
+        if new_booking.walker_id and new_booking.walker:
+            walker_name = new_booking.walker.user.firstname
+
+        has_pickup_notes = bool(
+            current_user.client and current_user.client.pickup_instructions
+        )
+
         return jsonify({
             'success': True,
             'status':  booking_status,
             'message': message,
             'booking': {
-                'id':           new_booking.id,
-                'date_display': booking_date.strftime('%a %-d %b'),
-                'date_iso':     booking_date.isoformat(),
-                'slot':         booking_slot,
-                'status':       new_booking.status,
-                'dog_id':       dog_id,
+                'id':               new_booking.id,
+                'date_display':     booking_date.strftime('%a %-d %b'),
+                'date_iso':         booking_date.isoformat(),
+                'slot':             booking_slot,
+                'status':           new_booking.status,
+                'dog_id':           dog_id,
+                'walker_name':      walker_name,
+                'has_pickup_notes': has_pickup_notes,
             },
         })
 
@@ -447,16 +457,22 @@ def book_both():
     db.session.commit()
     created = final_created if final_created else created
 
+    has_pickup_notes = bool(
+        current_user.client and current_user.client.pickup_instructions
+    )
+
     # Build response
     booking_payload = []
     for slot, status, b in created:
         booking_payload.append({
-            'id':           b.id,
-            'date_display': booking_date.strftime('%a %-d %b'),
-            'date_iso':     booking_date.isoformat(),
-            'slot':         slot,
-            'status':       status,
-            'dog_id':       dog_id,
+            'id':               b.id,
+            'date_display':     booking_date.strftime('%a %-d %b'),
+            'date_iso':         booking_date.isoformat(),
+            'slot':             slot,
+            'status':           b.status,
+            'dog_id':           dog_id,
+            'walker_name':      b.walker.user.firstname if b.walker_id and b.walker else None,
+            'has_pickup_notes': has_pickup_notes,
         })
 
     parts = []
