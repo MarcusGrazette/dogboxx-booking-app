@@ -145,7 +145,7 @@ class TestClientOneOffBooking:
         self._email = f'client_oneoff_{id(self)}@test.com'
 
     def test_happy_path_status_requested(self, app, client):
-        """Walker available → booking created with status=requested."""
+        """Walker available → booking is auto-confirmed and assigned."""
         with app.app_context():
             # Create a walker scheduled for tomorrow's day-of-week
             tom = tomorrow()
@@ -168,9 +168,11 @@ class TestClientOneOffBooking:
 
         assert resp.status_code == 200
         with app.app_context():
-            booking = Booking.query.filter_by(status='requested').first()
+            # With a walker available, booking should be auto-confirmed
+            booking = Booking.query.filter_by(status='confirmed').first()
             assert booking is not None
             assert booking.slot == 'Morning'
+            assert booking.walker_id is not None
 
     def test_no_walkers_rejects_booking(self, app, client):
         """No walkers scheduled → no booking created."""

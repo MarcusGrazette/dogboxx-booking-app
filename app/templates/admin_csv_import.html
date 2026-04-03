@@ -1,0 +1,78 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}Import Clients{% endblock %}
+{% block page_title %}Import Clients{% endblock %}
+{% block page_subtitle %}Bulk create client accounts from a CSV file{% endblock %}
+
+{% block page_actions %}
+<a href="{{ url_for('admin.clients') }}" class="btn btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Back to Clients
+</a>
+{% endblock %}
+
+{% block main %}
+<div class="row g-4">
+
+  <div class="col-12 col-lg-7">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-0"><i class="bi bi-upload me-2"></i>Upload CSV</h5>
+      </div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('admin.csv_import_preview') }}"
+              enctype="multipart/form-data" id="upload-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+          <div class="mb-4">
+            <label class="form-label fw-semibold">CSV file</label>
+            <input type="file" name="csv_file" id="csv_file"
+                   class="form-control" accept=".csv" required>
+            <div class="form-text">Max 500 KB · UTF-8 or Excel CSV · Must include
+              <code>firstname</code>, <code>lastname</code>, <code>email</code></div>
+          </div>
+
+          <button type="submit" class="btn btn-primary fw-semibold">
+            <i class="bi bi-eye me-2"></i>Preview import
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-5">
+    <div class="card">
+      <div class="card-header">
+        <h6 class="card-title mb-0"><i class="bi bi-table me-2"></i>Expected columns</h6>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+          <thead class="table-light">
+            <tr><th>Column</th><th>Required?</th><th>Notes</th></tr>
+          </thead>
+          <tbody class="small">
+            <tr><td><code>firstname</code></td><td><span class="badge bg-danger">Yes</span></td><td></td></tr>
+            <tr><td><code>lastname</code></td><td><span class="badge bg-danger">Yes</span></td><td></td></tr>
+            <tr><td><code>email</code></td><td><span class="badge bg-danger">Yes</span></td><td></td></tr>
+            <tr><td><code>phone</code></td><td><span class="badge bg-secondary">No</span></td><td></td></tr>
+            <tr><td><code>address_line_1</code></td><td><span class="badge bg-secondary">No</span></td><td></td></tr>
+            <tr><td><code>address_line_2</code></td><td><span class="badge bg-secondary">No</span></td><td></td></tr>
+            <tr><td><code>address_line_3</code></td><td><span class="badge bg-secondary">No</span></td><td></td></tr>
+            <tr><td><code>postcode</code></td><td><span class="badge bg-secondary">No</span></td><td></td></tr>
+            <tr><td><code>pickup_instructions</code></td><td><span class="badge bg-secondary">No</span></td><td></td></tr>
+            <tr><td><code>dog_name</code></td><td><span class="badge bg-secondary">No</span></td><td>Blank = no dog</td></tr>
+            <tr><td><code>dog_gender</code></td><td><span class="badge bg-secondary">No</span></td><td><code>M</code> or <code>F</code></td></tr>
+            <tr><td><code>dog_breed</code></td><td><span class="badge bg-secondary">No</span></td><td></td></tr>
+            <tr><td><code>dog_dob</code></td><td><span class="badge bg-secondary">No</span></td><td><code>YYYY-MM-DD</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer bg-transparent">
+        <a href="{{ url_for('admin.csv_import_sample') }}" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-download me-1"></i>Download sample template
+        </a>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

@@ -150,7 +150,10 @@
   <input type="hidden" name="html_body" id="test-html-body">
 </form>
 
-{# ── Confirm send modal ────────────────────────────────────────────────────── #}
+{% endblock %}
+
+{% block modals %}
+{# ── Confirm send modal — outside <main> to avoid stacking context issues ── #}
 <div class="modal fade" id="confirmSendModal" tabindex="-1" aria-labelledby="confirmSendModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -181,7 +184,6 @@
     </div>
   </div>
 </div>
-
 {% endblock %}
 
 {% block scripts %}

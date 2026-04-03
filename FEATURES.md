@@ -8,7 +8,7 @@
 
 | # | Priority | Effort | Status | Feature | Notes |
 |---|----------|--------|--------|---------|-------|
-| 1 | P1 | L | ✅ | **Booking workflow with capacity checks** | Walker availability × max_per_walker. Waitlist when full. |
+| 1 | P1 | L | ✅ | **Booking workflow with capacity checks** | Walker availability × max_per_walker. Waitlist when full. Auto-assigns least-loaded walker on creation — confirms immediately if capacity available. |
 | 2 | P1 | M | ✅ | **Recurring bookings (client)** | Start/end date + frequency (daily/weekly). Server expands to individual bookings. Skips weekends, duplicates. |
 | 3 | P1 | M | ✅ | **Admin booking board** | Calendar + slot view. Confirm/cancel requests. Drag-to-reorder pickup order per walker. |
 | 4 | P1 | M | ✅ | **Admin dogs view** | Searchable table of all dogs. Book on owner's behalf (one-off or recurring) via modal. Same pending flow as client-initiated. |
