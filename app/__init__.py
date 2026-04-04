@@ -131,9 +131,14 @@ def create_app(config_name=None):
     @app.before_request
     def enforce_https():
         """Redirect HTTP requests to HTTPS"""
+        # Skip healthcheck — Railway probes internally over HTTP
+        if request.path == '/health':
+            return
         # Only enforce in production
         if not app.debug and not app.testing:
-            if not request.is_secure:
+            # Respect X-Forwarded-Proto set by Railway's proxy
+            proto = request.headers.get('X-Forwarded-Proto', '')
+            if proto == 'http':
                 url = request.url.replace('http://', 'https://', 1)
                 return redirect(url, code=301)
 
