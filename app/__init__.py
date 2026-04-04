@@ -356,6 +356,10 @@ def create_app(config_name=None):
     # entire app (not just /static/js/).  Must be at /sw.js, not /static/…
     from flask import send_from_directory, make_response
 
+    @app.route('/health')
+    def health():
+        return 'ok', 200
+
     @app.route('/sw.js')
     def service_worker():
         static_js = os.path.join(app.root_path, 'static', 'js')
