@@ -1,23 +1,38 @@
 """Capacity checking logic for booking availability."""
 
-from app.models import WalkerSchedule, WalkerUnavailability, Booking, ServiceType, Walker
+from app.models import WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, Booking, ServiceType, Walker
 from app import db
 
 
 def get_available_walkers(date, slot, drop_in=False, ignore_unavailability=False):
     """Return list of active walkers scheduled for a given date + slot.
 
+    Includes walkers from their default weekly schedule plus any ad hoc
+    availability entries for this specific date+slot.
     If drop_in=True, only returns walkers with does_drop_ins=True.
     By default excludes walkers with unavailability exceptions for this date/slot.
     Pass ignore_unavailability=True to include them (e.g. for admin override checks).
     """
     day_of_week = date.weekday()  # 0=Monday, 6=Sunday
 
+    # Walkers scheduled by default for this day+slot
     schedules = (
         WalkerSchedule.query
         .filter_by(day_of_week=day_of_week, slot=slot, active=True)
         .all()
     )
+    scheduled_walker_ids = {s.walker_id for s in schedules}
+
+    # Walkers with ad hoc availability for this specific date+slot
+    adhoc = (
+        WalkerAdHocAvailability.query
+        .filter_by(date=date, slot=slot)
+        .all()
+    )
+    adhoc_walker_ids = {a.walker_id for a in adhoc}
+
+    # Union of both sets
+    all_walker_ids = scheduled_walker_ids | adhoc_walker_ids
 
     unavail_walker_ids = set()
     if not ignore_unavailability:
@@ -28,9 +43,10 @@ def get_available_walkers(date, slot, drop_in=False, ignore_unavailability=False
         )
         unavail_walker_ids = {u.walker_id for u in unavail}
 
+    all_walkers = Walker.query.filter(Walker.id.in_(all_walker_ids)).all()
     walkers = [
-        s.walker for s in schedules
-        if s.walker.user.active and s.walker_id not in unavail_walker_ids
+        w for w in all_walkers
+        if w.user.active and w.id not in unavail_walker_ids
     ]
 
     if drop_in:

@@ -416,6 +416,39 @@ class WalkerUnavailability(db.Model):
         return {
             'id': self.id,
             'walker_id': self.walker_id,
+            'date': self.date.isoformat(),
+            'slot': self.slot,
+            'reason': self.reason,
+        }
+
+
+class WalkerAdHocAvailability(db.Model):
+    """One-off available days outside a walker's default weekly schedule."""
+    __tablename__ = 'walker_adhoc_availability'
+    __table_args__ = (
+        db.UniqueConstraint('walker_id', 'date', 'slot', name='uq_walker_adhoc_date_slot'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    walker_id = db.Column(db.Integer, db.ForeignKey('walkers.id'), nullable=False, index=True)
+    date = db.Column(db.Date, nullable=False)
+    slot = db.Column(db.Enum('Morning', 'Afternoon', name='schedule_slot', create_type=False), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    walker = db.relationship('Walker', backref='adhoc_availabilities')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'walker_id': self.walker_id,
+            'date': self.date.isoformat(),
+            'slot': self.slot,
+        }
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'walker_id': self.walker_id,
             'date': self.date.isoformat() if self.date else None,
             'slot': self.slot,
             'reason': self.reason,

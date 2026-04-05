@@ -9,7 +9,7 @@ from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy import case
-from app.models import Walker, Booking, User, WalkerUnavailability, WalkerSchedule, Client, Dog
+from app.models import Walker, Booking, User, WalkerUnavailability, WalkerAdHocAvailability, WalkerSchedule, Client, Dog
 from app import db
 from datetime import datetime, timezone, timedelta, date
 
@@ -48,19 +48,26 @@ def schedule():
     for s in schedules:
         schedule_grid[s.day_of_week][s.slot] = True
 
-    # Get upcoming unavailabilities (next 30 days)
+    # Get upcoming unavailabilities and ad hoc availability (next 60 days)
     today = datetime.now(timezone.utc).date()
-    end_date = today + timedelta(days=30)
+    end_date = today + timedelta(days=60)
     unavailabilities = WalkerUnavailability.query.filter(
         WalkerUnavailability.walker_id == walker.id,
         WalkerUnavailability.date >= today,
         WalkerUnavailability.date <= end_date
     ).order_by(WalkerUnavailability.date, WalkerUnavailability.slot).all()
 
+    adhoc_availabilities = WalkerAdHocAvailability.query.filter(
+        WalkerAdHocAvailability.walker_id == walker.id,
+        WalkerAdHocAvailability.date >= today,
+        WalkerAdHocAvailability.date <= end_date
+    ).order_by(WalkerAdHocAvailability.date, WalkerAdHocAvailability.slot).all()
+
     return render_template("walker_schedule.html",
                            walker=walker,
                            schedule_grid=schedule_grid,
                            unavailabilities=unavailabilities,
+                           adhoc_availabilities=adhoc_availabilities,
                            today=today)
 
 
@@ -142,6 +149,84 @@ def delete_unavailability(id):
     db.session.commit()
 
     return jsonify(success=True, message="Unavailability removed")
+
+
+@walker_bp.route("/adhoc", methods=["POST"])
+@login_required
+@walker_required
+def add_adhoc():
+    """Add an ad hoc available day outside the default schedule. JSON endpoint."""
+    walker = Walker.query.filter_by(user_id=current_user.id).first()
+    if not walker:
+        return jsonify(success=False, message="Walker profile not found"), 404
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify(success=False, message="Invalid JSON"), 400
+
+    date_str = data.get('date')
+    slot = data.get('slot')
+
+    if not date_str or not slot:
+        return jsonify(success=False, message="Date and slot are required"), 400
+
+    if slot not in ('Morning', 'Afternoon'):
+        return jsonify(success=False, message="Invalid slot"), 400
+
+    try:
+        adhoc_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify(success=False, message="Invalid date format (use YYYY-MM-DD)"), 400
+
+    if adhoc_date < datetime.now(timezone.utc).date():
+        return jsonify(success=False, message="Cannot add availability for past dates"), 400
+
+    # Validate walker does NOT already work this slot on this day (would be redundant)
+    day_of_week = adhoc_date.weekday()
+    already_scheduled = WalkerSchedule.query.filter_by(
+        walker_id=walker.id, day_of_week=day_of_week, slot=slot, active=True
+    ).first()
+    if already_scheduled:
+        return jsonify(success=False, message=f"You are already scheduled for {slot} on {adhoc_date.strftime('%A')}s"), 400
+
+    # Check for duplicate
+    existing = WalkerAdHocAvailability.query.filter_by(
+        walker_id=walker.id, date=adhoc_date, slot=slot
+    ).first()
+    if existing:
+        return jsonify(success=False, message="Already marked as available for this date/slot"), 400
+
+    adhoc = WalkerAdHocAvailability(
+        walker_id=walker.id,
+        date=adhoc_date,
+        slot=slot,
+    )
+    db.session.add(adhoc)
+    db.session.commit()
+
+    return jsonify(success=True, message="Ad hoc availability added", adhoc=adhoc.to_dict()), 201
+
+
+@walker_bp.route("/adhoc/<int:id>", methods=["DELETE"])
+@login_required
+@walker_required
+def delete_adhoc(id):
+    """Remove an ad hoc availability entry. Walker can only delete their own."""
+    walker = Walker.query.filter_by(user_id=current_user.id).first()
+    if not walker:
+        return jsonify(success=False, message="Walker profile not found"), 404
+
+    adhoc = db.session.get(WalkerAdHocAvailability, id)
+    if not adhoc:
+        return jsonify(success=False, message="Not found"), 404
+
+    if adhoc.walker_id != walker.id:
+        return jsonify(success=False, message="Forbidden"), 403
+
+    db.session.delete(adhoc)
+    db.session.commit()
+
+    return jsonify(success=True, message="Ad hoc availability removed")
 
 
 @walker_bp.route("/pickups")
