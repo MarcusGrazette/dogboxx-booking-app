@@ -218,7 +218,7 @@ def create_app(config_name=None):
     with app.app_context():
         # Import all models so they're registered with SQLAlchemy
         from app.models import (User, Client, Dog, DogOwner, Walker,
-                                WalkerSchedule, ServiceType, Booking,
+                                WalkerSchedule, WalkerAdHocAvailability, ServiceType, Booking,
                                 BookingStatusChange, WalkEvent, Notification)
 
     # Custom error handler for rate limiting

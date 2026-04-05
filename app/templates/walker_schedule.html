@@ -178,6 +178,16 @@ async function addAdhoc() {
         });
         const data = await resp.json();
 
+        let data;
+        try {
+            data = await resp.json();
+        } catch (parseErr) {
+            const text = await resp.text().catch(() => '(unreadable)');
+            console.error('adhoc add: non-JSON response', resp.status, text);
+            alert(`Error (HTTP ${resp.status}): server returned unexpected response. Check console for details.`);
+            return;
+        }
+
         if (data.success) {
             const noMsg = document.getElementById('no-adhoc-msg');
             if (noMsg) noMsg.remove();
@@ -205,7 +215,8 @@ async function addAdhoc() {
             alert(data.message || 'Error adding availability');
         }
     } catch (err) {
-        alert('Network error');
+        console.error('adhoc add: fetch failed', err);
+        alert(`Request failed: ${err.message}`);
     }
 }
 
@@ -219,6 +230,16 @@ async function deleteAdhoc(id) {
         });
         const data = await resp.json();
 
+        let data;
+        try {
+            data = await resp.json();
+        } catch (parseErr) {
+            const text = await resp.text().catch(() => '(unreadable)');
+            console.error('adhoc delete: non-JSON response', resp.status, text);
+            alert(`Error (HTTP ${resp.status}): server returned unexpected response. Check console for details.`);
+            return;
+        }
+
         if (data.success) {
             const el = document.getElementById(`adhoc-${id}`);
             if (el) el.remove();
@@ -231,7 +252,8 @@ async function deleteAdhoc(id) {
             alert(data.message || 'Error removing availability');
         }
     } catch (err) {
-        alert('Network error');
+        console.error('adhoc delete: fetch failed', err);
+        alert(`Request failed: ${err.message}`);
     }
 }
 
