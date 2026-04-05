@@ -128,7 +128,7 @@
 
 /* ---- Page layout tweaks ---- */
 body {
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-family: 'Nunito', 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
 main.container {
@@ -281,6 +281,106 @@ footer {
   from { opacity: 1; transform: translateY(0) scale(1); }
   to   { opacity: 0; transform: translateY(1.25rem) scale(0.92); }
 }
+
+/* ── Walker: pickup slot section headers ──────────────────── */
+.pickup-slot-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  background: #fff;
+  border-bottom: 2px solid #E02FAC;
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #1B1B1B;
+  border-radius: 10px 10px 0 0;
+}
+
+.pickup-slot-header .slot-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.pickup-slot-header .slot-count {
+  margin-left: auto;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #E02FAC;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* Slot accent colours */
+.slot-dot-morning-walk  { background: #1B1B1B; }
+.slot-dot-afternoon-walk { background: #E02FAC; }
+.slot-dot-drop-in       { background: #7c3aed; }
+
+/* ── Walker: pickup order badge ────────────────────────────── */
+.pickup-order-badge {
+  width: 22px;
+  height: 22px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  background: #E02FAC;
+  color: #fff;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(224,47,172,0.35);
+}
+
+/* ── Walker: date summary bar ──────────────────────────────── */
+.date-summary-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 1rem;
+  background: #1B1B1B;
+  border-radius: 10px;
+  color: #fff;
+}
+
+.date-summary-bar .date-label {
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
+}
+
+.date-summary-bar .date-today-badge {
+  background: #E02FAC;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.2em 0.6em;
+  border-radius: 20px;
+  margin-left: 0.5rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.date-summary-bar .btn-change-date {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.7);
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 6px;
+  padding: 0.25rem 0.65rem;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.date-summary-bar .btn-change-date:hover {
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+}
+
+/* ── Walker: schedule page card left-border accents ────────── */
+.card-accent-pink   { border-left: 4px solid #E02FAC !important; }
+.card-accent-green  { border-left: 4px solid #22c55e !important; }
+.card-accent-amber  { border-left: 4px solid #f59e0b !important; }
 
 /* ── Android Native UX Touch & Gesture Optimizations ──────── */
 body {
