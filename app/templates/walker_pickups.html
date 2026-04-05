@@ -11,14 +11,14 @@
 
     <!-- Date summary bar (shown when calendar is collapsed) -->
     <div id="date-summary" class="mb-3 d-none">
-        <div class="d-flex align-items-center justify-content-between px-3 py-2 bg-light rounded border">
-            <div>
-                <i class="bi bi-calendar3 me-2 text-primary"></i>
-                <span id="date-summary-text" class="fw-semibold"></span>
-                <span id="date-today-badge" class="badge bg-primary ms-2 d-none">Today</span>
+        <div class="date-summary-bar">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-calendar3 me-2" style="opacity:0.6;"></i>
+                <span id="date-summary-text" class="date-label"></span>
+                <span id="date-today-badge" class="date-today-badge d-none">Today</span>
             </div>
-            <button class="btn btn-sm btn-outline-secondary" id="change-date-btn">
-                <i class="bi bi-pencil me-1"></i>Change
+            <button class="btn-change-date" id="change-date-btn">
+                <i class="bi bi-pencil-square me-1"></i>Change
             </button>
         </div>
     </div>

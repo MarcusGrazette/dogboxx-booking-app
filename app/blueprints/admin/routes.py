@@ -9,12 +9,13 @@ from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError
-from app.models import User, Booking, Walker, Dog, Client, WalkerSchedule, DogOwner, WalkerUnavailability, ServiceType, Notification
+from app.models import User, Booking, Walker, Dog, Client, WalkerSchedule, DogOwner, WalkerUnavailability, WalkerAdHocAvailability, ServiceType, Notification
 from app import db
 from app.capacity import get_max_per_walker, get_walker_slot_count, get_drop_in_capacity
 from app.utils.db_error_handler import handle_db_errors
 from app.forms import ClientCreateForm, WalkerCreateForm, WalkerScheduleForm
 from app.utils.uploads import process_dog_photo
+from app.utils.invoicing import invoice_for_client as _invoice_for_client
 from datetime import datetime, timezone, timedelta
 from werkzeug.security import generate_password_hash
 import secrets
@@ -111,6 +112,15 @@ def index():
     for u in unavails:
         unavail_map.setdefault(u.walker_id, {}).setdefault(u.date, set()).add(u.slot)
 
+    adhoc_entries = WalkerAdHocAvailability.query.filter(
+        WalkerAdHocAvailability.date >= today,
+        WalkerAdHocAvailability.date <= chart_end,
+    ).all()
+    # Build: {walker_id: {date: set of ad hoc slots}}
+    adhoc_map = {}
+    for a in adhoc_entries:
+        adhoc_map.setdefault(a.walker_id, {}).setdefault(a.date, set()).add(a.slot)
+
     # Build grid: list of {walker, days: [{date, slots: ['Morning','Afternoon']}]}
     walker_grid = []
     for walker in all_walkers:
@@ -118,8 +128,9 @@ def index():
         for d in weekdays:
             dow = d.weekday()
             scheduled = schedule_map.get(walker.id, {}).get(dow, set())
+            adhoc = adhoc_map.get(walker.id, {}).get(d, set())
             blocked = unavail_map.get(walker.id, {}).get(d, set())
-            available = scheduled - blocked
+            available = (scheduled | adhoc) - blocked
             days.append({'date': d, 'slots': sorted(available)})
         walker_grid.append({'walker': walker, 'days': days})
 
@@ -576,7 +587,7 @@ def drop_in_board_data(date_str):
         .all()
     )
 
-    # Only walkers with does_drop_ins=True, scheduled for this day/slot
+    # Only walkers with does_drop_ins=True, scheduled for this day/slot or with ad hoc availability
     day_of_week = selected_date.weekday()
     schedules = (
         WalkerSchedule.query
@@ -592,17 +603,31 @@ def drop_in_board_data(date_str):
     for s in schedules:
         walker_sched_slots.setdefault(s.walker_id, set()).add(s.slot)
 
+    # Ad hoc availability for drop-in walkers
+    adhoc_entries = (
+        WalkerAdHocAvailability.query
+        .join(Walker)
+        .filter(
+            WalkerAdHocAvailability.date == selected_date,
+            Walker.does_drop_ins == True,
+        )
+        .all()
+    )
+    walker_adhoc_slots = {}
+    for a in adhoc_entries:
+        walker_adhoc_slots.setdefault(a.walker_id, set()).add(a.slot)
+
     unavailabilities = WalkerUnavailability.query.filter_by(date=selected_date).all()
     walker_unavail_slots = {}
     for u in unavailabilities:
-        if u.walker_id in walker_sched_slots:
-            walker_unavail_slots.setdefault(u.walker_id, set()).add(u.slot)
+        walker_unavail_slots.setdefault(u.walker_id, set()).add(u.slot)
 
+    all_board_walker_ids = set(walker_sched_slots.keys()) | set(walker_adhoc_slots.keys())
     walkers = (
         Walker.query.options(joinedload(Walker.user))
-        .filter(Walker.id.in_(walker_sched_slots.keys()))
+        .filter(Walker.id.in_(all_board_walker_ids))
         .all()
-    ) if walker_sched_slots else []
+    ) if all_board_walker_ids else []
 
     def booking_dict(b):
         return {
@@ -625,7 +650,11 @@ def drop_in_board_data(date_str):
         {
             'id': w.id,
             'name': w.user.firstname if w.user else 'Walker',
-            'available_slots':   sorted(walker_sched_slots.get(w.id, []),   key=slot_order),
+            'available_slots': sorted(
+                (walker_sched_slots.get(w.id, set()) | walker_adhoc_slots.get(w.id, set()))
+                - walker_unavail_slots.get(w.id, set()),
+                key=slot_order
+            ),
             'unavailable_slots': sorted(walker_unavail_slots.get(w.id, []), key=slot_order),
         }
         for w in walkers
@@ -671,24 +700,29 @@ def board_data(date_str):
 
     day_of_week = selected_date.weekday()
     schedules = WalkerSchedule.query.filter_by(day_of_week=day_of_week, active=True).all()
-    walker_sched_slots = {}   # all scheduled slots regardless of unavailability
+    walker_sched_slots = {}   # default-schedule slots regardless of unavailability
     for s in schedules:
         walker_sched_slots.setdefault(s.walker_id, set()).add(s.slot)
+
+    # Ad hoc availability for this specific date
+    adhoc_entries = WalkerAdHocAvailability.query.filter_by(date=selected_date).all()
+    walker_adhoc_slots = {}
+    for a in adhoc_entries:
+        walker_adhoc_slots.setdefault(a.walker_id, set()).add(a.slot)
 
     # Track which slots each walker has marked unavailable
     unavailabilities = WalkerUnavailability.query.filter_by(date=selected_date).all()
     walker_unavail_slots = {}
     for u in unavailabilities:
-        if u.walker_id in walker_sched_slots:
-            walker_unavail_slots.setdefault(u.walker_id, set()).add(u.slot)
+        walker_unavail_slots.setdefault(u.walker_id, set()).add(u.slot)
 
-    # Include all scheduled walkers — unavailable ones appear with a warning on the board
-    all_scheduled_walker_ids = walker_sched_slots.keys()
+    # Union of scheduled + ad hoc walker IDs — all appear on the board
+    all_board_walker_ids = set(walker_sched_slots.keys()) | set(walker_adhoc_slots.keys())
     walkers = (
         Walker.query.options(joinedload(Walker.user))
-        .filter(Walker.id.in_(all_scheduled_walker_ids))
+        .filter(Walker.id.in_(all_board_walker_ids))
         .all()
-    ) if all_scheduled_walker_ids else []
+    ) if all_board_walker_ids else []
 
     # Dogs that have active bookings in BOTH Morning and Afternoon today — used for the
     # double-walk icon on board cards (whether booked via "both walks" or manually).
@@ -725,8 +759,12 @@ def board_data(date_str):
         {
             'id': w.id,
             'name': w.user.firstname if w.user else 'Walker',
-            'available_slots':   sorted(walker_sched_slots.get(w.id, []),       key=slot_order),
-            'unavailable_slots': sorted(walker_unavail_slots.get(w.id, []),     key=slot_order),
+            'available_slots': sorted(
+                (walker_sched_slots.get(w.id, set()) | walker_adhoc_slots.get(w.id, set()))
+                - walker_unavail_slots.get(w.id, set()),
+                key=slot_order
+            ),
+            'unavailable_slots': sorted(walker_unavail_slots.get(w.id, []), key=slot_order),
         }
         for w in walkers
     ]
@@ -1885,97 +1923,6 @@ def recurring_for_dog():
 # ─────────────────────────────────────────────────────────────────────────────
 # Invoicing
 # ─────────────────────────────────────────────────────────────────────────────
-
-def _invoice_for_client(user_id, month_start, month_end, all_configs):
-    """Return invoice data dict for a single client in the given month.
-
-    Billable items:
-      - confirmed / completed bookings (walks + drop-ins)
-      - cancelled bookings where notice < 5 days  (booking.date - cancelled_at.date() < 5)
-
-    Pricing:
-      - Group walks: price_per_walk; double_slot_discount for same-day AM+PM
-      - Drop-ins: price_per_drop_in; no double discount
-    """
-    from datetime import date as date_type
-    from collections import defaultdict
-
-    def config_for(d):
-        for c in all_configs:
-            if c.effective_from <= d:
-                return c
-        return None
-
-    dog_owner_ids = [
-        do.dog_id
-        for do in DogOwner.query.filter_by(user_id=user_id, role='primary').all()
-    ]
-    if not dog_owner_ids:
-        return None
-
-    bookings = (
-        Booking.query
-        .options(joinedload(Booking.dog), joinedload(Booking.service_type))
-        .filter(
-            Booking.dog_id.in_(dog_owner_ids),
-            Booking.date >= month_start,
-            Booking.date < month_end,
-            Booking.status.in_(['confirmed', 'completed', 'cancelled']),
-        )
-        .order_by(Booking.date, Booking.slot)
-        .all()
-    )
-
-    confirmed    = [b for b in bookings if b.status in ('confirmed', 'completed')]
-    late_cancels = [
-        b for b in bookings
-        if b.status == 'cancelled'
-        and b.cancelled_at is not None
-        and (b.date - b.cancelled_at.date()).days < 5
-    ]
-    all_billable = confirmed + late_cancels
-
-    # Split by service type
-    def is_drop_in(b):
-        return b.service_type and b.service_type.slug == 'drop-in'
-
-    # Group walk items by date → slot set (for double-slot discount)
-    date_slots = defaultdict(set)
-    for b in all_billable:
-        if not is_drop_in(b):
-            date_slots[b.date].add(b.slot)
-
-    # Calculate subtotal
-    subtotal = 0.0
-    for b in all_billable:
-        cfg = config_for(b.date)
-        if cfg:
-            if is_drop_in(b):
-                subtotal += float(cfg.price_per_drop_in)
-            else:
-                subtotal += float(cfg.price_per_walk)
-    for d, slots in date_slots.items():
-        if 'Morning' in slots and 'Afternoon' in slots:
-            cfg = config_for(d)
-            if cfg:
-                subtotal -= float(cfg.double_slot_discount)
-
-    walk_confirmed   = [b for b in confirmed if not is_drop_in(b)]
-    drop_in_confirmed = [b for b in confirmed if is_drop_in(b)]
-
-    return {
-        'confirmed':         confirmed,
-        'late_cancels':      late_cancels,
-        'all_billable':      all_billable,
-        'total_walks':       len(walk_confirmed),
-        'total_drop_ins':    len(drop_in_confirmed),
-        'total_cancels':     len(late_cancels),
-        'total_billable':    len(all_billable),
-        'doubles':           sum(1 for s in date_slots.values()
-                                 if 'Morning' in s and 'Afternoon' in s),
-        'subtotal':          round(subtotal, 2),
-    }
-
 
 @admin_bp.route("/invoicing")
 @login_required

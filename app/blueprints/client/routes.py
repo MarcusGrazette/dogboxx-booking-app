@@ -764,6 +764,106 @@ def profile():
     return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=datetime.now().strftime("%Y-%m-%d"))
 
 
+@client_bp.route("/monthly-summary")
+@login_required
+def monthly_summary():
+    """Client-facing monthly summary: bookings and estimated charges for a given month."""
+    from app.utils.invoicing import invoice_for_client
+    from app.models import PricingConfig
+    from collections import defaultdict
+    from datetime import timedelta
+
+    if current_user.role != 'client':
+        return redirect(url_for('client.index'))
+
+    today = date_type.today()
+    month_str = request.args.get('month', f'{today.year}-{today.month:02d}')
+    try:
+        year, month = int(month_str[:4]), int(month_str[5:7])
+        if not (1 <= month <= 12):
+            raise ValueError
+    except (ValueError, IndexError):
+        year, month = today.year, today.month
+
+    # Cap at current month — no peeking ahead
+    if (year, month) > (today.year, today.month):
+        year, month = today.year, today.month
+
+    month_start = date_type(year, month, 1)
+    month_end   = date_type(year + (month // 12), (month % 12) + 1, 1)
+
+    all_configs = (
+        PricingConfig.query
+        .filter(PricingConfig.effective_from <= month_end)
+        .order_by(PricingConfig.effective_from.desc())
+        .all()
+    )
+
+    def config_for(d):
+        for c in all_configs:
+            if c.effective_from <= d:
+                return c
+        return None
+
+    inv = invoice_for_client(current_user.id, month_start, month_end, all_configs)
+    if inv is None:
+        inv = {
+            'confirmed': [], 'late_cancels': [], 'all_billable': [],
+            'total_walks': 0, 'total_drop_ins': 0, 'total_cancels': 0,
+            'total_billable': 0, 'doubles': 0, 'subtotal': 0.0,
+        }
+
+    # Build per-booking line items
+    late_cancel_ids = {b.id for b in inv['late_cancels']}
+    line_items = []
+    for b in sorted(inv['all_billable'], key=lambda x: (x.date, x.slot)):
+        cfg = config_for(b.date)
+        is_drop_in = b.service_type and b.service_type.slug == 'drop-in'
+        unit_price = 0.0
+        if cfg:
+            unit_price = float(cfg.price_per_drop_in) if is_drop_in else float(cfg.price_per_walk)
+        line_items.append({
+            'booking':    b,
+            'unit_price': unit_price,
+            'is_cancel':  b.id in late_cancel_ids,
+            'is_drop_in': is_drop_in,
+        })
+
+    # Double-slot discount rows (group walks only)
+    date_slots = defaultdict(set)
+    for b in inv['all_billable']:
+        if not (b.service_type and b.service_type.slug == 'drop-in'):
+            date_slots[b.date].add(b.slot)
+    discounts = []
+    for d in sorted(d for d, slots in date_slots.items() if 'Morning' in slots and 'Afternoon' in slots):
+        cfg = config_for(d)
+        if cfg and cfg.double_slot_discount:
+            discounts.append({'date': d, 'amount': float(cfg.double_slot_discount)})
+
+    # Month nav
+    if month == 1:
+        prev_month = f'{year - 1}-12'
+    else:
+        prev_month = f'{year}-{month - 1:02d}'
+    if month == 12:
+        next_month = f'{year + 1}-01'
+    else:
+        next_month = f'{year}-{month + 1:02d}'
+    at_current = (year == today.year and month == today.month)
+
+    return render_template(
+        'client_monthly_summary.html',
+        inv=inv,
+        line_items=line_items,
+        discounts=discounts,
+        month_start=month_start,
+        prev_month=prev_month,
+        next_month=next_month,
+        at_current=at_current,
+        today=today,
+    )
+
+
 @client_bp.route("/profile/upload-dog-photo", methods=["POST"])
 @login_required
 def upload_dog_photo():

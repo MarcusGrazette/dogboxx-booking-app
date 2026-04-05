@@ -26,7 +26,7 @@
 | 12 | P2 | M | ✅ | **Walker unavailability** | Date-specific exceptions (per slot). Admin marks unavailability. Reduces capacity for that slot automatically. |
 | 13 | P3 | L | 🔲 | **Walker self-manage availability** | Walkers flag their own exceptions (holidays, sick days) rather than admin doing it. |
 | 14 | P3 | S | ✅ | **Google Maps pickup directions** | Maps button on each pickup card in /walker/pickups. |
-| 15 | P2 | M | 🔲 | **Walker ad hoc available days** | Walkers can add one-off available days outside their default schedule. Inverse of the existing unavailability model. New `walker_adhoc_availability` table (or reuse existing with a flag). Capacity checks need updating to include these. |
+| 15 | P2 | M | ✅ | **Walker ad hoc available days** | Walkers can add one-off available days outside their default schedule. Inverse of the existing unavailability model. New `walker_adhoc_availability` table (or reuse existing with a flag). Capacity checks need updating to include these. |
 | 16 | P2 | M | ✅ | **Admin override walker unavailability on allocation board** | Admin can assign dogs to a slot even if walker has marked themselves unavailable. Override shown visually (warning state). Booking creation bypasses the unavailability block when admin-initiated. |
 
 ## Admin
@@ -42,7 +42,7 @@
 | 26 | P2 | L | ✅ | **Invoicing view (admin)** | /admin/invoicing: monthly summary per client. /admin/invoicing/<id>: line items + weekly breakdown. Billable cancels (<5 days notice), double-slot discount, drop-in pricing. PricingConfig history. |
 | 27 | P2 | L | ✅ | **Multiple clients per dog** | dog_owners join table with primary/secondary roles. Admin join/revoke modal. Secondary owners can book and view shared dogs. |
 | 29 | P2 | L | ✅ | **Drop-in service type** | Client books AM/PM drop-in visits. Admin drop-in board (assign walkers, confirm/cancel, reorder). Walker pickup list includes drop-ins. Invoicing tracks drop-ins separately at price_per_drop_in. does_drop_ins flag on walkers. |
-| 28 | P3 | M | 🔲 | **CSV client/dog import** | Upload CSV matching the create-client form fields. Bulk create client + dog records. Validation with error report on bad rows. No need to handle joined accounts — those are done manually post-import. |
+| 28 | P3 | M | ✅ | **CSV client/dog import** | Upload CSV matching the create-client form fields. Bulk create client + dog records. Validation with error report on bad rows. No need to handle joined accounts — those are done manually post-import. |
 
 ## Client
 
