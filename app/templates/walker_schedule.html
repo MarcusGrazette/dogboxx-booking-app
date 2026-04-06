@@ -135,7 +135,7 @@
                 <div class="d-flex justify-content-between align-items-center border-bottom py-2" id="unavail-{{ u.id }}">
                     <div>
                         <strong>{{ u.date.strftime('%A, %d %b %Y') }}</strong>
-                        <span class="badge bg-{{ 'success' if u.slot == 'Morning' else 'danger' }}">{{ u.slot }}</span>
+                        <span class="badge bg-{{ 'success' if u.slot == 'Morning' else 'info' }}">{{ u.slot }}</span>
                         {% if u.reason %}
                         <span class="text-muted ms-2">— {{ u.reason }}</span>
                         {% endif %}
@@ -176,15 +176,13 @@ async function addAdhoc() {
             },
             body: JSON.stringify({ date: dateVal, slot })
         });
-        const data = await resp.json();
 
         let data;
         try {
             data = await resp.json();
         } catch (parseErr) {
-            const text = await resp.text().catch(() => '(unreadable)');
-            console.error('adhoc add: non-JSON response', resp.status, text);
-            alert(`Error (HTTP ${resp.status}): server returned unexpected response. Check console for details.`);
+            console.error('adhoc add: non-JSON response', resp.status, parseErr);
+            alert(`Error (HTTP ${resp.status}): unexpected server response.`);
             return;
         }
 
@@ -228,15 +226,13 @@ async function deleteAdhoc(id) {
             method: 'DELETE',
             headers: { 'X-CSRFToken': csrfToken }
         });
-        const data = await resp.json();
 
         let data;
         try {
             data = await resp.json();
         } catch (parseErr) {
-            const text = await resp.text().catch(() => '(unreadable)');
-            console.error('adhoc delete: non-JSON response', resp.status, text);
-            alert(`Error (HTTP ${resp.status}): server returned unexpected response. Check console for details.`);
+            console.error('adhoc delete: non-JSON response', resp.status, parseErr);
+            alert(`Error (HTTP ${resp.status}): unexpected server response.`);
             return;
         }
 
@@ -287,7 +283,7 @@ async function addUnavailability() {
             const u = data.unavailability;
             const dateObj = new Date(u.date + 'T00:00:00');
             const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' });
-            const badgeClass = u.slot === 'Morning' ? 'success' : 'danger';
+            const badgeClass = u.slot === 'Morning' ? 'success' : 'info';
 
             const div = document.createElement('div');
             div.className = 'd-flex justify-content-between align-items-center border-bottom py-2';
