@@ -411,7 +411,7 @@ body {
 
 /* Animate the main content container on both client and admin layouts */
 main.container, main.app-main .app-content {
-  animation: db-page-fade-in 0.25s cubic-bezier(0.2, 0, 0, 1) forwards;
+  animation: db-page-fade-in 0.25s cubic-bezier(0.2, 0, 0, 1);
 }
 
 /* ── Stat blocks (profile, monthly summary) ─────────────────────────────── */
