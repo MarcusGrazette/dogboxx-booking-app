@@ -3,7 +3,7 @@
 {% block title %}Admin - {{ client.full_name }}{% endblock %}
 
 {% block page_title %}{{ client.full_name }}{% endblock %}
-{% block page_subtitle %}{{ client.email }}</p>{% endblock %}
+{% block page_subtitle %}{{ client.email }}{% endblock %}
 
 {% block page_actions %}
     <div class="d-flex gap-2">
@@ -17,293 +17,308 @@
 {% endblock %}
 
 {% block main %}
+<div class="row g-4 align-items-start">
 
-{# --- Client summary card --- #}
-<div class="card mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="bi bi-person"></i> Client Details</h5>
-        <a href="{{ url_for('admin.edit_client', client_id=client.id) }}" class="btn btn-sm btn-outline-primary">
-            <i class="bi bi-pencil me-1"></i>Edit
-        </a>
-    </div>
-    <div class="card-body">
-        <dl class="row mb-0">
-            <dt class="col-sm-3">Name</dt>
-            <dd class="col-sm-9">{{ client.full_name }}</dd>
+    {# ══ LEFT COLUMN — identity cards ══ #}
+    <div class="col-12 col-lg-5">
 
-            <dt class="col-sm-3">Email</dt>
-            <dd class="col-sm-9">{{ client.email }}</dd>
+        {# --- Client summary card --- #}
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-person me-2" style="color:#E02FAC;"></i>Client Details
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-4 text-muted fw-semibold">Name</dt>
+                    <dd class="col-sm-8">{{ client.full_name }}</dd>
 
-            <dt class="col-sm-3">Status</dt>
-            <dd class="col-sm-9">
-                {% if client.active %}
-                <span class="badge bg-success">Active</span>
-                {% else %}
-                <span class="badge bg-danger">Inactive</span>
-                {% endif %}
-            </dd>
+                    <dt class="col-sm-4 text-muted fw-semibold">Email</dt>
+                    <dd class="col-sm-8">{{ client.email }}</dd>
 
-            <dt class="col-sm-3">Onboarding</dt>
-            <dd class="col-sm-9">
-                {% if client.client and client.client.onboarding_completed %}
-                <span class="badge bg-success">Complete</span>
-                {% else %}
-                <span class="badge bg-warning text-dark">Pending</span>
-                <span class="text-muted small ms-2">Client will be prompted on first login</span>
-                {% endif %}
-            </dd>
+                    <dt class="col-sm-4 text-muted fw-semibold">Status</dt>
+                    <dd class="col-sm-8">
+                        {% if client.active %}
+                        <span class="badge bg-success">Active</span>
+                        {% else %}
+                        <span class="badge bg-danger">Inactive</span>
+                        {% endif %}
+                    </dd>
 
-            <dt class="col-sm-3">Joined</dt>
-            <dd class="col-sm-9">{{ client.created_at.strftime('%d %b %Y') if client.created_at else '—' }}</dd>
-        </dl>
-    </div>
-</div>
+                    <dt class="col-sm-4 text-muted fw-semibold">Onboarding</dt>
+                    <dd class="col-sm-8">
+                        {% if client.client and client.client.onboarding_completed %}
+                        <span class="badge bg-success">Complete</span>
+                        {% else %}
+                        <span class="badge bg-warning text-dark">Pending</span>
+                        <span class="text-muted small ms-2">Prompted on first login</span>
+                        {% endif %}
+                    </dd>
 
-{# --- Primary dogs (this client owns) --- #}
-{% for entry in primary_dogs %}
-{% set dog = entry.dog %}
-{% set shared_with = entry.secondary_owners %}
-<div class="card mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0">
-            <i class="bi bi-heart"></i> {{ dog.name }}
-            <span class="badge bg-secondary ms-2 fw-normal" style="font-size:.7rem;">Primary owner</span>
-        </h5>
-        <div class="d-flex gap-2">
-            <button class="btn btn-sm btn-outline-success"
-                    data-dog-id="{{ dog.id }}"
-                    data-dog-name="{{ dog.name }}"
-                    onclick="openJoinModal(this)">
-                <i class="bi bi-person-plus me-1"></i>Share access
-            </button>
-            <a href="{{ url_for('admin.edit_client', client_id=client.id) }}" class="btn btn-sm btn-outline-primary">
-                <i class="bi bi-pencil me-1"></i>Edit
-            </a>
-        </div>
-    </div>
-    <div class="card-body">
-        <dl class="row mb-0">
-            <dt class="col-sm-3">Gender</dt>
-            <dd class="col-sm-9">{{ dog.gender | capitalize if dog.gender else '—' }}</dd>
-
-            <dt class="col-sm-3">Breed</dt>
-            <dd class="col-sm-9">{{ dog.breed if dog.breed else '—' }}</dd>
-
-            <dt class="col-sm-3">Date of birth</dt>
-            <dd class="col-sm-9">{{ dog.date_of_birth.strftime('%d %b %Y') if dog.date_of_birth else '—' }}</dd>
-
-            <dt class="col-sm-3">Allergies / notes</dt>
-            <dd class="col-sm-9">{{ dog.allergies if dog.allergies else '—' }}</dd>
-
-            <dt class="col-sm-3">WhatsApp group</dt>
-            <dd class="col-sm-9">
-                {% if dog.whatsapp_group_url %}
-                <a href="{{ dog.whatsapp_group_url }}" target="_blank" rel="noopener"
-                   class="btn btn-sm fw-semibold"
-                   style="background:#25D366;color:#fff;font-size:0.78rem;">
-                    <i class="bi bi-whatsapp me-1"></i>Open group
-                </a>
-                {% else %}—{% endif %}
-            </dd>
-        </dl>
-
-        {# Shared access list #}
-        {% if shared_with %}
-        <hr class="my-3">
-        <div class="d-flex align-items-center justify-content-between mb-2">
-            <p class="mb-0 fw-semibold small text-muted text-uppercase" style="letter-spacing:.04em;">
-                <i class="bi bi-people me-1"></i>Shared with
-            </p>
-        </div>
-        <ul class="list-group list-group-flush" id="shared-list-{{ dog.id }}">
-            {% for secondary_user in shared_with %}
-            <li class="list-group-item px-0 d-flex align-items-center justify-content-between"
-                id="shared-row-{{ dog.id }}-{{ secondary_user.id }}">
-                <div>
-                    <span class="fw-semibold">{{ secondary_user.full_name }}</span>
-                    <span class="text-muted small ms-2">{{ secondary_user.email }}</span>
-                    <a href="{{ url_for('admin.client_detail', client_id=secondary_user.id) }}"
-                       class="ms-2 small text-decoration-none">
-                        <i class="bi bi-box-arrow-up-right"></i>
-                    </a>
-                </div>
-                <button class="btn btn-sm btn-outline-danger"
-                        onclick="revokeAccess({{ client.id }}, {{ dog.id }}, {{ secondary_user.id }}, '{{ secondary_user.full_name|e }}', 'shared-row-{{ dog.id }}-{{ secondary_user.id }}')">
-                    <i class="bi bi-person-dash me-1"></i>Revoke
-                </button>
-            </li>
-            {% endfor %}
-        </ul>
-        {% endif %}
-    </div>
-</div>
-{% else %}
-{# No primary dogs — show the old "no dog" placeholder unless they're a secondary owner #}
-{% if not secondary_dogs %}
-<div class="card mb-4">
-    <div class="card-header">
-        <h5 class="mb-0"><i class="bi bi-heart"></i> Dog</h5>
-    </div>
-    <div class="card-body">
-        <div class="text-muted d-flex align-items-center gap-2 py-1">
-            <i class="bi bi-exclamation-circle text-warning"></i>
-            No dog added yet.
-            <a href="{{ url_for('admin.edit_client', client_id=client.id) }}" class="ms-1">Add dog info</a>
-            so the client's profile is ready when they log in.
-        </div>
-    </div>
-</div>
-{% endif %}
-{% endfor %}
-
-{# --- Secondary dogs (this client has shared access to) --- #}
-{% for entry in secondary_dogs %}
-{% set dog = entry.dog %}
-{% set primary_owner = entry.primary_owner %}
-<div class="card mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0">
-            <i class="bi bi-heart"></i> {{ dog.name }}
-            <span class="badge bg-info text-dark ms-2 fw-normal" style="font-size:.7rem;">Shared access</span>
-        </h5>
-        {% if primary_owner %}
-        <button class="btn btn-sm btn-outline-danger"
-                onclick="revokeAccess({{ primary_owner.id }}, {{ dog.id }}, {{ client.id }}, '{{ client.full_name|e }}', null)">
-            <i class="bi bi-person-dash me-1"></i>Revoke access
-        </button>
-        {% endif %}
-    </div>
-    <div class="card-body">
-        <dl class="row mb-2">
-            <dt class="col-sm-3">Primary owner</dt>
-            <dd class="col-sm-9">
-                {% if primary_owner %}
-                <a href="{{ url_for('admin.client_detail', client_id=primary_owner.id) }}">
-                    {{ primary_owner.full_name }}
-                </a>
-                <span class="text-muted small ms-2">{{ primary_owner.email }}</span>
-                {% else %}
-                <span class="text-muted">Unknown</span>
-                {% endif %}
-            </dd>
-
-            <dt class="col-sm-3">Gender</dt>
-            <dd class="col-sm-9">{{ dog.gender | capitalize if dog.gender else '—' }}</dd>
-
-            <dt class="col-sm-3">Breed</dt>
-            <dd class="col-sm-9">{{ dog.breed if dog.breed else '—' }}</dd>
-
-            <dt class="col-sm-3">Date of birth</dt>
-            <dd class="col-sm-9">{{ dog.date_of_birth.strftime('%d %b %Y') if dog.date_of_birth else '—' }}</dd>
-        </dl>
-        <p class="text-muted small mb-0">
-            <i class="bi bi-info-circle me-1"></i>
-            This client can view, book, and cancel walks for {{ dog.name }}, but cannot edit {{ dog.name }}'s profile.
-        </p>
-    </div>
-</div>
-{% endfor %}
-
-{# --- Pickup details --- #}
-<div class="card mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="bi bi-geo-alt"></i> Pickup Details</h5>
-        <button class="btn btn-sm btn-outline-primary" id="pickup-edit-btn">
-            <i class="bi bi-pencil me-1"></i>Edit
-        </button>
-    </div>
-    <div class="card-body">
-        {# Read view #}
-        <div id="pickup-read-view">
-            <dl class="row mb-0">
-                <dt class="col-sm-3">Access instructions</dt>
-                <dd class="col-sm-9" id="read-pickup-instructions">
-                    {{ client.client.pickup_instructions if client.client and client.client.pickup_instructions else '—' }}
-                </dd>
-                <dt class="col-sm-3">Maps pin</dt>
-                <dd class="col-sm-9">
-                    {% if client.client and client.client.maps_url %}
-                    <a href="{{ client.client.maps_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-success">
-                        <i class="bi bi-geo-alt-fill me-1"></i>Open in Maps
-                    </a>
-                    {% else %}
-                    <span id="read-maps-url">—</span>
+                    {% if client.client %}
+                    {% set addr = client.client.formatted_address or client.client.street_address %}
+                    {% if addr %}
+                    <dt class="col-sm-4 text-muted fw-semibold">Address</dt>
+                    <dd class="col-sm-8">
+                        <div>{{ addr }}</div>
+                        {% if not client.client.formatted_address and client.client.postal_code %}
+                        <div class="fw-semibold">{{ client.client.postal_code | upper }}</div>
+                        {% endif %}
+                    </dd>
                     {% endif %}
-                </dd>
-            </dl>
-        </div>
-        {# Edit view #}
-        <div id="pickup-edit-view" style="display:none;">
-            <div class="mb-3">
-                <label class="form-label fw-semibold small">Access instructions</label>
-                <textarea id="edit-pickup-instructions" class="form-control" rows="3" maxlength="500"
-                          placeholder="Door codes, concierge notes, special instructions...">{{ client.client.pickup_instructions or '' }}</textarea>
-                <div class="text-muted small text-end mt-1"><span id="instr-char-count">{{ (client.client.pickup_instructions or '')|length }}</span> / 500</div>
-            </div>
-            <div class="mb-3">
-                <label class="form-label fw-semibold small">Google Maps pin URL</label>
-                <input type="url" id="edit-maps-url" class="form-control"
-                       placeholder="https://maps.app.goo.gl/..."
-                       value="{{ client.client.maps_url or '' }}">
-            </div>
-            <div class="d-flex gap-2">
-                <button class="btn btn-primary btn-sm fw-semibold" id="pickup-save-btn">Save</button>
-                <button class="btn btn-outline-secondary btn-sm" id="pickup-cancel-btn">Cancel</button>
-                <span id="pickup-save-error" class="text-danger small align-self-center"></span>
-            </div>
-        </div>
-    </div>
-</div>
+                    {% endif %}
 
-{# --- Notification audit trail --- #}
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="bi bi-bell"></i> Notification History</h5>
-        <span class="text-muted small">Last 20 notifications</span>
-    </div>
-    <div class="card-body p-0">
-        {% if notifications %}
-        <div class="table-responsive">
-            <table class="table table-sm table-hover mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th>Sent</th>
-                        <th>Type</th>
-                        <th>Title</th>
-                        <th>Read</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for n in notifications %}
-                    <tr>
-                        <td class="text-nowrap text-muted small">{{ n.created_at.strftime('%d %b %Y %H:%M') }}</td>
-                        <td><span class="badge bg-secondary">{{ n.notification_type }}</span></td>
-                        <td>
-                            {{ n.title }}
-                            {% if n.body %}
-                            <div class="text-muted small">{{ n.body }}</div>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if n.read_at %}
-                            <span class="text-success small">{{ n.read_at.strftime('%d %b %H:%M') }}</span>
-                            {% else %}
-                            <span class="text-muted small">Unread</span>
-                            {% endif %}
-                        </td>
-                    </tr>
+                    <dt class="col-sm-4 text-muted fw-semibold">Joined</dt>
+                    <dd class="col-sm-8">{{ client.created_at.strftime('%d %b %Y') if client.created_at else '—' }}</dd>
+                </dl>
+            </div>
+        </div>
+
+        {# --- Primary dogs (this client owns) --- #}
+        {% for entry in primary_dogs %}
+        {% set dog = entry.dog %}
+        {% set shared_with = entry.secondary_owners %}
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>
+                    <i class="bi bi-heart-fill me-2" style="color:#E02FAC;"></i>{{ dog.name }}
+                    <span class="badge bg-secondary ms-1 fw-normal" style="font-size:.7rem;">Primary owner</span>
+                </span>
+                <button class="btn btn-sm btn-outline-success"
+                        data-dog-id="{{ dog.id }}"
+                        data-dog-name="{{ dog.name }}"
+                        onclick="openJoinModal(this)">
+                    <i class="bi bi-person-plus me-1"></i>Share access
+                </button>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-4 text-muted fw-semibold">Gender</dt>
+                    <dd class="col-sm-8">{{ dog.gender | capitalize if dog.gender else '—' }}</dd>
+
+                    <dt class="col-sm-4 text-muted fw-semibold">Breed</dt>
+                    <dd class="col-sm-8">{{ dog.breed if dog.breed else '—' }}</dd>
+
+                    <dt class="col-sm-4 text-muted fw-semibold">Date of birth</dt>
+                    <dd class="col-sm-8">{{ dog.date_of_birth.strftime('%d %b %Y') if dog.date_of_birth else '—' }}</dd>
+
+                    <dt class="col-sm-4 text-muted fw-semibold">Allergies / notes</dt>
+                    <dd class="col-sm-8">{{ dog.allergies if dog.allergies else '—' }}</dd>
+
+                    <dt class="col-sm-4 text-muted fw-semibold">WhatsApp group</dt>
+                    <dd class="col-sm-8">
+                        {% if dog.whatsapp_group_url %}
+                        <a href="{{ dog.whatsapp_group_url }}" target="_blank" rel="noopener"
+                           class="btn btn-sm fw-semibold"
+                           style="background:#25D366;color:#fff;font-size:0.78rem;">
+                            <i class="bi bi-whatsapp me-1"></i>Open group
+                        </a>
+                        {% else %}—{% endif %}
+                    </dd>
+                </dl>
+
+                {# Shared access list — indented to align with dd column #}
+                {% if shared_with %}
+                <hr class="my-3">
+                <p class="mb-2 fw-semibold small text-muted text-uppercase" style="letter-spacing:.04em;">
+                    <i class="bi bi-people me-1"></i>Shared with
+                </p>
+                <ul class="list-group list-group-flush" id="shared-list-{{ dog.id }}">
+                    {% for secondary_user in shared_with %}
+                    <li class="list-group-item px-0 d-flex align-items-center justify-content-between"
+                        id="shared-row-{{ dog.id }}-{{ secondary_user.id }}">
+                        <div>
+                            <span class="fw-semibold">{{ secondary_user.full_name }}</span>
+                            <span class="text-muted small ms-2">{{ secondary_user.email }}</span>
+                            <a href="{{ url_for('admin.client_detail', client_id=secondary_user.id) }}"
+                               class="ms-2 small text-decoration-none">
+                                <i class="bi bi-box-arrow-up-right"></i>
+                            </a>
+                        </div>
+                        <button class="btn btn-sm btn-outline-danger"
+                                onclick="revokeAccess({{ client.id }}, {{ dog.id }}, {{ secondary_user.id }}, '{{ secondary_user.full_name|e }}', 'shared-row-{{ dog.id }}-{{ secondary_user.id }}')">
+                            <i class="bi bi-person-dash me-1"></i>Revoke
+                        </button>
+                    </li>
                     {% endfor %}
-                </tbody>
-            </table>
+                </ul>
+                {% endif %}
+            </div>
         </div>
         {% else %}
-        <div class="text-center text-muted py-4">
-            <i class="bi bi-bell-slash fs-3"></i>
-            <p class="mt-2 mb-0">No notifications sent to this client yet.</p>
+        {% if not secondary_dogs %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-heart-fill me-2" style="color:#E02FAC;"></i>Dog
+            </div>
+            <div class="card-body">
+                <div class="text-muted d-flex align-items-center gap-2 py-1">
+                    <i class="bi bi-exclamation-circle text-warning"></i>
+                    No dog added yet.
+                    <a href="{{ url_for('admin.edit_client', client_id=client.id) }}" class="ms-1">Add dog info</a>
+                    so the client's profile is ready when they log in.
+                </div>
+            </div>
         </div>
         {% endif %}
-    </div>
-</div>
+        {% endfor %}
+
+        {# --- Secondary dogs (this client has shared access to) --- #}
+        {% for entry in secondary_dogs %}
+        {% set dog = entry.dog %}
+        {% set primary_owner = entry.primary_owner %}
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>
+                    <i class="bi bi-heart-fill me-2" style="color:#E02FAC;"></i>{{ dog.name }}
+                    <span class="badge bg-info text-dark ms-1 fw-normal" style="font-size:.7rem;">Shared access</span>
+                </span>
+                {% if primary_owner %}
+                <button class="btn btn-sm btn-outline-danger"
+                        onclick="revokeAccess({{ primary_owner.id }}, {{ dog.id }}, {{ client.id }}, '{{ client.full_name|e }}', null)">
+                    <i class="bi bi-person-dash me-1"></i>Revoke access
+                </button>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <dl class="row mb-2">
+                    <dt class="col-sm-4 text-muted fw-semibold">Primary owner</dt>
+                    <dd class="col-sm-8">
+                        {% if primary_owner %}
+                        <a href="{{ url_for('admin.client_detail', client_id=primary_owner.id) }}">
+                            {{ primary_owner.full_name }}
+                        </a>
+                        <span class="text-muted small ms-2">{{ primary_owner.email }}</span>
+                        {% else %}
+                        <span class="text-muted">Unknown</span>
+                        {% endif %}
+                    </dd>
+
+                    <dt class="col-sm-4 text-muted fw-semibold">Gender</dt>
+                    <dd class="col-sm-8">{{ dog.gender | capitalize if dog.gender else '—' }}</dd>
+
+                    <dt class="col-sm-4 text-muted fw-semibold">Breed</dt>
+                    <dd class="col-sm-8">{{ dog.breed if dog.breed else '—' }}</dd>
+
+                    <dt class="col-sm-4 text-muted fw-semibold">Date of birth</dt>
+                    <dd class="col-sm-8">{{ dog.date_of_birth.strftime('%d %b %Y') if dog.date_of_birth else '—' }}</dd>
+                </dl>
+                <p class="text-muted small mb-0">
+                    <i class="bi bi-info-circle me-1"></i>
+                    This client can view, book, and cancel walks for {{ dog.name }}, but cannot edit {{ dog.name }}'s profile.
+                </p>
+            </div>
+        </div>
+        {% endfor %}
+
+    </div>{# /left col #}
+
+    {# ══ RIGHT COLUMN — pickup + notifications ══ #}
+    <div class="col-12 col-lg-7">
+
+        {# --- Pickup details --- #}
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-geo-alt me-2" style="color:#E02FAC;"></i>Pickup Details</span>
+                <button class="btn btn-sm btn-outline-primary" id="pickup-edit-btn">
+                    <i class="bi bi-pencil me-1"></i>Edit
+                </button>
+            </div>
+            <div class="card-body">
+                {# Read view #}
+                <div id="pickup-read-view">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4 text-muted fw-semibold">Access instructions</dt>
+                        <dd class="col-sm-8" id="read-pickup-instructions">
+                            {{ client.client.pickup_instructions if client.client and client.client.pickup_instructions else '—' }}
+                        </dd>
+                        <dt class="col-sm-4 text-muted fw-semibold">Maps pin</dt>
+                        <dd class="col-sm-8">
+                            {% if client.client and client.client.maps_url %}
+                            <a href="{{ client.client.maps_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-success">
+                                <i class="bi bi-geo-alt-fill me-1"></i>Open in Maps
+                            </a>
+                            {% else %}
+                            <span id="read-maps-url">—</span>
+                            {% endif %}
+                        </dd>
+                    </dl>
+                </div>
+                {# Edit view #}
+                <div id="pickup-edit-view" style="display:none;">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Access instructions</label>
+                        <textarea id="edit-pickup-instructions" class="form-control" rows="3" maxlength="500"
+                                  placeholder="Door codes, concierge notes, special instructions...">{{ client.client.pickup_instructions or '' }}</textarea>
+                        <div class="text-muted small text-end mt-1"><span id="instr-char-count">{{ (client.client.pickup_instructions or '')|length }}</span> / 500</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Google Maps pin URL</label>
+                        <input type="url" id="edit-maps-url" class="form-control"
+                               placeholder="https://maps.app.goo.gl/..."
+                               value="{{ client.client.maps_url or '' }}">
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-primary btn-sm fw-semibold" id="pickup-save-btn">Save</button>
+                        <button class="btn btn-outline-secondary btn-sm" id="pickup-cancel-btn">Cancel</button>
+                        <span id="pickup-save-error" class="text-danger small align-self-center"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# --- Notification audit trail --- #}
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-bell me-2" style="color:#E02FAC;"></i>Notification History</span>
+                <span class="text-muted small">Last 20</span>
+            </div>
+            <div class="card-body p-0">
+                {% if notifications %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Sent</th>
+                                <th>Type</th>
+                                <th>Title</th>
+                                <th>Read</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for n in notifications %}
+                            <tr>
+                                <td class="text-nowrap text-muted small">{{ n.created_at.strftime('%d %b %Y %H:%M') }}</td>
+                                <td><span class="badge bg-secondary">{{ n.notification_type }}</span></td>
+                                <td>
+                                    {{ n.title }}
+                                    {% if n.body %}
+                                    <div class="text-muted small">{{ n.body }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if n.read_at %}
+                                    <span class="text-success small">{{ n.read_at.strftime('%d %b %H:%M') }}</span>
+                                    {% else %}
+                                    <span class="text-muted small">Unread</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-bell-slash fs-3"></i>
+                    <p class="mt-2 mb-0">No notifications sent to this client yet.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>{# /right col #}
+
+</div>{# /row #}
 
 {# ============================================================
    JOIN ACCESS MODAL
