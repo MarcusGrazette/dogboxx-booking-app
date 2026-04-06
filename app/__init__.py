@@ -363,7 +363,14 @@ def create_app(config_name=None):
 
     @app.route('/health')
     def health():
-        return 'ok', 200
+        from sqlalchemy import text as sql_text
+        from flask import jsonify
+        try:
+            db.session.execute(sql_text('SELECT 1'))
+            return jsonify(status='ok', database='connected'), 200
+        except Exception as e:
+            app.logger.error(f'Health check failed: {e}')
+            return jsonify(status='error', database='unavailable'), 503
 
     @app.route('/sw.js')
     def service_worker():
