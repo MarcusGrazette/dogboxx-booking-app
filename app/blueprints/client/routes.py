@@ -356,9 +356,7 @@ def book():
         if new_booking.walker_id and new_booking.walker:
             walker_name = new_booking.walker.user.firstname
 
-        has_pickup_notes = bool(
-            current_user.client and current_user.client.pickup_instructions
-        )
+        has_pickup_notes = bool(dog and dog.pickup_instructions)
 
         return jsonify({
             'success': True,
@@ -489,9 +487,7 @@ def book_both():
     db.session.commit()
     created = final_created if final_created else created
 
-    has_pickup_notes = bool(
-        current_user.client and current_user.client.pickup_instructions
-    )
+    has_pickup_notes = bool(dog and dog.pickup_instructions)
 
     # Build response
     booking_payload = []
@@ -724,8 +720,12 @@ def profile():
             if form.address_line_3.data:
                 client.street_address += '\n' + form.address_line_3.data.strip()
             client.postal_code = form.postcode.data.strip()
-            client.pickup_instructions = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
             client.maps_url = form.maps_url.data.strip() if form.maps_url.data else None
+
+            # Pickup notes live on the dog, not the client
+            pickup_dog = dog or (secondary_dogs[0]['dog'] if secondary_dogs else None)
+            if pickup_dog:
+                pickup_dog.pickup_instructions = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
 
             # Notifications
             current_user.phone = form.phone.data.strip() if form.phone.data else None
@@ -780,8 +780,12 @@ def profile():
             form.address_line_3.data = address_lines[2] if len(address_lines) > 2 else ''
         if client:
             form.postcode.data = client.postal_code
-            form.pickup_instructions.data = client.pickup_instructions
             form.maps_url.data = client.maps_url
+
+        # Populate pickup notes from the dog (primary or first shared dog)
+        pickup_dog = dog or (secondary_dogs[0]['dog'] if secondary_dogs else None)
+        if pickup_dog:
+            form.pickup_instructions.data = pickup_dog.pickup_instructions
 
         # Notifications
         form.phone.data = current_user.phone
@@ -1004,7 +1008,6 @@ def onboard():
             if form.address_line_3.data:
                 client.street_address += '\n' + form.address_line_3.data.strip()
             client.postal_code = form.postcode.data.strip()
-            client.pickup_instructions = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
             client.maps_url = form.maps_url.data.strip() if form.maps_url.data else None
             client.onboarding_completed = True
             client.onboarding_completed_at = datetime.now(timezone.utc)
@@ -1039,12 +1042,14 @@ def onboard():
             dog_breed = form.dog_breed.data.strip() if form.dog_breed.data else ""
             dog_allergies = form.dog_allergies.data.strip() if form.dog_allergies.data else ""
 
+            pickup_notes = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
             if existing_dog:
                 existing_dog.name = dog_name
                 existing_dog.gender = dog_gender
                 existing_dog.breed = dog_breed
                 existing_dog.allergies = dog_allergies
                 existing_dog.date_of_birth = dog_dob
+                existing_dog.pickup_instructions = pickup_notes
                 if pic_filename:
                     existing_dog.pic = pic_filename
             else:
@@ -1055,6 +1060,7 @@ def onboard():
                     allergies=dog_allergies,
                     date_of_birth=dog_dob,
                     pic=pic_filename,
+                    pickup_instructions=pickup_notes,
                 )
                 db.session.add(new_dog)
                 db.session.flush()

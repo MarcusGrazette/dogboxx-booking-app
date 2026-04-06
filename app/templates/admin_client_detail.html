@@ -227,9 +227,9 @@
                 {# Read view #}
                 <div id="pickup-read-view">
                     <dl class="row mb-0">
-                        <dt class="col-sm-4 text-muted fw-semibold">Access instructions</dt>
+                        <dt class="col-sm-4 text-muted fw-semibold">Pickup notes</dt>
                         <dd class="col-sm-8" id="read-pickup-instructions">
-                            {{ client.client.pickup_instructions if client.client and client.client.pickup_instructions else '—' }}
+                            {{ dog.pickup_instructions if dog and dog.pickup_instructions else '—' }}
                         </dd>
                         <dt class="col-sm-4 text-muted fw-semibold">Maps pin</dt>
                         <dd class="col-sm-8">
@@ -246,10 +246,10 @@
                 {# Edit view #}
                 <div id="pickup-edit-view" style="display:none;">
                     <div class="mb-3">
-                        <label class="form-label fw-semibold small">Access instructions</label>
+                        <label class="form-label fw-semibold small">Pickup notes</label>
                         <textarea id="edit-pickup-instructions" class="form-control" rows="3" maxlength="500"
-                                  placeholder="Door codes, concierge notes, special instructions...">{{ client.client.pickup_instructions or '' }}</textarea>
-                        <div class="text-muted small text-end mt-1"><span id="instr-char-count">{{ (client.client.pickup_instructions or '')|length }}</span> / 500</div>
+                                  placeholder="Door codes, concierge notes, special instructions...">{{ dog.pickup_instructions if dog else '' }}</textarea>
+                        <div class="text-muted small text-end mt-1"><span id="instr-char-count">{{ (dog.pickup_instructions or '' if dog else '')|length }}</span> / 500</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold small">Google Maps pin URL</label>

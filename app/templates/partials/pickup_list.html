@@ -59,10 +59,10 @@
                     </div>
                     {% endif %}
 
-                    <!-- Row 4: Pickup instructions (blue) -->
-                    {% if client and client.pickup_instructions %}
+                    <!-- Row 4: Pickup notes (blue) -->
+                    {% if b.dog and b.dog.pickup_instructions %}
                     <div class="small mt-2 px-2 py-1 rounded" style="background:#e8f4fd;color:#0a58ca;border-left:3px solid #3d8bcd;">
-                        <i class="bi bi-info-circle me-1"></i>{{ client.pickup_instructions }}
+                        <i class="bi bi-info-circle me-1"></i>{{ b.dog.pickup_instructions }}
                     </div>
                     {% endif %}
 

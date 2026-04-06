@@ -230,7 +230,7 @@
                 <div class="card-header">
                     <i class="bi bi-heart-fill me-2" style="color:#E02FAC;"></i>{{ sdog.name }}
                     <span class="badge fw-normal ms-1" style="font-size:.65rem; background:#e8f4fd; color:#0a6ebd; border:1px solid #b8d9f5;">
-                        <i class="bi bi-people me-1"></i>Shared access
+                        <i class="bi bi-people me-1"></i>Co-owner
                     </span>
                 </div>
                 <div class="card-body p-4">
@@ -250,7 +250,7 @@
                             </div>
                             {% if primary_owner %}
                             <div class="text-muted" style="font-size:0.72rem; margin-top:2px;">
-                                <i class="bi bi-person me-1"></i>Owner: {{ primary_owner.full_name }}
+                                <i class="bi bi-person me-1"></i>Co-owner: {{ primary_owner.full_name }}
                             </div>
                             {% endif %}
                         </div>
@@ -260,16 +260,6 @@
                     <div class="detail-row mb-2">
                         <i class="bi bi-calendar3 detail-icon"></i>
                         <div>{{ sdog.date_of_birth.strftime('%d %b %Y') }}</div>
-                    </div>
-                    {% endif %}
-
-                    {% if entry.primary_client and entry.primary_client.pickup_instructions %}
-                    <div class="detail-row mt-1">
-                        <i class="bi bi-signpost-2 detail-icon"></i>
-                        <div>
-                            <div class="text-muted" style="font-size:0.72rem; margin-bottom:2px;">Pickup notes</div>
-                            <div>{{ entry.primary_client.pickup_instructions }}</div>
-                        </div>
                     </div>
                     {% endif %}
 
@@ -310,7 +300,7 @@
             {# ─── PICKUP INSTRUCTIONS ─── #}
             <div class="card shadow-sm profile-card mb-4">
                 <div class="card-header">
-                    <i class="bi bi-signpost-2 me-2" style="color:#E02FAC;"></i>Pickup Instructions
+                    <i class="bi bi-signpost-2 me-2" style="color:#E02FAC;"></i>Pickup Notes
                 </div>
                 <div class="card-body p-4">
                     <p class="text-muted mb-3" style="font-size:0.8rem;">
