@@ -171,6 +171,13 @@
                             <span>Invoicing</span>
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('admin.newsletter') }}"
+                           class="nav-link {% if request.endpoint == 'admin.newsletter' %}active{% endif %}">
+                            <i class="bi bi-envelope-paper me-2"></i>
+                            <span>Newsletter</span>
+                        </a>
+                    </li>
 
                     <!-- Bookings -->
                     <li class="nav-header">Bookings</li>
@@ -209,17 +216,9 @@
                     </li>
                     <li class="nav-item">
                         <a href="{{ url_for('admin.walkers') }}"
-                           class="nav-link {% if request.endpoint in ['admin.walkers', 'admin.new_walker', 'admin.edit_walker', 'admin.walker_schedule'] %}active{% endif %}">
+                           class="nav-link {% if request.endpoint in ['admin.walkers', 'admin.new_walker', 'admin.edit_walker', 'admin.walker_schedule', 'admin.walker_overrides'] %}active{% endif %}">
                             <i class="bi bi-person-walking me-2"></i>
                             <span>Walkers</span>
-                        </a>
-                    </li>
-
-                    <li class="nav-item">
-                        <a href="{{ url_for('admin.newsletter') }}"
-                           class="nav-link {% if request.endpoint == 'admin.newsletter' %}active{% endif %}">
-                            <i class="bi bi-envelope-paper me-2"></i>
-                            <span>Newsletter</span>
                         </a>
                     </li>
 
