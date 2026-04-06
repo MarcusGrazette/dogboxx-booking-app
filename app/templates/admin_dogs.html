@@ -40,24 +40,21 @@
 {% block main %}
 <div class="card mb-4">
     <div class="card-body pb-2">
-        <form method="get" action="{{ url_for('admin.dogs') }}" class="row g-2 align-items-center">
+        <div class="row g-2 align-items-center">
             <div class="col-auto">
                 <div class="input-group">
                     <span class="input-group-text"><i class="bi bi-search"></i></span>
-                    <input type="text" name="q" class="form-control" placeholder="Search by dog name…"
-                           value="{{ search }}" style="min-width:220px;">
+                    <input type="text" id="dog-search" class="form-control" placeholder="Filter by name, breed or owner…"
+                           autocomplete="off" style="min-width:260px;">
+                    <button class="btn btn-outline-secondary" id="dog-search-clear" style="display:none;" type="button">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
                 </div>
             </div>
-            <div class="col-auto">
-                <button type="submit" class="btn btn-primary">Search</button>
-                {% if search %}
-                <a href="{{ url_for('admin.dogs') }}" class="btn btn-outline-secondary ms-1">Clear</a>
-                {% endif %}
-            </div>
             <div class="col-auto ms-auto text-muted small pt-1">
-                {{ dogs_data | length }} dog{{ 's' if dogs_data | length != 1 }}
+                <span id="dog-count">{{ dogs_data | length }}</span> dog{{ 's' if dogs_data | length != 1 else '' }}
             </div>
-        </form>
+        </div>
     </div>
 </div>
 
@@ -77,7 +74,7 @@
                 </thead>
                 <tbody>
                     {% for row in dogs_data %}
-                    <tr>
+                    <tr data-search="{{ (row.dog.name ~ ' ' ~ (row.dog.breed or '') ~ ' ' ~ row.owner_name ~ ' ' ~ row.owner_email) | lower }}">
                         <td class="ps-3 fw-semibold align-middle">
                             <img src="{{ url_for('static', filename='uploads/dogs/' ~ row.dog.pic) if row.dog.pic else url_for('static', filename='uploads/dogs/default-dog.png') }}"
                                  onerror="this.onerror=null;this.src='{{ url_for('static', filename='uploads/dogs/default-dog.png') }}'"
@@ -99,6 +96,11 @@
                         </td>
                     </tr>
                     {% endfor %}
+                    <tr id="no-results-row" style="display:none;">
+                        <td colspan="5" class="text-center text-muted py-4">
+                            <i class="bi bi-search me-2"></i>No dogs match your filter.
+                        </td>
+                    </tr>
                 </tbody>
             </table>
         </div>
@@ -107,12 +109,7 @@
 {% else %}
 <div class="card">
     <div class="card-body text-center text-muted py-5">
-        <i class="bi bi-search fs-3 d-block mb-2"></i>
-        {% if search %}
-        No dogs found matching <strong>{{ search }}</strong>.
-        {% else %}
-        No dogs on the books yet.
-        {% endif %}
+        <i class="bi bi-search fs-3 d-block mb-2"></i>No dogs on the books yet.
     </div>
 </div>
 {% endif %}
@@ -408,6 +405,35 @@ document.addEventListener('DOMContentLoaded', function () {
     function getCsrf() {
         return document.querySelector('meta[name=csrf-token]')?.content ||
                document.querySelector('input[name=csrf_token]')?.value || '';
+    }
+
+    // ── Live filter ─────────────────────────────────────────────────────────
+    const searchInput   = document.getElementById('dog-search');
+    const searchClear   = document.getElementById('dog-search-clear');
+    const countEl       = document.getElementById('dog-count');
+    const noResultsRow  = document.getElementById('no-results-row');
+    const allRows       = document.querySelectorAll('tbody tr[data-search]');
+
+    function applyFilter() {
+        const q = searchInput.value.trim().toLowerCase();
+        searchClear.style.display = q ? 'inline-flex' : 'none';
+        let visible = 0;
+        allRows.forEach(row => {
+            const match = !q || row.dataset.search.includes(q);
+            row.style.display = match ? '' : 'none';
+            if (match) visible++;
+        });
+        if (countEl) countEl.textContent = visible;
+        if (noResultsRow) noResultsRow.style.display = (visible === 0 && q) ? '' : 'none';
+    }
+
+    if (searchInput) {
+        searchInput.addEventListener('input', applyFilter);
+        searchClear.addEventListener('click', () => {
+            searchInput.value = '';
+            applyFilter();
+            searchInput.focus();
+        });
     }
 });
 </script>

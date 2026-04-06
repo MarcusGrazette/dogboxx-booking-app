@@ -1866,9 +1866,8 @@ def admin_delete_unavailability(walker_id, unavail_id):
 @login_required
 @admin_required
 def dogs():
-    """Admin view: all dogs on the books, searchable by name."""
-    search = request.args.get('q', '').strip()
-    query = (
+    """Admin view: all dogs on the books. Filtering is client-side."""
+    rows = (
         Dog.query
         .join(DogOwner, DogOwner.dog_id == Dog.id)
         .join(User, User.id == DogOwner.user_id)
@@ -1878,12 +1877,8 @@ def dogs():
                      User.lastname.label('owner_lastname'),
                      User.email.label('owner_email'))
         .order_by(Dog.name)
+        .all()
     )
-    if search:
-        query = query.filter(Dog.name.ilike(f'%{search}%'))
-
-    rows = query.all()
-    # rows is a list of (Dog, owner_user_id, owner_firstname, owner_lastname, owner_email)
     dogs_data = [
         {
             'dog': row[0],
@@ -1893,7 +1888,7 @@ def dogs():
         }
         for row in rows
     ]
-    return render_template("admin_dogs.html", dogs_data=dogs_data, search=search)
+    return render_template("admin_dogs.html", dogs_data=dogs_data)
 
 
 @admin_bp.route("/book_for_dog", methods=["POST"])
