@@ -1698,6 +1698,168 @@ def walker_schedule(walker_id):
     return render_template("admin_walker_schedule.html", walker=walker, form=form)
 
 
+# ─── Walker schedule overrides (ad hoc available + unavailability) ───────────
+
+@admin_bp.route("/walkers/overrides")
+@login_required
+@admin_required
+def walker_overrides():
+    """Admin page: manage ad hoc availability and unavailability for any walker."""
+    from datetime import date
+
+    active_walkers = (
+        Walker.query
+        .join(Walker.user)
+        .filter(User.active == True, User.role == 'walker')
+        .order_by(User.lastname, User.firstname)
+        .all()
+    )
+
+    today = date.today()
+
+    selected_walker = None
+    adhoc_list = []
+    unavail_list = []
+
+    walker_id_str = request.args.get('walker_id')
+    if walker_id_str:
+        try:
+            wid = int(walker_id_str)
+            selected_walker = next((w for w in active_walkers if w.id == wid), None)
+        except (ValueError, TypeError):
+            pass
+
+    if not selected_walker and active_walkers:
+        selected_walker = active_walkers[0]
+
+    if selected_walker:
+        adhoc_list = (
+            WalkerAdHocAvailability.query
+            .filter(
+                WalkerAdHocAvailability.walker_id == selected_walker.id,
+                WalkerAdHocAvailability.date >= today,
+            )
+            .order_by(WalkerAdHocAvailability.date, WalkerAdHocAvailability.slot)
+            .all()
+        )
+        unavail_list = (
+            WalkerUnavailability.query
+            .filter(
+                WalkerUnavailability.walker_id == selected_walker.id,
+                WalkerUnavailability.date >= today,
+            )
+            .order_by(WalkerUnavailability.date, WalkerUnavailability.slot)
+            .all()
+        )
+
+    return render_template(
+        'admin_walker_overrides.html',
+        active_walkers=active_walkers,
+        selected_walker=selected_walker,
+        adhoc_list=adhoc_list,
+        unavail_list=unavail_list,
+        today=today,
+    )
+
+
+@admin_bp.route("/walkers/<int:walker_id>/adhoc", methods=["POST"])
+@login_required
+@admin_required
+def admin_add_adhoc(walker_id):
+    """Admin: add an ad hoc available slot for any walker."""
+    from datetime import date
+
+    walker = Walker.query.get_or_404(walker_id)
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify(success=False, message="Invalid JSON"), 400
+
+    date_str = data.get('date')
+    slot = data.get('slot')
+
+    if not date_str or slot not in ('Morning', 'Afternoon'):
+        return jsonify(success=False, message="Date and valid slot are required"), 400
+
+    try:
+        adhoc_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify(success=False, message="Invalid date format (use YYYY-MM-DD)"), 400
+
+    # Don't add if already in default schedule (redundant)
+    day_of_week = adhoc_date.weekday()
+    if WalkerSchedule.query.filter_by(walker_id=walker.id, day_of_week=day_of_week, slot=slot, active=True).first():
+        return jsonify(success=False, message=f"{walker.user.full_name} is already scheduled for {slot} on {adhoc_date.strftime('%A')}s"), 400
+
+    if WalkerAdHocAvailability.query.filter_by(walker_id=walker.id, date=adhoc_date, slot=slot).first():
+        return jsonify(success=False, message="Already marked as available for this date/slot"), 400
+
+    adhoc = WalkerAdHocAvailability(walker_id=walker.id, date=adhoc_date, slot=slot)
+    db.session.add(adhoc)
+    db.session.commit()
+
+    return jsonify(success=True, adhoc=adhoc.to_dict()), 201
+
+
+@admin_bp.route("/walkers/<int:walker_id>/adhoc/<int:adhoc_id>", methods=["DELETE"])
+@login_required
+@admin_required
+def admin_delete_adhoc(walker_id, adhoc_id):
+    """Admin: remove an ad hoc available slot."""
+    adhoc = db.session.get(WalkerAdHocAvailability, adhoc_id)
+    if not adhoc or adhoc.walker_id != walker_id:
+        return jsonify(success=False, message="Not found"), 404
+    db.session.delete(adhoc)
+    db.session.commit()
+    return jsonify(success=True)
+
+
+@admin_bp.route("/walkers/<int:walker_id>/unavailability", methods=["POST"])
+@login_required
+@admin_required
+def admin_add_unavailability(walker_id):
+    """Admin: add an unavailability slot for any walker."""
+    walker = Walker.query.get_or_404(walker_id)
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify(success=False, message="Invalid JSON"), 400
+
+    date_str = data.get('date')
+    slot = data.get('slot')
+    reason = data.get('reason', '').strip() or None
+
+    if not date_str or slot not in ('Morning', 'Afternoon'):
+        return jsonify(success=False, message="Date and valid slot are required"), 400
+
+    try:
+        unavail_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify(success=False, message="Invalid date format (use YYYY-MM-DD)"), 400
+
+    if WalkerUnavailability.query.filter_by(walker_id=walker.id, date=unavail_date, slot=slot).first():
+        return jsonify(success=False, message="Already marked as unavailable for this date/slot"), 400
+
+    unavail = WalkerUnavailability(walker_id=walker.id, date=unavail_date, slot=slot, reason=reason)
+    db.session.add(unavail)
+    db.session.commit()
+
+    return jsonify(success=True, unavailability=unavail.to_dict()), 201
+
+
+@admin_bp.route("/walkers/<int:walker_id>/unavailability/<int:unavail_id>", methods=["DELETE"])
+@login_required
+@admin_required
+def admin_delete_unavailability(walker_id, unavail_id):
+    """Admin: remove an unavailability entry."""
+    unavail = db.session.get(WalkerUnavailability, unavail_id)
+    if not unavail or unavail.walker_id != walker_id:
+        return jsonify(success=False, message="Not found"), 404
+    db.session.delete(unavail)
+    db.session.commit()
+    return jsonify(success=True)
+
+
 # ─── Dogs ─────────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/dogs")
