@@ -263,6 +263,16 @@
                     </div>
                     {% endif %}
 
+                    {% if entry.primary_client and entry.primary_client.pickup_instructions %}
+                    <div class="detail-row mt-1">
+                        <i class="bi bi-signpost-2 detail-icon"></i>
+                        <div>
+                            <div class="text-muted" style="font-size:0.72rem; margin-bottom:2px;">Pickup notes</div>
+                            <div>{{ entry.primary_client.pickup_instructions }}</div>
+                        </div>
+                    </div>
+                    {% endif %}
+
                 </div>
             </div>
             {% endfor %}
@@ -304,7 +314,7 @@
                 </div>
                 <div class="card-body p-4">
                     <p class="text-muted mb-3" style="font-size:0.8rem;">
-                        Let us know anything we need to know to collect {{ dog.name if dog else 'your dog' }} — gate codes, doorbells, parking notes, etc.
+                        Let us know anything we need to know to collect {{ dog.name if dog else (secondary_dogs[0].dog.name if secondary_dogs else 'your dog') }} — gate codes, doorbells, parking notes, etc.
                     </p>
                     {{ form.pickup_instructions(class="form-control", rows=5,
                        placeholder="e.g. Our buzzer is labelled A, you can park the bike in our courtyard.") }}

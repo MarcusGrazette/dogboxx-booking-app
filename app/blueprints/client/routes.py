@@ -48,6 +48,7 @@ def _maybe_auto_confirm(booking, dog, service_slug='group-walk'):
             body=f'{dog.name} is booked for the {booking.slot} slot.',
             link='/profile',
         )
+        _notify_co_owners_of_booking(booking, dog.name, confirmed=True)
         return True
     else:
         # Notify admins — needs manual assignment
@@ -62,7 +63,35 @@ def _maybe_auto_confirm(booking, dog, service_slug='group-walk'):
                 link='/admin',
                 sender_id=booking.user_id,
             )
+        _notify_co_owners_of_booking(booking, dog.name, confirmed=False)
         return False
+
+
+def _notify_co_owners_of_booking(booking, dog_name, confirmed):
+    """Notify all co-owners of a dog about a booking event, excluding the actor.
+
+    Sends to every DogOwner row for the dog whose user_id differs from
+    booking.user_id. Must be called after db.session.flush() so booking.user
+    is accessible.
+    """
+    other_owners = DogOwner.query.filter(
+        DogOwner.dog_id == booking.dog_id,
+        DogOwner.user_id != booking.user_id,
+    ).all()
+    if not other_owners:
+        return
+    date_str = booking.date.strftime('%a %-d %b')
+    actor = booking.user.firstname if booking.user else 'Someone'
+    verb = 'confirmed' if confirmed else 'requested'
+    notif_type = 'booking_confirmed' if confirmed else 'booking_requested'
+    for ownership in other_owners:
+        create_notification(
+            recipient_id=ownership.user_id,
+            notification_type=notif_type,
+            title=f"{actor} {verb} {dog_name}'s {booking.slot.lower()} walk on {date_str}",
+            link='/bookings',
+            sender_id=booking.user_id,
+        )
 
 
 @client_bp.route("/", methods=["GET", "POST"])
@@ -201,6 +230,7 @@ def index():
                             link='/admin',
                             sender_id=current_user.id,
                         )
+                    _notify_co_owners_of_booking(new_booking, dog_name, confirmed=False)
                     db.session.commit()
                     flash(f"All slots are currently full for {booking_slot} on {booking_date.strftime('%d %b')}. "
                           f"You've been added to the waitlist — we'll let you know if a spot opens up.", "info")
@@ -309,6 +339,7 @@ def book():
                     link              = '/admin',
                     sender_id         = current_user.id,
                 )
+            _notify_co_owners_of_booking(new_booking, dog.name, confirmed=False)
             db.session.commit()
             message = (f"All slots are full — you've been added to the waitlist "
                        f"for {booking_slot} on {booking_date.strftime('%d %b')}.")
@@ -434,6 +465,7 @@ def book_both():
     for slot, status, b in created:
         if status == 'waitlisted':
             pending_slots.append((slot, status, b))
+            _notify_co_owners_of_booking(b, dog.name, confirmed=False)
         else:
             auto_confirmed = _maybe_auto_confirm(b, dog)
             final_created.append((slot, b.status, b))
@@ -561,7 +593,7 @@ def book_drop_in():
     db.session.flush()
     db.session.commit()
 
-    # Notify admins
+    # Notify admins and co-owners
     date_str_fmt = booking_date.strftime('%a %-d %b')
     for admin in User.query.filter_by(is_admin=True).all():
         create_notification(
@@ -572,6 +604,8 @@ def book_drop_in():
             link              = '/admin/drop-in-board',
             sender_id         = current_user.id,
         )
+    _notify_co_owners_of_booking(new_booking, dog.name, confirmed=False)
+    db.session.commit()
 
     if booking_status == 'waitlisted':
         message = (f"All drop-in slots are full for {booking_slot} on "
@@ -624,7 +658,8 @@ def profile():
             continue
         primary_o = DogOwner.query.filter_by(dog_id=so.dog_id, role='primary').first()
         primary_user = db.session.get(User, primary_o.user_id) if primary_o else None
-        secondary_dogs.append({'dog': secondary_dog, 'primary_owner': primary_user})
+        primary_client = Client.query.filter_by(user_id=primary_o.user_id).first() if primary_o else None
+        secondary_dogs.append({'dog': secondary_dog, 'primary_owner': primary_user, 'primary_client': primary_client})
 
     # Booking stats for the profile sidebar
     # Use dog_ids so secondary owners see all bookings for their shared dog,
@@ -1123,7 +1158,24 @@ def cancel_booking():
                     link=f'/admin/clients/{booking.user_id}',
                     sender_id=current_user.id,
                 )
+            # Notify any co-owners of the dog (e.g. primary owner if secondary cancelled)
+            if booking.dog_id:
+                other_owners = DogOwner.query.filter(
+                    DogOwner.dog_id == booking.dog_id,
+                    DogOwner.user_id != current_user.id,
+                ).all()
+                for ownership in other_owners:
+                    if not (ownership.user and ownership.user.is_admin):
+                        create_notification(
+                            recipient_id=ownership.user_id,
+                            notification_type='booking_cancelled',
+                            title=f"{current_user.firstname} cancelled {dog_name}'s walk",
+                            body=f"{date_str_fmt} · {booking.slot}",
+                            link='/bookings',
+                            sender_id=current_user.id,
+                        )
 
+        db.session.commit()
         return jsonify(success=True, message="Booking successfully cancelled")
         
     except Exception as e:

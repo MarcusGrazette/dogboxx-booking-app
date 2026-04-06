@@ -1208,6 +1208,17 @@ def revoke_dog_access(client_id):
             f"Admin {current_user.id} revoked secondary access for user {secondary_user_id} "
             f"from dog {dog_id}"
         )
+        # Notify the secondary user their access was removed
+        if secondary_user and dog:
+            from app.utils.notifications import create_notification
+            create_notification(
+                recipient_id=secondary_user.id,
+                notification_type='system',
+                title=f"Your access to {dog.name} has been removed",
+                body="Contact Dogboxx if you think this is a mistake.",
+                link='/profile',
+            )
+            db.session.commit()
         return jsonify(
             success=True,
             message=f"Access revoked for {secondary_user.full_name if secondary_user else secondary_user_id}",
