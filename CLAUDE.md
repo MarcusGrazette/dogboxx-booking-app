@@ -64,12 +64,13 @@ seed_demo_bookings.py  Demo booking data for presentations
 | `User` | All users. `role` = client/walker, `is_admin` boolean. Business owner is walker + admin. |
 | `Client` | Address + onboarding data |
 | `Walker` | Linked to User via 1:1 |
-| `Dog` | Profile (name, breed, DOB, photo, notes) |
+| `Dog` | Profile (name, breed, DOB, photo, notes, pickup_instructions). Pickup notes are per-dog and shared by all co-owners. |
 | `DogOwner` | Many-to-many dogs ↔ users, `role` = primary/secondary |
 | `Booking` | Links user, dog, service type, date, slot, walker, status |
 | `ServiceType` | Currently: Group Walk, Drop-in |
 | `WalkerSchedule` | Default weekly pattern (day_of_week + slot) |
-| `WalkerUnavailability` | Date-specific exceptions |
+| `WalkerUnavailability` | Date-specific exceptions to a walker's schedule |
+| `WalkerAdHocAvailability` | One-off available days outside a walker's default schedule |
 | `PricingConfig` | Pricing history (used by invoicing) |
 | `Notification` | In-app bell notifications (read/unread) |
 

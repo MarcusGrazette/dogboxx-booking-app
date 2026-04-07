@@ -441,17 +441,8 @@ class WalkerAdHocAvailability(db.Model):
         return {
             'id': self.id,
             'walker_id': self.walker_id,
-            'date': self.date.isoformat(),
-            'slot': self.slot,
-        }
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'walker_id': self.walker_id,
             'date': self.date.isoformat() if self.date else None,
             'slot': self.slot,
-            'reason': self.reason,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
