@@ -32,9 +32,10 @@ class Config:
     CSP = {
         'default-src': "'self'",
         'script-src': "'self' https://cdn.jsdelivr.net https://unpkg.com 'unsafe-inline'",
-        'style-src': "'self' https://cdn.jsdelivr.net https://unpkg.com 'unsafe-inline'",
+        'style-src': "'self' https://cdn.jsdelivr.net https://unpkg.com https://fonts.googleapis.com 'unsafe-inline'",
         'img-src': "'self' data:",
-        'font-src': "'self' https://cdn.jsdelivr.net",
+        'font-src': "'self' https://cdn.jsdelivr.net https://fonts.gstatic.com",
+        'connect-src': "'self' https://cdn.jsdelivr.net https://unpkg.com",
     }
     
     # Email (Resend)
