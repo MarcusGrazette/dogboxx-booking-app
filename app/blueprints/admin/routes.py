@@ -639,7 +639,7 @@ def drop_in_board_data(date_str):
             'status': b.status,
             'pickup_order': b.pickup_order,
             'walker_id': b.walker_id,
-            'has_notes': bool(b.user and b.user.client and b.user.client.pickup_instructions),
+            'has_notes': bool(b.dog and b.dog.pickup_instructions),
         }
 
     pending  = [booking_dict(b) for b in all_bookings if b.status in ('requested', 'waitlisted')]
@@ -747,7 +747,7 @@ def board_data(date_str):
             'pickup_order': b.pickup_order,
             'walker_id': b.walker_id,
             'has_both_slots': b.dog_id in both_slots_dog_ids,
-            'has_notes': bool(b.user and b.user.client and b.user.client.pickup_instructions),
+            'has_notes': bool(b.dog and b.dog.pickup_instructions),
         }
         return d
 
@@ -1208,6 +1208,17 @@ def revoke_dog_access(client_id):
             f"Admin {current_user.id} revoked secondary access for user {secondary_user_id} "
             f"from dog {dog_id}"
         )
+        # Notify the secondary user their access was removed
+        if secondary_user and dog:
+            from app.utils.notifications import create_notification
+            create_notification(
+                recipient_id=secondary_user.id,
+                notification_type='system',
+                title=f"Your access to {dog.name} has been removed",
+                body="Contact Dogboxx if you think this is a mistake.",
+                link='/profile',
+            )
+            db.session.commit()
         return jsonify(
             success=True,
             message=f"Access revoked for {secondary_user.full_name if secondary_user else secondary_user_id}",
@@ -1270,7 +1281,6 @@ def new_client():
                 if form.address_line_3.data and form.address_line_3.data.strip():
                     client.street_address += '\n' + form.address_line_3.data.strip()
                 client.postal_code = form.postcode.data.strip() if form.postcode.data else None
-            client.pickup_instructions = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
             client.maps_url = form.maps_url.data.strip() if form.maps_url.data else None
             db.session.add(client)
             db.session.flush()  # get client.id
@@ -1285,6 +1295,7 @@ def new_client():
                     allergies=form.dog_allergies.data.strip() if form.dog_allergies.data else "",
                     date_of_birth=form.dog_dob.data,
                     whatsapp_group_url=(form.dog_whatsapp_group_url.data.strip() or None) if form.dog_whatsapp_group_url.data else None,
+                    pickup_instructions=form.pickup_instructions.data.strip() if form.pickup_instructions.data else None,
                 )
                 db.session.add(new_dog)
                 db.session.flush()
@@ -1369,10 +1380,10 @@ def edit_client(client_id):
             else:
                 client.street_address = None
                 client.postal_code = None
-            client.pickup_instructions = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
             client.maps_url = form.maps_url.data.strip() if form.maps_url.data else None
 
             has_dog = bool(form.dog_name.data and form.dog_gender.data and form.dog_dob.data)
+            pickup_notes = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
             if has_dog:
                 if dog:
                     dog.name = form.dog_name.data.strip()
@@ -1381,6 +1392,7 @@ def edit_client(client_id):
                     dog.allergies = form.dog_allergies.data.strip() if form.dog_allergies.data else ""
                     dog.date_of_birth = form.dog_dob.data
                     dog.whatsapp_group_url = (form.dog_whatsapp_group_url.data.strip() or None) if form.dog_whatsapp_group_url.data else None
+                    dog.pickup_instructions = pickup_notes
                 else:
                     new_dog = Dog(
                         name=form.dog_name.data.strip(),
@@ -1389,6 +1401,7 @@ def edit_client(client_id):
                         allergies=form.dog_allergies.data.strip() if form.dog_allergies.data else "",
                         date_of_birth=form.dog_dob.data,
                         whatsapp_group_url=(form.dog_whatsapp_group_url.data.strip() or None) if form.dog_whatsapp_group_url.data else None,
+                        pickup_instructions=pickup_notes,
                     )
                     db.session.add(new_dog)
                     db.session.flush()
@@ -1422,8 +1435,10 @@ def edit_client(client_id):
                 form.address_line_2.data = lines[1] if len(lines) > 1 else ''
                 form.address_line_3.data = lines[2] if len(lines) > 2 else ''
             form.postcode.data = client.postal_code
-            form.pickup_instructions.data = client.pickup_instructions
             form.maps_url.data = client.maps_url
+
+        if dog:
+            form.pickup_instructions.data = dog.pickup_instructions
 
         if dog:
             form.dog_name.data = dog.name
@@ -1508,7 +1523,13 @@ def update_client_pickup_details(client_id):
     if pickup_instructions and len(pickup_instructions) > 500:
         return jsonify(success=False, message="Instructions too long (max 500 chars)"), 400
 
-    client.pickup_instructions = pickup_instructions
+    # Pickup notes now live on the dog, not the client
+    from app.models import DogOwner
+    dog_owner = DogOwner.query.filter_by(user_id=user.id, role='primary').first()
+    dog = db.session.get(Dog, dog_owner.dog_id) if dog_owner else None
+    if not dog:
+        return jsonify(success=False, message="No dog record found — add a dog first before saving pickup notes"), 404
+    dog.pickup_instructions = pickup_instructions
     client.maps_url = maps_url
     db.session.commit()
     return jsonify(success=True)
@@ -1866,9 +1887,8 @@ def admin_delete_unavailability(walker_id, unavail_id):
 @login_required
 @admin_required
 def dogs():
-    """Admin view: all dogs on the books, searchable by name."""
-    search = request.args.get('q', '').strip()
-    query = (
+    """Admin view: all dogs on the books. Filtering is client-side."""
+    rows = (
         Dog.query
         .join(DogOwner, DogOwner.dog_id == Dog.id)
         .join(User, User.id == DogOwner.user_id)
@@ -1878,12 +1898,8 @@ def dogs():
                      User.lastname.label('owner_lastname'),
                      User.email.label('owner_email'))
         .order_by(Dog.name)
+        .all()
     )
-    if search:
-        query = query.filter(Dog.name.ilike(f'%{search}%'))
-
-    rows = query.all()
-    # rows is a list of (Dog, owner_user_id, owner_firstname, owner_lastname, owner_email)
     dogs_data = [
         {
             'dog': row[0],
@@ -1893,7 +1909,7 @@ def dogs():
         }
         for row in rows
     ]
-    return render_template("admin_dogs.html", dogs_data=dogs_data, search=search)
+    return render_template("admin_dogs.html", dogs_data=dogs_data)
 
 
 @admin_bp.route("/book_for_dog", methods=["POST"])

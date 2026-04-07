@@ -111,7 +111,6 @@ class Client(db.Model):
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
 
-    pickup_instructions = db.Column(db.String(500), nullable=True)
     maps_url = db.Column(db.String(2048), nullable=True)
 
     # Relationship
@@ -138,7 +137,6 @@ class Client(db.Model):
             'onboarding_completed_at': self.onboarding_completed_at.isoformat() if self.onboarding_completed_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-            'pickup_instructions': self.pickup_instructions,
         }
 
 
@@ -154,6 +152,7 @@ class Dog(db.Model):
     other_info = db.Column(db.String(500), nullable=True)
     pic = db.Column(db.String(300), nullable=True)
     whatsapp_group_url = db.Column(db.String(2048), nullable=True)
+    pickup_instructions = db.Column(db.String(500), nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Many-to-many relationship with owners via DogOwner
@@ -172,6 +171,7 @@ class Dog(db.Model):
             'allergies': self.allergies,
             'other_info': self.other_info,
             'pic': self.pic,
+            'pickup_instructions': self.pickup_instructions,
         }
 
     @property

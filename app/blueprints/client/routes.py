@@ -48,6 +48,7 @@ def _maybe_auto_confirm(booking, dog, service_slug='group-walk'):
             body=f'{dog.name} is booked for the {booking.slot} slot.',
             link='/profile',
         )
+        _notify_co_owners_of_booking(booking, dog.name, confirmed=True)
         return True
     else:
         # Notify admins — needs manual assignment
@@ -62,7 +63,35 @@ def _maybe_auto_confirm(booking, dog, service_slug='group-walk'):
                 link='/admin',
                 sender_id=booking.user_id,
             )
+        _notify_co_owners_of_booking(booking, dog.name, confirmed=False)
         return False
+
+
+def _notify_co_owners_of_booking(booking, dog_name, confirmed):
+    """Notify all co-owners of a dog about a booking event, excluding the actor.
+
+    Sends to every DogOwner row for the dog whose user_id differs from
+    booking.user_id. Must be called after db.session.flush() so booking.user
+    is accessible.
+    """
+    other_owners = DogOwner.query.filter(
+        DogOwner.dog_id == booking.dog_id,
+        DogOwner.user_id != booking.user_id,
+    ).all()
+    if not other_owners:
+        return
+    date_str = booking.date.strftime('%a %-d %b')
+    actor = booking.user.firstname if booking.user else 'Someone'
+    verb = 'confirmed' if confirmed else 'requested'
+    notif_type = 'booking_confirmed' if confirmed else 'booking_requested'
+    for ownership in other_owners:
+        create_notification(
+            recipient_id=ownership.user_id,
+            notification_type=notif_type,
+            title=f"{actor} {verb} {dog_name}'s {booking.slot.lower()} walk on {date_str}",
+            link='/bookings',
+            sender_id=booking.user_id,
+        )
 
 
 @client_bp.route("/", methods=["GET", "POST"])
@@ -201,6 +230,7 @@ def index():
                             link='/admin',
                             sender_id=current_user.id,
                         )
+                    _notify_co_owners_of_booking(new_booking, dog_name, confirmed=False)
                     db.session.commit()
                     flash(f"All slots are currently full for {booking_slot} on {booking_date.strftime('%d %b')}. "
                           f"You've been added to the waitlist — we'll let you know if a spot opens up.", "info")
@@ -309,6 +339,7 @@ def book():
                     link              = '/admin',
                     sender_id         = current_user.id,
                 )
+            _notify_co_owners_of_booking(new_booking, dog.name, confirmed=False)
             db.session.commit()
             message = (f"All slots are full — you've been added to the waitlist "
                        f"for {booking_slot} on {booking_date.strftime('%d %b')}.")
@@ -325,9 +356,7 @@ def book():
         if new_booking.walker_id and new_booking.walker:
             walker_name = new_booking.walker.user.firstname
 
-        has_pickup_notes = bool(
-            current_user.client and current_user.client.pickup_instructions
-        )
+        has_pickup_notes = bool(dog and dog.pickup_instructions)
 
         return jsonify({
             'success': True,
@@ -434,6 +463,7 @@ def book_both():
     for slot, status, b in created:
         if status == 'waitlisted':
             pending_slots.append((slot, status, b))
+            _notify_co_owners_of_booking(b, dog.name, confirmed=False)
         else:
             auto_confirmed = _maybe_auto_confirm(b, dog)
             final_created.append((slot, b.status, b))
@@ -457,9 +487,7 @@ def book_both():
     db.session.commit()
     created = final_created if final_created else created
 
-    has_pickup_notes = bool(
-        current_user.client and current_user.client.pickup_instructions
-    )
+    has_pickup_notes = bool(dog and dog.pickup_instructions)
 
     # Build response
     booking_payload = []
@@ -561,7 +589,7 @@ def book_drop_in():
     db.session.flush()
     db.session.commit()
 
-    # Notify admins
+    # Notify admins and co-owners
     date_str_fmt = booking_date.strftime('%a %-d %b')
     for admin in User.query.filter_by(is_admin=True).all():
         create_notification(
@@ -572,6 +600,8 @@ def book_drop_in():
             link              = '/admin/drop-in-board',
             sender_id         = current_user.id,
         )
+    _notify_co_owners_of_booking(new_booking, dog.name, confirmed=False)
+    db.session.commit()
 
     if booking_status == 'waitlisted':
         message = (f"All drop-in slots are full for {booking_slot} on "
@@ -624,7 +654,8 @@ def profile():
             continue
         primary_o = DogOwner.query.filter_by(dog_id=so.dog_id, role='primary').first()
         primary_user = db.session.get(User, primary_o.user_id) if primary_o else None
-        secondary_dogs.append({'dog': secondary_dog, 'primary_owner': primary_user})
+        primary_client = Client.query.filter_by(user_id=primary_o.user_id).first() if primary_o else None
+        secondary_dogs.append({'dog': secondary_dog, 'primary_owner': primary_user, 'primary_client': primary_client})
 
     # Booking stats for the profile sidebar
     # Use dog_ids so secondary owners see all bookings for their shared dog,
@@ -689,8 +720,12 @@ def profile():
             if form.address_line_3.data:
                 client.street_address += '\n' + form.address_line_3.data.strip()
             client.postal_code = form.postcode.data.strip()
-            client.pickup_instructions = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
             client.maps_url = form.maps_url.data.strip() if form.maps_url.data else None
+
+            # Pickup notes live on the dog, not the client
+            pickup_dog = dog or (secondary_dogs[0]['dog'] if secondary_dogs else None)
+            if pickup_dog:
+                pickup_dog.pickup_instructions = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
 
             # Notifications
             current_user.phone = form.phone.data.strip() if form.phone.data else None
@@ -745,8 +780,12 @@ def profile():
             form.address_line_3.data = address_lines[2] if len(address_lines) > 2 else ''
         if client:
             form.postcode.data = client.postal_code
-            form.pickup_instructions.data = client.pickup_instructions
             form.maps_url.data = client.maps_url
+
+        # Populate pickup notes from the dog (primary or first shared dog)
+        pickup_dog = dog or (secondary_dogs[0]['dog'] if secondary_dogs else None)
+        if pickup_dog:
+            form.pickup_instructions.data = pickup_dog.pickup_instructions
 
         # Notifications
         form.phone.data = current_user.phone
@@ -969,7 +1008,6 @@ def onboard():
             if form.address_line_3.data:
                 client.street_address += '\n' + form.address_line_3.data.strip()
             client.postal_code = form.postcode.data.strip()
-            client.pickup_instructions = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
             client.maps_url = form.maps_url.data.strip() if form.maps_url.data else None
             client.onboarding_completed = True
             client.onboarding_completed_at = datetime.now(timezone.utc)
@@ -1004,12 +1042,14 @@ def onboard():
             dog_breed = form.dog_breed.data.strip() if form.dog_breed.data else ""
             dog_allergies = form.dog_allergies.data.strip() if form.dog_allergies.data else ""
 
+            pickup_notes = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
             if existing_dog:
                 existing_dog.name = dog_name
                 existing_dog.gender = dog_gender
                 existing_dog.breed = dog_breed
                 existing_dog.allergies = dog_allergies
                 existing_dog.date_of_birth = dog_dob
+                existing_dog.pickup_instructions = pickup_notes
                 if pic_filename:
                     existing_dog.pic = pic_filename
             else:
@@ -1020,6 +1060,7 @@ def onboard():
                     allergies=dog_allergies,
                     date_of_birth=dog_dob,
                     pic=pic_filename,
+                    pickup_instructions=pickup_notes,
                 )
                 db.session.add(new_dog)
                 db.session.flush()
@@ -1123,7 +1164,24 @@ def cancel_booking():
                     link=f'/admin/clients/{booking.user_id}',
                     sender_id=current_user.id,
                 )
+            # Notify any co-owners of the dog (e.g. primary owner if secondary cancelled)
+            if booking.dog_id:
+                other_owners = DogOwner.query.filter(
+                    DogOwner.dog_id == booking.dog_id,
+                    DogOwner.user_id != current_user.id,
+                ).all()
+                for ownership in other_owners:
+                    if not (ownership.user and ownership.user.is_admin):
+                        create_notification(
+                            recipient_id=ownership.user_id,
+                            notification_type='booking_cancelled',
+                            title=f"{current_user.firstname} cancelled {dog_name}'s walk",
+                            body=f"{date_str_fmt} · {booking.slot}",
+                            link='/bookings',
+                            sender_id=current_user.id,
+                        )
 
+        db.session.commit()
         return jsonify(success=True, message="Booking successfully cancelled")
         
     except Exception as e:

@@ -19,6 +19,27 @@
 
 {% block main %}
     {% if clients %}
+    <div class="card mb-4">
+        <div class="card-body pb-2">
+            <div class="row g-2 align-items-center">
+                <div class="col-auto">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" id="client-search" class="form-control"
+                               placeholder="Filter by name or email…"
+                               autocomplete="off" style="min-width:260px;">
+                        <button class="btn btn-outline-secondary" id="client-search-clear"
+                                style="display:none;" type="button">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="col-auto ms-auto text-muted small pt-1">
+                    <span id="client-count">{{ clients | length }}</span> client{{ 's' if clients | length != 1 else '' }}
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="card">
         <div class="card-body">
             <div class="table-responsive">
@@ -34,7 +55,7 @@
                     </thead>
                     <tbody>
                         {% for client in clients %}
-                        <tr>
+                        <tr data-search="{{ (client.full_name ~ ' ' ~ client.email) | lower }}">
                             <td>{{ client.full_name }}</td>
                             <td>{{ client.email }}</td>
                             <td>
@@ -64,6 +85,11 @@
                             </td>
                         </tr>
                         {% endfor %}
+                        <tr id="no-results-row" style="display:none;">
+                            <td colspan="5" class="text-center text-muted py-4">
+                                <i class="bi bi-search me-2"></i>No clients match your filter.
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -90,5 +116,35 @@
 function toggleClientStatus(clientId, action) {
     return toggleStatus('clients', clientId, action);
 }
+
+(function () {
+    const searchInput  = document.getElementById('client-search');
+    const searchClear  = document.getElementById('client-search-clear');
+    const countEl      = document.getElementById('client-count');
+    const noResultsRow = document.getElementById('no-results-row');
+    const allRows      = document.querySelectorAll('tbody tr[data-search]');
+
+    if (!searchInput) return;
+
+    function applyFilter() {
+        const q = searchInput.value.trim().toLowerCase();
+        searchClear.style.display = q ? 'inline-flex' : 'none';
+        let visible = 0;
+        allRows.forEach(row => {
+            const match = !q || row.dataset.search.includes(q);
+            row.style.display = match ? '' : 'none';
+            if (match) visible++;
+        });
+        if (countEl) countEl.textContent = visible;
+        if (noResultsRow) noResultsRow.style.display = (visible === 0 && q) ? '' : 'none';
+    }
+
+    searchInput.addEventListener('input', applyFilter);
+    searchClear.addEventListener('click', () => {
+        searchInput.value = '';
+        applyFilter();
+        searchInput.focus();
+    });
+}());
 </script>
 {% endblock %}

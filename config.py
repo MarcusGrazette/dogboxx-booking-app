@@ -96,7 +96,7 @@ class ProductionConfig(Config):
     
     # More strict rate limiting in production
     # Use Redis for distributed rate limiting if running multiple instances
-    RATELIMIT_STORAGE_URL = os.environ.get("REDIS_URL", "memory://")  # Fallback to memory storage
+    RATELIMIT_STORAGE_URI = os.environ.get("REDIS_URL", "memory://")  # Flask-Limiter 3.x key (was RATELIMIT_STORAGE_URL in 2.x)
     RATELIMIT_STRATEGY = "moving-window"  # More accurate but more resource-intensive
 
 
