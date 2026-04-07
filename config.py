@@ -44,7 +44,7 @@ class Config:
 
     # Rate Limiting Configuration
     RATELIMIT_DEFAULT = "200 per day, 50 per hour"
-    RATELIMIT_STORAGE_URL = "memory://"  # Use in-memory storage for development
+    RATELIMIT_STORAGE_URI = "memory://"  # Flask-Limiter 3.x key (was RATELIMIT_STORAGE_URL in 2.x)
     RATELIMIT_STRATEGY = "fixed-window"  # Options: fixed-window, moving-window
     RATELIMIT_HEADERS_ENABLED = True     # Add headers to responses
 

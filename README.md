@@ -156,9 +156,10 @@ seed_demo_bookings.py  Demo booking data for presentations
 | `Dog` | Dog profile (name, breed, DOB, photo, notes) |
 | `DogOwner` | Many-to-many join: dogs ↔ users, with `role` (primary/secondary) |
 | `Booking` | Walk booking — links user, dog, service type, date, slot, walker, status |
-| `ServiceType` | Service definition (currently: Group Walk) |
+| `ServiceType` | Service definition (currently: Group Walk, Drop-in) |
 | `WalkerSchedule` | Walker's default weekly availability (day_of_week + slot) |
 | `WalkerUnavailability` | Date-specific exceptions to a walker's schedule |
+| `WalkerAdHocAvailability` | One-off available days outside a walker's default schedule |
 | `Notification` | In-app notification records (recipient, type, read state) |
 
 ### Booking statuses
@@ -171,7 +172,7 @@ seed_demo_bookings.py  Demo booking data for presentations
 - **`develop`** — active development branch; all work goes here
 - **`main`** — production-ready only; updated via PR from `develop`
 
-To deploy: merge `develop` → `main` via GitHub PR, then pull on the production server and restart Flask.
+To deploy: merge `develop` → `main` via GitHub PR. Railway auto-deploys on merge to `main` — `flask db upgrade` runs automatically before the server starts.
 
 ---
 
@@ -189,9 +190,7 @@ The app uses three config classes in `config.py`:
 
 ## Known Limitations / Roadmap
 
-- Password reset (forgot password flow) not yet implemented
-- Email notifications not yet wired (in-app notifications are live; SMTP integration pending)
+- Email notifications (Resend) are wired for password reset and unsubscribe; transactional booking emails not yet implemented
 - Dental cleans service type stubbed in nav but not yet built
-- No automated test suite yet (unit testing setup in progress)
 
 See `FEATURES.md` for the full feature tracker.

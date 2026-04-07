@@ -736,7 +736,7 @@ def board_data(date_str):
         if 'Morning' in slots and 'Afternoon' in slots
     }
 
-    def booking_dict(b, include_walker=False):
+    def booking_dict(b):
         d = {
             'id': b.id,
             'dog_name': b.dog.name if b.dog else 'Unknown',

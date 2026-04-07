@@ -64,12 +64,13 @@ seed_demo_bookings.py  Demo booking data for presentations
 | `User` | All users. `role` = client/walker, `is_admin` boolean. Business owner is walker + admin. |
 | `Client` | Address + onboarding data |
 | `Walker` | Linked to User via 1:1 |
-| `Dog` | Profile (name, breed, DOB, photo, notes) |
+| `Dog` | Profile (name, breed, DOB, photo, notes, pickup_instructions). Pickup notes are per-dog and shared by all co-owners. |
 | `DogOwner` | Many-to-many dogs ↔ users, `role` = primary/secondary |
 | `Booking` | Links user, dog, service type, date, slot, walker, status |
 | `ServiceType` | Currently: Group Walk, Drop-in |
 | `WalkerSchedule` | Default weekly pattern (day_of_week + slot) |
-| `WalkerUnavailability` | Date-specific exceptions |
+| `WalkerUnavailability` | Date-specific exceptions to a walker's schedule |
+| `WalkerAdHocAvailability` | One-off available days outside a walker's default schedule |
 | `PricingConfig` | Pricing history (used by invoicing) |
 | `Notification` | In-app bell notifications (read/unread) |
 
@@ -171,6 +172,6 @@ railway shell             # interactive prod shell
 - Feature branches: `feature/<short-name>` off `develop`
 - PRs to `develop` first; then `develop` → `main` for production
 - After any schema change: `flask db migrate -m "description"` + commit the migration
-- Bump `CACHE_VERSION` in the app when deploying CSS/JS changes (SW cache invalidation)
+- **Always** bump `CACHE_VERSION` in `app/static/js/sw.js` whenever `brand.css`, `reusable-calendar.css`, `reusable-calendar.js`, or any other file in `PRECACHE_ASSETS` changes. Forgetting this causes browsers to serve stale cached assets after deploy.
 - This is a live production app with real clients — be careful with data migrations and deploys
 - **PR workflow**: push changes to `develop` and notify the user to test first. Only open a PR to `main` after the user has confirmed the changes look good. This avoids merging then immediately following up with a fix PR.

@@ -136,12 +136,12 @@ def index():
         booking_date = form.date.data
         booking_slot = form.slot.data
 
-        # Set date bounds, not in the past or more than three months in the future
         today = datetime.now(timezone.utc).date()
-        max_date = (datetime.now(timezone.utc) + timedelta(days=90)).date()
-
         errors = []
-        
+
+        if booking_date < today:
+            errors.append("Booking date cannot be in the past.")
+
         # Validate slot against allowed enum values
         if booking_slot not in ("Morning", "Afternoon"):
             errors.append("Invalid booking slot selected.")
@@ -268,12 +268,9 @@ def book():
         return jsonify({'success': False, 'message': 'Invalid date format.'}), 400
 
     today   = datetime.now(timezone.utc).date()
-    max_date = (datetime.now(timezone.utc) + timedelta(days=90)).date()
 
     if booking_date < today:
         return jsonify({'success': False, 'message': 'Booking date cannot be in the past.'}), 400
-    if booking_date > max_date:
-        return jsonify({'success': False, 'message': 'Booking date cannot be more than 90 days in the future.'}), 400
     if booking_slot not in ('Morning', 'Afternoon'):
         return jsonify({'success': False, 'message': 'Invalid slot selected.'}), 400
 
@@ -401,11 +398,8 @@ def book_both():
         return jsonify({'success': False, 'message': 'Invalid date format.'}), 400
 
     today    = datetime.now(timezone.utc).date()
-    max_date = (datetime.now(timezone.utc) + timedelta(days=90)).date()
     if booking_date < today:
         return jsonify({'success': False, 'message': 'Booking date cannot be in the past.'}), 400
-    if booking_date > max_date:
-        return jsonify({'success': False, 'message': 'Booking date is too far in the future.'}), 400
 
     user_dogs = Dog.query.join(DogOwner).filter(DogOwner.user_id == current_user.id).all()
     if not user_dogs:
@@ -542,11 +536,8 @@ def book_drop_in():
         return jsonify({'success': False, 'message': 'Invalid date format.'}), 400
 
     today    = datetime.now(timezone.utc).date()
-    max_date = (datetime.now(timezone.utc) + timedelta(days=90)).date()
     if booking_date < today:
         return jsonify({'success': False, 'message': 'Booking date cannot be in the past.'}), 400
-    if booking_date > max_date:
-        return jsonify({'success': False, 'message': 'Booking date is too far in the future.'}), 400
 
     user_dogs = Dog.query.join(DogOwner).filter(DogOwner.user_id == current_user.id).all()
     if not user_dogs:
