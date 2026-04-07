@@ -11,7 +11,7 @@ import functools
 import traceback
 from typing import Dict, Any, Optional, Callable, TypeVar, cast
 
-from flask import flash, jsonify
+from flask import abort, flash, jsonify
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from werkzeug.exceptions import HTTPException
 
@@ -86,7 +86,7 @@ def handle_db_errors(
                 
                 # Re-raise as HTTPException with appropriate status code
                 if not flash_message and not json_response:
-                    raise HTTPException(response=msg, code=status_code)
+                    abort(status_code)
                     
                 return cast(T, None)  # Return None if we've handled the error
                 
@@ -105,7 +105,7 @@ def handle_db_errors(
                     return jsonify(success=False, message=msg), status_code
                 
                 if not flash_message and not json_response:
-                    raise HTTPException(response=msg, code=status_code)
+                    abort(status_code)
                     
                 return cast(T, None)
                 
@@ -124,7 +124,7 @@ def handle_db_errors(
                     return jsonify(success=False, message=msg), status_code
                 
                 if not flash_message and not json_response:
-                    raise HTTPException(response=msg, code=status_code)
+                    abort(status_code)
                     
                 return cast(T, None)
                 
@@ -143,7 +143,7 @@ def handle_db_errors(
                     return jsonify(success=False, message=msg), status_code
                 
                 if not flash_message and not json_response:
-                    raise HTTPException(response=msg, code=status_code)
+                    abort(status_code)
                     
                 return cast(T, None)
         

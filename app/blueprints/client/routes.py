@@ -141,7 +141,12 @@ def index():
         max_date = (datetime.now(timezone.utc) + timedelta(days=90)).date()
 
         errors = []
-        
+
+        if booking_date < today:
+            errors.append("Booking date cannot be in the past.")
+        if booking_date > max_date:
+            errors.append("Bookings cannot be made more than 3 months in advance.")
+
         # Validate slot against allowed enum values
         if booking_slot not in ("Morning", "Afternoon"):
             errors.append("Invalid booking slot selected.")

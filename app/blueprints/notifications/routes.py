@@ -55,7 +55,7 @@ def mark_one_read(notification_id):
 
 @notifications_bp.route('/read-all', methods=['POST'])
 @login_required
-def mark_all(request=None):
+def mark_all():
     """Mark all notifications read for current user."""
     mark_all_read(current_user.id)
     # Support both AJAX and regular form POST
