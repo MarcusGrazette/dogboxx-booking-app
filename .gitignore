@@ -7,7 +7,6 @@ flask_session/
 *.pyc
 /app/static/images
 /app/static/icons
-/app/seed_db
 /seed_datalogs/
 *.log
 app/static/uploads/dogs/*.jpg

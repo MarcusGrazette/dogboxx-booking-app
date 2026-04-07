@@ -10,8 +10,10 @@ app = create_app(os.environ.get('FLASK_ENV', 'development'))
 def seed_service_types_cmd():
     """Seed essential service types (group-walk, drop-in). Safe to run multiple times."""
     from app.seed_db.seeder import seed_service_types
+    from app import db
     with app.app_context():
         seed_service_types()
+        db.session.commit()
     click.echo("Service types seeded.")
 
 
