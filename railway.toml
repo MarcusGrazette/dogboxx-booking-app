@@ -2,7 +2,7 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "flask db upgrade && flask seed-service-types && gunicorn run:app --workers 2 --bind 0.0.0.0:$PORT --timeout 120 --log-level info"
+startCommand = "flask db upgrade && flask seed-service-types && gunicorn run:app --workers 2 --worker-class gevent --worker-connections 100 --bind 0.0.0.0:$PORT --timeout 120 --log-level info"
 healthcheckPath = "/health"
 healthcheckTimeout = 60
 restartPolicyType = "on_failure"
