@@ -33,6 +33,7 @@ ordered-set==4.1.0
 packaging==25.0
 pillow==11.3.0
 psycopg2-binary==2.9.11
+redis>=3.0
 py-vapid==1.9.4
 python-dotenv==1.1.1
 pytz==2025.2
