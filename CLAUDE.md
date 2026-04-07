@@ -171,6 +171,6 @@ railway shell             # interactive prod shell
 - Feature branches: `feature/<short-name>` off `develop`
 - PRs to `develop` first; then `develop` → `main` for production
 - After any schema change: `flask db migrate -m "description"` + commit the migration
-- Bump `CACHE_VERSION` in the app when deploying CSS/JS changes (SW cache invalidation)
+- **Always** bump `CACHE_VERSION` in `app/static/js/sw.js` whenever `brand.css`, `reusable-calendar.css`, `reusable-calendar.js`, or any other file in `PRECACHE_ASSETS` changes. Forgetting this causes browsers to serve stale cached assets after deploy.
 - This is a live production app with real clients — be careful with data migrations and deploys
 - **PR workflow**: push changes to `develop` and notify the user to test first. Only open a PR to `main` after the user has confirmed the changes look good. This avoids merging then immediately following up with a fix PR.
