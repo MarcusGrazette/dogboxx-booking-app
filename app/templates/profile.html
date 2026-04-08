@@ -321,34 +321,14 @@
                 </div>
                 <div class="card-body p-4">
 
-                    <div class="d-flex align-items-center justify-content-between py-2 border-bottom">
+                    <div class="d-flex align-items-center justify-content-between py-2">
                         <div>
-                            <div class="fw-semibold small"><i class="bi bi-envelope me-1 text-muted"></i> Email</div>
-                            <div class="text-muted" style="font-size:0.75rem;">{{ current_user.email }}</div>
+                            <div class="fw-semibold small"><i class="bi bi-envelope me-1 text-muted"></i> Email newsletter &amp; updates</div>
+                            <div class="text-muted" style="font-size:0.75rem;">Booking reminders, news and offers to {{ current_user.email }}</div>
                         </div>
                         <div class="form-check form-switch mb-0">
                             {{ form.notify_email(class="form-check-input", role="switch") }}
                         </div>
-                    </div>
-
-                    <div class="d-flex align-items-center justify-content-between py-2">
-                        <div>
-                            <div class="fw-semibold small"><i class="bi bi-whatsapp me-1 text-muted"></i> WhatsApp</div>
-                            <div class="text-muted" style="font-size:0.75rem;">Get booking updates via WhatsApp</div>
-                        </div>
-                        <div class="form-check form-switch mb-0">
-                            {{ form.notify_whatsapp(class="form-check-input", role="switch", id="notify_whatsapp") }}
-                        </div>
-                    </div>
-
-                    <div id="phone-field" class="mt-2" style="{% if not form.notify_whatsapp.data %}display:none;{% endif %}">
-                        <div class="input-group">
-                            <span class="input-group-text"><i class="bi bi-phone text-secondary"></i></span>
-                            {{ form.phone(class="form-control", placeholder="e.g. +44 7700 900000") }}
-                        </div>
-                        {% for error in form.phone.errors %}
-                        <div class="text-danger small mt-1">{{ error }}</div>
-                        {% endfor %}
                     </div>
 
                 </div>
@@ -404,15 +384,6 @@
 <script>
 (function () {
     'use strict';
-
-    // ── WhatsApp toggle ───────────────────────────────────────────────────────
-    const whatsappCheckbox = document.getElementById('notify_whatsapp');
-    const phoneField = document.getElementById('phone-field');
-    if (whatsappCheckbox) {
-        whatsappCheckbox.addEventListener('change', function () {
-            phoneField.style.display = this.checked ? 'block' : 'none';
-        });
-    }
 
     // ── Dog age display ───────────────────────────────────────────────────────
     function calcDogAge(dobStr) {

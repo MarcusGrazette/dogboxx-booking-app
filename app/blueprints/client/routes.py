@@ -718,14 +718,9 @@ def profile():
             if pickup_dog:
                 pickup_dog.pickup_instructions = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
 
-            # Notifications
-            current_user.phone = form.phone.data.strip() if form.phone.data else None
-            if form.notify_email.data and form.notify_whatsapp.data:
-                current_user.notification_preference = 'both'
-            elif form.notify_whatsapp.data:
-                current_user.notification_preference = 'whatsapp'
-            else:
-                current_user.notification_preference = 'email'
+            # Notifications — email toggle controls newsletter subscription
+            current_user.email_marketing = bool(form.notify_email.data)
+            current_user.notification_preference = 'email'
 
             # Dog info
             if dog:
@@ -779,9 +774,7 @@ def profile():
             form.pickup_instructions.data = pickup_dog.pickup_instructions
 
         # Notifications
-        form.phone.data = current_user.phone
-        form.notify_email.data = current_user.notification_preference in ('email', 'both')
-        form.notify_whatsapp.data = current_user.notification_preference in ('whatsapp', 'both')
+        form.notify_email.data = current_user.email_marketing
 
         # Dog info
         if dog:
