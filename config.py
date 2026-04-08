@@ -71,10 +71,14 @@ class DevelopmentConfig(Config):
 
 
 class TestingConfig(Config):
-    """Testing configuration."""
+    """Testing configuration.
+
+    Uses TEST_DATABASE_URL when set (PostgreSQL in CI), otherwise falls back
+    to in-memory SQLite for fast local test runs.
+    """
     TESTING = True
     DEBUG = True
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
+    SQLALCHEMY_DATABASE_URI = os.environ.get('TEST_DATABASE_URL', 'sqlite:///:memory:')
     WTF_CSRF_ENABLED = False
     RATELIMIT_ENABLED = False
 
