@@ -408,15 +408,25 @@
                 });
             }
 
-            await fetch('/notifications/push-subscribe', {
-                method:  'POST',
-                headers: {
-                    'Content-Type':     'application/json',
-                    'X-CSRFToken':      _csrfToken,
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                body: JSON.stringify(sub.toJSON()),
-            });
+            // Only register with the server if the subscription is new or has
+            // changed. Using localStorage avoids a redundant DB write on every
+            // page load. The stored value is cleared if the endpoint changes
+            // (e.g. subscription rotated by the browser) so the server stays
+            // in sync. After a DB reset the user needs to hard-refresh once
+            // to clear localStorage and re-register.
+            const STORAGE_KEY = 'push_endpoint_registered';
+            if (sub.endpoint !== localStorage.getItem(STORAGE_KEY)) {
+                await fetch('/notifications/push-subscribe', {
+                    method:  'POST',
+                    headers: {
+                        'Content-Type':     'application/json',
+                        'X-CSRFToken':      _csrfToken,
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: JSON.stringify(sub.toJSON()),
+                });
+                localStorage.setItem(STORAGE_KEY, sub.endpoint);
+            }
 
         } catch (err) {
             console.debug('[push] registration skipped:', err.message);
@@ -482,15 +492,19 @@
                         });
                     }
 
-                    await fetch('/notifications/push-subscribe', {
-                        method:  'POST',
-                        headers: {
-                            'Content-Type':     'application/json',
-                            'X-CSRFToken':      _csrfToken,
-                            'X-Requested-With': 'XMLHttpRequest',
-                        },
-                        body: JSON.stringify(sub.toJSON()),
-                    });
+                    const STORAGE_KEY = 'push_endpoint_registered';
+                    if (sub.endpoint !== localStorage.getItem(STORAGE_KEY)) {
+                        await fetch('/notifications/push-subscribe', {
+                            method:  'POST',
+                            headers: {
+                                'Content-Type':     'application/json',
+                                'X-CSRFToken':      _csrfToken,
+                                'X-Requested-With': 'XMLHttpRequest',
+                            },
+                            body: JSON.stringify(sub.toJSON()),
+                        });
+                        localStorage.setItem(STORAGE_KEY, sub.endpoint);
+                    }
 
                     enableDiv.classList.add('d-none');
 

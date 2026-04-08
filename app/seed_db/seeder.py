@@ -262,15 +262,9 @@ def seed_bookings(bookings_data, users, dogs, walkers):
 
 
 def seed_service_types():
-    """Create default service types."""
+    """Create default service types. Idempotent — adds missing types, skips existing ones."""
     print("Creating service types...")
-    
-    # Check if service types already exist
-    existing_count = ServiceType.query.count()
-    if existing_count > 0:
-        print(f"  Service types already exist ({existing_count}), skipping...")
-        return
-    
+
     service_types = [
         {
             'name': 'Group Walk',
@@ -281,22 +275,39 @@ def seed_service_types():
             'requires_walker': True,
             'requires_compatibility_check': True,
             'default_max_capacity': 6,
-            'active': True
+            'active': True,
+            'settings': {'cancellation_notice_days': 5},
+        },
+        {
+            'name': 'Drop In',
+            'slug': 'drop-in',
+            'description': 'Short comfort-break visit at home. Morning or afternoon slots.',
+            'capacity_model': 'walker_assigned',
+            'slot_type': 'morning_afternoon',
+            'requires_walker': True,
+            'requires_compatibility_check': False,
+            'default_max_capacity': 6,
+            'active': True,
+            'settings': {'cancellation_notice_days': 5},
         },
         {
             'name': 'Doggy Day Care',
-            'slug': 'day-care', 
+            'slug': 'day-care',
             'description': 'Full day care service for dogs',
             'capacity_model': 'facility_capacity',
             'slot_type': 'full_half_day',
             'requires_walker': False,
             'requires_compatibility_check': False,
             'default_max_capacity': 20,
-            'active': True
-        }
+            'active': True,
+            'settings': {},
+        },
     ]
-    
+
     for service_data in service_types:
+        if ServiceType.query.filter_by(slug=service_data['slug']).first():
+            print(f"  Service type '{service_data['slug']}' already exists — skipping")
+            continue
         service = ServiceType(**service_data)
         db.session.add(service)
         print(f"  Created service type: {service.name}")
