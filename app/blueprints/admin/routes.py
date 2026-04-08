@@ -2271,6 +2271,7 @@ def invoicing_detail(client_id):
     # First Monday on or before month_start
     first_monday = month_start - timedelta(days=month_start.weekday())
     weeks = []
+    weekly_discounts = []  # per-qualifying-week discount line items for the line-items section
     wk_start = first_monday
     while wk_start < month_end:
         wk_end = wk_start + timedelta(days=7)  # exclusive
@@ -2282,18 +2283,34 @@ def invoicing_detail(client_id):
         wk_confirmed  = sum(1 for li in wk_items if not li['is_cancel'] and not (li['booking'].service_type and li['booking'].service_type.slug == 'drop-in'))
         wk_drop_ins   = sum(1 for li in wk_items if not li['is_cancel'] and li['booking'].service_type and li['booking'].service_type.slug == 'drop-in')
         wk_cancels    = sum(1 for li in wk_items if li['is_cancel'])
-        wk_discount_total = sum(d['amount'] for d in wk_discounts)
+        wk_double_discount = sum(d['amount'] for d in wk_discounts)
+
+        # Weekly discount: ≥5 confirmed group walks in the week
+        wk_weekly_discount = 0.0
+        if wk_confirmed >= 5:
+            cfg = config_for(wk_start)
+            if cfg and cfg.weekly_discount:
+                wk_weekly_discount = round(float(cfg.weekly_discount) * wk_confirmed, 2)
+                weekly_discounts.append({
+                    'week_start':  wk_start,
+                    'walk_count':  wk_confirmed,
+                    'amount':      wk_weekly_discount,
+                })
+
+        wk_discount_total = round(wk_double_discount + wk_weekly_discount, 2)
         wk_gross      = sum(li['unit_price'] for li in wk_items)
         wk_subtotal   = round(wk_gross - wk_discount_total, 2)
 
         weeks.append({
-            'commencing':      wk_start,
-            'confirmed':       wk_confirmed,
-            'drop_ins':        wk_drop_ins,
-            'cancels':         wk_cancels,
-            'discount_total':  wk_discount_total,
-            'subtotal':        wk_subtotal,
-            'has_activity':    bool(wk_items),
+            'commencing':          wk_start,
+            'confirmed':           wk_confirmed,
+            'drop_ins':            wk_drop_ins,
+            'cancels':             wk_cancels,
+            'double_discount':     wk_double_discount,
+            'weekly_discount':     wk_weekly_discount,
+            'discount_total':      wk_discount_total,
+            'subtotal':            wk_subtotal,
+            'has_activity':        bool(wk_items),
         })
         wk_start = wk_end
 
@@ -2314,6 +2331,7 @@ def invoicing_detail(client_id):
         inv=inv,
         line_items=line_items,
         discounts=discounts,
+        weekly_discounts=weekly_discounts,
         weeks=weeks,
         month_start=month_start,
         prev_month=prev_month,

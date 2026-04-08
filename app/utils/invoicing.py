@@ -4,6 +4,7 @@ client-facing monthly summary page.
 """
 
 from collections import defaultdict
+from datetime import date as _date
 from sqlalchemy.orm import joinedload
 from app.models import DogOwner, Booking
 
@@ -16,8 +17,9 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
       - cancelled bookings where notice < 5 days  (booking.date - cancelled_at.date() < 5)
 
     Pricing:
-      - Group walks: price_per_walk; double_slot_discount for same-day AM+PM
-      - Drop-ins: price_per_drop_in; no double discount
+      - Group walks: price_per_walk; double_slot_discount for same-day AM+PM;
+        weekly_discount per walk for weeks with ≥5 confirmed group walks
+      - Drop-ins: price_per_drop_in; no double discount; no weekly discount
 
     Returns None if the user has no primary dog (and therefore no bookings).
     """
@@ -66,6 +68,9 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
         if not is_drop_in(b):
             date_slots[b.date].add(b.slot)
 
+    walk_confirmed    = [b for b in confirmed if not is_drop_in(b)]
+    drop_in_confirmed = [b for b in confirmed if is_drop_in(b)]
+
     # Calculate subtotal
     subtotal = 0.0
     for b in all_billable:
@@ -81,18 +86,34 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
             if cfg:
                 subtotal -= float(cfg.double_slot_discount)
 
-    walk_confirmed    = [b for b in confirmed if not is_drop_in(b)]
-    drop_in_confirmed = [b for b in confirmed if is_drop_in(b)]
+    # Weekly discount — confirmed group walks only, ≥5 per ISO week
+    week_walks: dict = defaultdict(int)
+    for b in walk_confirmed:
+        iso_year, iso_week, _ = b.date.isocalendar()
+        week_walks[(iso_year, iso_week)] += 1
+
+    weekly_discount_total = 0.0
+    weekly_discount_weeks = 0
+    for (iso_year, iso_week), count in week_walks.items():
+        if count >= 5:
+            rep_date = _date.fromisocalendar(iso_year, iso_week, 1)  # Monday of the week
+            cfg = config_for(rep_date)
+            if cfg and cfg.weekly_discount:
+                weekly_discount_total += float(cfg.weekly_discount) * count
+                weekly_discount_weeks += 1
+    subtotal -= weekly_discount_total
 
     return {
-        'confirmed':      confirmed,
-        'late_cancels':   late_cancels,
-        'all_billable':   all_billable,
-        'total_walks':    len(walk_confirmed),
-        'total_drop_ins': len(drop_in_confirmed),
-        'total_cancels':  len(late_cancels),
-        'total_billable': len(all_billable),
-        'doubles':        sum(1 for s in date_slots.values()
-                              if 'Morning' in s and 'Afternoon' in s),
-        'subtotal':       round(subtotal, 2),
+        'confirmed':              confirmed,
+        'late_cancels':           late_cancels,
+        'all_billable':           all_billable,
+        'total_walks':            len(walk_confirmed),
+        'total_drop_ins':         len(drop_in_confirmed),
+        'total_cancels':          len(late_cancels),
+        'total_billable':         len(all_billable),
+        'doubles':                sum(1 for s in date_slots.values()
+                                      if 'Morning' in s and 'Afternoon' in s),
+        'weekly_discount_total':  round(weekly_discount_total, 2),
+        'weekly_discount_weeks':  weekly_discount_weeks,
+        'subtotal':               round(subtotal, 2),
     }

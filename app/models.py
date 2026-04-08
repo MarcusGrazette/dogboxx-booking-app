@@ -510,6 +510,7 @@ class PricingConfig(db.Model):
     id                   = db.Column(db.Integer, primary_key=True)
     price_per_walk       = db.Column(db.Numeric(8, 2), nullable=False)
     double_slot_discount = db.Column(db.Numeric(8, 2), nullable=False, default=0)
+    weekly_discount      = db.Column(db.Numeric(8, 2), nullable=False, default=0)
     price_per_drop_in    = db.Column(db.Numeric(8, 2), nullable=False, default=5)
     effective_from       = db.Column(db.Date, nullable=False, unique=True)
     created_at           = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
@@ -517,13 +518,15 @@ class PricingConfig(db.Model):
     def __repr__(self):
         return (f'<PricingConfig £{self.price_per_walk}/walk '
                 f'£{self.price_per_drop_in}/drop-in '
-                f'(−£{self.double_slot_discount} double) from {self.effective_from}>')
+                f'(−£{self.double_slot_discount} double, −£{self.weekly_discount} weekly) '
+                f'from {self.effective_from}>')
 
     def to_dict(self):
         return {
             'id':                   self.id,
             'price_per_walk':       float(self.price_per_walk),
             'double_slot_discount': float(self.double_slot_discount),
+            'weekly_discount':      float(self.weekly_discount),
             'price_per_drop_in':    float(self.price_per_drop_in),
             'effective_from':       self.effective_from.isoformat(),
         }
