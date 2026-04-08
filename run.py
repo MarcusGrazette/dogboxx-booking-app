@@ -23,8 +23,8 @@ def seed_service_types_cmd():
 @click.option("--lastname", prompt=True, help="Last name")
 @click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True, help="Password")
 def create_admin(email, firstname, lastname, password):
-    """Create an admin user. Safe to run on a live DB."""
-    from app.models import User
+    """Create an admin user with a walker record. Safe to run on a live DB."""
+    from app.models import User, Walker
     from app import db
     from werkzeug.security import generate_password_hash
     with app.app_context():
@@ -43,8 +43,29 @@ def create_admin(email, firstname, lastname, password):
             active=True,
         )
         db.session.add(user)
+        db.session.flush()
+        db.session.add(Walker(user_id=user.id))
         db.session.commit()
-        click.echo(f"Admin user {email} created successfully.")
+        click.echo(f"Admin user {email} created successfully (with walker record).")
+
+
+@app.cli.command("make-walker")
+@click.option("--email", prompt=True, help="Email of existing user to give a walker record")
+def make_walker(email):
+    """Add a Walker record to an existing user. Safe to run if record already exists."""
+    from app.models import User, Walker
+    from app import db
+    with app.app_context():
+        user = User.query.filter_by(email=email.lower()).first()
+        if not user:
+            click.echo(f"No user found with email {email}.")
+            return
+        if Walker.query.filter_by(user_id=user.id).first():
+            click.echo(f"{email} already has a walker record.")
+            return
+        db.session.add(Walker(user_id=user.id))
+        db.session.commit()
+        click.echo(f"Walker record created for {email}.")
 
 
 if __name__ == "__main__":
