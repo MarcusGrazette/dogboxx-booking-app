@@ -493,10 +493,11 @@ def update_pricing():
     from app.models import PricingConfig
 
     try:
-        price          = float(request.form['price_per_walk'])
-        discount       = float(request.form['double_slot_discount'])
-        drop_in_price  = float(request.form.get('price_per_drop_in', 5))
-        eff_from       = date.fromisoformat(request.form['effective_from'])
+        price            = float(request.form['price_per_walk'])
+        discount         = float(request.form['double_slot_discount'])
+        weekly_disc      = float(request.form.get('weekly_discount', 0))
+        drop_in_price    = float(request.form.get('price_per_drop_in', 5))
+        eff_from         = date.fromisoformat(request.form['effective_from'])
     except (KeyError, ValueError) as e:
         flash(f"Invalid pricing data: {e}", "danger")
         return redirect(url_for('admin.revenue'))
@@ -506,12 +507,14 @@ def update_pricing():
     if existing:
         existing.price_per_walk       = price
         existing.double_slot_discount = discount
+        existing.weekly_discount      = weekly_disc
         existing.price_per_drop_in    = drop_in_price
         flash(f"Pricing for {eff_from} updated.", "success")
     else:
         db.session.add(PricingConfig(
             price_per_walk=price,
             double_slot_discount=discount,
+            weekly_discount=weekly_disc,
             price_per_drop_in=drop_in_price,
             effective_from=eff_from,
         ))
