@@ -89,10 +89,11 @@
             <div class="small text-muted">Total due</div>
           </div>
         </div>
-        {% if inv.doubles %}
+        {% if inv.doubles or inv.weekly_discount_total %}
         <div class="alert alert-info mt-3 mb-0 py-2 small">
           <i class="bi bi-info-circle me-1"></i>
-          Double-slot discount applied on {{ inv.doubles }} day{{ 's' if inv.doubles != 1 }}.
+          {% if inv.doubles %}Double-slot discount applied on {{ inv.doubles }} day{{ 's' if inv.doubles != 1 }}.{% endif %}
+          {% if inv.weekly_discount_weeks %}Weekly discount applied on {{ inv.weekly_discount_weeks }} week{{ 's' if inv.weekly_discount_weeks != 1 }} (−£{{ '%.2f' | format(inv.weekly_discount_total) }}).{% endif %}
         </div>
         {% endif %}
       </div>
@@ -115,6 +116,7 @@
                 <th class="text-center">Drop-ins</th>
                 <th class="text-center">Charged cancels</th>
                 <th class="text-center">Double-walk discount</th>
+                <th class="text-center">Weekly discount</th>
                 <th class="text-end">Subtotal</th>
               </tr>
             </thead>
@@ -140,8 +142,13 @@
                   {% else %}<span class="text-muted">—</span>{% endif %}
                 </td>
                 <td class="text-center">
-                  {% if w.discount_total %}
-                  <span class="text-danger small fw-semibold">−£{{ '%.2f' | format(w.discount_total) }}</span>
+                  {% if w.double_discount %}
+                  <span class="text-danger small fw-semibold">−£{{ '%.2f' | format(w.double_discount) }}</span>
+                  {% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td class="text-center">
+                  {% if w.weekly_discount %}
+                  <span class="text-info small fw-semibold">−£{{ '%.2f' | format(w.weekly_discount) }}</span>
                   {% else %}<span class="text-muted">—</span>{% endif %}
                 </td>
                 <td class="text-end {% if w.has_activity %}fw-semibold{% else %}text-muted{% endif %}">
@@ -158,6 +165,9 @@
                 <td class="text-center fw-bold">{{ inv.total_cancels }}</td>
                 <td class="text-center {% if inv.doubles %}text-danger fw-bold{% else %}text-muted{% endif %}">
                   {% if inv.doubles %}−£{{ '%.2f' | format(discounts | sum(attribute='amount')) }}{% else %}—{% endif %}
+                </td>
+                <td class="text-center {% if inv.weekly_discount_total %}text-info fw-bold{% else %}text-muted{% endif %}">
+                  {% if inv.weekly_discount_total %}−£{{ '%.2f' | format(inv.weekly_discount_total) }}{% else %}—{% endif %}
                 </td>
                 <td class="text-end fw-bold fs-6">£{{ '%.2f' | format(inv.subtotal) }}</td>
               </tr>
@@ -228,13 +238,26 @@
                 <td class="text-muted small">{{ d.date.strftime('%A') }}</td>
                 <td class="text-muted small">Morning + Afternoon</td>
                 <td><span class="badge bg-secondary-subtle text-secondary">Double-slot discount</span></td>
+                <td></td>
                 <td class="text-end text-danger fw-semibold">−£{{ '%.2f' | format(d.amount) }}</td>
+              </tr>
+              {% endfor %}
+
+              {# Weekly discount rows #}
+              {% for wd in weekly_discounts %}
+              <tr class="table-light">
+                <td class="text-muted small">Wk {{ wd.week_start.strftime('%-d %b') }}</td>
+                <td class="text-muted small"></td>
+                <td class="text-muted small">{{ wd.walk_count }} walk{{ 's' if wd.walk_count != 1 }}</td>
+                <td><span class="badge bg-info-subtle text-info">Weekly discount</span></td>
+                <td></td>
+                <td class="text-end text-info fw-semibold">−£{{ '%.2f' | format(wd.amount) }}</td>
               </tr>
               {% endfor %}
             </tbody>
             <tfoot class="table-light">
               <tr>
-                <td colspan="4" class="fw-bold text-end">Total</td>
+                <td colspan="5" class="fw-bold text-end">Total</td>
                 <td class="text-end fw-bold fs-6">£{{ '%.2f' | format(inv.subtotal) }}</td>
               </tr>
             </tfoot>

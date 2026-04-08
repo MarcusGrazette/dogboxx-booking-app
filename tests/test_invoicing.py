@@ -12,6 +12,10 @@ Covers:
 - Early cancel (>= 5 days notice) → not billable
 - Cancel with no cancelled_at → not billable
 - total_walks / total_drop_ins / total_cancels counts
+- Weekly discount: ≥5 confirmed group walks in ISO week → per-walk discount
+- Weekly discount: <5 walks → no discount
+- Weekly discount: drop-ins do not count toward threshold or receive discount
+- Weekly discount + double-slot discount are cumulative
 """
 import datetime
 import pytest
@@ -63,6 +67,7 @@ PRICE_DATE = datetime.date(2025, 1, 1)
 WALK_PRICE       = 12.00
 DROP_IN_PRICE    =  5.00
 DOUBLE_DISCOUNT  =  2.00
+WEEKLY_DISCOUNT  =  1.00
 
 
 # ---------------------------------------------------------------------------
@@ -97,12 +102,14 @@ def make_pricing_config(
     price_per_walk=WALK_PRICE,
     price_per_drop_in=DROP_IN_PRICE,
     double_slot_discount=DOUBLE_DISCOUNT,
+    weekly_discount=0.00,
 ):
     cfg = PricingConfig(
         effective_from=effective_from,
         price_per_walk=price_per_walk,
         price_per_drop_in=price_per_drop_in,
         double_slot_discount=double_slot_discount,
+        weekly_discount=weekly_discount,
     )
     db.session.add(cfg)
     db.session.flush()
@@ -348,3 +355,95 @@ class TestInvoiceForClient:
             inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
             assert inv['total_walks'] == 1
             assert inv['subtotal'] == 0.0
+
+    # ── Weekly discount tests ────────────────────────────────────────────────
+
+    def test_weekly_discount_applied_for_five_walks_in_one_week(self, app):
+        """5 confirmed group walks in the same ISO week → weekly discount applied."""
+        with app.app_context():
+            u, dog = make_client_with_dog('inv_wkly5@test.com')
+            st = make_walk_service()
+            make_pricing_config(weekly_discount=WEEKLY_DISCOUNT)
+            # ISO week 6 of 2026: Mon 2 Feb – Fri 6 Feb
+            for day in range(2, 7):  # Mon–Fri
+                add_booking(u, dog, st, datetime.date(2026, 2, day), 'Morning', status='confirmed')
+            db.session.commit()
+            inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
+            assert inv['total_walks'] == 5
+            assert inv['weekly_discount_weeks'] == 1
+            expected = round(WALK_PRICE * 5 - WEEKLY_DISCOUNT * 5, 2)
+            assert inv['subtotal'] == expected
+
+    def test_weekly_discount_not_applied_for_four_walks(self, app):
+        """4 confirmed group walks in a week → no weekly discount."""
+        with app.app_context():
+            u, dog = make_client_with_dog('inv_wkly4@test.com')
+            st = make_walk_service()
+            make_pricing_config(weekly_discount=WEEKLY_DISCOUNT)
+            for day in range(2, 6):  # Mon–Thu only (4 walks)
+                add_booking(u, dog, st, datetime.date(2026, 2, day), 'Morning', status='confirmed')
+            db.session.commit()
+            inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
+            assert inv['total_walks'] == 4
+            assert inv['weekly_discount_weeks'] == 0
+            assert inv['weekly_discount_total'] == 0.0
+            assert inv['subtotal'] == round(WALK_PRICE * 4, 2)
+
+    def test_weekly_discount_drop_ins_not_counted(self, app):
+        """Drop-ins do not count toward the 5-walk weekly threshold."""
+        with app.app_context():
+            u, dog = make_client_with_dog('inv_wkly_di@test.com')
+            walk_st = make_walk_service()
+            di_st   = make_drop_in_service()
+            make_pricing_config(weekly_discount=WEEKLY_DISCOUNT)
+            # 3 walks + 2 drop-ins in the same week = 3 walks only → no discount
+            for day in range(2, 5):  # Mon–Wed walks
+                add_booking(u, dog, walk_st, datetime.date(2026, 2, day), 'Morning', status='confirmed')
+            for day in range(5, 7):  # Thu–Fri drop-ins
+                add_booking(u, dog, di_st, datetime.date(2026, 2, day), 'Morning', status='confirmed')
+            db.session.commit()
+            inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
+            assert inv['total_walks'] == 3
+            assert inv['total_drop_ins'] == 2
+            assert inv['weekly_discount_weeks'] == 0
+
+    def test_weekly_discount_cumulative_with_double_slot(self, app):
+        """Weekly discount and double-slot discount both apply independently."""
+        with app.app_context():
+            u, dog = make_client_with_dog('inv_wkly_dbl@test.com')
+            st = make_walk_service()
+            make_pricing_config(
+                double_slot_discount=DOUBLE_DISCOUNT,
+                weekly_discount=WEEKLY_DISCOUNT,
+            )
+            # Mon–Fri morning walks (5) + Mon AM+PM double slot
+            for day in range(2, 7):  # Mon–Fri mornings
+                add_booking(u, dog, st, datetime.date(2026, 2, day), 'Morning', status='confirmed')
+            # Monday afternoon as well → double-slot day, 6 walks total in the week
+            add_booking(u, dog, st, datetime.date(2026, 2, 2), 'Afternoon', status='confirmed')
+            db.session.commit()
+            inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
+            assert inv['total_walks'] == 6
+            assert inv['doubles'] == 1
+            assert inv['weekly_discount_weeks'] == 1
+            expected = round(
+                WALK_PRICE * 6
+                - DOUBLE_DISCOUNT          # double-slot discount (1 day)
+                - WEEKLY_DISCOUNT * 6,     # weekly discount (6 walks)
+                2
+            )
+            assert inv['subtotal'] == expected
+
+    def test_weekly_discount_zero_when_config_discount_is_zero(self, app):
+        """No weekly discount applied when weekly_discount is 0 in config."""
+        with app.app_context():
+            u, dog = make_client_with_dog('inv_wkly_zero@test.com')
+            st = make_walk_service()
+            make_pricing_config(weekly_discount=0.00)  # no weekly discount configured
+            for day in range(2, 7):
+                add_booking(u, dog, st, datetime.date(2026, 2, day), 'Morning', status='confirmed')
+            db.session.commit()
+            inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
+            assert inv['weekly_discount_weeks'] == 0
+            assert inv['weekly_discount_total'] == 0.0
+            assert inv['subtotal'] == round(WALK_PRICE * 5, 2)

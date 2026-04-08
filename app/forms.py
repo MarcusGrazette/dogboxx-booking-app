@@ -203,13 +203,7 @@ class ProfileForm(FlaskForm):
     )
 
     # Notifications
-    notify_email = BooleanField('Email', default=True)
-    notify_whatsapp = BooleanField('WhatsApp')
-    phone = StringField(
-        'Phone Number',
-        validators=[Optional(), Length(max=20)],
-        render_kw={"placeholder": "e.g. +44 7700 900000"}
-    )
+    notify_email = BooleanField('Email newsletter & updates', default=True)
 
     # Dog info
     dog_name = StringField(

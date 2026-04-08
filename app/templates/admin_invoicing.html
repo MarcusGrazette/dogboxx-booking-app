@@ -91,6 +91,12 @@
                      title="Cancellations with less than 5 days notice"></i>
                 </th>
                 <th class="text-center">Double-slot days</th>
+                <th class="text-center">
+                  5-day weeks
+                  <i class="bi bi-info-circle text-muted ms-1"
+                     data-bs-toggle="tooltip"
+                     title="Weeks with 5 or more confirmed walks — weekly discount applied"></i>
+                </th>
                 <th class="text-end">Subtotal</th>
                 <th></th>
               </tr>
@@ -132,6 +138,13 @@
                   <span class="text-muted">—</span>
                   {% endif %}
                 </td>
+                <td class="text-center">
+                  {% if r.weekly_discount_weeks %}
+                  <span class="badge bg-info-subtle text-info fw-semibold">{{ r.weekly_discount_weeks }}</span>
+                  {% else %}
+                  <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
                 <td class="text-end fw-bold">£{{ '%.2f' | format(r.subtotal) }}</td>
                 <td class="text-end">
                   <a href="{{ url_for('admin.invoicing_detail', client_id=r.client.id, month=month_start.strftime('%Y-%m')) }}"
@@ -144,7 +157,7 @@
             </tbody>
             <tfoot class="table-light">
               <tr>
-                <td colspan="5" class="fw-bold text-end">Total</td>
+                <td colspan="7" class="fw-bold text-end">Total</td>
                 <td class="text-end fw-bold fs-6">£{{ '%.2f' | format(grand_total) }}</td>
                 <td></td>
               </tr>
