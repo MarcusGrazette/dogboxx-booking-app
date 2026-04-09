@@ -1662,6 +1662,12 @@ def walker_schedule(walker_id):
     """View/edit walker's weekly schedule"""
 # Get walker
     walker = Walker.query.options(joinedload(Walker.user)).get_or_404(walker_id)
+
+    # Admins can edit any walker's schedule; walkers can only edit their own
+    if not current_user.is_admin:
+        own_walker = Walker.query.filter_by(user_id=current_user.id).first()
+        if not own_walker or own_walker.id != walker_id:
+            return jsonify(success=False, message="Forbidden"), 403
     
     form = WalkerScheduleForm()
     

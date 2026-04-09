@@ -26,6 +26,8 @@ class Config:
     
     # Security settings
     SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access to session cookie
+    SESSION_COOKIE_SAMESITE = 'Lax'   # Prevent cross-site cookie sending
+    REMEMBER_COOKIE_SAMESITE = 'Lax'  # Same for remember-me cookies
     PERMANENT_SESSION_LIFETIME = timedelta(days=14)  # For remember me cookies
     
     # Content Security Policy

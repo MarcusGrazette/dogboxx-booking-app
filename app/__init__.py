@@ -37,6 +37,11 @@ def _home_url_for(user):
 
 def create_app(config_name=None):
     app = Flask(__name__)
+
+    # Trust the reverse proxy (Railway) to set X-Forwarded-For / X-Forwarded-Proto.
+    # Required so Flask-Limiter sees the real client IP rather than the proxy's IP.
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
     
     # Determine configuration to use
     if config_name is None:
