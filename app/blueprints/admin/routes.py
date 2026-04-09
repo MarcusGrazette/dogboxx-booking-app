@@ -1314,11 +1314,7 @@ def new_client():
             logging.info(f"Admin {current_user.id} created client account for {user.email} "
                          f"(address={'yes' if has_address else 'no'}, dog={'yes' if has_dog else 'no'})")
 
-            flash(
-                f"Client account created. "
-                f"Temporary password: <strong>{temp_password}</strong> — share this with {user.firstname}.",
-                "success"
-            )
+            flash(f"Client account created for {user.firstname} {user.lastname}.", "success")
             return redirect(url_for('admin.client_detail', client_id=user.id))
 
         except IntegrityError as e:
@@ -1594,9 +1590,8 @@ def new_walker():
             
             db.session.commit()
             
-            # TODO: Send welcome email with temp password
             logging.info(f"Admin {current_user.id} created walker account for {user.email}")
-            flash(f"Walker account created successfully. Temporary password: {temp_password}", "success")
+            flash(f"Walker account created for {user.firstname} {user.lastname}.", "success")
             
             return redirect(url_for('admin.walkers'))
             
