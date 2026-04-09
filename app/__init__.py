@@ -197,11 +197,15 @@ def create_app(config_name=None):
         if not app.debug and not app.testing:
             # HSTS header (HTTP Strict Transport Security)
             response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-            
+
             # Other security headers
             response.headers['X-Content-Type-Options'] = 'nosniff'
             response.headers['X-Frame-Options'] = 'SAMEORIGIN'
-            response.headers['X-XSS-Protection'] = '1; mode=block'
+            # X-XSS-Protection is deprecated in modern browsers — omitted intentionally
+
+        # Applied in all environments (no HTTPS requirement)
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
         
         # Add Content Security Policy header
         if app.config.get('CSP'):

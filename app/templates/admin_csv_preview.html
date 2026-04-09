@@ -110,10 +110,9 @@
 </div>
 {% endif %}
 
-{# Hidden form for the confirmed import #}
+{# Confirm form — payload is stored server-side in the session, not in this form #}
 <form method="POST" action="{{ url_for('admin.csv_import_confirm') }}" id="confirm-form" class="d-none">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <input type="hidden" name="import_payload" value="{{ import_payload }}">
 </form>
 <button id="confirm-modal-trigger" class="d-none" data-bs-toggle="modal" data-bs-target="#confirmImportModal"></button>
 

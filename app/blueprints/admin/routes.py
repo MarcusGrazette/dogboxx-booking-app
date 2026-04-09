@@ -2574,16 +2574,16 @@ def csv_import_preview():
     valid_count   = sum(1 for r in rows if not r['errors'])
     invalid_count = sum(1 for r in rows if r['errors'])
 
-    import json
-    # Only pass valid, non-duplicate rows to the confirm form
-    import_payload = json.dumps([r for r in rows if not r['errors']])
+    # Store validated rows server-side in the session; don't pass them as a
+    # hidden form field (which can be tampered with client-side).
+    from flask import session as flask_session
+    flask_session['csv_import_rows'] = [r for r in rows if not r['errors']]
 
     return render_template(
         "admin_csv_preview.html",
         rows=rows,
         valid_count=valid_count,
         invalid_count=invalid_count,
-        import_payload=import_payload,
     )
 
 
@@ -2591,13 +2591,12 @@ def csv_import_preview():
 @login_required
 @admin_required
 def csv_import_confirm():
-    """Execute the import from the confirmed JSON payload."""
-    import json
+    """Execute the import using the validated rows stored in the session."""
+    from flask import session as flask_session
 
-    try:
-        rows = json.loads(request.form.get('import_payload', '[]'))
-    except (json.JSONDecodeError, TypeError):
-        flash("Invalid import data.", "error")
+    rows = flask_session.pop('csv_import_rows', None)
+    if rows is None:
+        flash("Import session expired or not found. Please re-upload the CSV.", "error")
         return redirect(url_for('admin.csv_import'))
 
     created = 0
