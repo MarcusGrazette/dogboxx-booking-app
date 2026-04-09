@@ -1465,7 +1465,10 @@ def deactivate_client(client_id):
         user = User.query.filter(User.role == 'client', User.id == client_id).first()
         if not user:
             return jsonify(success=False, message="Client not found"), 404
-        
+
+        if user.id == current_user.id:
+            return jsonify(success=False, message="You cannot deactivate your own account"), 400
+
         user.active = False
         db.session.commit()
         
@@ -1616,7 +1619,10 @@ def deactivate_walker(walker_id):
         user = User.query.filter(User.role == 'walker', User.id == walker_id).first()
         if not user:
             return jsonify(success=False, message="Walker not found"), 404
-        
+
+        if user.id == current_user.id:
+            return jsonify(success=False, message="You cannot deactivate your own account"), 400
+
         user.active = False
         db.session.commit()
         
