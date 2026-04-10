@@ -69,19 +69,21 @@ def seed():
             db.session.add(drop_in)
             print("✓ Created service type: Drop In")
 
-        # Admin account
-        if not User.query.filter_by(role='admin').first():
+        # Owner / admin account
+        if not User.query.filter_by(email='lydia@dogboxx.org').first():
             admin = User(
-                firstname='Admin',
-                lastname='DogBoxx',
-                email='admin@dogboxx.org',
-                role='admin',
+                firstname='Lydia',
+                lastname='Maxwell',
+                email='lydia@dogboxx.org',
+                role='walker',
+                is_admin=True,
+                is_super_admin=True,
                 hashed_password=generate_password_hash('changeme123!'),
                 must_change_password=True,
                 active=True,
             )
             db.session.add(admin)
-            print("✓ Created admin account: admin@dogboxx.org (password: changeme123!)")
+            print("✓ Created owner account: lydia@dogboxx.org (password: changeme123!)")
 
         db.session.commit()
         print("\n✓ Seed complete!")

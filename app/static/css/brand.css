@@ -29,6 +29,10 @@
   --bs-link-color-rgb:       224, 47, 172;
   --bs-link-hover-color:     #C0258F;
   --bs-link-hover-color-rgb: 192, 37, 143;
+
+  /* Form switches — Bootstrap uses its own variable, doesn't inherit --bs-primary */
+  --bs-form-check-input-checked-bg-color:     #E02FAC;
+  --bs-form-check-input-checked-border-color: #E02FAC;
 }
 
 /* ---- Buttons ---- */

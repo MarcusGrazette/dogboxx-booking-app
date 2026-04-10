@@ -26,6 +26,8 @@ class Config:
     
     # Security settings
     SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access to session cookie
+    SESSION_COOKIE_SAMESITE = 'Lax'   # Prevent cross-site cookie sending
+    REMEMBER_COOKIE_SAMESITE = 'Lax'  # Same for remember-me cookies
     PERMANENT_SESSION_LIFETIME = timedelta(days=14)  # For remember me cookies
     
     # Content Security Policy
@@ -71,10 +73,14 @@ class DevelopmentConfig(Config):
 
 
 class TestingConfig(Config):
-    """Testing configuration."""
+    """Testing configuration.
+
+    Uses TEST_DATABASE_URL when set (PostgreSQL in CI), otherwise falls back
+    to in-memory SQLite for fast local test runs.
+    """
     TESTING = True
     DEBUG = True
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
+    SQLALCHEMY_DATABASE_URI = os.environ.get('TEST_DATABASE_URL', 'sqlite:///:memory:')
     WTF_CSRF_ENABLED = False
     RATELIMIT_ENABLED = False
 

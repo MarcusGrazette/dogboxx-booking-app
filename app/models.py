@@ -13,6 +13,7 @@ class User(db.Model):
     role = db.Column(db.Enum('client', 'walker', name='user_roles'),
                      nullable=False, default='client')
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
+    is_super_admin = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     active = db.Column(db.Boolean, default=True, nullable=False)
     hashed_password = db.Column(db.String(256), nullable=False)

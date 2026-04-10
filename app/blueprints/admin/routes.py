@@ -1314,11 +1314,7 @@ def new_client():
             logging.info(f"Admin {current_user.id} created client account for {user.email} "
                          f"(address={'yes' if has_address else 'no'}, dog={'yes' if has_dog else 'no'})")
 
-            flash(
-                f"Client account created. "
-                f"Temporary password: <strong>{temp_password}</strong> — share this with {user.firstname}.",
-                "success"
-            )
+            flash(f"Client account created for {user.firstname} {user.lastname}.", "success")
             return redirect(url_for('admin.client_detail', client_id=user.id))
 
         except IntegrityError as e:
@@ -1469,7 +1465,10 @@ def deactivate_client(client_id):
         user = User.query.filter(User.role == 'client', User.id == client_id).first()
         if not user:
             return jsonify(success=False, message="Client not found"), 404
-        
+
+        if user.id == current_user.id:
+            return jsonify(success=False, message="You cannot deactivate your own account"), 400
+
         user.active = False
         db.session.commit()
         
@@ -1557,6 +1556,28 @@ def walkers():
     return render_template("admin_walkers.html", walkers=walkers)
 
 
+@admin_bp.route("/walkers/<int:walker_user_id>/toggle-admin", methods=["POST"])
+@login_required
+@admin_required
+def toggle_walker_admin(walker_user_id):
+    """Promote or demote a walker's admin access. Super-admin only."""
+    if not current_user.is_super_admin:
+        return jsonify(success=False, message="Only the business owner can change admin access."), 403
+
+    if walker_user_id == current_user.id:
+        return jsonify(success=False, message="You cannot change your own admin access."), 400
+
+    target = User.query.filter_by(id=walker_user_id, role='walker').first_or_404()
+
+    if target.is_super_admin:
+        return jsonify(success=False, message="Cannot change admin access for the business owner."), 400
+
+    target.is_admin = not target.is_admin
+    db.session.commit()
+
+    return jsonify(success=True, is_admin=target.is_admin)
+
+
 @admin_bp.route("/walkers/new", methods=["GET", "POST"])
 @login_required
 @admin_required
@@ -1594,9 +1615,8 @@ def new_walker():
             
             db.session.commit()
             
-            # TODO: Send welcome email with temp password
             logging.info(f"Admin {current_user.id} created walker account for {user.email}")
-            flash(f"Walker account created successfully. Temporary password: {temp_password}", "success")
+            flash(f"Walker account created for {user.firstname} {user.lastname}.", "success")
             
             return redirect(url_for('admin.walkers'))
             
@@ -1621,7 +1641,10 @@ def deactivate_walker(walker_id):
         user = User.query.filter(User.role == 'walker', User.id == walker_id).first()
         if not user:
             return jsonify(success=False, message="Walker not found"), 404
-        
+
+        if user.id == current_user.id:
+            return jsonify(success=False, message="You cannot deactivate your own account"), 400
+
         user.active = False
         db.session.commit()
         
@@ -1662,6 +1685,12 @@ def walker_schedule(walker_id):
     """View/edit walker's weekly schedule"""
 # Get walker
     walker = Walker.query.options(joinedload(Walker.user)).get_or_404(walker_id)
+
+    # Admins can edit any walker's schedule; walkers can only edit their own
+    if not current_user.is_admin:
+        own_walker = Walker.query.filter_by(user_id=current_user.id).first()
+        if not own_walker or own_walker.id != walker_id:
+            return jsonify(success=False, message="Forbidden"), 403
     
     form = WalkerScheduleForm()
     
@@ -2568,16 +2597,16 @@ def csv_import_preview():
     valid_count   = sum(1 for r in rows if not r['errors'])
     invalid_count = sum(1 for r in rows if r['errors'])
 
-    import json
-    # Only pass valid, non-duplicate rows to the confirm form
-    import_payload = json.dumps([r for r in rows if not r['errors']])
+    # Store validated rows server-side in the session; don't pass them as a
+    # hidden form field (which can be tampered with client-side).
+    from flask import session as flask_session
+    flask_session['csv_import_rows'] = [r for r in rows if not r['errors']]
 
     return render_template(
         "admin_csv_preview.html",
         rows=rows,
         valid_count=valid_count,
         invalid_count=invalid_count,
-        import_payload=import_payload,
     )
 
 
@@ -2585,13 +2614,12 @@ def csv_import_preview():
 @login_required
 @admin_required
 def csv_import_confirm():
-    """Execute the import from the confirmed JSON payload."""
-    import json
+    """Execute the import using the validated rows stored in the session."""
+    from flask import session as flask_session
 
-    try:
-        rows = json.loads(request.form.get('import_payload', '[]'))
-    except (json.JSONDecodeError, TypeError):
-        flash("Invalid import data.", "error")
+    rows = flask_session.pop('csv_import_rows', None)
+    if rows is None:
+        flash("Import session expired or not found. Please re-upload the CSV.", "error")
         return redirect(url_for('admin.csv_import'))
 
     created = 0

@@ -37,6 +37,11 @@ def _home_url_for(user):
 
 def create_app(config_name=None):
     app = Flask(__name__)
+
+    # Trust the reverse proxy (Railway) to set X-Forwarded-For / X-Forwarded-Proto.
+    # Required so Flask-Limiter sees the real client IP rather than the proxy's IP.
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
     
     # Determine configuration to use
     if config_name is None:
@@ -192,11 +197,15 @@ def create_app(config_name=None):
         if not app.debug and not app.testing:
             # HSTS header (HTTP Strict Transport Security)
             response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-            
+
             # Other security headers
             response.headers['X-Content-Type-Options'] = 'nosniff'
             response.headers['X-Frame-Options'] = 'SAMEORIGIN'
-            response.headers['X-XSS-Protection'] = '1; mode=block'
+            # X-XSS-Protection is deprecated in modern browsers — omitted intentionally
+
+        # Applied in all environments (no HTTPS requirement)
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
         
         # Add Content Security Policy header
         if app.config.get('CSP'):
@@ -364,13 +373,12 @@ def create_app(config_name=None):
     @app.route('/health')
     def health():
         from sqlalchemy import text as sql_text
-        from flask import jsonify
         try:
             db.session.execute(sql_text('SELECT 1'))
-            return jsonify(status='ok', database='connected'), 200
+            return '', 200
         except Exception as e:
             app.logger.error(f'Health check failed: {e}')
-            return jsonify(status='error', database='unavailable'), 503
+            return '', 503
 
     @app.route('/sw.js')
     def service_worker():

@@ -29,7 +29,7 @@ Always check out `develop` before starting new work.
 | Database | PostgreSQL (prod), SQLite supported for quick local dev |
 | Frontend | Jinja2, Bootstrap 5, AdminLTE 3, Bootstrap Icons, vanilla JS |
 | Email | Resend API (`noreply@dogboxx.org` verified) |
-| CI | GitHub Actions — `pytest` runs on push to `main`/`develop` and all PRs |
+| CI | GitHub Actions — Postgres-backed: `flask db upgrade` → `flask db check` → `pytest` on push/PR |
 
 ---
 
@@ -71,7 +71,7 @@ seed_demo_bookings.py  Demo booking data for presentations
 | `WalkerSchedule` | Default weekly pattern (day_of_week + slot) |
 | `WalkerUnavailability` | Date-specific exceptions to a walker's schedule |
 | `WalkerAdHocAvailability` | One-off available days outside a walker's default schedule |
-| `PricingConfig` | Pricing history (used by invoicing) |
+| `PricingConfig` | Pricing history (used by invoicing). Fields: `price_per_walk`, `double_slot_discount`, `weekly_discount` (per-walk, for weeks ≥5 walks), `price_per_drop_in`, `effective_from`. |
 | `Notification` | In-app bell notifications (read/unread) |
 
 **Booking statuses:** `requested` → `confirmed` / `waitlisted` / `cancelled`
@@ -94,6 +94,7 @@ See `.env.example`. Required:
 | `APP_BASE_URL` | Public URL — used in password reset links |
 
 Optional: `REDIS_URL` for persistent rate limiting (falls back to in-memory).
+Optional: `TEST_DATABASE_URL` — PostgreSQL URL used by `TestingConfig` in CI. If not set, tests use SQLite.
 
 ---
 
@@ -117,7 +118,7 @@ venv/bin/flask run --host=0.0.0.0 --port=5000
 
 | Role | Email | Password |
 |---|---|---|
-| Admin + Walker | admin@dogboxx.org | adminpass |
+| Admin + Walker (Owner) | lydia@dogboxx.org | changeme123! |
 | Walker | testwalker@dogboxx.org | walkies123 |
 | Client | john.doe@example.com | clientpass |
 
@@ -126,11 +127,16 @@ venv/bin/flask run --host=0.0.0.0 --port=5000
 ## Tests
 
 ```bash
-pytest                    # run all tests
+pytest                    # run all tests (SQLite locally)
 pytest tests/test_auth.py # specific file
 ```
 
-140 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing. All should pass. CI runs on every push/PR — don't merge anything that breaks CI.
+145 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing. All should pass. CI runs on every push/PR — don't merge anything that breaks CI.
+
+CI runs three steps in order against a real Postgres instance:
+1. `flask db upgrade` — verifies the full migration chain runs cleanly from scratch
+2. `flask db check` — fails if any model column lacks a matching migration (catches standalone scripts that bypass Alembic)
+3. `pytest` — runs the test suite against Postgres (enforces enum constraints, catches type differences invisible in SQLite)
 
 ---
 
@@ -146,8 +152,20 @@ pytest tests/test_auth.py # specific file
 Useful commands:
 ```bash
 railway logs              # tail production logs
-railway run flask db upgrade   # run migration on prod DB
-railway shell             # interactive prod shell
+railway shell             # interactive prod shell (local subshell with Railway env vars — not SSH)
+```
+
+**Running migrations on prod from local** — `railway run` injects the internal `DATABASE_URL` (unreachable locally). Use `DATABASE_PUBLIC_URL` instead:
+```bash
+DATABASE_URL="<DATABASE_PUBLIC_URL value>" FLASK_ENV=production flask db upgrade
+```
+`DATABASE_PUBLIC_URL` must be set in Railway dashboard variables first.
+
+**CLI commands for admin setup:**
+```bash
+flask create-admin        # create admin user + walker record (prompts for details)
+flask make-walker --email user@example.com  # add Walker record to existing user
+flask seed-service-types  # seed Group Walk / Drop In / Day Care service types (idempotent)
 ```
 
 ---
@@ -171,7 +189,17 @@ railway shell             # interactive prod shell
 - Check `FEATURES.md` for open items before starting new features
 - Feature branches: `feature/<short-name>` off `develop`
 - PRs to `develop` first; then `develop` → `main` for production
-- After any schema change: `flask db migrate -m "description"` + commit the migration
-- **Always** bump `CACHE_VERSION` in `app/static/js/sw.js` whenever `brand.css`, `reusable-calendar.css`, `reusable-calendar.js`, or any other file in `PRECACHE_ASSETS` changes. Forgetting this causes browsers to serve stale cached assets after deploy.
+- After any schema change: `flask db migrate -m "description"` + commit the migration. Never add columns via standalone scripts — always use Alembic so CI catches drift.
+- **`CACHE_VERSION` in `app/static/js/sw.js` is bumped automatically** by a PostToolUse hook (`.claude/hooks/bump-cache-version.sh`) whenever `brand.css`, `reusable-calendar.css`, or `reusable-calendar.js` are edited. For other changes to `PRECACHE_ASSETS`, bump manually.
 - This is a live production app with real clients — be careful with data migrations and deploys
 - **PR workflow**: push changes to `develop` and notify the user to test first. Only open a PR to `main` after the user has confirmed the changes look good. This avoids merging then immediately following up with a fix PR.
+- **Notification preferences**: `notification_preference` on `User` is always `'email'` — WhatsApp was removed. The email toggle on `/profile` controls `email_marketing` (newsletter), not booking notification emails.
+- **Invoicing discounts**: double-slot discount (same-day AM+PM walks) and weekly discount (≥5 confirmed walks in ISO week) are both applied in `app/utils/invoicing.py`. Both are configurable via `/admin/revenue`.
+
+---
+
+## Claude Code Tooling
+
+- `.claude/settings.json` — project hooks config (PostToolUse: auto-bump sw.js CACHE_VERSION)
+- `.claude/hooks/bump-cache-version.sh` — fires on Edit/Write to watched static assets
+- **GitHub MCP** is configured at user scope — use it to read issues, PR status, and CI results directly rather than running `gh` CLI commands
