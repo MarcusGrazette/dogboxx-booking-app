@@ -118,7 +118,7 @@ venv/bin/flask run --host=0.0.0.0 --port=5000
 
 | Role | Email | Password |
 |---|---|---|
-| Admin + Walker | admin@dogboxx.org | adminpass |
+| Admin + Walker (Owner) | lydia@dogboxx.org | changeme123! |
 | Walker | testwalker@dogboxx.org | walkies123 |
 | Client | john.doe@example.com | clientpass |
 
@@ -190,8 +190,16 @@ flask seed-service-types  # seed Group Walk / Drop In / Day Care service types (
 - Feature branches: `feature/<short-name>` off `develop`
 - PRs to `develop` first; then `develop` → `main` for production
 - After any schema change: `flask db migrate -m "description"` + commit the migration. Never add columns via standalone scripts — always use Alembic so CI catches drift.
-- **Always** bump `CACHE_VERSION` in `app/static/js/sw.js` whenever `brand.css`, `reusable-calendar.css`, `reusable-calendar.js`, or any other file in `PRECACHE_ASSETS` changes. Forgetting this causes browsers to serve stale cached assets after deploy.
+- **`CACHE_VERSION` in `app/static/js/sw.js` is bumped automatically** by a PostToolUse hook (`.claude/hooks/bump-cache-version.sh`) whenever `brand.css`, `reusable-calendar.css`, or `reusable-calendar.js` are edited. For other changes to `PRECACHE_ASSETS`, bump manually.
 - This is a live production app with real clients — be careful with data migrations and deploys
 - **PR workflow**: push changes to `develop` and notify the user to test first. Only open a PR to `main` after the user has confirmed the changes look good. This avoids merging then immediately following up with a fix PR.
 - **Notification preferences**: `notification_preference` on `User` is always `'email'` — WhatsApp was removed. The email toggle on `/profile` controls `email_marketing` (newsletter), not booking notification emails.
 - **Invoicing discounts**: double-slot discount (same-day AM+PM walks) and weekly discount (≥5 confirmed walks in ISO week) are both applied in `app/utils/invoicing.py`. Both are configurable via `/admin/revenue`.
+
+---
+
+## Claude Code Tooling
+
+- `.claude/settings.json` — project hooks config (PostToolUse: auto-bump sw.js CACHE_VERSION)
+- `.claude/hooks/bump-cache-version.sh` — fires on Edit/Write to watched static assets
+- **GitHub MCP** is configured at user scope — use it to read issues, PR status, and CI results directly rather than running `gh` CLI commands

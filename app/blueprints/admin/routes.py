@@ -1556,6 +1556,28 @@ def walkers():
     return render_template("admin_walkers.html", walkers=walkers)
 
 
+@admin_bp.route("/walkers/<int:walker_user_id>/toggle-admin", methods=["POST"])
+@login_required
+@admin_required
+def toggle_walker_admin(walker_user_id):
+    """Promote or demote a walker's admin access. Super-admin only."""
+    if not current_user.is_super_admin:
+        return jsonify(success=False, message="Only the business owner can change admin access."), 403
+
+    if walker_user_id == current_user.id:
+        return jsonify(success=False, message="You cannot change your own admin access."), 400
+
+    target = User.query.filter_by(id=walker_user_id, role='walker').first_or_404()
+
+    if target.is_super_admin:
+        return jsonify(success=False, message="Cannot change admin access for the business owner."), 400
+
+    target.is_admin = not target.is_admin
+    db.session.commit()
+
+    return jsonify(success=True, is_admin=target.is_admin)
+
+
 @admin_bp.route("/walkers/new", methods=["GET", "POST"])
 @login_required
 @admin_required

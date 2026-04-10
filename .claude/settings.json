@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/marcus/claude/dogboxx-booking-app/.claude/hooks/bump-cache-version.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
