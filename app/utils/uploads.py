@@ -16,18 +16,46 @@ MAX_SIZE = (800, 800)
 CROPPED_SIZE = (400, 400)  # square output for cropper uploads
 
 
+def _backup_to_r2(local_path, r2_key):
+    """Copy a saved file to the R2 backup bucket. Best-effort — never raises."""
+    try:
+        import boto3
+        from botocore.client import Config
+
+        endpoint = os.environ.get('R2_ENDPOINT_URL')
+        key_id   = os.environ.get('R2_ACCESS_KEY_ID')
+        secret   = os.environ.get('R2_SECRET_ACCESS_KEY')
+        bucket   = os.environ.get('R2_BUCKET_UPLOADS', 'dogboxx-uploads-backup')
+
+        if not all([endpoint, key_id, secret]):
+            return  # not configured (local dev / CI)
+
+        client = boto3.client(
+            's3',
+            endpoint_url=endpoint,
+            aws_access_key_id=key_id,
+            aws_secret_access_key=secret,
+            config=Config(signature_version='s3v4'),
+            region_name='auto',
+        )
+        client.upload_file(local_path, bucket, r2_key)
+        logging.info(f"R2 backup: {r2_key}")
+    except Exception as e:
+        logging.warning(f"R2 backup failed for {r2_key}: {e}")
+
+
 def process_dog_photo(file_storage):
     """Process and save an uploaded dog photo.
-    
+
     Validates the image, strips EXIF metadata, resizes, and saves
     with a UUID filename.
-    
+
     Args:
         file_storage: A werkzeug FileStorage object from request.files
-        
+
     Returns:
         The saved filename (e.g. 'abc123.jpg'), or None if no file provided.
-        
+
     Raises:
         ValueError: If the file is invalid or unsupported format.
     """
@@ -69,6 +97,7 @@ def process_dog_photo(file_storage):
     clean_img.save(upload_path, fmt, **kwargs)
 
     logging.info(f"Saved dog photo: {unique_filename}")
+    _backup_to_r2(upload_path, f"dogs/{unique_filename}")
     return unique_filename
 
 
@@ -125,4 +154,5 @@ def process_cropped_photo(file_storage, subfolder='dogs'):
     img.save(upload_path, 'JPEG', quality=88, optimize=True)
 
     logging.info(f"Saved cropped photo ({subfolder}): {unique_filename}")
+    _backup_to_r2(upload_path, f"{subfolder}/{unique_filename}")
     return unique_filename
