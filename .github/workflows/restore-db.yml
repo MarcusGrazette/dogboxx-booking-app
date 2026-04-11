@@ -1,0 +1,64 @@
+name: Restore Database from Backup
+
+# DESTRUCTIVE — overwrites the production database.
+# Only run this during a declared incident after confirming with Lydia.
+#
+# Restore process:
+#   1. Downloads the chosen backup from R2
+#   2. Runs it against DATABASE_PUBLIC_URL (production Postgres)
+#   3. The --clean dump drops and recreates all tables before restoring data
+
+on:
+  workflow_dispatch:
+    inputs:
+      backup_date:
+        description: 'Backup to restore (YYYY-MM-DD). Run the backup workflow first to see available dates.'
+        required: true
+      confirm:
+        description: 'Type RESTORE to confirm. This overwrites production data.'
+        required: true
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Confirm intent
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "RESTORE" ]; then
+            echo "Confirmation string does not match. Aborting."
+            exit 1
+          fi
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Configure AWS CLI for Cloudflare R2
+        run: |
+          aws configure set aws_access_key_id     "$R2_ACCESS_KEY_ID"
+          aws configure set aws_secret_access_key "$R2_SECRET_ACCESS_KEY"
+          aws configure set default.region        auto
+        env:
+          R2_ACCESS_KEY_ID:     ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+
+      - name: Check backup exists
+        run: |
+          KEY="${{ github.event.inputs.backup_date }}.sql.gz"
+          aws s3 ls "s3://dogboxx-db-backups/$KEY" --endpoint-url "$R2_ENDPOINT_URL" \
+            || { echo "Backup not found: $KEY"; exit 1; }
+        env:
+          R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+
+      - name: Restore database
+        run: |
+          KEY="${{ github.event.inputs.backup_date }}.sql.gz"
+          echo "Restoring from: $KEY"
+          aws s3 cp "s3://dogboxx-db-backups/$KEY" - \
+              --endpoint-url "$R2_ENDPOINT_URL" \
+            | gunzip \
+            | psql "$DATABASE_PUBLIC_URL"
+          echo "Restore complete."
+        env:
+          DATABASE_PUBLIC_URL: ${{ secrets.DATABASE_PUBLIC_URL }}
+          R2_ENDPOINT_URL:     ${{ secrets.R2_ENDPOINT_URL }}

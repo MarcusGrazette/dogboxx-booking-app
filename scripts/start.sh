@@ -18,11 +18,38 @@ if [ -d /data/uploads ]; then
   cp -n app/static/uploads/dogs/default-dog.png /data/uploads/dogs/ 2>/dev/null || true
   cp -n app/static/uploads/dogs/default-dog.jpg /data/uploads/dogs/ 2>/dev/null || true
 
+  # Disaster recovery: if the volume is empty (e.g. after a volume loss and
+  # recreation), restore all photos from the R2 backup before serving traffic.
+  DOGS_COUNT=$(find /data/uploads/dogs -maxdepth 1 -name '*.jpg' -o -name '*.png' 2>/dev/null | grep -vc 'default-dog' || true)
+  if [ "$DOGS_COUNT" -eq 0 ] && [ -n "$R2_ACCESS_KEY_ID" ]; then
+    echo "Volume appears empty — restoring uploads from R2..."
+    python3 - <<'PYEOF'
+import boto3, os
+from botocore.client import Config
+client = boto3.client('s3',
+    endpoint_url=os.environ['R2_ENDPOINT_URL'],
+    aws_access_key_id=os.environ['R2_ACCESS_KEY_ID'],
+    aws_secret_access_key=os.environ['R2_SECRET_ACCESS_KEY'],
+    config=Config(signature_version='s3v4'),
+    region_name='auto')
+bucket = os.environ.get('R2_BUCKET_UPLOADS', 'dogboxx-uploads-backup')
+paginator = client.get_paginator('list_objects_v2')
+restored = 0
+for page in paginator.paginate(Bucket=bucket):
+    for obj in page.get('Contents', []):
+        key = obj['Key']
+        local_path = f'/data/uploads/{key}'
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        if not os.path.exists(local_path):
+            client.download_file(bucket, key, local_path)
+            restored += 1
+print(f'Restored {restored} file(s) from R2.')
+PYEOF
+  fi
+
   # Swap the ephemeral directory for a symlink to the volume
   rm -rf app/static/uploads
   ln -s /data/uploads app/static/uploads
-
-  echo "Uploads directory linked to volume at /data/uploads"
 fi
 
 flask db upgrade

@@ -25,7 +25,7 @@ jobs:
       - name: Dump and upload to R2
         run: |
           TIMESTAMP=$(date -u +%Y-%m-%d)
-          pg_dump "$DATABASE_PUBLIC_URL" \
+          pg_dump "$DATABASE_PUBLIC_URL" --clean --if-exists \
             | gzip \
             | aws s3 cp - "s3://dogboxx-db-backups/${TIMESTAMP}.sql.gz" \
                 --endpoint-url "$R2_ENDPOINT_URL"
