@@ -1,0 +1,50 @@
+name: Nightly Database Backup
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # 2am UTC daily
+  workflow_dispatch:        # allow manual trigger from GitHub Actions UI
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install PostgreSQL client
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Configure AWS CLI for Cloudflare R2
+        run: |
+          aws configure set aws_access_key_id     "$R2_ACCESS_KEY_ID"
+          aws configure set aws_secret_access_key "$R2_SECRET_ACCESS_KEY"
+          aws configure set default.region        auto
+        env:
+          R2_ACCESS_KEY_ID:     ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+
+      - name: Dump and upload to R2
+        run: |
+          TIMESTAMP=$(date -u +%Y-%m-%d)
+          pg_dump "$DATABASE_PUBLIC_URL" \
+            | gzip \
+            | aws s3 cp - "s3://dogboxx-db-backups/${TIMESTAMP}.sql.gz" \
+                --endpoint-url "$R2_ENDPOINT_URL"
+          echo "Backup complete: ${TIMESTAMP}.sql.gz"
+        env:
+          DATABASE_PUBLIC_URL: ${{ secrets.DATABASE_PUBLIC_URL }}
+          R2_ENDPOINT_URL:     ${{ secrets.R2_ENDPOINT_URL }}
+
+      - name: Delete backups older than 30 days
+        run: |
+          CUTOFF=$(date -u -d '30 days ago' +%Y-%m-%d)
+          aws s3 ls s3://dogboxx-db-backups/ --endpoint-url "$R2_ENDPOINT_URL" \
+            | awk '{print $4}' \
+            | while read KEY; do
+                DATE="${KEY%.sql.gz}"
+                if [[ "$DATE" < "$CUTOFF" ]]; then
+                  echo "Deleting old backup: $KEY"
+                  aws s3 rm "s3://dogboxx-db-backups/$KEY" --endpoint-url "$R2_ENDPOINT_URL"
+                fi
+              done
+        env:
+          R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}

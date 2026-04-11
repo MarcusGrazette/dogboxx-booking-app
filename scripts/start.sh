@@ -11,8 +11,6 @@ set -e
 #
 # Mount point configured in railway.toml: /data/uploads
 
-echo "Volume check: /data=$(ls -la /data 2>&1 | tr '\n' ' ')"
-
 if [ -d /data/uploads ]; then
   mkdir -p /data/uploads/dogs /data/uploads/profiles
 
