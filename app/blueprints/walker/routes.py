@@ -9,7 +9,7 @@ from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy import case
-from app.models import Walker, Booking, User, WalkerUnavailability, WalkerAdHocAvailability, WalkerSchedule, Client, Dog
+from app.models import Walker, Booking, User, WalkerUnavailability, WalkerAdHocAvailability, WalkerSchedule, Client, Dog, DailyMessage
 from app import db
 from datetime import datetime, timezone, timedelta, date
 
@@ -281,6 +281,8 @@ def pickups(date_str=None):
     afternoon_pickups  = [b for b in bookings if b.slot == 'Afternoon' and not _is_drop_in(b)]
     afternoon_drop_ins = [b for b in bookings if b.slot == 'Afternoon' and     _is_drop_in(b)]
 
+    daily_message = DailyMessage.query.filter_by(date=selected_date).first()
+
     return render_template("walker_pickups.html",
                            walker=walker,
                            selected_date=selected_date,
@@ -289,7 +291,8 @@ def pickups(date_str=None):
                            morning_pickups=morning_pickups,
                            afternoon_pickups=afternoon_pickups,
                            afternoon_drop_ins=afternoon_drop_ins,
-                           has_pickups=len(bookings) > 0)
+                           has_pickups=len(bookings) > 0,
+                           daily_message=daily_message)
 
 
 @walker_bp.route("/api/pickup-days/<int:year>/<int:month>")

@@ -1,107 +1,138 @@
-{% macro pickup_card(bookings, slot_name, slot_icon, slot_dot_class) %}
+{% macro pickup_card(bookings, slot_name, slot_icon, slot_dot_class, collapse_id) %}
 {% if bookings %}
 <div class="card mb-3">
-    <div class="pickup-slot-header">
+    <div class="pickup-slot-header"
+         role="button"
+         data-bs-toggle="collapse"
+         data-bs-target="#{{ collapse_id }}"
+         aria-expanded="true"
+         aria-controls="{{ collapse_id }}"
+         style="cursor:pointer;user-select:none;">
         <span class="slot-dot {{ slot_dot_class }}"></span>
         <i class="bi bi-{{ slot_icon }}"></i>
         {{ slot_name }}
         <span class="slot-count">{{ bookings|length }} {{ 'dog' if bookings|length == 1 else 'dogs' }}</span>
+        <i class="bi bi-chevron-down ms-2 pickup-chevron" style="font-size:0.8rem;transition:transform 0.2s;"></i>
     </div>
-    <div class="list-group list-group-flush">
-        {% for b in bookings %}
-        <div class="list-group-item py-3">
-            <div class="d-flex align-items-start gap-3">
+    <div id="{{ collapse_id }}" class="collapse show">
+        <div class="list-group list-group-flush">
+            {% for b in bookings %}
+            <div class="list-group-item py-3">
+                <div class="d-flex align-items-start gap-3">
 
-                <!-- Left column: avatar + maps link -->
-                {% set client = b.user.client if b.user else none %}
-                <div class="flex-shrink-0 d-flex flex-column align-items-center gap-1" style="width:64px;">
-                    <div class="position-relative" style="width:64px;height:64px;">
-                        <img src="{{ '/static/uploads/dogs/' + b.dog.pic if b.dog and b.dog.pic else '/static/uploads/dogs/default-dog.png' }}"
-                             class="rounded-circle" width="64" height="64" style="object-fit:cover;"
-                             alt="{{ b.dog.name if b.dog else 'Dog' }}"
-                             onerror="this.onerror=null; this.src='/static/uploads/dogs/default-dog.png'">
-                        <span class="position-absolute bottom-0 end-0 rounded-circle d-flex align-items-center justify-content-center pickup-order-badge">
-                            {{ b.pickup_order if b.pickup_order else '—' }}
-                        </span>
-                    </div>
-                    {% if client and client.maps_url %}
-                    <a href="{{ client.maps_url }}" target="_blank" rel="noopener"
-                       class="btn btn-sm btn-primary w-100 p-0 fw-semibold"
-                       style="font-size:0.72rem;line-height:1.8;"
-                       title="Open in Google Maps">
-                        <i class="bi bi-geo-alt-fill me-1"></i>Map
-                    </a>
-                    {% endif %}
-                </div>
-
-                <!-- Details -->
-                <div class="flex-grow-1 min-width-0 text-start">
-
-                    <!-- Row 1: Dog name -->
-                    <div>
-                        <span class="fw-bold" style="font-size:1.2rem;">{{ b.dog.name if b.dog else 'Unknown' }}</span>
-                    </div>
-
-                    <!-- Row 2: Owner name(s) -->
-                    <div class="mt-1">
-                        <span class="text-muted small"><i class="bi bi-person me-1"></i>{{ b.dog.owners_display if b.dog else (b.user.full_name if b.user else 'Unknown client') }}</span>
-                    </div>
-
-                    <!-- Row 3: Address -->
-                    {% if client and client.formatted_address %}
-                    <div class="small text-muted mt-1">{{ client.formatted_address }}</div>
-                    {% endif %}
-
-                    <!-- Row 3: Today's note (amber) -->
-                    {% if b.client_notes %}
-                    <div class="small mt-2 px-2 py-1 rounded" style="background:#fff8e1;color:#7a5800;border-left:3px solid #ffc107;">
-                        <i class="bi bi-pencil-square me-1"></i>{{ b.client_notes }}
-                    </div>
-                    {% endif %}
-
-                    <!-- Row 4: Pickup notes (blue) -->
-                    {% if b.dog and b.dog.pickup_instructions %}
-                    <div class="small mt-2 px-2 py-1 rounded" style="background:#e8f4fd;color:#0a58ca;border-left:3px solid #3d8bcd;">
-                        <i class="bi bi-info-circle me-1"></i>{{ b.dog.pickup_instructions }}
-                    </div>
-                    {% endif %}
-
-                    <!-- Row 5: WhatsApp buttons -->
-                    {% if b.dog and b.dog.whatsapp_group_url %}
-                    <div class="d-flex gap-2 mt-2">
-                        <a href="{{ b.dog.whatsapp_group_url }}"
-                           target="_blank" rel="noopener"
-                           class="btn btn-sm fw-semibold flex-fill"
-                           style="background:#25D366;color:#fff;font-size:0.78rem;">
-                            <i class="bi bi-whatsapp me-1"></i>Group chat
+                    <!-- Left column: avatar + maps link -->
+                    {% set client = b.user.client if b.user else none %}
+                    <div class="flex-shrink-0 d-flex flex-column align-items-center gap-1" style="width:64px;">
+                        <div class="position-relative" style="width:64px;height:64px;">
+                            <img src="{{ '/static/uploads/dogs/' + b.dog.pic if b.dog and b.dog.pic else '/static/uploads/dogs/default-dog.png' }}"
+                                 class="rounded-circle" width="64" height="64" style="object-fit:cover;"
+                                 alt="{{ b.dog.name if b.dog else 'Dog' }}"
+                                 onerror="this.onerror=null; this.src='/static/uploads/dogs/default-dog.png'">
+                            <span class="position-absolute bottom-0 end-0 rounded-circle d-flex align-items-center justify-content-center pickup-order-badge">
+                                {{ b.pickup_order if b.pickup_order else '—' }}
+                            </span>
+                        </div>
+                        {% if client and client.maps_url %}
+                        <a href="{{ client.maps_url }}" target="_blank" rel="noopener"
+                           class="btn btn-sm btn-primary w-100 p-0 fw-semibold"
+                           style="font-size:0.72rem;line-height:1.8;"
+                           title="Open in Google Maps">
+                            <i class="bi bi-geo-alt-fill me-1"></i>Map
                         </a>
+                        {% endif %}
                     </div>
-                    {% elif b.user and b.user.phone %}
-                    {% set wa_num = b.user.phone | wa_number %}
-                    <div class="d-flex gap-2 mt-2">
-                        <a href="https://wa.me/{{ wa_num }}?text=Hi%2C%20I'm%205%20mins%20away%21"
-                           target="_blank" rel="noopener"
-                           class="btn btn-sm fw-semibold flex-fill"
-                           style="background:#25D366;color:#fff;font-size:0.78rem;">
-                            <i class="bi bi-chat-fill me-1"></i>5 mins away
-                        </a>
-                        <a href="https://wa.me/{{ wa_num }}"
-                           target="_blank" rel="noopener"
-                           class="btn btn-sm btn-outline-secondary flex-fill"
-                           style="font-size:0.78rem;">
-                            <i class="bi bi-telephone me-1"></i>Call
-                        </a>
-                    </div>
-                    {% endif %}
 
+                    <!-- Details -->
+                    <div class="flex-grow-1 min-width-0 text-start">
+
+                        <!-- Row 1: Dog name -->
+                        <div>
+                            <span class="fw-bold" style="font-size:1.2rem;">{{ b.dog.name if b.dog else 'Unknown' }}</span>
+                        </div>
+
+                        <!-- Row 2: Owner name(s) -->
+                        <div class="mt-1">
+                            <span class="text-muted small"><i class="bi bi-person me-1"></i>{{ b.dog.owners_display if b.dog else (b.user.full_name if b.user else 'Unknown client') }}</span>
+                        </div>
+
+                        <!-- Row 3: Address -->
+                        {% if client and client.formatted_address %}
+                        <div class="small text-muted mt-1">{{ client.formatted_address }}</div>
+                        {% endif %}
+
+                        <!-- Row 3: Today's note (amber) -->
+                        {% if b.client_notes %}
+                        <div class="small mt-2 px-2 py-1 rounded" style="background:#fff8e1;color:#7a5800;border-left:3px solid #ffc107;">
+                            <i class="bi bi-pencil-square me-1"></i>{{ b.client_notes }}
+                        </div>
+                        {% endif %}
+
+                        <!-- Row 4: Pickup notes (blue) -->
+                        {% if b.dog and b.dog.pickup_instructions %}
+                        <div class="small mt-2 px-2 py-1 rounded" style="background:#e8f4fd;color:#0a58ca;border-left:3px solid #3d8bcd;">
+                            <i class="bi bi-info-circle me-1"></i>{{ b.dog.pickup_instructions }}
+                        </div>
+                        {% endif %}
+
+                        <!-- Row 5: WhatsApp buttons -->
+                        {% if b.dog and b.dog.whatsapp_group_url %}
+                        <div class="d-flex gap-2 mt-2">
+                            <a href="{{ b.dog.whatsapp_group_url }}"
+                               target="_blank" rel="noopener"
+                               class="btn btn-sm fw-semibold flex-fill"
+                               style="background:#25D366;color:#fff;font-size:0.78rem;">
+                                <i class="bi bi-whatsapp me-1"></i>Group chat
+                            </a>
+                        </div>
+                        {% elif b.user and b.user.phone %}
+                        {% set wa_num = b.user.phone | wa_number %}
+                        <div class="d-flex gap-2 mt-2">
+                            <a href="https://wa.me/{{ wa_num }}?text=Hi%2C%20I'm%205%20mins%20away%21"
+                               target="_blank" rel="noopener"
+                               class="btn btn-sm fw-semibold flex-fill"
+                               style="background:#25D366;color:#fff;font-size:0.78rem;">
+                                <i class="bi bi-chat-fill me-1"></i>5 mins away
+                            </a>
+                            <a href="https://wa.me/{{ wa_num }}"
+                               target="_blank" rel="noopener"
+                               class="btn btn-sm btn-outline-secondary flex-fill"
+                               style="font-size:0.78rem;">
+                                <i class="bi bi-telephone me-1"></i>Call
+                            </a>
+                        </div>
+                        {% endif %}
+
+                    </div>
                 </div>
             </div>
+            {% endfor %}
         </div>
-        {% endfor %}
     </div>
 </div>
 {% endif %}
 {% endmacro %}
+
+{# ── Daily announcement ──────────────────────────────────────────────────── #}
+{% if daily_message is defined and daily_message %}
+<div class="card mb-3 card-accent-pink">
+    <div class="pickup-slot-header"
+         role="button"
+         data-bs-toggle="collapse"
+         data-bs-target="#collapse-announcement"
+         aria-expanded="true"
+         aria-controls="collapse-announcement"
+         style="cursor:pointer;user-select:none;">
+        <i class="bi bi-megaphone-fill text-primary"></i>
+        Today's Team Announcements
+        <i class="bi bi-chevron-down ms-auto pickup-chevron" style="font-size:0.8rem;transition:transform 0.2s;"></i>
+    </div>
+    <div id="collapse-announcement" class="collapse show">
+        <div class="card-body ql-content">
+            {{ daily_message.content | safe }}
+        </div>
+    </div>
+</div>
+{% endif %}
 
 {% if not has_pickups %}
 <div class="card">
@@ -114,8 +145,8 @@
 {# Order: AM drop-ins → AM walks → PM walks → PM drop-ins #}
 {% set morning_drop_ins   = morning_drop_ins   if morning_drop_ins   is defined else [] %}
 {% set afternoon_drop_ins = afternoon_drop_ins if afternoon_drop_ins is defined else [] %}
-{{ pickup_card(morning_drop_ins,   'Morning Drop-ins',   'house-door',  'slot-dot-drop-in') }}
-{{ pickup_card(morning_pickups,    'Morning Walks',       'sunrise',     'slot-dot-morning-walk') }}
-{{ pickup_card(afternoon_pickups,  'Afternoon Walks',     'sunset',      'slot-dot-afternoon-walk') }}
-{{ pickup_card(afternoon_drop_ins, 'Afternoon Drop-ins',  'house-door',  'slot-dot-drop-in') }}
+{{ pickup_card(morning_drop_ins,   'Morning Drop-ins',   'house-door',  'slot-dot-drop-in',         'collapse-morning-dropins') }}
+{{ pickup_card(morning_pickups,    'Morning Walks',       'sunrise',     'slot-dot-morning-walk',    'collapse-morning-walks') }}
+{{ pickup_card(afternoon_pickups,  'Afternoon Walks',     'sunset',      'slot-dot-afternoon-walk',  'collapse-afternoon-walks') }}
+{{ pickup_card(afternoon_drop_ins, 'Afternoon Drop-ins',  'house-door',  'slot-dot-drop-in',         'collapse-afternoon-dropins') }}
 {% endif %}
