@@ -1263,12 +1263,8 @@ def new_client():
                 hashed_password=generate_password_hash(temp_password),
                 must_change_password=True,
             )
-            if form.notify_email.data and form.notify_whatsapp.data:
-                user.notification_preference = 'both'
-            elif form.notify_whatsapp.data:
-                user.notification_preference = 'whatsapp'
-            else:
-                user.notification_preference = 'email'
+            user.notification_preference = 'email'
+            user.email_marketing = bool(form.notify_email.data)
             user.phone = form.phone.data.strip() if form.phone.data else None
 
             db.session.add(user)
@@ -1356,12 +1352,8 @@ def edit_client(client_id):
             user.firstname = form.firstname.data.strip().title()
             user.lastname = form.lastname.data.strip().title()
 
-            if form.notify_email.data and form.notify_whatsapp.data:
-                user.notification_preference = 'both'
-            elif form.notify_whatsapp.data:
-                user.notification_preference = 'whatsapp'
-            else:
-                user.notification_preference = 'email'
+            user.notification_preference = 'email'
+            user.email_marketing = bool(form.notify_email.data)
             user.phone = form.phone.data.strip() if form.phone.data else None
 
             if not client:
@@ -1424,8 +1416,7 @@ def edit_client(client_id):
         form.firstname.data = user.firstname
         form.lastname.data = user.lastname
         form.phone.data = user.phone
-        form.notify_email.data = (user.notification_preference or 'email') in ('email', 'both')
-        form.notify_whatsapp.data = (user.notification_preference or '') in ('whatsapp', 'both')
+        form.notify_email.data = user.email_marketing
 
         if client:
             if client.street_address:

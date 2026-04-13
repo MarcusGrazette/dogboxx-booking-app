@@ -953,6 +953,25 @@ def upload_profile_photo():
         return jsonify(success=False, error="Server error saving photo"), 500
 
 
+@client_bp.route("/account-pending")
+@login_required
+def account_pending():
+    """Holding page for client users whose account exists but has no Client record yet.
+
+    This happens when an admin creates a User login but hasn't filled in the
+    client details (address / dog info) in the admin panel.  The before_request
+    guard redirects them here instead of to /onboard, which requires a Client row.
+    """
+    from app.models import Client
+    # If the Client record appears (admin just finished setting up), redirect onward.
+    client = Client.query.filter_by(user_id=current_user.id).first()
+    if client:
+        if client.onboarding_completed:
+            return redirect(url_for('client.index'))
+        return redirect(url_for('client.onboard'))
+    return render_template('account_pending.html')
+
+
 @client_bp.route("/onboard", methods=["GET", "POST"])
 @login_required
 def onboard():
@@ -997,13 +1016,8 @@ def onboard():
             client.onboarding_completed_at = datetime.now(timezone.utc)
 
             # Notification preferences
-            current_user.phone = form.phone.data.strip() if form.phone.data else None
-            if form.notify_email.data and form.notify_whatsapp.data:
-                current_user.notification_preference = 'both'
-            elif form.notify_whatsapp.data:
-                current_user.notification_preference = 'whatsapp'
-            else:
-                current_user.notification_preference = 'email'
+            current_user.notification_preference = 'email'
+            current_user.email_marketing = bool(form.notify_email.data)
 
             # Handle file upload
             pic_filename = None
@@ -1081,10 +1095,7 @@ def onboard():
             form.postcode.data = client.postal_code
             form.pickup_instructions.data = client.pickup_instructions
             form.maps_url.data = client.maps_url
-        if current_user.phone:
-            form.phone.data = current_user.phone
-        form.notify_email.data = (current_user.notification_preference or 'email') in ('email', 'both')
-        form.notify_whatsapp.data = (current_user.notification_preference or '') in ('whatsapp', 'both')
+        form.notify_email.data = current_user.email_marketing
         if existing_dog:
             form.dog_name.data = existing_dog.name
             form.dog_gender.data = existing_dog.gender

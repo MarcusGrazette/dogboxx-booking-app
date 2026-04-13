@@ -174,15 +174,20 @@ def create_app(config_name=None):
         # Exception: secondary owners have shared access to another client's dog —
         # they don't need to onboard themselves.
         if current_user.role == 'client':
-            if request.endpoint not in ['client.onboard', 'auth.logout', 'auth.change_password', 'static']:
+            if request.endpoint not in ['client.onboard', 'client.account_pending', 'auth.logout', 'auth.change_password', 'static']:
                 from app.models import Client, DogOwner
                 client = Client.query.filter_by(user_id=current_user.id).first()
-                if not client or not client.onboarding_completed:
-                    has_secondary_dog = DogOwner.query.filter_by(
-                        user_id=current_user.id, role='secondary'
-                    ).first() is not None
-                    if not has_secondary_dog:
-                        from flask import url_for
+                has_secondary_dog = DogOwner.query.filter_by(
+                    user_id=current_user.id, role='secondary'
+                ).first() is not None
+                if not has_secondary_dog:
+                    from flask import url_for
+                    if client is None:
+                        # Admin created the User account but hasn't set up the
+                        # Client record yet — show a holding page rather than
+                        # the onboarding form (which would fail with no client).
+                        return redirect(url_for('client.account_pending'))
+                    if not client.onboarding_completed:
                         return redirect(url_for('client.onboard'))
 
     @app.after_request

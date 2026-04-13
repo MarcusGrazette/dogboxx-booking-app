@@ -22,15 +22,15 @@ Complete Your Profile
             <div class="py-4 py-md-5">
 
                 <div class="text-center mb-4">
-                    <h2 class="fw-semibold mb-2">Hello {{ current_user.firstname }}!</h2>
-                    <p class="text-muted">Let's complete your profile to get started.</p>
+                    <h2 class="fw-semibold mb-2">Almost there, {{ current_user.firstname }}!</h2>
+                    <p class="text-muted">Your account is set up — we just need a couple more details before you can start booking.</p>
                 </div>
 
                 <!-- Progress indicator -->
                 <div class="mb-4">
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <small id="progress-step" class="text-muted">Step 1 of 2</small>
-                        <small id="progress-text" class="text-muted">Address & Access</small>
+                        <small id="progress-step" class="text-muted">Part 1 of 2</small>
+                        <small id="progress-text" class="text-muted">Your address</small>
                     </div>
                     <div class="progress" style="height: 4px;">
                         <div class="progress-bar" role="progressbar" style="width: 50%"></div>
@@ -41,10 +41,9 @@ Complete Your Profile
                 <form action="{{ url_for('client.onboard') }}" method="post" novalidate id="onboardingForm" enctype="multipart/form-data">
                     {{ form.hidden_tag() }}
 
-                    <!-- Step 1: Address and Access -->
+                    <!-- Part 1: Address -->
                     <div id="step-1">
 
-                        <!-- Address -->
                         <div class="mb-3">
                             <label class="form-label">Your address</label>
                             <div class="input-group mb-2">
@@ -74,40 +73,6 @@ Complete Your Profile
                             {% endfor %}
                         </div>
 
-                        <!-- Notification Preferences -->
-                        <div class="card mb-4">
-                            <div class="card-header">
-                                <h5 class="mb-0"><i class="bi bi-bell"></i> Notification Preferences</h5>
-                            </div>
-                            <div class="card-body">
-                                <p class="text-muted small">How would you like to receive updates about your bookings?</p>
-                                
-                                <div class="form-check mb-2">
-                                    {{ form.notify_email(class="form-check-input", id="notify_email") }}
-                                    <label class="form-check-label" for="notify_email">
-                                        <i class="bi bi-envelope me-1"></i> Email to {{ current_user.email }}
-                                    </label>
-                                </div>
-                                
-                                <div class="form-check mb-2">
-                                    {{ form.notify_whatsapp(class="form-check-input", id="notify_whatsapp") }}
-                                    <label class="form-check-label" for="notify_whatsapp">
-                                        <i class="bi bi-whatsapp me-1"></i> WhatsApp
-                                    </label>
-                                </div>
-                                
-                                <div id="phone-field" class="mt-3" style="display: none;">
-                                    <div class="input-group">
-                                        <span class="input-group-text"><i class="bi bi-phone fs-5 text-secondary"></i></span>
-                                        {{ form.phone(class="form-control", placeholder="e.g. +44 7700 900000") }}
-                                    </div>
-                                    {% for error in form.phone.errors %}
-                                    <div class="text-danger small mt-1">{{ error }}</div>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                        </div>
-
                         <div class="col-12 mb-3">
                             <button class="btn btn-primary fw-semibold" type="button" id="nextBtn">
                                 Next
@@ -116,13 +81,12 @@ Complete Your Profile
 
                     </div>
 
-                    <!-- Step 2: Dog information -->
+                    <!-- Part 2: Dog information -->
                     <div id="step-2" style="display: none;">
 
-                        <!-- About Your Dog card -->
                         <div class="card mb-4">
                             <div class="card-header">
-                                <h5 class="mb-0"><i class="bi bi-heart-fill"></i> About Your Dog</h5>
+                                <h5 class="mb-0"><i class="bi bi-heart-fill"></i> Your Dog</h5>
                             </div>
                             <div class="card-body text-start">
                                 <div class="input-group mb-3">
@@ -163,7 +127,6 @@ Complete Your Profile
                             </div>
                         </div>
 
-                        <!-- Health & Notes card -->
                         <div class="card mb-4">
                             <div class="card-header">
                                 <h5 class="mb-0"><i class="bi bi-bandaid"></i> Health &amp; Notes</h5>
@@ -179,7 +142,6 @@ Complete Your Profile
                             </div>
                         </div>
 
-                        <!-- Photo card -->
                         <div class="card mb-4">
                             <div class="card-header">
                                 <h5 class="mb-0"><i class="bi bi-camera"></i> Photo</h5>
@@ -216,17 +178,6 @@ Complete Your Profile
     }
 
     document.addEventListener('DOMContentLoaded', function () {
-        // Show/hide phone field based on WhatsApp checkbox
-        const whatsappCheck = document.getElementById('notify_whatsapp');
-        const phoneField = document.getElementById('phone-field');
-        if (whatsappCheck && phoneField) {
-            function togglePhone() {
-                phoneField.style.display = whatsappCheck.checked ? 'block' : 'none';
-            }
-            whatsappCheck.addEventListener('change', togglePhone);
-            togglePhone();
-        }
-
         // Initialize FilePond
         FilePond.registerPlugin(
             FilePondPluginImagePreview,
@@ -244,7 +195,7 @@ Complete Your Profile
             labelIdle: '<i class="bi bi-cloud-upload fs-3"></i><br>Drag & drop or <span class="filepond--label-action">browse</span>'
         });
 
-        // Step 1 to Step 2 transition
+        // Part 1 → Part 2 transition
         const nextButton = document.getElementById('nextBtn');
         const step1 = document.getElementById('step-1');
         const step2 = document.getElementById('step-2');
@@ -266,8 +217,8 @@ Complete Your Profile
             step1.style.display = 'none';
             step2.style.display = 'block';
             document.querySelector('.progress-bar').style.width = '100%';
-            document.getElementById('progress-step').textContent = 'Step 2 of 2';
-            document.getElementById('progress-text').textContent = 'About Your Dog';
+            document.getElementById('progress-step').textContent = 'Part 2 of 2';
+            document.getElementById('progress-text').textContent = 'Your dog';
         });
 
         // Handle form submission

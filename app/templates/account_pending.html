@@ -1,0 +1,29 @@
+{% extends "layout.html" %}
+
+{% block title %}Account Being Set Up{% endblock %}
+
+{% block main %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-8 col-lg-6">
+            <div class="py-5 text-center">
+                <div class="mb-4">
+                    <i class="bi bi-hourglass-split text-primary" style="font-size: 3rem;"></i>
+                </div>
+                <h2 class="fw-semibold mb-3">Your account is almost ready</h2>
+                <p class="text-muted mb-4">
+                    We're just finishing setting up your account. This usually only takes a moment — check back shortly and you'll be good to go.
+                </p>
+                <p class="text-muted small">
+                    If you've been waiting a while, drop us a message and we'll get it sorted.
+                </p>
+                <div class="mt-4">
+                    <a href="{{ url_for('client.account_pending') }}" class="btn btn-outline-primary">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Check again
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
