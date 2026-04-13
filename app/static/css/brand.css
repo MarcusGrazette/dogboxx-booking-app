@@ -33,6 +33,25 @@
   /* Form switches — Bootstrap uses its own variable, doesn't inherit --bs-primary */
   --bs-form-check-input-checked-bg-color:     #E02FAC;
   --bs-form-check-input-checked-border-color: #E02FAC;
+
+  /* Dropdown active state — overrides Bootstrap's default blue highlight */
+  --bs-dropdown-link-active-bg:    var(--db-primary-subtle);
+  --bs-dropdown-link-active-color: var(--bs-body-color);
+}
+
+/* ---- Form switches ---- */
+/* Direct property override — more reliable than the CSS variable alone */
+.form-switch .form-check-input:checked {
+  background-color: #E02FAC;
+  border-color:     #E02FAC;
+  width: 2.5em;
+  height: 1.25em;
+}
+
+.form-switch .form-check-input {
+  cursor: pointer;
+  width: 2.5em;
+  height: 1.25em;
 }
 
 /* ---- Buttons ---- */

@@ -98,12 +98,6 @@ class OnboardingForm(FlaskForm):
         render_kw={"placeholder": "https://maps.app.goo.gl/..."}
     )
     notify_email = BooleanField('Email', default=True)
-    notify_whatsapp = BooleanField('WhatsApp')
-    phone = StringField(
-        'Phone Number',
-        validators=[Optional(), Length(max=20)],
-        render_kw={"placeholder": "e.g. +44 7700 900000"}
-    )
 
     dog_name = StringField(
         "Dog's Name",
@@ -297,7 +291,6 @@ class ClientCreateForm(FlaskForm):
         render_kw={"placeholder": "+44 7700 900000"}
     )
     notify_email = BooleanField('Email', default=True)
-    notify_whatsapp = BooleanField('WhatsApp')
 
     # ── Dog info (optional — all three core fields required together) ─────
     dog_name = StringField(
