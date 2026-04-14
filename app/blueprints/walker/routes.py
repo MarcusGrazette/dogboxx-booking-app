@@ -281,6 +281,11 @@ def pickups(date_str=None):
     afternoon_pickups  = [b for b in bookings if b.slot == 'Afternoon' and not _is_drop_in(b)]
     afternoon_drop_ins = [b for b in bookings if b.slot == 'Afternoon' and     _is_drop_in(b)]
 
+    # Dogs appearing in both morning and afternoon slots on this day
+    morning_dog_ids   = {b.dog_id for b in morning_pickups + morning_drop_ins if b.dog_id}
+    afternoon_dog_ids = {b.dog_id for b in afternoon_pickups + afternoon_drop_ins if b.dog_id}
+    double_booked_dog_ids = morning_dog_ids & afternoon_dog_ids
+
     daily_message = DailyMessage.query.filter_by(date=selected_date).first()
 
     return render_template("walker_pickups.html",
@@ -292,7 +297,8 @@ def pickups(date_str=None):
                            afternoon_pickups=afternoon_pickups,
                            afternoon_drop_ins=afternoon_drop_ins,
                            has_pickups=len(bookings) > 0,
-                           daily_message=daily_message)
+                           daily_message=daily_message,
+                           double_booked_dog_ids=double_booked_dog_ids)
 
 
 @walker_bp.route("/api/pickup-days/<int:year>/<int:month>")
@@ -370,6 +376,10 @@ def api_pickup_list(date_str):
     afternoon_pickups  = [b for b in bookings if b.slot == 'Afternoon' and not _is_drop_in(b)]
     afternoon_drop_ins = [b for b in bookings if b.slot == 'Afternoon' and     _is_drop_in(b)]
 
+    morning_dog_ids   = {b.dog_id for b in morning_pickups + morning_drop_ins if b.dog_id}
+    afternoon_dog_ids = {b.dog_id for b in afternoon_pickups + afternoon_drop_ins if b.dog_id}
+    double_booked_dog_ids = morning_dog_ids & afternoon_dog_ids
+
     daily_message = DailyMessage.query.filter_by(date=selected_date).first()
 
     return render_template("partials/pickup_list.html",
@@ -379,7 +389,8 @@ def api_pickup_list(date_str):
                            afternoon_pickups=afternoon_pickups,
                            afternoon_drop_ins=afternoon_drop_ins,
                            has_pickups=len(bookings) > 0,
-                           daily_message=daily_message)
+                           daily_message=daily_message,
+                           double_booked_dog_ids=double_booked_dog_ids)
 
 
 @walker_bp.route("/profile")

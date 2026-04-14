@@ -1,4 +1,4 @@
-{% macro pickup_card(bookings, slot_name, slot_icon, slot_dot_class, collapse_id) %}
+{% macro pickup_card(bookings, slot_name, slot_icon, slot_dot_class, collapse_id, double_booked_ids=none) %}
 {% if bookings %}
 <div class="card mb-3">
     <div class="pickup-slot-header"
@@ -45,9 +45,14 @@
                     <!-- Details -->
                     <div class="flex-grow-1 min-width-0 text-start">
 
-                        <!-- Row 1: Dog name -->
-                        <div>
+                        <!-- Row 1: Dog name + double-booking badge -->
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
                             <span class="fw-bold" style="font-size:1.2rem;">{{ b.dog.name if b.dog else 'Unknown' }}</span>
+                            {% if double_booked_ids and b.dog and b.dog.id in double_booked_ids %}
+                            <span class="badge modifier-both" title="Booked for both morning and afternoon">
+                                <i class="bi bi-layers-fill me-1"></i>Both slots
+                            </span>
+                            {% endif %}
                         </div>
 
                         <!-- Row 2: Owner name(s) -->
@@ -145,8 +150,9 @@
 {# Order: AM drop-ins → AM walks → PM walks → PM drop-ins #}
 {% set morning_drop_ins   = morning_drop_ins   if morning_drop_ins   is defined else [] %}
 {% set afternoon_drop_ins = afternoon_drop_ins if afternoon_drop_ins is defined else [] %}
-{{ pickup_card(morning_drop_ins,   'Morning Drop-ins',   'house-door',  'slot-dot-drop-in',         'collapse-morning-dropins') }}
-{{ pickup_card(morning_pickups,    'Morning Walks',       'sunrise',     'slot-dot-morning-walk',    'collapse-morning-walks') }}
-{{ pickup_card(afternoon_pickups,  'Afternoon Walks',     'sunset',      'slot-dot-afternoon-walk',  'collapse-afternoon-walks') }}
-{{ pickup_card(afternoon_drop_ins, 'Afternoon Drop-ins',  'house-door',  'slot-dot-drop-in',         'collapse-afternoon-dropins') }}
+{% set dbl = double_booked_dog_ids if double_booked_dog_ids is defined else none %}
+{{ pickup_card(morning_drop_ins,   'Morning Drop-ins',   'house-door',  'slot-dot-drop-in',         'collapse-morning-dropins',  dbl) }}
+{{ pickup_card(morning_pickups,    'Morning Walks',       'sunrise',     'slot-dot-morning-walk',    'collapse-morning-walks',    dbl) }}
+{{ pickup_card(afternoon_pickups,  'Afternoon Walks',     'sunset',      'slot-dot-afternoon-walk',  'collapse-afternoon-walks',  dbl) }}
+{{ pickup_card(afternoon_drop_ins, 'Afternoon Drop-ins',  'house-door',  'slot-dot-drop-in',         'collapse-afternoon-dropins', dbl) }}
 {% endif %}
