@@ -282,6 +282,10 @@ def create_app(config_name=None):
         from flask_wtf.csrf import generate_csrf
         return dict(csrf_token=generate_csrf)
 
+    @app.context_processor
+    def inject_home_url():
+        return dict(home_url=_home_url_for(current_user))
+
     @app.template_filter('wa_number')
     def wa_number_filter(phone: str) -> str:
         """Format a phone number for use in a wa.me URL.
