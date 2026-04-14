@@ -1,0 +1,485 @@
+{% extends "layout.html" %}
+
+{% block title %}My Profile{% endblock %}
+
+{% block head_extra %}
+<link href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js" defer></script>
+<style>
+  .avatar-wrap {
+    position: relative;
+    width: 72px;
+    height: 72px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .avatar-wrap img,
+  .avatar-initials {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #E02FAC;
+    display: block;
+  }
+  .avatar-initials {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #E02FAC;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #fff;
+  }
+  .avatar-edit-overlay {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 1rem;
+    opacity: 0;
+    transition: opacity 0.18s ease;
+  }
+  .avatar-wrap:hover .avatar-edit-overlay { opacity: 1; }
+
+  /* Slot indicator dots in the schedule table */
+  .sched-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+  .sched-dot-morning   { background: #1B1B1B; }
+  .sched-dot-afternoon { background: #E02FAC; }
+
+  /* Slim availability rows */
+  .avail-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.45rem 0;
+    border-bottom: 1px solid #f0f0f0;
+    gap: 0.5rem;
+  }
+  .avail-row:last-child { border-bottom: none; }
+
+  #crop-image { max-width: 100%; display: block; }
+</style>
+{% endblock %}
+
+{% block main %}
+<div class="container" style="max-width:680px;">
+
+  <div class="page-header">
+    <h2><i class="bi bi-person-circle me-2"></i>My Profile</h2>
+  </div>
+
+  {# ── Account card ──────────────────────────────────────────────────────── #}
+  <div class="card mb-4">
+    <div class="card-header">
+      <i class="bi bi-person-fill me-2" style="color:#E02FAC;"></i>Account
+    </div>
+    <div class="card-body">
+      <div class="d-flex align-items-center gap-3">
+        {# Avatar — click to change photo #}
+        <div class="avatar-wrap" id="avatar-clickable" title="Update profile photo">
+          {% if current_user.profile_pic %}
+          <img src="{{ url_for('static', filename='uploads/profiles/' + current_user.profile_pic) }}"
+               alt="{{ current_user.firstname }}" id="avatar-preview">
+          {% else %}
+          <div class="avatar-initials" id="avatar-preview">
+            {{ current_user.firstname[0] | upper }}{{ current_user.lastname[0] | upper if current_user.lastname else '' }}
+          </div>
+          {% endif %}
+          <div class="avatar-edit-overlay"><i class="bi bi-pencil-fill"></i></div>
+        </div>
+
+        <div class="flex-grow-1">
+          <div class="fw-bold fs-5 lh-sm">{{ current_user.firstname }} {{ current_user.lastname }}</div>
+          <div class="text-muted small">{{ current_user.email }}</div>
+          <a href="{{ url_for('auth.change_password') }}" class="btn btn-sm btn-outline-secondary mt-2">
+            <i class="bi bi-key me-1"></i>Change password
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Weekly schedule (Mon–Fri only) ────────────────────────────────────── #}
+  <div class="card mb-4 card-accent-pink">
+    <div class="card-header">
+      <i class="bi bi-clock me-2" style="color:#E02FAC;"></i>Default Weekly Schedule
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-bordered mb-0 text-center">
+        <thead>
+          <tr>
+            <th class="text-start">Day</th>
+            <th><i class="bi bi-sunrise me-1"></i>Morning</th>
+            <th><i class="bi bi-sunset me-1"></i>Afternoon</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for day_num in range(5) %}{# Mon–Fri only #}
+          <tr>
+            <td class="fw-semibold text-start">{{ schedule_grid[day_num].name }}</td>
+            <td>
+              {% if schedule_grid[day_num]['Morning'] %}
+              <span class="sched-dot sched-dot-morning" title="Scheduled"></span>
+              {% else %}
+              <span class="text-muted small">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if schedule_grid[day_num]['Afternoon'] %}
+              <span class="sched-dot sched-dot-afternoon" title="Scheduled"></span>
+              {% else %}
+              <span class="text-muted small">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div class="px-3 py-2 text-muted small border-top">
+        <i class="bi bi-info-circle me-1"></i>
+        Your default schedule is set by the admin. Contact them to make changes.
+      </div>
+    </div>
+  </div>
+
+  {# ── Extra available days ──────────────────────────────────────────────── #}
+  <div class="card mb-4 card-accent-green">
+    <div class="card-header">
+      <i class="bi bi-calendar-plus me-2" style="color:#22c55e;"></i>Extra Available Days
+    </div>
+    <div class="card-body">
+      <p class="text-muted small mb-3">Add one-off days where you're available outside your normal schedule.</p>
+      <div class="row g-2 mb-3 align-items-end">
+        <div class="col-auto">
+          <label for="adhoc-date" class="form-label small">Date</label>
+          <input type="date" id="adhoc-date" class="form-control" min="{{ today.isoformat() }}">
+        </div>
+        <div class="col-auto">
+          <label for="adhoc-slot" class="form-label small">Slot</label>
+          <select id="adhoc-slot" class="form-select">
+            <option value="Morning">Morning</option>
+            <option value="Afternoon">Afternoon</option>
+          </select>
+        </div>
+        <div class="col-auto">
+          <button class="btn btn-success" onclick="addAdhoc()">
+            <i class="bi bi-plus-lg"></i> Add
+          </button>
+        </div>
+      </div>
+      <div id="adhoc-list">
+        {% if adhoc_availabilities %}
+          {% for a in adhoc_availabilities %}
+          <div class="avail-row" id="adhoc-{{ a.id }}">
+            <div>
+              <span class="fw-semibold">{{ a.date.strftime('%a, %-d %b %Y') }}</span>
+              <span class="badge ms-2 {% if a.slot == 'Morning' %}bg-dark{% else %}text-bg-pink{% endif %}">{{ a.slot }}</span>
+            </div>
+            <button class="btn btn-sm btn-outline-danger" onclick="deleteAdhoc({{ a.id }})">
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
+          {% endfor %}
+        {% else %}
+        <p class="text-muted mb-0 small" id="no-adhoc-msg"><i class="bi bi-calendar2 me-1"></i>No extra days added.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ── Unavailability ────────────────────────────────────────────────────── #}
+  <div class="card mb-4 card-accent-amber">
+    <div class="card-header">
+      <i class="bi bi-calendar-x me-2" style="color:#f59e0b;"></i>Upcoming Unavailability
+    </div>
+    <div class="card-body">
+      <div class="row g-2 mb-3 align-items-end">
+        <div class="col-auto">
+          <label for="unavail-date" class="form-label small">Date</label>
+          <input type="date" id="unavail-date" class="form-control"
+                 min="{{ today.isoformat() }}"
+                 max="{{ (today.replace(year=today.year+1)).isoformat() }}">
+        </div>
+        <div class="col-auto">
+          <label for="unavail-slot" class="form-label small">Slot</label>
+          <select id="unavail-slot" class="form-select">
+            <option value="Morning">Morning</option>
+            <option value="Afternoon">Afternoon</option>
+          </select>
+        </div>
+        <div class="col">
+          <label for="unavail-reason" class="form-label small">Reason (optional)</label>
+          <input type="text" id="unavail-reason" class="form-control" maxlength="200"
+                 placeholder="e.g. Doctor appointment">
+        </div>
+        <div class="col-auto">
+          <button class="btn btn-warning" onclick="addUnavailability()">
+            <i class="bi bi-plus-lg"></i> Add
+          </button>
+        </div>
+      </div>
+      <div id="unavail-list">
+        {% if unavailabilities %}
+          {% for u in unavailabilities %}
+          <div class="avail-row" id="unavail-{{ u.id }}">
+            <div>
+              <span class="fw-semibold">{{ u.date.strftime('%a, %-d %b %Y') }}</span>
+              <span class="badge ms-2 {% if u.slot == 'Morning' %}bg-dark{% else %}text-bg-pink{% endif %}">{{ u.slot }}</span>
+              {% if u.reason %}<span class="text-muted ms-2 small">— {{ u.reason }}</span>{% endif %}
+            </div>
+            <button class="btn btn-sm btn-outline-danger" onclick="deleteUnavailability({{ u.id }})">
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
+          {% endfor %}
+        {% else %}
+        <p class="text-muted mb-0 small" id="no-unavail-msg"><i class="bi bi-check-circle me-1"></i>No upcoming unavailability set.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{# ── Crop modal (shared) ──────────────────────────────────────────────────── #}
+<div class="modal fade" id="cropModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Crop profile photo</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="background:#111;">
+        <img id="crop-image" src="" alt="" style="max-width:100%;display:block;">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary fw-semibold" id="crop-save-btn">
+          <span id="crop-spinner" class="spinner-border spinner-border-sm me-1 d-none" role="status"></span>
+          Save photo
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<input type="file" id="photo-input" accept="image/*" style="display:none;">
+{% endblock %}
+
+{% block scripts %}
+<script>
+const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+
+// ── Profile photo upload (Cropper.js) ──────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function () {
+  const fileInput  = document.getElementById('photo-input');
+  const cropImg    = document.getElementById('crop-image');
+  const saveBtn    = document.getElementById('crop-save-btn');
+  const spinner    = document.getElementById('crop-spinner');
+  let cropper      = null;
+  let cropModal    = null;
+
+  function getModal() {
+    if (!cropModal) cropModal = new bootstrap.Modal(document.getElementById('cropModal'));
+    return cropModal;
+  }
+
+  document.getElementById('avatar-clickable').addEventListener('click', function () {
+    fileInput.value = '';
+    fileInput.click();
+  });
+
+  fileInput.addEventListener('change', function () {
+    const file = this.files[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { alert('Please choose an image file.'); return; }
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      if (cropper) { cropper.destroy(); cropper = null; }
+      cropImg.src = e.target.result;
+      getModal().show();
+      document.getElementById('cropModal').addEventListener('shown.bs.modal', function init() {
+        document.getElementById('cropModal').removeEventListener('shown.bs.modal', init);
+        cropper = new Cropper(cropImg, {
+          aspectRatio: 1,
+          viewMode: 1,
+          dragMode: 'move',
+          autoCropArea: 0.85,
+          cropBoxMovable: false,
+          cropBoxResizable: false,
+          toggleDragModeOnDblClick: false,
+          guides: false, center: false, highlight: false, background: false,
+          responsive: true, restore: false,
+        });
+      });
+    };
+    reader.readAsDataURL(file);
+  });
+
+  saveBtn.addEventListener('click', function () {
+    if (!cropper) return;
+    spinner.classList.remove('d-none');
+    saveBtn.disabled = true;
+
+    cropper.getCroppedCanvas({ width: 400, height: 400 }).toBlob(function (blob) {
+      const fd = new FormData();
+      fd.append('file', blob, 'profile.jpg');
+      fetch('{{ url_for("walker.upload_profile_photo") }}', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken },
+        body: fd,
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          // Replace initials div or update img src
+          const preview = document.getElementById('avatar-preview');
+          if (preview.tagName === 'IMG') {
+            preview.src = data.url + '?t=' + Date.now();
+          } else {
+            const img = document.createElement('img');
+            img.src = data.url + '?t=' + Date.now();
+            img.alt = '{{ current_user.firstname }}';
+            img.id = 'avatar-preview';
+            img.style.cssText = 'width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid #E02FAC;display:block;';
+            preview.replaceWith(img);
+          }
+          // Update navbar avatar if present
+          const navAvatar = document.getElementById('navbar-avatar');
+          if (navAvatar && navAvatar.tagName === 'IMG') navAvatar.src = data.url + '?t=' + Date.now();
+          getModal().hide();
+        } else {
+          alert(data.error || 'Upload failed.');
+        }
+      })
+      .catch(() => alert('Network error. Please try again.'))
+      .finally(() => { spinner.classList.add('d-none'); saveBtn.disabled = false; });
+    }, 'image/jpeg', 0.9);
+  });
+
+  document.getElementById('cropModal').addEventListener('hidden.bs.modal', function () {
+    if (cropper) { cropper.destroy(); cropper = null; }
+  });
+});
+
+// ── Availability / unavailability AJAX (unchanged logic) ───────────────────
+async function addAdhoc() {
+    const dateVal = document.getElementById('adhoc-date').value;
+    const slot = document.getElementById('adhoc-slot').value;
+    if (!dateVal) { alert('Please select a date.'); return; }
+    try {
+        const resp = await fetch('{{ url_for("walker.add_adhoc") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ date: dateVal, slot })
+        });
+        const data = await resp.json();
+        if (data.success) {
+            const noMsg = document.getElementById('no-adhoc-msg');
+            if (noMsg) noMsg.remove();
+            const a = data.adhoc;
+            const dateObj = new Date(a.date + 'T00:00:00');
+            const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+            const badgeClass = a.slot === 'Morning' ? 'bg-dark' : 'text-bg-pink';
+            const div = document.createElement('div');
+            div.className = 'avail-row';
+            div.id = `adhoc-${a.id}`;
+            div.innerHTML = `
+                <div>
+                    <span class="fw-semibold">${dateStr}</span>
+                    <span class="badge ms-2 ${badgeClass}">${a.slot}</span>
+                </div>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteAdhoc(${a.id})">
+                    <i class="bi bi-trash"></i>
+                </button>`;
+            document.getElementById('adhoc-list').appendChild(div);
+            document.getElementById('adhoc-date').value = '';
+        } else {
+            alert(data.message || 'Error adding availability');
+        }
+    } catch (err) { alert('Request failed: ' + err.message); }
+}
+
+async function deleteAdhoc(id) {
+    if (!confirm('Remove this extra available day?')) return;
+    try {
+        const resp = await fetch(`/walker/adhoc/${id}`, {
+            method: 'DELETE', headers: { 'X-CSRFToken': csrfToken }
+        });
+        const data = await resp.json();
+        if (data.success) {
+            document.getElementById(`adhoc-${id}`)?.remove();
+            if (!document.querySelector('#adhoc-list .avail-row')) {
+                document.getElementById('adhoc-list').innerHTML =
+                    '<p class="text-muted mb-0 small" id="no-adhoc-msg"><i class="bi bi-calendar2 me-1"></i>No extra days added.</p>';
+            }
+        } else { alert(data.message || 'Error removing availability'); }
+    } catch (err) { alert('Request failed: ' + err.message); }
+}
+
+async function addUnavailability() {
+    const dateVal = document.getElementById('unavail-date').value;
+    const slot    = document.getElementById('unavail-slot').value;
+    const reason  = document.getElementById('unavail-reason').value;
+    if (!dateVal) { alert('Please select a date.'); return; }
+    try {
+        const resp = await fetch('{{ url_for("walker.add_unavailability") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ date: dateVal, slot, reason })
+        });
+        const data = await resp.json();
+        if (data.success) {
+            const noMsg = document.getElementById('no-unavail-msg');
+            if (noMsg) noMsg.remove();
+            const u = data.unavailability;
+            const dateObj = new Date(u.date + 'T00:00:00');
+            const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+            const badgeClass = u.slot === 'Morning' ? 'bg-dark' : 'text-bg-pink';
+            const div = document.createElement('div');
+            div.className = 'avail-row';
+            div.id = `unavail-${u.id}`;
+            div.innerHTML = `
+                <div>
+                    <span class="fw-semibold">${dateStr}</span>
+                    <span class="badge ms-2 ${badgeClass}">${u.slot}</span>
+                    ${u.reason ? `<span class="text-muted ms-2 small">— ${u.reason}</span>` : ''}
+                </div>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteUnavailability(${u.id})">
+                    <i class="bi bi-trash"></i>
+                </button>`;
+            document.getElementById('unavail-list').appendChild(div);
+            document.getElementById('unavail-date').value = '';
+            document.getElementById('unavail-reason').value = '';
+        } else { alert(data.message || 'Error adding unavailability'); }
+    } catch (err) { alert('Network error'); }
+}
+
+async function deleteUnavailability(id) {
+    if (!confirm('Remove this unavailability?')) return;
+    try {
+        const resp = await fetch(`/walker/unavailability/${id}`, {
+            method: 'DELETE', headers: { 'X-CSRFToken': csrfToken }
+        });
+        const data = await resp.json();
+        if (data.success) {
+            document.getElementById(`unavail-${id}`)?.remove();
+            if (!document.querySelector('#unavail-list .avail-row')) {
+                document.getElementById('unavail-list').innerHTML =
+                    '<p class="text-muted mb-0 small" id="no-unavail-msg"><i class="bi bi-check-circle me-1"></i>No upcoming unavailability set.</p>';
+            }
+        } else { alert(data.message || 'Error removing unavailability'); }
+    } catch (err) { alert('Network error'); }
+}
+</script>
+{% endblock %}

@@ -213,6 +213,7 @@ footer {
 .text-primary  { color: #E02FAC !important; }
 .bg-primary    { background-color: #E02FAC !important; }
 .border-primary { border-color: #E02FAC !important; }
+.text-bg-pink  { background-color: #E02FAC !important; color: #fff !important; }
 
 /* ---- AdminLTE overrides ---- */
 .app-sidebar {

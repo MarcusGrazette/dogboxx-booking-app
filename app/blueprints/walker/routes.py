@@ -49,7 +49,15 @@ def index():
 @login_required
 @walker_required
 def schedule():
-    """Display the walker's default weekly schedule and upcoming unavailability."""
+    """Legacy route — redirect to /walker/profile."""
+    return redirect(url_for('walker.profile'))
+
+
+@walker_bp.route("/profile")
+@login_required
+@walker_required
+def profile():
+    """Walker profile page: account info, photo, weekly schedule, and availability."""
     walker = Walker.query.filter_by(user_id=current_user.id).first()
     if not walker:
         flash("Walker profile not found. Please contact support.", "danger")
@@ -83,12 +91,43 @@ def schedule():
         WalkerAdHocAvailability.date <= end_date
     ).order_by(WalkerAdHocAvailability.date, WalkerAdHocAvailability.slot).all()
 
-    return render_template("walker_schedule.html",
+    return render_template("walker_profile.html",
                            walker=walker,
                            schedule_grid=schedule_grid,
                            unavailabilities=unavailabilities,
                            adhoc_availabilities=adhoc_availabilities,
                            today=today)
+
+
+@walker_bp.route("/profile/upload-photo", methods=["POST"])
+@login_required
+@walker_required
+def upload_profile_photo():
+    """AJAX endpoint: accept a cropped image blob and save as the walker's profile photo."""
+    from app.utils.uploads import process_cropped_photo
+    import logging
+
+    if 'file' not in request.files:
+        return jsonify(success=False, error="No file provided"), 400
+
+    try:
+        filename = process_cropped_photo(request.files['file'], subfolder='profiles')
+        if not filename:
+            return jsonify(success=False, error="Empty file"), 400
+
+        current_user.profile_pic = filename
+        db.session.commit()
+
+        url = url_for('static', filename=f'uploads/profiles/{filename}')
+        logging.info(f"Profile photo updated for walker {current_user.email}: {filename}")
+        return jsonify(success=True, url=url)
+
+    except ValueError as e:
+        return jsonify(success=False, error=str(e)), 400
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error saving walker profile photo for {current_user.email}: {e}")
+        return jsonify(success=False, error="Server error saving photo"), 500
 
 
 @walker_bp.route("/unavailability", methods=["POST"])
@@ -408,9 +447,4 @@ def api_pickup_list(date_str):
                            double_booked_dog_ids=double_booked_dog_ids)
 
 
-@walker_bp.route("/profile")
-@login_required
-@walker_required
-def profile():
-    """Display and manage walker profile"""
-    return "Walker Profile Page - Coming Soon"
+
