@@ -8,13 +8,33 @@ unavailability exceptions, and pickup lists.
 from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
-from sqlalchemy import case
-from app.models import Walker, Booking, User, WalkerUnavailability, WalkerAdHocAvailability, WalkerSchedule, Client, Dog
+from sqlalchemy import case, func
+from app.models import Walker, Booking, User, WalkerUnavailability, WalkerAdHocAvailability, WalkerSchedule, Client, Dog, DailyMessage
 from app import db
 from datetime import datetime, timezone, timedelta, date
 
 from app.blueprints.walker import walker_bp
 from app.utils.decorators import walker_required
+
+
+def _double_booked_dog_ids(selected_date):
+    """Return a set of dog_ids that have confirmed bookings in BOTH morning and
+    afternoon on selected_date, across all walkers."""
+    rows = (
+        db.session.query(Booking.dog_id)
+        .filter(
+            Booking.date == selected_date,
+            Booking.status.in_(['confirmed', 'completed']),
+            Booking.dog_id.isnot(None),
+        )
+        .group_by(Booking.dog_id)
+        .having(
+            func.count(case((Booking.slot == 'Morning',   1), else_=None)) > 0,
+            func.count(case((Booking.slot == 'Afternoon', 1), else_=None)) > 0,
+        )
+        .all()
+    )
+    return {row.dog_id for row in rows}
 
 
 @walker_bp.route("/")
@@ -281,6 +301,10 @@ def pickups(date_str=None):
     afternoon_pickups  = [b for b in bookings if b.slot == 'Afternoon' and not _is_drop_in(b)]
     afternoon_drop_ins = [b for b in bookings if b.slot == 'Afternoon' and     _is_drop_in(b)]
 
+    double_booked_dog_ids = _double_booked_dog_ids(selected_date)
+
+    daily_message = DailyMessage.query.filter_by(date=selected_date).first()
+
     return render_template("walker_pickups.html",
                            walker=walker,
                            selected_date=selected_date,
@@ -289,7 +313,9 @@ def pickups(date_str=None):
                            morning_pickups=morning_pickups,
                            afternoon_pickups=afternoon_pickups,
                            afternoon_drop_ins=afternoon_drop_ins,
-                           has_pickups=len(bookings) > 0)
+                           has_pickups=len(bookings) > 0,
+                           daily_message=daily_message,
+                           double_booked_dog_ids=double_booked_dog_ids)
 
 
 @walker_bp.route("/api/pickup-days/<int:year>/<int:month>")
@@ -367,13 +393,19 @@ def api_pickup_list(date_str):
     afternoon_pickups  = [b for b in bookings if b.slot == 'Afternoon' and not _is_drop_in(b)]
     afternoon_drop_ins = [b for b in bookings if b.slot == 'Afternoon' and     _is_drop_in(b)]
 
+    double_booked_dog_ids = _double_booked_dog_ids(selected_date)
+
+    daily_message = DailyMessage.query.filter_by(date=selected_date).first()
+
     return render_template("partials/pickup_list.html",
                            selected_date=selected_date,
                            morning_drop_ins=morning_drop_ins,
                            morning_pickups=morning_pickups,
                            afternoon_pickups=afternoon_pickups,
                            afternoon_drop_ins=afternoon_drop_ins,
-                           has_pickups=len(bookings) > 0)
+                           has_pickups=len(bookings) > 0,
+                           daily_message=daily_message,
+                           double_booked_dog_ids=double_booked_dog_ids)
 
 
 @walker_bp.route("/profile")

@@ -305,6 +305,37 @@ footer {
   to   { opacity: 0; transform: translateY(1.25rem) scale(0.92); }
 }
 
+/* ── Modifier pills (reused from admin board, available globally) ── */
+.modifier-pill {
+  font-size: 0.65rem;
+  padding: 2px 5px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+.modifier-both {
+  background: rgba(255, 193, 7, 0.15);
+  color: #997404;
+  border: 1px solid #ffc107;
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+
+/* ── Collapsible pickup slot chevron ──────────────────────── */
+/* Rotate the chevron when its sibling collapse panel is hidden */
+.pickup-slot-header[aria-expanded="false"] .pickup-chevron {
+  transform: rotate(-90deg);
+}
+
+/* ── Quill-rendered HTML in daily announcements ────────────── */
+.ql-content p { margin-bottom: 0.5rem; }
+.ql-content ul, .ql-content ol { padding-left: 1.25rem; margin-bottom: 0.5rem; }
+.ql-content h1, .ql-content h2, .ql-content h3 { margin-top: 0.75rem; margin-bottom: 0.25rem; }
+
 /* ── Walker: pickup slot section headers ──────────────────── */
 .pickup-slot-header {
   display: flex;

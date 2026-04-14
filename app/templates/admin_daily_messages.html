@@ -1,0 +1,159 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}Daily Messages{% endblock %}
+{% block page_title %}Daily Messages{% endblock %}
+{% block page_subtitle %}Post a message to the walker team for a specific day{% endblock %}
+
+{% block head_extra %}
+<link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+<style>
+  #quill-editor {
+    height: 200px;
+    font-size: 1rem;
+    background: #fff;
+    border-radius: 0 0 0.375rem 0.375rem;
+  }
+  .ql-toolbar {
+    border-radius: 0.375rem 0.375rem 0 0;
+    border-color: #dee2e6 !important;
+  }
+  .ql-container {
+    border-color: #dee2e6 !important;
+    border-radius: 0 0 0.375rem 0.375rem;
+  }
+</style>
+{% endblock %}
+
+{% block main %}
+<div class="row g-4">
+
+  {# ── Compose ───────────────────────────────────────────────────────────── #}
+  <div class="col-12 col-lg-7">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-0"><i class="bi bi-megaphone me-2"></i>Post a Message</h5>
+      </div>
+      <div class="card-body">
+        <form method="post" id="messageForm" action="{{ url_for('admin.daily_messages') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="content" id="content_val">
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Date</label>
+            <input type="date" name="date" id="msg_date" class="form-control"
+                   value="{{ today.strftime('%Y-%m-%d') }}" required>
+            <div class="form-text">Walkers will see this message on their pickup list for this day.</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Message</label>
+            <div id="quill-editor"></div>
+          </div>
+
+          <button type="submit" class="btn btn-primary fw-semibold" id="saveBtn">
+            <i class="bi bi-floppy me-1"></i> Save Message
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  {# ── Existing messages ─────────────────────────────────────────────────── #}
+  <div class="col-12 col-lg-5">
+    <div class="card">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <h5 class="card-title mb-0"><i class="bi bi-clock-history me-2"></i>Saved Messages</h5>
+        {% if messages %}
+        <form method="post" action="{{ url_for('admin.bulk_delete_old_daily_messages') }}"
+              onsubmit="return confirm('Delete all messages older than 30 days?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-trash me-1"></i>Delete &gt;30 days old
+          </button>
+        </form>
+        {% endif %}
+      </div>
+      {% if messages %}
+      <div class="list-group list-group-flush" style="max-height:520px;overflow-y:auto;">
+        {% for msg in messages %}
+        <div class="list-group-item">
+          <div class="d-flex align-items-start justify-content-between gap-2">
+            <div class="flex-grow-1 min-width-0">
+              <div class="fw-semibold small mb-1">
+                {{ msg.date.strftime('%A, %-d %B %Y') }}
+                {% if msg.date == today %}
+                  <span class="badge bg-primary ms-1" style="font-size:0.65rem;">Today</span>
+                {% elif msg.date < today %}
+                  <span class="badge bg-secondary ms-1" style="font-size:0.65rem;">Past</span>
+                {% else %}
+                  <span class="badge bg-success ms-1" style="font-size:0.65rem;">Upcoming</span>
+                {% endif %}
+              </div>
+              <div class="text-muted small message-preview" style="overflow:hidden;max-height:3em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">
+                {{ msg.content | striptags | truncate(120) }}
+              </div>
+            </div>
+            <div class="d-flex gap-1 flex-shrink-0">
+              <button type="button" class="btn btn-sm btn-outline-primary edit-btn"
+                      data-date="{{ msg.date.strftime('%Y-%m-%d') }}"
+                      data-content="{{ msg.content | e }}"
+                      title="Edit">
+                <i class="bi bi-pencil"></i>
+              </button>
+              <form method="post"
+                    action="{{ url_for('admin.delete_daily_message', message_id=msg.id) }}"
+                    onsubmit="return confirm('Delete this message?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="card-body text-center text-muted py-4">
+        <i class="bi bi-megaphone display-5 d-block mb-2 opacity-25"></i>
+        No messages yet.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+<script>
+  const quill = new Quill('#quill-editor', {
+    theme: 'snow',
+    placeholder: 'Write your message to the team…',
+    modules: {
+      toolbar: [
+        ['bold', 'italic', 'underline'],
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        ['clean']
+      ]
+    }
+  });
+
+  document.getElementById('messageForm').addEventListener('submit', function (e) {
+    if (quill.getText().trim().length === 0) {
+      e.preventDefault();
+      alert('Please enter a message.');
+      return;
+    }
+    document.getElementById('content_val').value = quill.root.innerHTML;
+  });
+
+  // Load an existing message into the form for editing
+  document.querySelectorAll('.edit-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.getElementById('msg_date').value = btn.dataset.date;
+      quill.root.innerHTML = btn.dataset.content;
+      document.getElementById('quill-editor').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  });
+</script>
+{% endblock %}

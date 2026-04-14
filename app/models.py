@@ -577,3 +577,19 @@ class WalkEvent(db.Model):
             'latitude': self.latitude,
             'longitude': self.longitude,
         }
+
+
+class DailyMessage(db.Model):
+    """A message from the business owner to the walker team, shown at the top
+    of the pickup list for a given date. One message per day (UNIQUE on date).
+    """
+    __tablename__ = 'daily_messages'
+
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, nullable=False, unique=True, index=True)
+    content = db.Column(db.Text, nullable=False)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    created_by = db.relationship('User', foreign_keys=[created_by_id])
