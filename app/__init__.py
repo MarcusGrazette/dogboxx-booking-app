@@ -297,6 +297,15 @@ def create_app(config_name=None):
             digits = '44' + digits[1:]
         return digits
 
+    @app.template_filter('ordinal')
+    def ordinal_filter(n: int) -> str:
+        """Return the ordinal suffix for an integer, e.g. 1 → '1st', 14 → '14th'."""
+        if 11 <= (n % 100) <= 13:
+            suffix = 'th'
+        else:
+            suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
+        return f'{n}{suffix}'
+
     @app.context_processor
     def inject_device_info():
         """Expose UA device flags to all templates.

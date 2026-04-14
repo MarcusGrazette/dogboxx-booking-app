@@ -62,6 +62,7 @@
 
     {% else %}
     {# ── Breakdown table ── #}
+    {# Badge colours: dark = morning, pink = afternoon — letter = service type (W/D) #}
     <div class="card">
         <div class="card-header">
             <i class="bi bi-list-ul me-2" style="color:#E02FAC;"></i>Breakdown
@@ -71,46 +72,35 @@
                 <thead>
                     <tr>
                         <th>Date</th>
-                        <th>Slot</th>
-                        <th>Service</th>
-                        <th class="text-center">Dogs</th>
+                        <th></th>
+                        <th class="text-center">#</th>
+                        <th>Dogs</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for item in line_items %}
                     <tr>
-                        <td class="text-nowrap align-middle">{{ item.date.strftime('%a %-d %b') }}</td>
-                        <td class="align-middle">
-                            {% if item.slot == 'Morning' %}
-                            <span class="slot-dot-morning-walk d-inline-block me-1 rounded-circle" style="width:9px;height:9px;"></span>Morning
-                            {% else %}
-                            <span class="slot-dot-afternoon-walk d-inline-block me-1 rounded-circle" style="width:9px;height:9px;"></span>Afternoon
-                            {% endif %}
+                        <td class="text-nowrap align-middle fw-semibold">
+                            {{ item.date.strftime('%a') }} {{ item.date.day | ordinal }}
                         </td>
                         <td class="align-middle">
-                            {% if item.is_drop_in %}
-                            <span class="badge" style="background:#7c3aed;color:#fff;">Drop-in</span>
+                            {% if item.slot == 'Morning' and not item.is_drop_in %}
+                            <span class="badge bg-dark">W</span>
+                            {% elif item.slot == 'Afternoon' and not item.is_drop_in %}
+                            <span class="badge text-bg-pink">W</span>
+                            {% elif item.slot == 'Morning' and item.is_drop_in %}
+                            <span class="badge" style="background:#7c3aed;color:#fff;">D</span>
                             {% else %}
-                            <span class="badge bg-dark">Walk</span>
+                            <span class="badge" style="background:#E02FAC;color:#fff;">D</span>
                             {% endif %}
                         </td>
-                        <td class="text-center align-middle">
-                            <span class="fw-bold">{{ item.dog_count }}</span>
-                            {% if item.dogs %}
-                            <div class="text-muted" style="font-size:0.72rem;line-height:1.4;">
-                                {{ item.dogs | map(attribute='name') | join(', ') }}
-                            </div>
-                            {% endif %}
+                        <td class="text-center align-middle fw-bold">{{ item.dog_count }}</td>
+                        <td class="align-middle text-muted small">
+                            {{ item.dogs | map(attribute='name') | join(', ') }}
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
-                <tfoot>
-                    <tr>
-                        <td colspan="3" class="fw-bold text-end text-muted small">Total dogs walked</td>
-                        <td class="text-center fw-bold" style="color:#E02FAC;">{{ total_dogs_walked }}</td>
-                    </tr>
-                </tfoot>
             </table>
         </div>
     </div>
