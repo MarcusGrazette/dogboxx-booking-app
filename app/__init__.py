@@ -284,6 +284,7 @@ def create_app(config_name=None):
 
     @app.context_processor
     def inject_home_url():
+        from flask_login import current_user
         return dict(home_url=_home_url_for(current_user))
 
     @app.template_filter('wa_number')
