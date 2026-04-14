@@ -370,13 +370,16 @@ def api_pickup_list(date_str):
     afternoon_pickups  = [b for b in bookings if b.slot == 'Afternoon' and not _is_drop_in(b)]
     afternoon_drop_ins = [b for b in bookings if b.slot == 'Afternoon' and     _is_drop_in(b)]
 
+    daily_message = DailyMessage.query.filter_by(date=selected_date).first()
+
     return render_template("partials/pickup_list.html",
                            selected_date=selected_date,
                            morning_drop_ins=morning_drop_ins,
                            morning_pickups=morning_pickups,
                            afternoon_pickups=afternoon_pickups,
                            afternoon_drop_ins=afternoon_drop_ins,
-                           has_pickups=len(bookings) > 0)
+                           has_pickups=len(bookings) > 0,
+                           daily_message=daily_message)
 
 
 @walker_bp.route("/profile")
