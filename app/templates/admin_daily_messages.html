@@ -35,7 +35,6 @@
       </div>
       <div class="card-body">
         <form method="post" id="messageForm" action="{{ url_for('admin.daily_messages') }}">
-          {{ csrf_token() | safe if csrf_token is defined }}
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="content" id="content_val">
 
