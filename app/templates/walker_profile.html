@@ -179,8 +179,9 @@
       </div>
       <div id="adhoc-list">
         {% if adhoc_availabilities %}
+          {% set fold = 8 %}
           {% for a in adhoc_availabilities %}
-          <div class="avail-row" id="adhoc-{{ a.id }}">
+          <div class="avail-row{% if loop.index > fold %} avail-extra d-none{% endif %}" id="adhoc-{{ a.id }}">
             <div>
               <span class="fw-semibold">{{ a.date.strftime('%a, %-d %b %Y') }}</span>
               <span class="badge ms-2 {% if a.slot == 'Morning' %}bg-dark{% else %}text-bg-pink{% endif %}">{{ a.slot }}</span>
@@ -190,6 +191,13 @@
             </button>
           </div>
           {% endfor %}
+          {% if adhoc_availabilities|length > fold %}
+          <div class="mt-2" id="adhoc-show-more">
+            <button class="btn btn-sm btn-link px-0 text-muted" onclick="showMoreAvail('adhoc')">
+              Show {{ adhoc_availabilities|length - fold }} more
+            </button>
+          </div>
+          {% endif %}
         {% else %}
         <p class="text-muted mb-0 small" id="no-adhoc-msg"><i class="bi bi-calendar2 me-1"></i>No extra days added.</p>
         {% endif %}
@@ -230,8 +238,9 @@
       </div>
       <div id="unavail-list">
         {% if unavailabilities %}
+          {% set fold = 8 %}
           {% for u in unavailabilities %}
-          <div class="avail-row" id="unavail-{{ u.id }}">
+          <div class="avail-row{% if loop.index > fold %} avail-extra d-none{% endif %}" id="unavail-{{ u.id }}">
             <div>
               <span class="fw-semibold">{{ u.date.strftime('%a, %-d %b %Y') }}</span>
               <span class="badge ms-2 {% if u.slot == 'Morning' %}bg-dark{% else %}text-bg-pink{% endif %}">{{ u.slot }}</span>
@@ -242,6 +251,13 @@
             </button>
           </div>
           {% endfor %}
+          {% if unavailabilities|length > fold %}
+          <div class="mt-2" id="unavail-show-more">
+            <button class="btn btn-sm btn-link px-0 text-muted" onclick="showMoreAvail('unavail')">
+              Show {{ unavailabilities|length - fold }} more
+            </button>
+          </div>
+          {% endif %}
         {% else %}
         <p class="text-muted mb-0 small" id="no-unavail-msg"><i class="bi bi-check-circle me-1"></i>No upcoming unavailability set.</p>
         {% endif %}
@@ -372,6 +388,13 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 });
 
+// ── Show more toggle ───────────────────────────────────────────────────────
+function showMoreAvail(prefix) {
+    document.querySelectorAll(`#${prefix}-list .avail-extra`).forEach(el => el.classList.remove('d-none'));
+    const btn = document.getElementById(`${prefix}-show-more`);
+    if (btn) btn.remove();
+}
+
 // ── Availability / unavailability AJAX (unchanged logic) ───────────────────
 async function addAdhoc() {
     const dateVal = document.getElementById('adhoc-date').value;
@@ -419,7 +442,7 @@ async function deleteAdhoc(id) {
         const data = await resp.json();
         if (data.success) {
             document.getElementById(`adhoc-${id}`)?.remove();
-            if (!document.querySelector('#adhoc-list .avail-row')) {
+            if (!document.querySelector('#adhoc-list [id^="adhoc-"]')) {
                 document.getElementById('adhoc-list').innerHTML =
                     '<p class="text-muted mb-0 small" id="no-adhoc-msg"><i class="bi bi-calendar2 me-1"></i>No extra days added.</p>';
             }
@@ -474,7 +497,7 @@ async function deleteUnavailability(id) {
         const data = await resp.json();
         if (data.success) {
             document.getElementById(`unavail-${id}`)?.remove();
-            if (!document.querySelector('#unavail-list .avail-row')) {
+            if (!document.querySelector('#unavail-list [id^="unavail-"]')) {
                 document.getElementById('unavail-list').innerHTML =
                     '<p class="text-muted mb-0 small" id="no-unavail-msg"><i class="bi bi-check-circle me-1"></i>No upcoming unavailability set.</p>';
             }

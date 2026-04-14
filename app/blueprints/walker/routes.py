@@ -76,19 +76,17 @@ def profile():
     for s in schedules:
         schedule_grid[s.day_of_week][s.slot] = True
 
-    # Get upcoming unavailabilities and ad hoc availability (next 60 days)
+    # All future unavailabilities and ad hoc availability — no upper date cap
+    # so walkers can see entries they've added months ahead (e.g. holidays).
     today = datetime.now(timezone.utc).date()
-    end_date = today + timedelta(days=60)
     unavailabilities = WalkerUnavailability.query.filter(
         WalkerUnavailability.walker_id == walker.id,
         WalkerUnavailability.date >= today,
-        WalkerUnavailability.date <= end_date
     ).order_by(WalkerUnavailability.date, WalkerUnavailability.slot).all()
 
     adhoc_availabilities = WalkerAdHocAvailability.query.filter(
         WalkerAdHocAvailability.walker_id == walker.id,
         WalkerAdHocAvailability.date >= today,
-        WalkerAdHocAvailability.date <= end_date
     ).order_by(WalkerAdHocAvailability.date, WalkerAdHocAvailability.slot).all()
 
     return render_template("walker_profile.html",
