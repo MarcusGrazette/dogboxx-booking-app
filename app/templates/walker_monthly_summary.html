@@ -1,0 +1,120 @@
+{% extends "layout.html" %}
+
+{% block title %}My Month — {{ month_start.strftime('%B %Y') }}{% endblock %}
+
+{% block main %}
+<div class="mt-3 pb-4" style="max-width:760px;">
+
+    {# ── Page header ── #}
+    <div class="page-header mb-4">
+        <h2><i class="bi bi-calendar3 me-2"></i>My Month</h2>
+    </div>
+
+    {# ── Month navigation ── #}
+    <div class="d-flex align-items-center gap-3 mb-4">
+        <a href="{{ url_for('walker.monthly_summary', month=prev_month) }}"
+           class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-chevron-left"></i>
+        </a>
+        <h5 class="mb-0 fw-bold">{{ month_start.strftime('%B %Y') }}</h5>
+        <a href="{{ url_for('walker.monthly_summary', month=next_month) }}"
+           class="btn btn-outline-secondary btn-sm {% if at_current %}invisible{% endif %}">
+            <i class="bi bi-chevron-right"></i>
+        </a>
+    </div>
+
+    {# ── Summary stat cards ── #}
+    <div class="row g-3 mb-4">
+        <div class="col-4">
+            <div class="card text-center h-100">
+                <div class="card-body py-3">
+                    <div class="stat-num">{{ walk_slots }}</div>
+                    <div class="stat-label">Walk slots</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="card text-center h-100">
+                <div class="card-body py-3">
+                    <div class="stat-num">{{ drop_in_visits }}</div>
+                    <div class="stat-label">Drop-ins</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="card text-center h-100">
+                <div class="card-body py-3">
+                    <div class="stat-num" style="color:#E02FAC;">{{ total_dogs_walked }}</div>
+                    <div class="stat-label">Dogs walked</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if not line_items %}
+    {# ── Empty state ── #}
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-calendar2 display-4 text-muted"></i>
+            <p class="mt-3 text-muted fs-5">No walks or drop-ins in {{ month_start.strftime('%B %Y') }}.</p>
+        </div>
+    </div>
+
+    {% else %}
+    {# ── Breakdown table ── #}
+    <div class="card">
+        <div class="card-header">
+            <i class="bi bi-list-ul me-2" style="color:#E02FAC;"></i>Breakdown
+        </div>
+        <div class="table-responsive">
+            <table class="table mb-0">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Slot</th>
+                        <th>Service</th>
+                        <th class="text-center">Dogs</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in line_items %}
+                    <tr>
+                        <td class="text-nowrap align-middle">{{ item.date.strftime('%a %-d %b') }}</td>
+                        <td class="align-middle">
+                            {% if item.slot == 'Morning' %}
+                            <span class="slot-dot-morning-walk d-inline-block me-1 rounded-circle" style="width:9px;height:9px;"></span>Morning
+                            {% else %}
+                            <span class="slot-dot-afternoon-walk d-inline-block me-1 rounded-circle" style="width:9px;height:9px;"></span>Afternoon
+                            {% endif %}
+                        </td>
+                        <td class="align-middle">
+                            {% if item.is_drop_in %}
+                            <span class="badge" style="background:#7c3aed;color:#fff;">Drop-in</span>
+                            {% else %}
+                            <span class="badge bg-dark">Walk</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center align-middle">
+                            <span class="fw-bold">{{ item.dog_count }}</span>
+                            {% if item.dogs %}
+                            <div class="text-muted" style="font-size:0.72rem;line-height:1.4;">
+                                {{ item.dogs | map(attribute='name') | join(', ') }}
+                            </div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="3" class="fw-bold text-end text-muted small">Total dogs walked</td>
+                        <td class="text-center fw-bold" style="color:#E02FAC;">{{ total_dogs_walked }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

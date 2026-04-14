@@ -355,6 +355,101 @@ def pickups(date_str=None):
                            double_booked_dog_ids=double_booked_dog_ids)
 
 
+@walker_bp.route("/monthly-summary")
+@login_required
+@walker_required
+def monthly_summary():
+    """Walker monthly summary: walks and drop-ins delivered, grouped by slot with dog counts."""
+    from collections import defaultdict
+
+    walker = Walker.query.filter_by(user_id=current_user.id).first()
+    if not walker:
+        flash("Walker profile not found. Please contact support.", "danger")
+        return redirect(url_for('client.index'))
+
+    today = datetime.now(timezone.utc).date()
+    month_str = request.args.get('month', f'{today.year}-{today.month:02d}')
+    try:
+        year, month = int(month_str[:4]), int(month_str[5:7])
+        if not (1 <= month <= 12):
+            raise ValueError
+    except (ValueError, IndexError):
+        year, month = today.year, today.month
+
+    # Cap at current month — summaries only make sense for completed/in-progress months
+    if (year, month) > (today.year, today.month):
+        year, month = today.year, today.month
+
+    month_start = date(year, month, 1)
+    month_end = date(year + (month // 12), (month % 12) + 1, 1)
+
+    bookings = (
+        Booking.query
+        .options(
+            joinedload(Booking.service_type),
+            joinedload(Booking.dog),
+        )
+        .filter(
+            Booking.walker_id == walker.id,
+            Booking.date >= month_start,
+            Booking.date < month_end,
+            Booking.status.in_(['confirmed', 'completed']),
+        )
+        .order_by(Booking.date, Booking.slot)
+        .all()
+    )
+
+    # Group individual dog bookings into slots: (date, slot, svc_key) → [bookings]
+    groups = defaultdict(list)
+    for b in bookings:
+        is_drop_in = b.service_type and b.service_type.slug == 'drop-in'
+        key = (b.date, b.slot, 'drop-in' if is_drop_in else 'walk')
+        groups[key].append(b)
+
+    # Build sorted line items (one row per slot group)
+    line_items = []
+    for (d, slot, svc_key) in sorted(groups.keys()):
+        grp = groups[(d, slot, svc_key)]
+        dogs = [b.dog for b in grp if b.dog]
+        line_items.append({
+            'date':      d,
+            'slot':      slot,
+            'is_drop_in': svc_key == 'drop-in',
+            'dog_count': len(grp),
+            'dogs':      dogs,
+        })
+
+    # Summary stats
+    walk_slots       = sum(1        for item in line_items if not item['is_drop_in'])
+    drop_in_visits   = sum(item['dog_count'] for item in line_items if     item['is_drop_in'])
+    total_dogs_walked = sum(item['dog_count'] for item in line_items if not item['is_drop_in'])
+
+    # Month navigation
+    if month == 1:
+        prev_month = f'{year - 1}-12'
+    else:
+        prev_month = f'{year}-{month - 1:02d}'
+    if month == 12:
+        next_month = f'{year + 1}-01'
+    else:
+        next_month = f'{year}-{month + 1:02d}'
+    at_current = (year == today.year and month == today.month)
+
+    return render_template(
+        'walker_monthly_summary.html',
+        walker=walker,
+        month_start=month_start,
+        line_items=line_items,
+        walk_slots=walk_slots,
+        drop_in_visits=drop_in_visits,
+        total_dogs_walked=total_dogs_walked,
+        prev_month=prev_month,
+        next_month=next_month,
+        at_current=at_current,
+        today=today,
+    )
+
+
 @walker_bp.route("/api/pickup-days/<int:year>/<int:month>")
 @login_required
 @walker_required
