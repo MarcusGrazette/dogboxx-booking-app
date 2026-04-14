@@ -182,9 +182,9 @@
           {% set fold = 8 %}
           {% for a in adhoc_availabilities %}
           <div class="avail-row{% if loop.index > fold %} avail-extra d-none{% endif %}" id="adhoc-{{ a.id }}">
-            <div>
-              <span class="fw-semibold">{{ a.date.strftime('%a, %-d %b %Y') }}</span>
-              <span class="badge ms-2 {% if a.slot == 'Morning' %}bg-dark{% else %}text-bg-pink{% endif %}">{{ a.slot }}</span>
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge avail-slot-badge {% if a.slot == 'Morning' %}bg-dark{% else %}text-bg-pink{% endif %}">{{ a.slot }}</span>
+              <span class="fw-semibold">{{ a.date.strftime('%A, %-d %B') }}</span>
             </div>
             <button class="btn btn-sm btn-outline-danger" onclick="deleteAdhoc({{ a.id }})">
               <i class="bi bi-trash"></i>
@@ -241,10 +241,10 @@
           {% set fold = 8 %}
           {% for u in unavailabilities %}
           <div class="avail-row{% if loop.index > fold %} avail-extra d-none{% endif %}" id="unavail-{{ u.id }}">
-            <div>
-              <span class="fw-semibold">{{ u.date.strftime('%a, %-d %b %Y') }}</span>
-              <span class="badge ms-2 {% if u.slot == 'Morning' %}bg-dark{% else %}text-bg-pink{% endif %}">{{ u.slot }}</span>
-              {% if u.reason %}<span class="text-muted ms-2 small">— {{ u.reason }}</span>{% endif %}
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <span class="badge avail-slot-badge {% if u.slot == 'Morning' %}bg-dark{% else %}text-bg-pink{% endif %}">{{ u.slot }}</span>
+              <span class="fw-semibold">{{ u.date.strftime('%A, %-d %B') }}</span>
+              {% if u.reason %}<span class="text-muted small">— {{ u.reason }}</span>{% endif %}
             </div>
             <button class="btn btn-sm btn-outline-danger" onclick="deleteUnavailability({{ u.id }})">
               <i class="bi bi-trash"></i>
@@ -412,15 +412,15 @@ async function addAdhoc() {
             if (noMsg) noMsg.remove();
             const a = data.adhoc;
             const dateObj = new Date(a.date + 'T00:00:00');
-            const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+            const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
             const badgeClass = a.slot === 'Morning' ? 'bg-dark' : 'text-bg-pink';
             const div = document.createElement('div');
             div.className = 'avail-row';
             div.id = `adhoc-${a.id}`;
             div.innerHTML = `
-                <div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge avail-slot-badge ${badgeClass}">${a.slot}</span>
                     <span class="fw-semibold">${dateStr}</span>
-                    <span class="badge ms-2 ${badgeClass}">${a.slot}</span>
                 </div>
                 <button class="btn btn-sm btn-outline-danger" onclick="deleteAdhoc(${a.id})">
                     <i class="bi bi-trash"></i>
@@ -467,16 +467,16 @@ async function addUnavailability() {
             if (noMsg) noMsg.remove();
             const u = data.unavailability;
             const dateObj = new Date(u.date + 'T00:00:00');
-            const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+            const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
             const badgeClass = u.slot === 'Morning' ? 'bg-dark' : 'text-bg-pink';
             const div = document.createElement('div');
             div.className = 'avail-row';
             div.id = `unavail-${u.id}`;
             div.innerHTML = `
-                <div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span class="badge avail-slot-badge ${badgeClass}">${u.slot}</span>
                     <span class="fw-semibold">${dateStr}</span>
-                    <span class="badge ms-2 ${badgeClass}">${u.slot}</span>
-                    ${u.reason ? `<span class="text-muted ms-2 small">— ${u.reason}</span>` : ''}
+                    ${u.reason ? `<span class="text-muted small">— ${u.reason}</span>` : ''}
                 </div>
                 <button class="btn btn-sm btn-outline-danger" onclick="deleteUnavailability(${u.id})">
                     <i class="bi bi-trash"></i>

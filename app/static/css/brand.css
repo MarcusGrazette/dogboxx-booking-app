@@ -215,6 +215,13 @@ footer {
 .border-primary { border-color: #E02FAC !important; }
 .text-bg-pink  { background-color: #E02FAC !important; color: #fff !important; }
 
+/* ── Availability slot pill (fixed width so dates align) ─── */
+.avail-slot-badge {
+  min-width: 5.5rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
 /* ---- AdminLTE overrides ---- */
 .app-sidebar {
   background-color: #1B1B1B !important;
