@@ -105,13 +105,13 @@
                         </li>
                         {% if current_user.role == 'walker' %}
                         <li>
-                            <a class="dropdown-item py-2" href="{{ url_for('walker.pickups') }}">
-                                <i class="bi bi-geo-alt me-2 text-muted"></i>Pickups
+                            <a class="dropdown-item py-2" href="{{ url_for('walker.profile') }}">
+                                <i class="bi bi-person-circle me-2 text-muted"></i>Profile
                             </a>
                         </li>
                         <li>
-                            <a class="dropdown-item py-2" href="{{ url_for('walker.profile') }}">
-                                <i class="bi bi-person-circle me-2 text-muted"></i>Profile
+                            <a class="dropdown-item py-2" href="{{ url_for('walker.pickups') }}">
+                                <i class="bi bi-geo-alt me-2 text-muted"></i>Daily Pickups
                             </a>
                         </li>
                         <li>
