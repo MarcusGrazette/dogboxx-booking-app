@@ -51,7 +51,7 @@
 | 30 | P1 | M | ✅ | **Client onboarding** | Address (with Google Places autocomplete), pickup instructions, dog profile. |
 | 31 | P1 | M | ✅ | **Client profile edit** | Edit address, notification prefs, dog details + photo. |
 | 32 | P2 | M | ✅ | **Monthly walk summary** | Client-facing summary of walks taken and any outstanding items. |
-| 34 | P3 | M | 🔲 | **Multi-dog support (client UI)** | Data model supports multiple dogs per client via DogOwner join table. Missing: client UI to add a second dog. Admin can assign additional dogs manually. |
+| 34 | P3 | M | 🔲 | **Multi-dog support** | Data model supports multiple dogs per client via DogOwner join table. Booking flow already handles multiple dogs. Missing: (1) client UI to add a second dog, (2) admin client edit page only manages one primary dog — no way to add a second primary dog for an existing client. |
 
 ## Newsletter
 
