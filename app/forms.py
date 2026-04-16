@@ -341,6 +341,40 @@ class ClientCreateForm(FlaskForm):
         return rv
 
 
+class AddDogForm(FlaskForm):
+    """Form for admin to add a second (or subsequent) dog to an existing client."""
+    dog_name = StringField(
+        "Dog's Name",
+        validators=[DataRequired(message="Dog name is required"), Length(max=50)]
+    )
+    dog_gender = SelectField(
+        'Gender',
+        choices=[('', 'Select Gender'), ('male', 'Male'), ('female', 'Female')],
+        validators=[DataRequired(message="Gender is required")]
+    )
+    dog_dob = DateField(
+        'Date of Birth',
+        validators=[DataRequired(message="Date of birth is required")]
+    )
+    dog_breed = StringField('Breed', validators=[Optional()])
+    dog_allergies = TextAreaField(
+        'Allergies / health notes',
+        validators=[Optional()],
+        render_kw={"rows": 2, "placeholder": "Allergies, medical notes, special needs…"}
+    )
+    pickup_instructions = TextAreaField(
+        'Pickup instructions',
+        validators=[Optional()],
+        render_kw={"rows": 2, "placeholder": "Door codes, key safe, gate notes…"}
+    )
+    dog_whatsapp_group_url = StringField(
+        'WhatsApp Group URL',
+        validators=[Optional(), Length(max=2048)],
+        render_kw={"placeholder": "https://chat.whatsapp.com/…"}
+    )
+    submit = SubmitField('Add Dog')
+
+
 class WalkerCreateForm(FlaskForm):
     """Form for admin to create a new walker account"""
     email = StringField(

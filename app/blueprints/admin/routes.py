@@ -1107,6 +1107,7 @@ def client_detail(client_id):
         .limit(20)
         .all()
     )
+    from app.forms import AddDogForm
     return render_template(
         "admin_client_detail.html",
         client=user,
@@ -1115,6 +1116,8 @@ def client_detail(client_id):
         secondary_dogs=secondary_dogs,
         available_clients=available_clients,
         notifications=notifications,
+        add_dog_form=AddDogForm(),
+        add_dog_modal_open=False,
     )
 
 
@@ -1444,6 +1447,96 @@ def edit_client(client_id):
         title=f"Edit {user.full_name}",
         is_edit=True,
         client_user=user,
+    )
+
+
+@admin_bp.route("/clients/<int:client_id>/add-dog", methods=["POST"])
+@login_required
+@admin_required
+def add_dog(client_id):
+    """Add a second (or subsequent) primary dog to an existing client."""
+    from app.forms import AddDogForm
+    user = User.query.filter(User.role == 'client', User.id == client_id).first_or_404()
+
+    form = AddDogForm()
+    if form.validate_on_submit():
+        try:
+            new_dog = Dog(
+                name=form.dog_name.data.strip(),
+                gender=form.dog_gender.data,
+                breed=form.dog_breed.data.strip() if form.dog_breed.data else "",
+                date_of_birth=form.dog_dob.data,
+                allergies=form.dog_allergies.data.strip() if form.dog_allergies.data else "",
+                pickup_instructions=form.pickup_instructions.data.strip() if form.pickup_instructions.data else None,
+                whatsapp_group_url=(form.dog_whatsapp_group_url.data.strip() or None) if form.dog_whatsapp_group_url.data else None,
+            )
+            db.session.add(new_dog)
+            db.session.flush()
+            db.session.add(DogOwner(dog_id=new_dog.id, user_id=user.id, role='primary'))
+            db.session.commit()
+            flash(f"{new_dog.name} added successfully.", "success")
+        except Exception as e:
+            db.session.rollback()
+            logging.error(f"Error adding dog for client {client_id}: {e}")
+            flash("An error occurred while adding the dog.", "error")
+        return redirect(url_for('admin.client_detail', client_id=client_id))
+
+    # Validation failed — re-render the detail page with the modal open
+    # Re-build everything client_detail needs
+    primary_ownerships = DogOwner.query.filter_by(user_id=user.id, role='primary').all()
+    primary_dogs = []
+    for ownership in primary_ownerships:
+        dog = db.session.get(Dog, ownership.dog_id)
+        if not dog:
+            continue
+        secondary_ownerships = DogOwner.query.filter_by(dog_id=dog.id, role='secondary').all()
+        secondary_users = [db.session.get(User, so.user_id) for so in secondary_ownerships]
+        secondary_users = [u for u in secondary_users if u]
+        primary_dogs.append({'dog': dog, 'secondary_owners': secondary_users})
+
+    secondary_ownerships = DogOwner.query.filter_by(user_id=user.id, role='secondary').all()
+    secondary_dogs = []
+    for ownership in secondary_ownerships:
+        dog = db.session.get(Dog, ownership.dog_id)
+        if not dog:
+            continue
+        primary_o = DogOwner.query.filter_by(dog_id=dog.id, role='primary').first()
+        primary_user = db.session.get(User, primary_o.user_id) if primary_o else None
+        secondary_dogs.append({'dog': dog, 'primary_owner': primary_user})
+
+    already_linked_ids = {user.id}
+    for pd in primary_dogs:
+        for so in pd['secondary_owners']:
+            already_linked_ids.add(so.id)
+    for sd in secondary_dogs:
+        if sd['primary_owner']:
+            already_linked_ids.add(sd['primary_owner'].id)
+    available_clients = (
+        User.query
+        .filter(User.role == 'client', User.active == True)
+        .filter(~User.id.in_(already_linked_ids))
+        .order_by(User.lastname, User.firstname)
+        .all()
+    )
+
+    dog = primary_dogs[0]['dog'] if primary_dogs else None
+    notifications = (
+        Notification.query
+        .filter_by(recipient_id=user.id)
+        .order_by(Notification.created_at.desc())
+        .limit(20)
+        .all()
+    )
+    return render_template(
+        "admin_client_detail.html",
+        client=user,
+        dog=dog,
+        primary_dogs=primary_dogs,
+        secondary_dogs=secondary_dogs,
+        available_clients=available_clients,
+        notifications=notifications,
+        add_dog_form=form,
+        add_dog_modal_open=True,
     )
 
 

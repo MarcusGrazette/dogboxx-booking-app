@@ -154,13 +154,25 @@
                 <div class="text-muted d-flex align-items-center gap-2 py-1">
                     <i class="bi bi-exclamation-circle text-warning"></i>
                     No dog added yet.
-                    <a href="{{ url_for('admin.edit_client', client_id=client.id) }}" class="ms-1">Add dog info</a>
-                    so the client's profile is ready when they log in.
+                    <button class="btn btn-sm btn-outline-primary ms-1"
+                            data-bs-toggle="modal" data-bs-target="#addDogModal">
+                        <i class="bi bi-plus-lg me-1"></i>Add dog
+                    </button>
                 </div>
             </div>
         </div>
         {% endif %}
         {% endfor %}
+
+        {# Add another dog button — shown when at least one dog already exists #}
+        {% if primary_dogs %}
+        <div class="mb-4">
+            <button class="btn btn-outline-primary btn-sm"
+                    data-bs-toggle="modal" data-bs-target="#addDogModal">
+                <i class="bi bi-plus-lg me-1"></i>Add another dog
+            </button>
+        </div>
+        {% endif %}
 
         {# --- Secondary dogs (this client has shared access to) --- #}
         {% for entry in secondary_dogs %}
@@ -321,6 +333,64 @@
 </div>{# /row #}
 
 {# ============================================================
+   ADD DOG MODAL
+   ============================================================ #}
+<div class="modal fade" id="addDogModal" tabindex="-1" aria-labelledby="addDogModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addDogModalLabel">
+                    <i class="bi bi-heart-fill me-2" style="color:#E02FAC;"></i>Add a dog
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('admin.add_dog', client_id=client.id) }}">
+                {{ add_dog_form.hidden_tag() }}
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-sm-6">
+                            <label class="form-label fw-semibold" for="add_dog_name">Name <span class="text-danger">*</span></label>
+                            {{ add_dog_form.dog_name(class="form-control" + (" is-invalid" if add_dog_form.dog_name.errors else ""), id="add_dog_name") }}
+                            {% for e in add_dog_form.dog_name.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label fw-semibold" for="add_dog_gender">Gender <span class="text-danger">*</span></label>
+                            {{ add_dog_form.dog_gender(class="form-select" + (" is-invalid" if add_dog_form.dog_gender.errors else ""), id="add_dog_gender") }}
+                            {% for e in add_dog_form.dog_gender.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label fw-semibold" for="add_dog_dob">Date of birth <span class="text-danger">*</span></label>
+                            {{ add_dog_form.dog_dob(class="form-control" + (" is-invalid" if add_dog_form.dog_dob.errors else ""), id="add_dog_dob") }}
+                            {% for e in add_dog_form.dog_dob.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label fw-semibold" for="add_dog_breed">Breed</label>
+                            {{ add_dog_form.dog_breed(class="form-control", id="add_dog_breed") }}
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold" for="add_dog_allergies">Allergies / health notes</label>
+                            {{ add_dog_form.dog_allergies(class="form-control", id="add_dog_allergies") }}
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold" for="add_dog_pickup">Pickup instructions</label>
+                            {{ add_dog_form.pickup_instructions(class="form-control", id="add_dog_pickup") }}
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold" for="add_dog_whatsapp">WhatsApp group URL</label>
+                            {{ add_dog_form.dog_whatsapp_group_url(class="form-control", id="add_dog_whatsapp") }}
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    {{ add_dog_form.submit(class="btn btn-primary fw-semibold") }}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{# ============================================================
    JOIN ACCESS MODAL
    ============================================================ #}
 <div class="modal fade" id="joinAccessModal" tabindex="-1" aria-labelledby="joinAccessModalLabel" aria-hidden="true">
@@ -367,6 +437,12 @@
 
 {% block scripts %}
 <script>
+{% if add_dog_modal_open %}
+document.addEventListener('DOMContentLoaded', function () {
+    new bootstrap.Modal(document.getElementById('addDogModal')).show();
+});
+{% endif %}
+
 (function () {
     // ── Pickup details inline edit ──────────────────────────────────────────
     const editBtn    = document.getElementById('pickup-edit-btn');
