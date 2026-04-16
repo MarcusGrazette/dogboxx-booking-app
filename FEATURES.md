@@ -24,7 +24,7 @@
 | 10 | P1 | M | ✅ | **Walker pickup list** | Daily route view with dog photo, owner, address, pickup instructions, ordered by pickup_order. Date navigation. |
 | 11 | P2 | M | ✅ | **Walker schedule management** | Default weekly schedule (day + slot). Admin sets. Walker can view. |
 | 12 | P2 | M | ✅ | **Walker unavailability** | Date-specific exceptions (per slot). Admin marks unavailability. Reduces capacity for that slot automatically. |
-| 13 | P3 | L | 🔲 | **Walker self-manage availability** | Walkers flag their own exceptions (holidays, sick days) rather than admin doing it. |
+| 13 | P3 | L | ✅ | **Walker self-manage availability** | Walkers flag their own exceptions (holidays, sick days) rather than admin doing it. |
 | 14 | P3 | S | ✅ | **Google Maps pickup directions** | Maps button on each pickup card in /walker/pickups. |
 | 15 | P2 | M | ✅ | **Walker ad hoc available days** | Walkers can add one-off available days outside their default schedule. Inverse of the existing unavailability model. New `walker_adhoc_availability` table (or reuse existing with a flag). Capacity checks need updating to include these. |
 | 16 | P2 | M | ✅ | **Admin override walker unavailability on allocation board** | Admin can assign dogs to a slot even if walker has marked themselves unavailable. Override shown visually (warning state). Booking creation bypasses the unavailability block when admin-initiated. |
@@ -50,9 +50,8 @@
 |---|----------|--------|--------|---------|-------|
 | 30 | P1 | M | ✅ | **Client onboarding** | Address (with Google Places autocomplete), pickup instructions, dog profile. |
 | 31 | P1 | M | ✅ | **Client profile edit** | Edit address, notification prefs, dog details + photo. |
-| 32 | P2 | M | 🔲 | **Monthly walk summary** | Client-facing summary of walks taken, upcoming, and any outstanding items. |
-| 33 | P3 | L | 🔲 | **Online payments** | Stripe integration for invoice payment. |
-| 34 | P3 | M | 🔲 | **Multi-dog support** | Client adds multiple dogs. Share dog profile with another registered user (e.g. partner). |
+| 32 | P2 | M | ✅ | **Monthly walk summary** | Client-facing summary of walks taken and any outstanding items. |
+| 34 | P3 | M | 🔲 | **Multi-dog support (client UI)** | Data model supports multiple dogs per client via DogOwner join table. Missing: client UI to add a second dog. Admin can assign additional dogs manually. |
 
 ## Newsletter
 
@@ -71,7 +70,6 @@
 | 43 | P1 | S | ✅ | **Notify client: booking cancelled** | Triggered when admin cancels a booking. |
 | 44 | P1 | S | ✅ | **Notify walker: assigned to booking** | Triggered when admin assigns a walker. |
 | 45 | P1 | S | ✅ | **Notification audit trail (admin)** | Admin can see notification history per client on their detail page. |
-| 46 | P2 | L | 🔲 | **Email notifications** | SMTP (Outlook 365 @dogboxx.org) for booking confirmations, cancellations, reminders. In-app notifications are live; email integration pending. |
 
 ## Infrastructure & Quality
 
