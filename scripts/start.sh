@@ -11,6 +11,14 @@ set -e
 #
 # Mount point configured in railway.toml: /data/uploads
 
+echo "=== Volume diagnostics ==="
+echo "/data exists:         $([ -e /data ] && echo YES || echo NO)"
+echo "/data/uploads exists: $([ -e /data/uploads ] && echo YES || echo NO)"
+echo "/data type:           $([ -d /data ] && echo dir || ([ -e /data ] && echo exists-not-dir || echo missing))"
+ls /data 2>/dev/null && echo "Contents of /data shown above" || echo "/data not listable"
+mount | grep -E '/data|upload' || echo "No /data or upload mounts found"
+echo "==========================="
+
 if [ -d /data/uploads ]; then
   mkdir -p /data/uploads/dogs /data/uploads/profiles
 
@@ -53,6 +61,7 @@ PYEOF
 fi
 
 flask db upgrade
+flask seed-service-types
 
 # exec replaces the shell so gunicorn receives Railway's SIGTERM directly
-exec gunicorn run:app --workers 2 --bind 0.0.0.0:$PORT --timeout 120 --log-level info
+exec gunicorn run:app --workers 2 --worker-class gevent --worker-connections 100 --bind 0.0.0.0:$PORT --timeout 120 --log-level info
