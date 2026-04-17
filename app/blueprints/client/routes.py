@@ -531,7 +531,8 @@ def book_both():
     parts = []
     for slot, status, _ in created:
         label = 'AM' if slot == 'Morning' else 'PM'
-        parts.append(f'{label} {"waitlisted" if status == "waitlisted" else "requested"}')
+        word = 'waitlisted' if status == 'waitlisted' else ('confirmed' if status == 'confirmed' else 'requested')
+        parts.append(f'{label} {word}')
     if skipped:
         parts.append(f'{", ".join(skipped)} skipped (already booked)')
 
