@@ -277,7 +277,7 @@ footer {
   left: 1rem; right: 1rem;
 }
 @media (min-width: 768px) {
-  #db-toast-container { bottom: auto; top: 1.25rem; right: 1.25rem; left: auto; width: 340px; }
+  #db-toast-container { bottom: auto; top: 1.25rem; left: 50%; right: auto; width: 340px; transform: translateX(-50%); }
 }
 .db-toast {
   pointer-events: all; display: flex; align-items: center; gap: 0.6rem;

@@ -98,6 +98,9 @@
 
 <form method="post" enctype="multipart/form-data" novalidate>
     {{ form.hidden_tag() }}
+    {# Shared hidden file input — triggered by clicking any photo circle; not submitted with the form #}
+    <input type="file" id="dog-photo-input" accept="image/png,image/jpeg,image/gif"
+           style="display:none;" aria-hidden="true">
 
     {# ── Hidden fields: read-only data that must still round-trip for form validation ── #}
     {{ form.firstname(type="hidden") }}
@@ -176,8 +179,8 @@
                 </div>
             </div>
 
-            {# ─── PRIMARY DOG CARD (user is the owner — can update photo) ─── #}
-            {% if dog %}
+            {# ─── PRIMARY DOG CARDS (user is the owner — can update photo) ─── #}
+            {% for dog in primary_dogs %}
             <div class="card shadow-sm profile-card mb-4">
                 <div class="card-header">
                     <i class="bi bi-heart-fill me-2" style="color:#E02FAC;"></i>{{ dog.name }}
@@ -186,11 +189,11 @@
 
                     {# Photo (hover to edit) + name + breed/gender #}
                     <div class="d-flex align-items-center gap-3 mb-3">
-                        <div class="dog-photo-wrap" id="dog-photo-clickable" title="Update photo"
-                             data-upload-url="{{ url_for('client.upload_dog_photo') }}">
+                        <div class="dog-photo-wrap" id="dog-photo-clickable-{{ dog.id }}" title="Update photo"
+                             data-upload-url="{{ url_for('client.upload_dog_photo', dog_id=dog.id) }}">
                             <img src="{{ url_for('static', filename='uploads/dogs/' + dog.pic) if dog.pic else url_for('static', filename='uploads/dogs/default-dog.png') }}"
                                  onerror="this.onerror=null;this.src='{{ url_for('static', filename='uploads/dogs/default-dog.png') }}'"
-                                 alt="{{ dog.name }}" id="dog-photo-preview">
+                                 alt="{{ dog.name }}" id="dog-photo-preview-{{ dog.id }}">
                             <div class="dog-photo-edit-overlay">
                                 <i class="bi bi-pencil-fill"></i>
                             </div>
@@ -209,18 +212,14 @@
                         <i class="bi bi-calendar3 detail-icon"></i>
                         <div>
                             <div>{{ dog.date_of_birth.strftime('%d %b %Y') }}</div>
-                            <div class="text-muted" style="font-size:0.75rem;" id="dog-age-display"></div>
+                            <div class="text-muted" style="font-size:0.75rem;" id="dog-age-display-{{ dog.id }}"></div>
                         </div>
                     </div>
                     {% endif %}
 
-                    {# Hidden file input — triggered by clicking the photo circle #}
-                    <input type="file" id="dog-photo-input" accept="image/png,image/jpeg,image/gif"
-                           style="display:none;" aria-hidden="true">
-
                 </div>
             </div>
-            {% endif %}
+            {% endfor %}
 
             {# ─── SECONDARY DOG CARDS (shared access — read-only) ─── #}
             {% for entry in secondary_dogs %}
@@ -268,7 +267,7 @@
             {% endfor %}
 
             {# ─── Fallback if no dog at all ─── #}
-            {% if not dog and not secondary_dogs %}
+            {% if not primary_dogs and not secondary_dogs %}
             <div class="card shadow-sm profile-card mb-4">
                 <div class="card-header">
                     <i class="bi bi-exclamation-circle me-2 text-warning"></i>No dog on file
@@ -277,9 +276,6 @@
                     <div class="text-muted small fst-italic">
                         Contact Dogboxx to get started.
                     </div>
-                    {# Keep the hidden file input so JS doesn't error #}
-                    <input type="file" id="dog-photo-input" accept="image/png,image/jpeg,image/gif"
-                           style="display:none;" aria-hidden="true">
                 </div>
             </div>
             {% endif %}
@@ -303,11 +299,25 @@
                     <i class="bi bi-signpost-2 me-2" style="color:#E02FAC;"></i>Pickup Notes
                 </div>
                 <div class="card-body p-4">
-                    <p class="text-muted mb-3" style="font-size:0.8rem;">
-                        Let us know anything we need to know to collect {{ dog.name if dog else (secondary_dogs[0].dog.name if secondary_dogs else 'your dog') }} — gate codes, doorbells, parking notes, etc.
-                    </p>
-                    {{ form.pickup_instructions(class="form-control", rows=5,
-                       placeholder="e.g. Our buzzer is labelled A, you can park the bike in our courtyard.") }}
+                    {% if primary_dogs %}
+                        {% for dog in primary_dogs %}
+                        {% if primary_dogs|length > 1 %}
+                        <p class="fw-semibold small mb-1">{{ dog.name }}</p>
+                        {% endif %}
+                        <p class="text-muted mb-2" style="font-size:0.8rem;">
+                            Let us know anything we need to know to collect {{ dog.name }} — gate codes, doorbells, parking notes, etc.
+                        </p>
+                        <textarea class="form-control" name="pickup_instructions_{{ dog.id }}" rows="4"
+                                  placeholder="e.g. Our buzzer is labelled A, you can park the bike in our courtyard.">{{ dog.pickup_instructions or '' }}</textarea>
+                        {% if not loop.last %}<hr class="my-3">{% endif %}
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted mb-3" style="font-size:0.8rem;">
+                            Let us know anything we need to know to collect {{ secondary_dogs[0].dog.name if secondary_dogs else 'your dog' }} — gate codes, doorbells, parking notes, etc.
+                        </p>
+                        {{ form.pickup_instructions(class="form-control", rows=5,
+                           placeholder="e.g. Our buzzer is labelled A, you can park the bike in our courtyard.") }}
+                    {% endif %}
                     <div class="d-grid mt-3">
                         {{ form.submit(class="btn btn-primary fw-semibold") }}
                     </div>
@@ -399,19 +409,21 @@
         return years === 1 ? `1 year, ${months}mo old` : `${years} years, ${months}mo old`;
     }
 
-    {% if dog and dog.date_of_birth %}
-    const ageEl = document.getElementById('dog-age-display');
-    if (ageEl) {
-        const age = calcDogAge('{{ dog.date_of_birth.strftime("%Y-%m-%d") }}');
-        if (age) ageEl.textContent = age;
-    }
-    {% endif %}
+    {% for dog in primary_dogs %}{% if dog.date_of_birth %}
+    (function() {
+        var ageEl = document.getElementById('dog-age-display-{{ dog.id }}');
+        if (ageEl) {
+            var age = calcDogAge('{{ dog.date_of_birth.strftime("%Y-%m-%d") }}');
+            if (age) ageEl.textContent = age;
+        }
+    }());
+    {% endif %}{% endfor %}
 
     // ── Cropper.js photo upload ───────────────────────────────────────────────
     //
-    // Shared modal handles two upload targets:
-    //   #dog-photo-clickable  → uploads/dogs/     → updates #dog-photo-preview
-    //   #user-avatar-clickable → uploads/profiles/ → updates #user-avatar-preview
+    // Shared modal handles multiple upload targets:
+    //   #dog-photo-clickable-{id}  → uploads/dogs/     → updates #dog-photo-preview-{id}
+    //   #user-avatar-clickable     → uploads/profiles/ → updates #user-avatar-preview
     //
     // Each trigger carries a data-upload-url attribute pointing to its endpoint.
     // The active target is tracked in `activeTarget` so the save button knows
@@ -424,7 +436,7 @@
     //   4. "Save photo" → getCroppedCanvas(400×400).toBlob() → fetch POST →
     //      server saves → preview updates in place, navbar img updated if profile
 
-    const fileInput   = document.getElementById('dog-photo-input');  // null for secondary-only owners
+    const fileInput   = document.getElementById('dog-photo-input');
     const cropImageEl = document.getElementById('crop-image');
     const cropSaveBtn = document.getElementById('crop-save-btn');
     const cropSpinner = document.getElementById('crop-spinner');
@@ -434,7 +446,6 @@
     let cropModal   = null;
     let activeTarget = null; // the trigger element that opened the modal
 
-    // No primary dog → photo upload not available; skip all cropper wiring
     if (!fileInput) return;
 
     function getCropModal() {

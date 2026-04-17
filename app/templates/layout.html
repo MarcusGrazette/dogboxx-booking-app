@@ -69,7 +69,7 @@
         <div class="container-fluid px-3 d-flex align-items-center">
 
             <!-- Logo: me-auto pushes everything else right -->
-            <a class="navbar-brand lh-1 py-0 me-auto" href="{{ url_for('client.index') }}">
+            <a class="navbar-brand lh-1 py-0 me-auto" href="{{ home_url }}">
                 <img src="{{ url_for('static', filename='logo-white-on-black.png') }}" alt="Dogboxx" height="48">
             </a>
 
@@ -105,13 +105,18 @@
                         </li>
                         {% if current_user.role == 'walker' %}
                         <li>
-                            <a class="dropdown-item py-2" href="{{ url_for('walker.pickups') }}">
-                                <i class="bi bi-geo-alt me-2 text-muted"></i>Pickups
+                            <a class="dropdown-item py-2" href="{{ url_for('walker.profile') }}">
+                                <i class="bi bi-person-circle me-2 text-muted"></i>Profile
                             </a>
                         </li>
                         <li>
-                            <a class="dropdown-item py-2" href="{{ url_for('walker.profile') }}">
-                                <i class="bi bi-person-circle me-2 text-muted"></i>Profile
+                            <a class="dropdown-item py-2" href="{{ url_for('walker.pickups') }}">
+                                <i class="bi bi-geo-alt me-2 text-muted"></i>Daily Pickups
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item py-2" href="{{ url_for('walker.monthly_summary') }}">
+                                <i class="bi bi-calendar3 me-2 text-muted"></i>My Month
                             </a>
                         </li>
                         <li><hr class="dropdown-divider my-1"></li>

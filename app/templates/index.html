@@ -158,6 +158,20 @@
                             {{ form.hidden_tag() }}
                             <input type="hidden" name="date" id="booking-date-hidden">
 
+                            {# Dog selector — only shown when client has multiple dogs #}
+                            {% if dogs|length > 1 %}
+                            <div class="mb-3">
+                                <label class="form-label small fw-semibold mb-1" for="dog-selector">Which dog?</label>
+                                <select class="form-select form-select-sm" id="dog-selector" name="dog_id">
+                                    {% for d in dogs %}
+                                    <option value="{{ d.id }}">{{ d.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            {% else %}
+                            <input type="hidden" name="dog_id" id="dog-selector" value="{{ dogs[0].id if dogs else '' }}">
+                            {% endif %}
+
                             {# Booking Type Segmented Control #}
                             <div class="btn-group w-100 mb-3 booking-type-group" role="group">
                                 <input type="radio" class="btn-check" name="booking_type" id="type-single"
@@ -642,6 +656,7 @@
                         end_date: recurEnd.value,
                         slot: slotSelect.value,
                         frequency: recurFreq.value,
+                        dog_id: document.getElementById('dog-selector')?.value || null,
                     }),
                 })
                     .then(r => r.json())
@@ -675,7 +690,7 @@
                 fetch('{{ url_for("client.book_both") }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-                    body: JSON.stringify({ date: selectedDate }),
+                    body: JSON.stringify({ date: selectedDate, dog_id: document.getElementById('dog-selector')?.value || null }),
                 })
                     .then(r => r.json())
                     .then(data => {
@@ -715,7 +730,7 @@
                 fetch('{{ url_for("client.book") }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-                    body: JSON.stringify({ date: selectedDate, slot: slotSelect.value }),
+                    body: JSON.stringify({ date: selectedDate, slot: slotSelect.value, dog_id: document.getElementById('dog-selector')?.value || null }),
                 })
                     .then(r => r.json())
                     .then(data => {
@@ -1052,7 +1067,7 @@
             fetch('{{ url_for("client.book_drop_in") }}', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-                body: JSON.stringify({ date, slot }),
+                body: JSON.stringify({ date, slot, dog_id: document.getElementById('dog-selector')?.value || null }),
             })
                 .then(r => r.json())
                 .then(data => {

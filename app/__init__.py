@@ -282,6 +282,11 @@ def create_app(config_name=None):
         from flask_wtf.csrf import generate_csrf
         return dict(csrf_token=generate_csrf)
 
+    @app.context_processor
+    def inject_home_url():
+        from flask_login import current_user
+        return dict(home_url=_home_url_for(current_user))
+
     @app.template_filter('wa_number')
     def wa_number_filter(phone: str) -> str:
         """Format a phone number for use in a wa.me URL.
@@ -296,6 +301,15 @@ def create_app(config_name=None):
         if digits.startswith('0'):
             digits = '44' + digits[1:]
         return digits
+
+    @app.template_filter('ordinal')
+    def ordinal_filter(n: int) -> str:
+        """Return the ordinal suffix for an integer, e.g. 1 → '1st', 14 → '14th'."""
+        if 11 <= (n % 100) <= 13:
+            suffix = 'th'
+        else:
+            suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
+        return f'{n}{suffix}'
 
     @app.context_processor
     def inject_device_info():
