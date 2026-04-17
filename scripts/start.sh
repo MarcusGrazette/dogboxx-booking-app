@@ -11,14 +11,6 @@ set -e
 #
 # Mount point configured in railway.toml: /data/uploads
 
-echo "=== Volume diagnostics ==="
-echo "/data exists:         $([ -e /data ] && echo YES || echo NO)"
-echo "/data/uploads exists: $([ -e /data/uploads ] && echo YES || echo NO)"
-echo "/data type:           $([ -d /data ] && echo dir || ([ -e /data ] && echo exists-not-dir || echo missing))"
-ls /data 2>/dev/null && echo "Contents of /data shown above" || echo "/data not listable"
-mount | grep -E '/data|upload' || echo "No /data or upload mounts found"
-echo "==========================="
-
 if [ -d /data/uploads ]; then
   mkdir -p /data/uploads/dogs /data/uploads/profiles
 
