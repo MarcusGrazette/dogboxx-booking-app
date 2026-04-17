@@ -658,17 +658,22 @@ def profile():
 
     client = Client.query.filter_by(user_id=current_user.id).first()
 
-    # Get primary dog (user is the main owner — can edit photo/details)
-    dog_owner = DogOwner.query.filter_by(user_id=current_user.id, role='primary').first()
+    # Get all primary dogs (user is the main owner — can edit photo/details)
+    primary_ownerships = DogOwner.query.filter_by(user_id=current_user.id, role='primary').all()
+    primary_dogs = []
+    for _po in primary_ownerships:
+        _d = db.session.get(Dog, _po.dog_id)
+        if _d:
+            primary_dogs.append(_d)
+    dog = primary_dogs[0] if primary_dogs else None  # first primary dog (for form hidden fields)
 
     # Secondary-only owners (co-owners with no primary dog of their own) should be
     # allowed to view/edit their profile without going through onboarding.
-    is_secondary_only = (dog_owner is None and
+    is_secondary_only = (not primary_ownerships and
                          DogOwner.query.filter_by(user_id=current_user.id, role='secondary').count() > 0)
 
     if not is_secondary_only and (not client or not client.onboarding_completed):
         return redirect(url_for('client.onboard'))
-    dog = db.session.get(Dog, dog_owner.dog_id) if dog_owner else None
 
     # Get secondary dogs (user has shared access — read-only on the profile)
     secondary_ownerships = DogOwner.query.filter_by(user_id=current_user.id, role='secondary').all()
@@ -748,9 +753,16 @@ def profile():
             client.maps_url = form.maps_url.data.strip() if form.maps_url.data else None
 
             # Pickup notes live on the dog, not the client
-            pickup_dog = dog or (secondary_dogs[0]['dog'] if secondary_dogs else None)
-            if pickup_dog:
-                pickup_dog.pickup_instructions = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
+            if primary_dogs:
+                # Per-dog raw fields (named pickup_instructions_{id}) in the template
+                for _pd in primary_dogs:
+                    _val = request.form.get(f'pickup_instructions_{_pd.id}', '').strip() or None
+                    _pd.pickup_instructions = _val
+            elif secondary_dogs:
+                # Secondary-only path: update first shared dog's instructions via form field
+                secondary_dogs[0]['dog'].pickup_instructions = (
+                    form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
+                )
 
             # Notifications — email toggle controls newsletter subscription
             current_user.email_marketing = bool(form.notify_email.data)
@@ -772,11 +784,11 @@ def profile():
                             dog.pic = pic_filename
                     except ValueError as e:
                         flash(f"Upload error: {str(e)}", "error")
-                        return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=datetime.now().strftime("%Y-%m-%d"))
+                        return render_template("profile.html", form=form, dog=dog, primary_dogs=primary_dogs, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=datetime.now().strftime("%Y-%m-%d"))
                     except Exception as e:
                         logging.error(f"Error processing uploaded file: {e}")
                         flash("Error processing your image. Please try a different file.", "error")
-                        return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=datetime.now().strftime("%Y-%m-%d"))
+                        return render_template("profile.html", form=form, dog=dog, primary_dogs=primary_dogs, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=datetime.now().strftime("%Y-%m-%d"))
 
             db.session.commit()
             flash("Profile updated successfully!", "success")
@@ -802,10 +814,10 @@ def profile():
             form.postcode.data = client.postal_code
             form.maps_url.data = client.maps_url
 
-        # Populate pickup notes from the dog (primary or first shared dog)
-        pickup_dog = dog or (secondary_dogs[0]['dog'] if secondary_dogs else None)
-        if pickup_dog:
-            form.pickup_instructions.data = pickup_dog.pickup_instructions
+        # Pickup notes: primary dogs use per-dog raw fields in template;
+        # secondary-only path pre-fills the form field for backward compat
+        if not primary_dogs and secondary_dogs:
+            form.pickup_instructions.data = secondary_dogs[0]['dog'].pickup_instructions
 
         # Notifications
         form.notify_email.data = current_user.email_marketing
@@ -818,7 +830,7 @@ def profile():
             form.dog_dob.data = dog.date_of_birth
             form.dog_allergies.data = dog.allergies
 
-    return render_template("profile.html", form=form, dog=dog, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=datetime.now().strftime("%Y-%m-%d"))
+    return render_template("profile.html", form=form, dog=dog, primary_dogs=primary_dogs, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=datetime.now().strftime("%Y-%m-%d"))
 
 
 @client_bp.route("/monthly-summary")
@@ -929,7 +941,17 @@ def upload_dog_photo():
     Expects a multipart POST with a 'file' field containing the canvas blob
     from Cropper.js. Returns JSON {success, url} or {success, error}.
     """
-    dog_owner = DogOwner.query.filter_by(user_id=current_user.id, role='primary').first()
+    dog_id_param = request.args.get('dog_id') or request.form.get('dog_id')
+    if dog_id_param:
+        try:
+            dog_id_param = int(dog_id_param)
+        except (TypeError, ValueError):
+            return jsonify(success=False, error="Invalid dog ID"), 400
+        dog_owner = DogOwner.query.filter_by(
+            user_id=current_user.id, dog_id=dog_id_param, role='primary'
+        ).first()
+    else:
+        dog_owner = DogOwner.query.filter_by(user_id=current_user.id, role='primary').first()
     dog = db.session.get(Dog, dog_owner.dog_id) if dog_owner else None
     if not dog:
         return jsonify(success=False, error="Dog profile not found"), 404
