@@ -94,6 +94,25 @@ def _notify_co_owners_of_booking(booking, dog_name, confirmed):
         )
 
 
+def _resolve_dog(user_dogs, requested_id):
+    """Return the Dog to book for.
+
+    If requested_id is provided and belongs to this user, return that dog.
+    Otherwise fall back to the first dog (single-dog accounts / legacy callers).
+    Raises ValueError if requested_id is provided but not accessible.
+    """
+    if requested_id:
+        try:
+            requested_id = int(requested_id)
+        except (TypeError, ValueError):
+            raise ValueError("Invalid dog selection.")
+        dog = next((d for d in user_dogs if d.id == requested_id), None)
+        if dog is None:
+            raise ValueError("Dog not found on your account.")
+        return dog
+    return user_dogs[0]
+
+
 @client_bp.route("/", methods=["GET", "POST"])
 @login_required
 def index():
@@ -151,7 +170,13 @@ def index():
             errors.append("No dog found on your account. Please add a dog before booking.")
 
         if not errors:
-            dog_id = user_dogs[0].id  # Use first dog from DogOwner relationship
+            try:
+                selected_dog = _resolve_dog(user_dogs, request.form.get('dog_id'))
+                dog_id = selected_dog.id
+            except ValueError as e:
+                errors.append(str(e))
+
+        if not errors:
             # Prevent duplicate booking: same dog + date + slot (only active bookings)
             active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
             existing = Booking.query.filter(
@@ -278,7 +303,10 @@ def book():
     if not user_dogs:
         return jsonify({'success': False, 'message': 'No dog found on your account. Please add a dog before booking.'}), 400
 
-    dog    = user_dogs[0]
+    try:
+        dog = _resolve_dog(user_dogs, data.get('dog_id'))
+    except ValueError as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
     dog_id = dog.id
 
     # ── Duplicate / cap checks ────────────────────────────────────────────────
@@ -405,7 +433,10 @@ def book_both():
     if not user_dogs:
         return jsonify({'success': False, 'message': 'No dog found on your account.'}), 400
 
-    dog    = user_dogs[0]
+    try:
+        dog = _resolve_dog(user_dogs, data.get('dog_id'))
+    except ValueError as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
     dog_id = dog.id
 
     default_service = ServiceType.query.filter_by(slug='group-walk', active=True).first()
@@ -543,7 +574,10 @@ def book_drop_in():
     if not user_dogs:
         return jsonify({'success': False, 'message': 'No dog found on your account.'}), 400
 
-    dog    = user_dogs[0]
+    try:
+        dog = _resolve_dog(user_dogs, data.get('dog_id'))
+    except ValueError as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
     dog_id = dog.id
 
     drop_in_service = ServiceType.query.filter_by(slug='drop-in', active=True).first()
@@ -1289,7 +1323,10 @@ def recurring_booking():
         user_dogs = Dog.query.join(DogOwner).filter(DogOwner.user_id == current_user.id).all()
         if not user_dogs:
             return jsonify(success=False, message="No dog found on your account"), 400
-        dog = user_dogs[0]
+        try:
+            dog = _resolve_dog(user_dogs, data.get('dog_id'))
+        except ValueError as e:
+            return jsonify(success=False, message=str(e)), 400
 
         default_service = ServiceType.query.filter_by(slug='group-walk', active=True).first()
         if not default_service:
