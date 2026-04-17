@@ -46,11 +46,10 @@
   color: #fff !important;
 }
 .cal-confirmed {
-  background: rgba(224, 47, 172, 0.1);
-  color: #E02FAC;
-  font-weight: 600;
+  background: #d1e7dd;
+  color: #0a3622;
 }
-.cal-confirmed:hover { background: rgba(224, 47, 172, 0.18); }
+.cal-confirmed:hover { background: #a3cfbb; }
 .cal-confirmed.cal-selected {
   background: var(--bs-primary) !important;
   color: #fff !important;

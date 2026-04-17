@@ -16,31 +16,19 @@
 
   /* Neutral palette */
   --db-dark:                 #1B1B1B;
-  --db-surface:              #f6f3f2;
+  --db-surface:              #F6F6F6;
   --db-muted:                #5E5E5E;
 
-  /* Override body — warm editorial cream instead of flat grey */
-  --bs-body-bg:              #fcf9f8;
-  --bs-body-color:           #1a1a1a;
-  --bs-secondary-color:      rgba(26, 26, 26, 0.6);
-  --bs-tertiary-bg:          #f6f3f2;
-
-  /* Border — warm grey to complement the cream background */
-  --bs-border-color:         #e2dfde;
-
-  /* Border radii — 8/16pt design-system tokens */
-  --bs-border-radius:        0.5rem;
-  --bs-border-radius-lg:     1rem;
+  /* Override body */
+  --bs-body-bg:              #F6F6F6;
+  --bs-body-color:           #1B1B1B;
+  --bs-secondary-color:      #5E5E5E;
 
   /* Links */
   --bs-link-color:           #E02FAC;
   --bs-link-color-rgb:       224, 47, 172;
   --bs-link-hover-color:     #C0258F;
   --bs-link-hover-color-rgb: 192, 37, 143;
-
-  /* Nav links — prevent link-color (#E02FAC) bleeding into nav components */
-  --bs-nav-link-color:       #1a1a1a;
-  --bs-nav-link-hover-color: #E02FAC;
 
   /* Form switches — Bootstrap uses its own variable, doesn't inherit --bs-primary */
   --bs-form-check-input-checked-bg-color:     #E02FAC;
@@ -49,10 +37,6 @@
   /* Dropdown active state — overrides Bootstrap's default blue highlight */
   --bs-dropdown-link-active-bg:    var(--db-primary-subtle);
   --bs-dropdown-link-active-color: var(--bs-body-color);
-
-  /* Cards — shadow-only style, no border */
-  --bs-card-border-width:    0;
-  --bs-card-box-shadow:      0 4px 24px rgba(28, 27, 27, 0.05);
 }
 
 /* ---- Form switches ---- */
@@ -78,11 +62,9 @@
   --bs-btn-hover-border-color: #C0258F;
   --bs-btn-active-bg:        #A81E7C;
   --bs-btn-active-border-color: #A81E7C;
-  --bs-btn-disabled-bg:      #f2a4cc;
-  --bs-btn-disabled-border-color: #f2a4cc;
+  --bs-btn-disabled-bg:      #E02FAC;
+  --bs-btn-disabled-border-color: #E02FAC;
   color: #fff;
-  font-weight: 700;
-  letter-spacing: -0.01em;
 }
 
 .btn-outline-primary {
@@ -117,17 +99,11 @@
   color: #E02FAC !important;
 }
 
-/* ---- Nav pills ---- */
-.nav-pills .nav-link.active {
-  background-color: #E02FAC;
-}
-
-/* font-weight only — color handled via --bs-nav-link-color in :root */
-.nav-link { font-weight: 600; }
-
 /* ---- Cards ---- */
 .card {
-  /* border and box-shadow driven by CSS variables set in :root */
+  border: 1px solid #e8e0e6;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(27, 27, 27, 0.06);
 }
 
 .card-header {
@@ -211,7 +187,15 @@ h2 { font-size: 1.35rem; }
 
 
 /* ---- Calendar overrides ---- */
-/* (base calendar styles live in reusable-calendar.css) */
+.cal-cell.today .cal-day {
+  background-color: #E02FAC;
+  border-color: #E02FAC;
+}
+
+.cal-cell.selected .cal-day {
+  background-color: var(--db-primary-dark);
+  border-color: var(--db-primary-dark);
+}
 
 /* ---- Login / auth pages ---- */
 
@@ -276,7 +260,7 @@ footer {
 
 /* Content area background */
 .app-content {
-  background-color: #f6f3f2;
+  background-color: #F6F6F6;
 }
 
 /* Content header */
