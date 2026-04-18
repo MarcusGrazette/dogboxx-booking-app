@@ -209,19 +209,9 @@
     c.id = 'db-toast-container';
     c.setAttribute('aria-live', 'polite');
     c.setAttribute('aria-atomic', 'false');
-    // Inline the positioning styles so the container works even if
-    // flash_toasts.html never rendered (no server-side flash messages).
-    c.style.cssText = [
-      'position:fixed',
-      'z-index:1060',
-      'display:flex',
-      'flex-direction:column',
-      'gap:0.5rem',
-      'pointer-events:none',
-      'bottom:calc(1.25rem + env(safe-area-inset-bottom,0px))',
-      'left:1rem',
-      'right:1rem',
-    ].join(';');
+    // No inline styles — brand.css handles all positioning (mobile + desktop
+    // media query). Inline styles would override the media query and break
+    // desktop centering.
     document.body.appendChild(c);
     return c;
   }
