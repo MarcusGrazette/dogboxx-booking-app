@@ -190,33 +190,14 @@ def forgot_password():
             base_url = current_app.config.get('APP_BASE_URL', '').rstrip('/')
             reset_url = f"{base_url}/auth/reset-password/{token}"
 
-            logo_url = f"{base_url}/static/dogboxx-logo.png"
-            html = f"""
-            <div style="font-family:sans-serif;max-width:520px;margin:0 auto;">
-              <div style="margin-bottom:24px;">
-                <img src="{logo_url}" alt="Dogboxx" style="height:48px;width:auto;">
-              </div>
-              <p>Hi {user.firstname},</p>
-              <p>We received a request to reset your Dogboxx password.
-                 Click the button below — the link expires in 1 hour.</p>
-              <p style="margin:28px 0;">
-                <a href="{reset_url}"
-                   style="background:#E02FAC;color:#fff;padding:12px 28px;
-                          border-radius:6px;text-decoration:none;font-weight:600;
-                          display:inline-block;">
-                  Reset my password
-                </a>
-              </p>
-              <p>Kind regards,<br><strong>Team Dogboxx</strong></p>
-              <p style="color:#999;font-size:0.8em;margin-top:24px;border-top:1px solid #eee;padding-top:16px;">
-                If you didn't request this, you can safely ignore this email.
-                Your password won't change until you click the link above.
-              </p>
-            </div>
-            """
+            html = render_template(
+                "email/password_reset.html",
+                firstname=user.firstname,
+                reset_url=reset_url,
+            )
             send_email(
                 to=user.email,
-                subject="Reset your Dogboxx password",
+                subject="Reset your DogBoxx password",
                 html=html,
             )
             logging.info(f"Password reset requested for {email}")
