@@ -2742,9 +2742,10 @@ def csv_import_confirm():
             if has_dog:
                 from datetime import date as date_type
                 dob = date_type.fromisoformat(r['dog_dob']) if r.get('dog_dob') else None
+                _gender_map = {'M': 'male', 'F': 'female'}
                 dog = Dog(
                     name=r['dog_name'],
-                    gender=r.get('dog_gender') or 'M',
+                    gender=_gender_map.get(r.get('dog_gender'), 'male'),
                     breed=r.get('dog_breed') or '',
                     allergies='',
                     date_of_birth=dob,

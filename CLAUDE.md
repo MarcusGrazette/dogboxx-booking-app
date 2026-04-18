@@ -72,6 +72,7 @@ seed_demo_bookings.py  Demo booking data for presentations
 | `WalkerUnavailability` | Date-specific exceptions to a walker's schedule |
 | `WalkerAdHocAvailability` | One-off available days outside a walker's default schedule |
 | `PricingConfig` | Pricing history (used by invoicing). Fields: `price_per_walk`, `double_slot_discount`, `weekly_discount` (per-walk, for weeks ≥5 walks), `price_per_drop_in`, `effective_from`. |
+| `DailyMessage` | Admin-authored announcements shown to walkers on the pickup list. |
 | `Notification` | In-app bell notifications (read/unread) |
 
 **Booking statuses:** `requested` → `confirmed` / `waitlisted` / `cancelled`
@@ -131,7 +132,7 @@ pytest                    # run all tests (SQLite locally)
 pytest tests/test_auth.py # specific file
 ```
 
-145 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing. All should pass. CI runs on every push/PR — don't merge anything that breaks CI.
+151 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing. All should pass. CI runs on every push/PR — don't merge anything that breaks CI.
 
 CI runs three steps in order against a real Postgres instance:
 1. `flask db upgrade` — verifies the full migration chain runs cleanly from scratch
@@ -179,8 +180,8 @@ flask seed-service-types  # seed Group Walk / Drop In / Day Care service types (
 | `app/utils/notifications.py` | Notification creation helpers |
 | `config.py` | Dev/Test/Prod config classes |
 | `FEATURES.md` | Feature tracker — check here before starting new work |
-| `Procfile` | Railway start command |
-| `railway.toml` | Railway project config |
+| `scripts/start.sh` | Production startup — creates volume symlink, runs migrations, starts gunicorn |
+| `railway.toml` | Railway project config — `startCommand` calls `scripts/start.sh` |
 
 ---
 

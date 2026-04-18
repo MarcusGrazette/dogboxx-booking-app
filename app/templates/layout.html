@@ -23,7 +23,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <meta name="apple-mobile-web-app-title" content="Dogboxx">
+    <meta name="apple-mobile-web-app-title" content="DogBoxx">
 
     <!-- iOS splash screens (shown while PWA loads from background) -->
     <link rel="apple-touch-startup-image" href="{{ url_for('static', filename='splash/splash-iphone-se.png') }}" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)">
@@ -48,7 +48,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-    <!-- Dogboxx brand colours (overrides Bootstrap defaults) -->
+    <!-- DogBoxx brand colours (overrides Bootstrap defaults) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/brand.css') }}">
     <!-- Reusable Calendar Component CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/reusable-calendar.css') }}">
@@ -70,7 +70,7 @@
 
             <!-- Logo: me-auto pushes everything else right -->
             <a class="navbar-brand lh-1 py-0 me-auto" href="{{ home_url }}">
-                <img src="{{ url_for('static', filename='logo-white-on-black.png') }}" alt="Dogboxx" height="48">
+                <img src="{{ url_for('static', filename='logo-white-on-black.png') }}" alt="DogBoxx" height="48">
             </a>
 
             {% if current_user.is_authenticated %}
@@ -160,9 +160,9 @@
     <div id="a2hs-banner" class="d-none position-fixed bottom-0 start-0 w-100 p-3 shadow-lg" style="z-index: 1070; background: rgba(28, 28, 30, 0.98); backdrop-filter: blur(14px); border-top: 2px solid #E02FAC; transform: translateY(100%); transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);">
       <div class="container d-flex align-items-center justify-content-between px-1">
         <div class="d-flex align-items-center text-white gap-3">
-          <img src="{{ url_for('static', filename='android-chrome-192x192.png') }}" width="44" height="44" class="rounded-3 shadow-sm" alt="Dogboxx Icon">
+          <img src="{{ url_for('static', filename='android-chrome-192x192.png') }}" width="44" height="44" class="rounded-3 shadow-sm" alt="DogBoxx Icon">
           <div>
-            <div class="fw-bold mb-0 lh-1" style="font-size: 0.95rem;">Dogboxx App</div>
+            <div class="fw-bold mb-0 lh-1" style="font-size: 0.95rem;">DogBoxx App</div>
             <div class="text-white-50 lh-1 mt-1" style="font-size: 0.8rem;">Install for the best experience</div>
           </div>
         </div>
@@ -209,19 +209,9 @@
     c.id = 'db-toast-container';
     c.setAttribute('aria-live', 'polite');
     c.setAttribute('aria-atomic', 'false');
-    // Inline the positioning styles so the container works even if
-    // flash_toasts.html never rendered (no server-side flash messages).
-    c.style.cssText = [
-      'position:fixed',
-      'z-index:1060',
-      'display:flex',
-      'flex-direction:column',
-      'gap:0.5rem',
-      'pointer-events:none',
-      'bottom:calc(1.25rem + env(safe-area-inset-bottom,0px))',
-      'left:1rem',
-      'right:1rem',
-    ].join(';');
+    // No inline styles — brand.css handles all positioning (mobile + desktop
+    // media query). Inline styles would override the media query and break
+    // desktop centering.
     document.body.appendChild(c);
     return c;
   }
