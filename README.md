@@ -13,25 +13,33 @@ A booking management platform for a small dog walking business. Built with Flask
 ## Features
 
 ### Client
-- Self-registration and onboarding (address, pickup instructions, dog profile)
-- Book walks — one-off or recurring (daily/weekly, expand into individual bookings)
+- Onboarding (address, pickup instructions, dog profile)
+- Book walks — one-off, recurring (daily/weekly), or both AM + PM slots in one action
+- Drop-in visits — bookable separately from group walks
 - Booking dashboard with status tracking (requested → confirmed / waitlisted)
 - In-app notification bell for booking confirmations, cancellations, and walker assignments
-- Profile and dog profile editing (including photo upload)
+- Profile and dog profile editing (photo upload, per-dog pickup instructions)
+- Multi-dog support — dog selector on booking form; all dogs shown on profile
+- Monthly walk summary with booking history
 
 ### Admin
-- Dashboard with booking stats and a calendar view of upcoming walks
-- **Bookings board** — review pending requests, confirm/cancel, assign walkers, drag-to-reorder pickup order per walker per slot
-- **Dogs view** — searchable table of all dogs on the books; book on behalf of any dog's owner (one-off or recurring)
-- **Clients** — create, view, and manage client accounts
-- **Walkers** — create and manage walkers, set default weekly schedules, mark unavailability by date/slot
+- Dashboard with booking stats, 4-week chart, and walker availability grid
+- **Bookings board** — confirm/cancel requests, assign walkers, drag-to-reorder pickup order per walker per slot
+- **Drop-in board** — separate board for drop-in visits with the same confirm/assign/reorder flow
+- **Dogs view** — searchable table; book on behalf of any owner (one-off or recurring); add additional dogs to a client
+- **Clients** — create, view, manage accounts; add secondary co-owners; CSV bulk import
+- **Walkers** — create walkers, set default weekly schedules, mark unavailability, add ad hoc available days; override unavailability on the allocation board
+- **Invoicing** — monthly summary per client with line items, weekly breakdown, configurable pricing (walk, drop-in, double-slot discount, weekly discount)
+- **Newsletter** — WYSIWYG editor with merge tags, recipient sidebar, test send, one-click unsubscribe
+- **Daily messages** — admin posts announcements visible to walkers on their pickup list
 - Notification audit trail per client
-- Admin is also a walker — "My Pickup List" accessible directly from the sidebar
+- Admin is also a walker — "My Pickup List" in the sidebar
 
 ### Walker
-- Daily pickup list with dog photo, owner name, address, pickup instructions, and ordered pickup sequence
+- Daily pickup list with dog photo, owner, address, pickup instructions, ordered pickup sequence, and daily announcements
 - Date navigation (past/future pickup lists)
-- Schedule management — view default schedule and manage unavailability exceptions
+- Profile page — default schedule, unavailability exceptions, ad hoc available days
+- Monthly summary — walk slots, drop-in visits, and dog counts with month navigation
 
 ### Capacity & Waitlisting
 - Walk capacity is dynamic: `available walkers × max_per_walker` per slot per day
@@ -104,7 +112,7 @@ The app is available at `http://localhost:5000`.
 
 | Role | Email | Password |
 |---|---|---|
-| Admin + Walker | admin@dogboxx.org | adminpass |
+| Admin + Walker (Owner) | lydia@dogboxx.org | changeme123! |
 | Walker | testwalker@dogboxx.org | walkies123 |
 | Client | john.doe@example.com | clientpass |
 
@@ -127,12 +135,12 @@ This adds walker unavailability on specific days to reduce capacity and trigger 
 ```
 app/
   blueprints/
-    admin/          Admin routes (dashboard, bookings, dogs, clients, walkers)
-    auth/           Login, logout, registration
+    admin/          Admin routes (dashboard, bookings, dogs, clients, walkers, invoicing, newsletter)
+    auth/           Login, logout, password reset, unsubscribe
     client/         Client home, onboarding, bookings, profile
-    walker/         Pickup list, schedule, unavailability
+    walker/         Pickup list, profile, monthly summary
     api/            JSON endpoints (calendar data, booking actions)
-  templates/        Jinja2 templates (admin_layout.html, base.html, partials/)
+  templates/        Jinja2 templates (admin_layout.html, layout.html, partials/)
   static/           CSS, JS, images, uploads
   models.py         SQLAlchemy models
   capacity.py       Walk capacity and availability logic
@@ -140,6 +148,7 @@ app/
   utils/            Notifications, decorators, DB error handling, uploads
 config.py           Development / Testing / Production config classes
 migrations/         Alembic migration files
+scripts/start.sh    Production startup (volume symlink, migrations, gunicorn)
 seed.py             Base seed data (users, dogs, walkers, schedules)
 seed_demo_bookings.py  Demo booking data for presentations
 ```
@@ -153,13 +162,15 @@ seed_demo_bookings.py  Demo booking data for presentations
 | `User` | All users — has `role` (client/walker) and `is_admin` flag |
 | `Client` | Address and onboarding data for client users |
 | `Walker` | Walker record linked to a User |
-| `Dog` | Dog profile (name, breed, DOB, photo, notes) |
+| `Dog` | Dog profile (name, breed, DOB, photo, pickup_instructions) |
 | `DogOwner` | Many-to-many join: dogs ↔ users, with `role` (primary/secondary) |
 | `Booking` | Walk booking — links user, dog, service type, date, slot, walker, status |
 | `ServiceType` | Service definition (currently: Group Walk, Drop-in) |
 | `WalkerSchedule` | Walker's default weekly availability (day_of_week + slot) |
 | `WalkerUnavailability` | Date-specific exceptions to a walker's schedule |
 | `WalkerAdHocAvailability` | One-off available days outside a walker's default schedule |
+| `PricingConfig` | Pricing history — walk, drop-in, double-slot discount, weekly discount |
+| `DailyMessage` | Admin announcements shown to walkers on the pickup list |
 | `Notification` | In-app notification records (recipient, type, read state) |
 
 ### Booking statuses
@@ -172,7 +183,7 @@ seed_demo_bookings.py  Demo booking data for presentations
 - **`develop`** — active development branch; all work goes here
 - **`main`** — production-ready only; updated via PR from `develop`
 
-To deploy: merge `develop` → `main` via GitHub PR. Railway auto-deploys on merge to `main` — `flask db upgrade` runs automatically before the server starts.
+To deploy: merge `develop` → `main` via GitHub PR. Railway auto-deploys on merge to `main`. The startup script `scripts/start.sh` runs on each deploy — it creates the persistent uploads volume symlink, runs `flask db upgrade`, seeds service types, then starts gunicorn.
 
 ---
 
