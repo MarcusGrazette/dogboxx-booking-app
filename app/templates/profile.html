@@ -113,9 +113,6 @@
     {# dog_gender is a SelectField — type="hidden" doesn't work on <select>, use raw input #}
     <input type="hidden" name="dog_gender" value="{{ form.dog_gender.data or '' }}">
     {{ form.dog_breed(type="hidden") }}
-    {{ form.dog_dob(type="hidden") }}
-    {# dog_allergies hidden so existing data isn't wiped — admin manages this field #}
-    <input type="hidden" name="dog_allergies" value="{{ form.dog_allergies.data or '' }}">
 
     <div class="row justify-content-center">
     <div class="col-12 col-xl-11">
@@ -206,16 +203,24 @@
                         </div>
                     </div>
 
-                    {# DOB + age #}
-                    {% if dog.date_of_birth %}
-                    <div class="detail-row mb-3">
-                        <i class="bi bi-calendar3 detail-icon"></i>
-                        <div>
-                            <div>{{ dog.date_of_birth.strftime('%d %b %Y') }}</div>
-                            <div class="text-muted" style="font-size:0.75rem;" id="dog-age-display-{{ dog.id }}"></div>
-                        </div>
+                    {# DOB — editable #}
+                    <div class="mb-2 mt-3">
+                        <label class="form-label fw-semibold small mb-1">Date of birth</label>
+                        <input type="date" class="form-control form-control-sm"
+                               name="dog_dob_{{ dog.id }}"
+                               value="{{ dog.date_of_birth.strftime('%Y-%m-%d') if dog.date_of_birth else '' }}"
+                               max="{{ today }}">
+                        <div class="text-muted" style="font-size:0.75rem; margin-top:3px;" id="dog-age-display-{{ dog.id }}"></div>
                     </div>
-                    {% endif %}
+
+                    {# Allergies / health notes — editable #}
+                    <div class="mb-1">
+                        <label class="form-label fw-semibold small mb-1">Health notes</label>
+                        <textarea class="form-control form-control-sm"
+                                  name="dog_allergies_{{ dog.id }}"
+                                  rows="2"
+                                  placeholder="Allergies, medical conditions, special needs…">{{ dog.allergies or '' }}</textarea>
+                    </div>
 
                 </div>
             </div>
@@ -409,15 +414,19 @@
         return years === 1 ? `1 year, ${months}mo old` : `${years} years, ${months}mo old`;
     }
 
-    {% for dog in primary_dogs %}{% if dog.date_of_birth %}
+    {% for dog in primary_dogs %}
     (function() {
-        var ageEl = document.getElementById('dog-age-display-{{ dog.id }}');
-        if (ageEl) {
-            var age = calcDogAge('{{ dog.date_of_birth.strftime("%Y-%m-%d") }}');
-            if (age) ageEl.textContent = age;
+        var dobInput = document.querySelector('input[name="dog_dob_{{ dog.id }}"]');
+        var ageEl    = document.getElementById('dog-age-display-{{ dog.id }}');
+        if (!dobInput || !ageEl) return;
+        function updateAge() {
+            var age = calcDogAge(dobInput.value);
+            ageEl.textContent = age || '';
         }
+        updateAge();
+        dobInput.addEventListener('change', updateAge);
     }());
-    {% endif %}{% endfor %}
+    {% endfor %}
 
     // ── Cropper.js photo upload ───────────────────────────────────────────────
     //

@@ -2732,8 +2732,7 @@ def csv_import_confirm():
             parts = [p for p in [r.get('address_line_1'), r.get('address_line_2'), r.get('address_line_3')] if p]
             if parts:
                 client.street_address = '\n'.join(parts)
-            client.postal_code        = r.get('postcode')
-            client.pickup_instructions = r.get('pickup_instructions')
+            client.postal_code = r.get('postcode')
             has_address = bool(r.get('address_line_1'))
             db.session.add(client)
             db.session.flush()
@@ -2749,6 +2748,7 @@ def csv_import_confirm():
                     breed=r.get('dog_breed') or '',
                     allergies='',
                     date_of_birth=dob,
+                    pickup_instructions=r.get('pickup_instructions'),
                 )
                 db.session.add(dog)
                 db.session.flush()
