@@ -212,7 +212,7 @@ class ProfileForm(FlaskForm):
     dog_breed = StringField('Breed', validators=[Optional()])
     dog_dob = DateField(
         'Date of Birth',
-        validators=[DataRequired(message="Please enter your dog's date of birth")]
+        validators=[Optional()]
     )
     dog_allergies = StringField('Allergies', validators=[Optional()])
 
@@ -321,12 +321,11 @@ class ClientCreateForm(FlaskForm):
     submit = SubmitField('Save Client')
 
     def validate(self, extra_validators=None):
-        """If any dog field is provided, require name + gender + dob together."""
+        """If any dog field is provided, require name + gender together."""
         rv = super().validate(extra_validators)
         dog_fields_provided = any([
             self.dog_name.data and self.dog_name.data.strip(),
             self.dog_gender.data,
-            self.dog_dob.data,
         ])
         if dog_fields_provided:
             if not (self.dog_name.data and self.dog_name.data.strip()):
@@ -334,9 +333,6 @@ class ClientCreateForm(FlaskForm):
                 rv = False
             if not self.dog_gender.data:
                 self.dog_gender.errors.append("Gender is required when adding dog info.")
-                rv = False
-            if not self.dog_dob.data:
-                self.dog_dob.errors.append("Date of birth is required when adding dog info.")
                 rv = False
         return rv
 

@@ -1,8 +1,8 @@
-# CLAUDE.md — Dogboxx Booking App
+# CLAUDE.md — DogBoxx Booking App
 
 ## Project Overview
 
-Dogboxx is a booking management platform for a real small dog walking business (~50 clients). It handles the full lifecycle: client request → walker assignment → pickup. Flask + PostgreSQL, Blueprint architecture.
+DogBoxx is a booking management platform for a real small dog walking business (~50 clients). It handles the full lifecycle: client request → walker assignment → pickup. Flask + PostgreSQL, Blueprint architecture.
 
 **Repo:** `git@github.com:MarcusGrazette/dogboxx-booking-app.git`
 **Local:** `/home/marcus/claude/dogboxx-booking-app/`
@@ -62,7 +62,7 @@ seed_demo_bookings.py  Demo booking data for presentations
 | Model | Notes |
 |---|---|
 | `User` | All users. `role` = client/walker, `is_admin` boolean. Business owner is walker + admin. |
-| `Client` | Address + onboarding data |
+| `Client` | Address + onboarding data. **No `pickup_instructions` field** — that lives on `Dog`. |
 | `Walker` | Linked to User via 1:1 |
 | `Dog` | Profile (name, breed, DOB, photo, notes, pickup_instructions). Pickup notes are per-dog and shared by all co-owners. |
 | `DogOwner` | Many-to-many dogs ↔ users, `role` = primary/secondary |
@@ -178,6 +178,7 @@ flask seed-service-types  # seed Group Walk / Drop In / Day Care service types (
 | `app/capacity.py` | Walk capacity checks + `auto_assign_walker()` |
 | `app/models.py` | All SQLAlchemy models |
 | `app/utils/notifications.py` | Notification creation helpers |
+| `app/templates/email/password_reset.html` | Password reset email — table-based Jinja template, CSS-only wordmark, no embedded image |
 | `config.py` | Dev/Test/Prod config classes |
 | `FEATURES.md` | Feature tracker — check here before starting new work |
 | `scripts/start.sh` | Production startup — creates volume symlink, runs migrations, starts gunicorn |
@@ -196,6 +197,11 @@ flask seed-service-types  # seed Group Walk / Drop In / Day Care service types (
 - **PR workflow**: push changes to `develop` and notify the user to test first. Only open a PR to `main` after the user has confirmed the changes look good. This avoids merging then immediately following up with a fix PR.
 - **Notification preferences**: `notification_preference` on `User` is always `'email'` — WhatsApp was removed. The email toggle on `/profile` controls `email_marketing` (newsletter), not booking notification emails.
 - **Invoicing discounts**: double-slot discount (same-day AM+PM walks) and weekly discount (≥5 confirmed walks in ISO week) are both applied in `app/utils/invoicing.py`. Both are configurable via `/admin/revenue`.
+- **Brand name spelling**: `DogBoxx` — capital D and capital B. Used consistently across all templates.
+- **Per-dog editable fields on `/profile`**: pickup instructions, DOB, and health notes all use raw `name="field_{{ dog.id }}"` inputs (not WTForms fields) and are saved by iterating `primary_dogs` in the route — same pattern for all three.
+- **Client profile DOB/allergies**: clients can edit these on `/profile`; name/gender/breed remain admin-managed (hidden form fields round-trip the values).
+- **CSV import dog gender**: CSV accepts `M`/`F`; must be mapped to `male`/`female` before writing to the `Dog` model (PostgreSQL enum). Already fixed in `csv_import_confirm`.
+- **`ClientCreateForm` dog validation**: name + gender required together if either is provided; DOB is optional.
 
 ---
 

@@ -769,13 +769,24 @@ def profile():
             current_user.email_marketing = bool(form.notify_email.data)
             current_user.notification_preference = 'email'
 
-            # Dog info
+            # Dog info — name/gender/breed are admin-managed (round-trip via hidden fields)
+            # dob and allergies are client-editable via per-dog raw fields
             if dog:
                 dog.name = form.dog_name.data.strip()
                 dog.gender = form.dog_gender.data.strip()
                 dog.breed = form.dog_breed.data.strip() if form.dog_breed.data else ""
-                dog.date_of_birth = form.dog_dob.data
-                dog.allergies = form.dog_allergies.data.strip() if form.dog_allergies.data else ""
+
+            for _pd in primary_dogs:
+                from datetime import date as _date_type
+                _dob_str = request.form.get(f'dog_dob_{_pd.id}', '').strip()
+                if _dob_str:
+                    try:
+                        _pd.date_of_birth = _date_type.fromisoformat(_dob_str)
+                    except ValueError:
+                        pass
+                else:
+                    _pd.date_of_birth = None
+                _pd.allergies = request.form.get(f'dog_allergies_{_pd.id}', '').strip() or None
 
                 # Handle photo upload
                 if 'file' in request.files and request.files['file'].filename:
@@ -1150,7 +1161,7 @@ def onboard():
                 form.address_line_2.data = lines[1] if len(lines) > 1 else ''
                 form.address_line_3.data = lines[2] if len(lines) > 2 else ''
             form.postcode.data = client.postal_code
-            form.pickup_instructions.data = client.pickup_instructions
+            form.pickup_instructions.data = existing_dog.pickup_instructions if existing_dog else None
             form.maps_url.data = client.maps_url
         form.notify_email.data = current_user.email_marketing
         if existing_dog:
