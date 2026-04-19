@@ -777,17 +777,6 @@ def profile():
                 dog.breed = form.dog_breed.data.strip() if form.dog_breed.data else ""
 
             for _pd in primary_dogs:
-                from datetime import date as _date_type
-                _dob_str = request.form.get(f'dog_dob_{_pd.id}', '').strip()
-                if _dob_str:
-                    try:
-                        _pd.date_of_birth = _date_type.fromisoformat(_dob_str)
-                    except ValueError:
-                        pass
-                else:
-                    _pd.date_of_birth = None
-                _pd.allergies = request.form.get(f'dog_allergies_{_pd.id}', '').strip() or None
-
                 # Handle photo upload
                 if 'file' in request.files and request.files['file'].filename:
                     try:
@@ -1019,6 +1008,67 @@ def upload_profile_photo():
         db.session.rollback()
         logging.error(f"Error saving profile photo for {current_user.email}: {e}")
         return jsonify(success=False, error="Server error saving photo"), 500
+
+
+@client_bp.route("/profile/update-pickup", methods=["POST"])
+@login_required
+def update_pickup():
+    """AJAX: save pickup instructions (per dog) and newsletter preference."""
+    if current_user.role != 'client':
+        return jsonify(success=False, error="Forbidden"), 403
+
+    client = Client.query.filter_by(user_id=current_user.id).first()
+    primary_ownerships = DogOwner.query.filter_by(user_id=current_user.id, role='primary').all()
+    primary_dogs = [db.session.get(Dog, po.dog_id) for po in primary_ownerships]
+    primary_dogs = [d for d in primary_dogs if d]
+
+    secondary_ownerships = DogOwner.query.filter_by(user_id=current_user.id, role='secondary').all()
+
+    try:
+        if primary_dogs:
+            for _pd in primary_dogs:
+                _val = request.form.get(f'pickup_instructions_{_pd.id}', '').strip() or None
+                _pd.pickup_instructions = _val
+        elif secondary_ownerships:
+            sec_dog = db.session.get(Dog, secondary_ownerships[0].dog_id)
+            if sec_dog:
+                sec_dog.pickup_instructions = request.form.get('pickup_instructions', '').strip() or None
+
+        current_user.email_marketing = request.form.get('notify_email') == 'true'
+        db.session.commit()
+        return jsonify(success=True)
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error updating pickup notes for {current_user.email}: {e}")
+        return jsonify(success=False, error="Server error"), 500
+
+
+@client_bp.route("/profile/dog/<int:dog_id>/update-details", methods=["POST"])
+@login_required
+def update_dog_details(dog_id):
+    """AJAX: save DOB and health notes for a dog the current user owns as primary."""
+    ownership = DogOwner.query.filter_by(dog_id=dog_id, user_id=current_user.id, role='primary').first()
+    if not ownership:
+        return jsonify(success=False, error="Not authorised"), 403
+
+    dog = db.session.get(Dog, dog_id)
+    if not dog:
+        return jsonify(success=False, error="Dog not found"), 404
+
+    try:
+        from datetime import date as _date_type
+        dob_str = request.form.get('dob', '').strip()
+        dog.date_of_birth = _date_type.fromisoformat(dob_str) if dob_str else None
+        dog.allergies = request.form.get('health_notes', '').strip() or None
+        db.session.commit()
+        return jsonify(success=True)
+    except ValueError:
+        db.session.rollback()
+        return jsonify(success=False, error="Invalid date"), 400
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error updating dog details for dog {dog_id}: {e}")
+        return jsonify(success=False, error="Server error"), 500
 
 
 @client_bp.route("/account-pending")

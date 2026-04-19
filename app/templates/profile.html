@@ -2,6 +2,8 @@
 
 {% block title %}My Profile{% endblock %}
 
+{% block main_class %}container py-3{% endblock %}
+
 {% block head_extra %}
 <link href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js" defer></script>
@@ -83,7 +85,9 @@
 
     .profile-card {
         border-radius: 1rem;
-        border: 0;
+        border: 1px solid #E5E5E5;
+        box-shadow: none !important;
+        background-color: #FAFAFA;
     }
 </style>
 {% endblock %}
@@ -124,14 +128,14 @@
         <div class="col-12 col-md-5">
 
             {# ─── CLIENT CARD ─── #}
-            <div class="card shadow-sm profile-card mb-4">
+            <div class="card profile-card mb-4">
                 <div class="card-header">
                     <i class="bi bi-person-fill me-2" style="color:#E02FAC;"></i>Account
                 </div>
                 <div class="card-body p-4">
 
                     {# Avatar + name + email #}
-                    <div class="d-flex align-items-center gap-3 mb-4">
+                    <div class="d-flex align-items-center gap-3 mb-0">
                         <div class="dog-photo-wrap" id="user-avatar-clickable" title="Update profile photo"
                              data-upload-url="{{ url_for('client.upload_profile_photo') }}">
                             {% if current_user.profile_pic %}
@@ -155,30 +159,13 @@
                         </div>
                     </div>
 
-                    {# Address #}
-                    {% if client and client.street_address %}
-                    {% set addr_lines = client.street_address.split('\n') %}
-                    <div class="detail-row">
-                        <i class="bi bi-house-door detail-icon"></i>
-                        <div>
-                            {% for line in addr_lines %}
-                                {% if line.strip() %}<div>{{ line.strip() }}</div>{% endif %}
-                            {% endfor %}
-                            {% if client.postal_code %}
-                            <div class="fw-semibold">{{ client.postal_code | upper }}</div>
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% else %}
-                    <div class="text-muted small fst-italic">No address on file</div>
-                    {% endif %}
 
                 </div>
             </div>
 
             {# ─── PRIMARY DOG CARDS (user is the owner — can update photo) ─── #}
             {% for dog in primary_dogs %}
-            <div class="card shadow-sm profile-card mb-4">
+            <div class="card profile-card mb-4">
                 <div class="card-header">
                     <i class="bi bi-heart-fill me-2" style="color:#E02FAC;"></i>{{ dog.name }}
                 </div>
@@ -198,28 +185,47 @@
                         <div>
                             <div class="fw-bold lh-sm">{{ dog.name }}</div>
                             <div class="text-muted small">
-                                {{ dog.gender | capitalize if dog.gender }}{% if dog.breed %} · {{ dog.breed }}{% endif %}
+                                {{ dog.gender | capitalize if dog.gender }}{% if dog.breed %} · {{ dog.breed }}{% endif %}<span id="dog-age-display-{{ dog.id }}"></span>
                             </div>
                         </div>
                     </div>
 
                     {# DOB — editable #}
-                    <div class="mb-2 mt-3">
-                        <label class="form-label fw-semibold small mb-1">Date of birth</label>
-                        <input type="date" class="form-control form-control-sm"
-                               name="dog_dob_{{ dog.id }}"
-                               value="{{ dog.date_of_birth.strftime('%Y-%m-%d') if dog.date_of_birth else '' }}"
-                               max="{{ today }}">
-                        <div class="text-muted" style="font-size:0.75rem; margin-top:3px;" id="dog-age-display-{{ dog.id }}"></div>
+                    <div class="d-flex align-items-center gap-2 mb-2 mt-3">
+                        <label class="form-label fw-semibold small mb-0 text-nowrap">DoB</label>
+                        <div class="input-group input-group-sm" style="max-width:180px;">
+                            <span class="input-group-text"><i class="bi bi-calendar-heart text-secondary"></i></span>
+                            <input type="date" class="form-control"
+                                   name="dog_dob_{{ dog.id }}"
+                                   value="{{ dog.date_of_birth.strftime('%Y-%m-%d') if dog.date_of_birth else '' }}"
+                                   max="{{ today }}">
+                        </div>
                     </div>
 
                     {# Allergies / health notes — editable #}
-                    <div class="mb-1">
+                    <div class="mb-3">
                         <label class="form-label fw-semibold small mb-1">Health notes</label>
-                        <textarea class="form-control form-control-sm"
-                                  name="dog_allergies_{{ dog.id }}"
-                                  rows="2"
-                                  placeholder="Allergies, medical conditions, special needs…">{{ dog.allergies or '' }}</textarea>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text"><i class="bi bi-bandaid text-secondary"></i></span>
+                            <textarea class="form-control dog-health-notes"
+                                      name="dog_allergies_{{ dog.id }}"
+                                      rows="2"
+                                      placeholder="Allergies, medical conditions, special needs…">{{ dog.allergies or '' }}</textarea>
+                        </div>
+                    </div>
+
+                    {# Per-dog save ─ AJAX, does not submit the main form #}
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button"
+                                class="btn btn-sm btn-outline-secondary fw-semibold save-dog-btn"
+                                data-dog-id="{{ dog.id }}"
+                                data-url="{{ url_for('client.update_dog_details', dog_id=dog.id) }}">
+                            <i class="bi bi-check2 me-1"></i>Save dog details
+                        </button>
+                        <span class="save-dog-feedback text-success small" style="display:none; font-size:0.8rem;">
+                            <i class="bi bi-check-circle-fill me-1"></i>Saved
+                        </span>
+                        <span class="save-dog-error text-danger small" style="display:none; font-size:0.8rem;"></span>
                     </div>
 
                 </div>
@@ -230,7 +236,7 @@
             {% for entry in secondary_dogs %}
             {% set sdog = entry.dog %}
             {% set primary_owner = entry.primary_owner %}
-            <div class="card shadow-sm profile-card mb-4">
+            <div class="card profile-card mb-4">
                 <div class="card-header">
                     <i class="bi bi-heart-fill me-2" style="color:#E02FAC;"></i>{{ sdog.name }}
                     <span class="badge fw-normal ms-1" style="font-size:.65rem; background:#e8f4fd; color:#0a6ebd; border:1px solid #b8d9f5;">
@@ -250,7 +256,7 @@
                         <div>
                             <div class="fw-bold lh-sm">{{ sdog.name }}</div>
                             <div class="text-muted small">
-                                {{ sdog.gender | capitalize if sdog.gender }}{% if sdog.breed %} · {{ sdog.breed }}{% endif %}
+                                {{ sdog.gender | capitalize if sdog.gender }}{% if sdog.breed %} · {{ sdog.breed }}{% endif %}<span class="dog-age-static" data-dob="{{ sdog.date_of_birth.strftime('%Y-%m-%d') if sdog.date_of_birth else '' }}"></span>
                             </div>
                             {% if primary_owner %}
                             <div class="text-muted" style="font-size:0.72rem; margin-top:2px;">
@@ -262,8 +268,15 @@
 
                     {% if sdog.date_of_birth %}
                     <div class="detail-row mb-2">
-                        <i class="bi bi-calendar3 detail-icon"></i>
+                        <i class="bi bi-calendar-heart detail-icon"></i>
                         <div>{{ sdog.date_of_birth.strftime('%d %b %Y') }}</div>
+                    </div>
+                    {% endif %}
+
+                    {% if sdog.allergies %}
+                    <div class="detail-row mb-2">
+                        <i class="bi bi-bandaid detail-icon"></i>
+                        <div class="small">{{ sdog.allergies }}</div>
                     </div>
                     {% endif %}
 
@@ -273,7 +286,7 @@
 
             {# ─── Fallback if no dog at all ─── #}
             {% if not primary_dogs and not secondary_dogs %}
-            <div class="card shadow-sm profile-card mb-4">
+            <div class="card profile-card mb-4">
                 <div class="card-header">
                     <i class="bi bi-exclamation-circle me-2 text-warning"></i>No dog on file
                 </div>
@@ -285,11 +298,6 @@
             </div>
             {% endif %}
 
-            {# ─── "Contact DogBoxx" note (consolidated, shown once) ─── #}
-            <p class="text-muted small mb-4">
-                <i class="bi bi-info-circle me-1"></i>
-                Your personal details and dog information are managed by DogBoxx. Contact us to make changes.
-            </p>
 
         </div>{# /left col #}
 
@@ -299,18 +307,35 @@
         <div class="col-12 col-md-7">
 
             {# ─── PICKUP INSTRUCTIONS ─── #}
-            <div class="card shadow-sm profile-card mb-4">
+            <div class="card profile-card mb-4">
                 <div class="card-header">
                     <i class="bi bi-signpost-2 me-2" style="color:#E02FAC;"></i>Pickup Notes
                 </div>
                 <div class="card-body p-4">
+
+                    {# ─── Address anchor ─── #}
+                    {% if client and client.street_address %}
+                    <div class="d-flex align-items-center gap-2 mb-3 pb-3 text-muted small" style="border-bottom:1px solid #f0f0f0;">
+                        <i class="bi bi-house-door" style="flex-shrink:0;"></i>
+                        <span>{{ client.street_address.replace('\n', ', ') }}{% if client.postal_code %}, {{ client.postal_code | upper }}{% endif %}</span>
+                    </div>
+                    {% elif not primary_dogs and secondary_dogs %}
+                        {% set prim_cl = secondary_dogs[0].primary_client %}
+                        {% if prim_cl and prim_cl.street_address %}
+                        <div class="d-flex align-items-center gap-2 mb-3 pb-3 text-muted small" style="border-bottom:1px solid #f0f0f0;">
+                            <i class="bi bi-house-door" style="flex-shrink:0;"></i>
+                            <span>{{ prim_cl.street_address.replace('\n', ', ') }}{% if prim_cl.postal_code %}, {{ prim_cl.postal_code | upper }}{% endif %}</span>
+                        </div>
+                        {% endif %}
+                    {% endif %}
+
                     {% if primary_dogs %}
                         {% for dog in primary_dogs %}
                         {% if primary_dogs|length > 1 %}
                         <p class="fw-semibold small mb-1">{{ dog.name }}</p>
                         {% endif %}
                         <p class="text-muted mb-2" style="font-size:0.8rem;">
-                            Let us know anything we need to know to collect {{ dog.name }} — gate codes, doorbells, parking notes, etc.
+                            Anything we need to know when collecting {{ dog.name }}?
                         </p>
                         <textarea class="form-control" name="pickup_instructions_{{ dog.id }}" rows="4"
                                   placeholder="e.g. Our buzzer is labelled A, you can park the bike in our courtyard.">{{ dog.pickup_instructions or '' }}</textarea>
@@ -318,19 +343,27 @@
                         {% endfor %}
                     {% else %}
                         <p class="text-muted mb-3" style="font-size:0.8rem;">
-                            Let us know anything we need to know to collect {{ secondary_dogs[0].dog.name if secondary_dogs else 'your dog' }} — gate codes, doorbells, parking notes, etc.
+                            Anything we need to know when collecting {{ secondary_dogs[0].dog.name if secondary_dogs else 'your dog' }}?
                         </p>
                         {{ form.pickup_instructions(class="form-control", rows=5,
                            placeholder="e.g. Our buzzer is labelled A, you can park the bike in our courtyard.") }}
                     {% endif %}
-                    <div class="d-grid mt-3">
-                        {{ form.submit(class="btn btn-primary fw-semibold") }}
+                    <div class="d-flex align-items-center gap-2 mt-3">
+                        <button type="button" id="save-pickup-btn"
+                                class="btn btn-primary fw-semibold"
+                                data-url="{{ url_for('client.update_pickup') }}">
+                            <i class="bi bi-check2 me-1"></i>Save pickup notes
+                        </button>
+                        <span id="save-pickup-feedback" class="text-success small" style="display:none; font-size:0.8rem;">
+                            <i class="bi bi-check-circle-fill me-1"></i>Saved
+                        </span>
+                        <span id="save-pickup-error" class="text-danger small" style="display:none; font-size:0.8rem;"></span>
                     </div>
                 </div>
             </div>
 
             {# ─── NOTIFICATIONS CARD ─── #}
-            <div class="card shadow-sm profile-card">
+            <div class="card profile-card">
                 <div class="card-header">
                     <i class="bi bi-bell-fill me-2" style="color:#E02FAC;"></i>Notifications
                 </div>
@@ -339,7 +372,7 @@
                     <div class="d-flex align-items-center justify-content-between py-2">
                         <div>
                             <div class="fw-semibold small"><i class="bi bi-envelope me-1 text-muted"></i> Email newsletter &amp; updates</div>
-                            <div class="text-muted" style="font-size:0.75rem;">Booking reminders, news and offers to {{ current_user.email }}</div>
+                            <div class="text-muted" style="font-size:0.75rem;">Toggle on to get the monthly DogBoxx newsletter to {{ current_user.email }}</div>
                         </div>
                         <div class="form-check form-switch mb-0">
                             {{ form.notify_email(class="form-check-input", role="switch") }}
@@ -400,6 +433,96 @@
 (function () {
     'use strict';
 
+    // ── Per-dog AJAX save ────────────────────────────────────────────────────
+    document.querySelectorAll('.save-dog-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const dogId   = btn.dataset.dogId;
+            const url     = btn.dataset.url;
+            const card    = btn.closest('.card-body');
+            const dobInput    = card.querySelector('input[name="dog_dob_' + dogId + '"]');
+            const notesInput  = card.querySelector('textarea[name="dog_allergies_' + dogId + '"]');
+            const feedback    = btn.nextElementSibling;
+            const errEl       = feedback.nextElementSibling;
+
+            btn.disabled = true;
+            feedback.style.display = 'none';
+            errEl.style.display = 'none';
+
+            const body = new FormData();
+            body.append('dob',          dobInput  ? dobInput.value  : '');
+            body.append('health_notes', notesInput ? notesInput.value : '');
+
+            fetch(url, {
+                method:  'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+                body:    body,
+            })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    feedback.style.display = 'inline';
+                    setTimeout(function () { feedback.style.display = 'none'; }, 3000);
+                } else {
+                    errEl.textContent = data.error || 'Could not save';
+                    errEl.style.display = 'inline';
+                }
+            })
+            .catch(function () {
+                errEl.textContent = 'Network error — please try again';
+                errEl.style.display = 'inline';
+            })
+            .finally(function () { btn.disabled = false; });
+        });
+    });
+
+    // ── Pickup notes AJAX save ───────────────────────────────────────────────
+    var pickupBtn      = document.getElementById('save-pickup-btn');
+    var pickupFeedback = document.getElementById('save-pickup-feedback');
+    var pickupError    = document.getElementById('save-pickup-error');
+
+    if (pickupBtn) {
+        pickupBtn.addEventListener('click', function () {
+            pickupBtn.disabled = true;
+            pickupFeedback.style.display = 'none';
+            pickupError.style.display    = 'none';
+
+            var body = new FormData();
+
+            // Collect all per-dog pickup instruction textareas
+            document.querySelectorAll('textarea[name^="pickup_instructions_"]').forEach(function (ta) {
+                body.append(ta.name, ta.value);
+            });
+            // Secondary-only path
+            var secField = document.querySelector('textarea[name="pickup_instructions"]');
+            if (secField) body.append('pickup_instructions', secField.value);
+
+            // Newsletter toggle
+            var toggle = document.querySelector('input[name="notify_email"]');
+            body.append('notify_email', toggle && toggle.checked ? 'true' : 'false');
+
+            fetch(pickupBtn.dataset.url, {
+                method:  'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+                body:    body,
+            })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    pickupFeedback.style.display = 'inline';
+                    setTimeout(function () { pickupFeedback.style.display = 'none'; }, 3000);
+                } else {
+                    pickupError.textContent = data.error || 'Could not save';
+                    pickupError.style.display = 'inline';
+                }
+            })
+            .catch(function () {
+                pickupError.textContent = 'Network error — please try again';
+                pickupError.style.display = 'inline';
+            })
+            .finally(function () { pickupBtn.disabled = false; });
+        });
+    }
+
     // ── Dog age display ───────────────────────────────────────────────────────
     function calcDogAge(dobStr) {
         if (!dobStr) return null;
@@ -409,9 +532,9 @@
         let months = now.getMonth() - dob.getMonth();
         if (months < 0) { years--; months += 12; }
         if (years < 0) return null;
-        if (years === 0) return months === 1 ? '1 month old' : `${months} months old`;
-        if (months === 0) return years === 1 ? '1 year old' : `${years} years old`;
-        return years === 1 ? `1 year, ${months}mo old` : `${years} years, ${months}mo old`;
+        if (years === 0) return months === 1 ? '1 month' : `${months} months`;
+        if (months === 0) return years === 1 ? '1 year' : `${years} years`;
+        return years === 1 ? `1 year, ${months}mo` : `${years} years, ${months}mo`;
     }
 
     {% for dog in primary_dogs %}
@@ -421,12 +544,17 @@
         if (!dobInput || !ageEl) return;
         function updateAge() {
             var age = calcDogAge(dobInput.value);
-            ageEl.textContent = age || '';
+            ageEl.textContent = age ? ' · ' + age : '';
         }
         updateAge();
         dobInput.addEventListener('change', updateAge);
     }());
     {% endfor %}
+
+    document.querySelectorAll('.dog-age-static').forEach(function (el) {
+        var age = calcDogAge(el.dataset.dob);
+        el.textContent = age ? ' · ' + age : '';
+    });
 
     // ── Cropper.js photo upload ───────────────────────────────────────────────
     //
