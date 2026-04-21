@@ -35,5 +35,10 @@ def slot_availability():
     except ValueError:
         return jsonify(error="Invalid date format, expected YYYY-MM-DD"), 400
 
-    summary = get_slot_availability_summary(date)
+    service = request.args.get('service', 'walk')
+    if service == 'drop-in':
+        from app.capacity import get_drop_in_availability_summary
+        summary = get_drop_in_availability_summary(date)
+    else:
+        summary = get_slot_availability_summary(date)
     return jsonify(summary)

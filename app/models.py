@@ -22,7 +22,7 @@ class User(db.Model):
     phone = db.Column(db.String(20), nullable=True)
     profile_pic = db.Column(db.String(256), nullable=True)
     notification_preference = db.Column(
-        db.Enum('email', 'whatsapp', 'both', name='notification_pref'),
+        db.Enum('email', name='notification_pref'),
         nullable=False, default='email'
     )
 
@@ -269,6 +269,10 @@ class WalkerSchedule(db.Model):
 class ServiceType(db.Model):
     __tablename__ = 'service_types'
 
+    WALK     = 'group-walk'
+    DROP_IN  = 'drop-in'
+    DAY_CARE = 'day-care'
+
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     slug = db.Column(db.String(50), unique=True, nullable=False)
@@ -315,6 +319,13 @@ class Booking(db.Model):
             postgresql_where=db.text("status NOT IN ('cancelled', 'rejected', 'completed')")
         ),
     )
+
+    # Named status groups — use these instead of inline string tuples
+    CAPACITY_STATUSES = ('requested', 'confirmed', 'modified')       # counts toward slot capacity
+    PENDING_STATUSES = ('requested', 'waitlisted')                    # awaiting confirmation
+    ACTIVE_STATUSES = ('confirmed', 'requested', 'waitlisted')        # live bookings (admin views)
+    WALKER_STATUSES = ('confirmed', 'completed')                      # shown on walker pickup list
+    INVOICE_STATUSES = ('confirmed', 'completed', 'cancelled')        # billable activity
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)

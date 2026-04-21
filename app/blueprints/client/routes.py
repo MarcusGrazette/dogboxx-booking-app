@@ -24,7 +24,7 @@ from app.blueprints.client import client_bp
 from app.utils.notifications import create_notification
 
 
-def _maybe_auto_confirm(booking, dog, service_slug='group-walk'):
+def _maybe_auto_confirm(booking, dog, service_slug=ServiceType.WALK):
     """Try to auto-assign a walker to a newly-created 'requested' booking.
 
     If a walker with capacity is available, sets the booking to confirmed,
@@ -148,7 +148,7 @@ def index():
             b.date_display = b.date.strftime("%a %d %b")
         else:
             b.date_display = None
-        b.is_drop_in = b.service_type and b.service_type.slug == 'drop-in'
+        b.is_drop_in = b.service_type and b.service_type.slug == ServiceType.DROP_IN
 
     form = BookingForm()
     if form.validate_on_submit():
@@ -210,7 +210,7 @@ def index():
                 }
             ):
                 # Look up default service type by slug
-                default_service = ServiceType.query.filter_by(slug='group-walk', active=True).first()
+                default_service = ServiceType.query.filter_by(slug=ServiceType.WALK, active=True).first()
                 if not default_service:
                     flash("No service type available. Please contact support.", "danger")
                     return redirect(url_for("client.index"))
@@ -268,7 +268,14 @@ def index():
                         flash("Booking request submitted — we'll confirm it shortly.", "success")
                 return redirect(url_for("client.index"))
     
-    return render_template("index.html", user=user, client=user.client, dogs=user_dogs, bookings=upcoming_bookings, form=form) # type: ignore
+    has_drop_in_walkers = Walker.query.join(User).filter(
+        Walker.does_drop_ins == True,
+        User.active == True,
+    ).first() is not None
+
+    return render_template("index.html", user=user, client=user.client, dogs=user_dogs,
+                           bookings=upcoming_bookings, form=form,
+                           has_drop_in_walkers=has_drop_in_walkers) # type: ignore
 
 
 @client_bp.route("/book", methods=["POST"])
@@ -330,7 +337,7 @@ def book():
 
     # ── Capacity check + create ───────────────────────────────────────────────
     try:
-        default_service = ServiceType.query.filter_by(slug='group-walk', active=True).first()
+        default_service = ServiceType.query.filter_by(slug=ServiceType.WALK, active=True).first()
         if not default_service:
             return jsonify({'success': False, 'message': 'No service type available. Please contact support.'}), 500
 
@@ -439,7 +446,7 @@ def book_both():
         return jsonify({'success': False, 'message': str(e)}), 400
     dog_id = dog.id
 
-    default_service = ServiceType.query.filter_by(slug='group-walk', active=True).first()
+    default_service = ServiceType.query.filter_by(slug=ServiceType.WALK, active=True).first()
     if not default_service:
         return jsonify({'success': False, 'message': 'No service type available.'}), 500
 
@@ -581,7 +588,7 @@ def book_drop_in():
         return jsonify({'success': False, 'message': str(e)}), 400
     dog_id = dog.id
 
-    drop_in_service = ServiceType.query.filter_by(slug='drop-in', active=True).first()
+    drop_in_service = ServiceType.query.filter_by(slug=ServiceType.DROP_IN, active=True).first()
     if not drop_in_service:
         return jsonify({'success': False, 'message': 'Drop-in service is not currently available.'}), 503
 
@@ -641,6 +648,7 @@ def book_drop_in():
         'message':  message,
         'booking':  {
             'id':           new_booking.id,
+            'dog_id':       dog_id,
             'date_display': booking_date.strftime('%a %-d %b'),
             'date_iso':     booking_date.isoformat(),
             'slot':         booking_slot,
@@ -888,7 +896,7 @@ def monthly_summary():
     line_items = []
     for b in sorted(inv['all_billable'], key=lambda x: (x.date, x.slot)):
         cfg = config_for(b.date)
-        is_drop_in = b.service_type and b.service_type.slug == 'drop-in'
+        is_drop_in = b.service_type and b.service_type.slug == ServiceType.DROP_IN
         unit_price = 0.0
         if cfg:
             unit_price = float(cfg.price_per_drop_in) if is_drop_in else float(cfg.price_per_walk)
@@ -902,7 +910,7 @@ def monthly_summary():
     # Double-slot discount rows (group walks only)
     date_slots = defaultdict(set)
     for b in inv['all_billable']:
-        if not (b.service_type and b.service_type.slug == 'drop-in'):
+        if not (b.service_type and b.service_type.slug == ServiceType.DROP_IN):
             date_slots[b.date].add(b.slot)
     discounts = []
     for d in sorted(d for d, slots in date_slots.items() if 'Morning' in slots and 'Afternoon' in slots):
@@ -1224,6 +1232,125 @@ def onboard():
     return render_template("onboarding.html", form=form, existing_dog=existing_dog, today=datetime.now().strftime('%Y-%m-%d'))
 
 
+@client_bp.route("/pause-walks/preview")
+@login_required
+def pause_walks_preview():
+    """Return bookings that would be cancelled in a date range (no writes)."""
+    if current_user.role != 'client':
+        return jsonify(success=False, error="Forbidden"), 403
+    try:
+        start = date_type.fromisoformat(request.args.get('start', ''))
+        end   = date_type.fromisoformat(request.args.get('end', ''))
+    except (ValueError, TypeError):
+        return jsonify(success=False, error="Invalid dates"), 400
+
+    today = datetime.now(timezone.utc).date()
+    if start <= today:
+        return jsonify(success=False, error="Start date must be in the future"), 400
+    if end < start:
+        return jsonify(success=False, error="End date must be after start date"), 400
+    if (end - start).days > 365:
+        return jsonify(success=False, error="Range cannot exceed one year"), 400
+
+    dog_ids = get_accessible_dog_ids(current_user.id)
+    bookings = Booking.query.filter(
+        Booking.dog_id.in_(dog_ids),
+        Booking.date >= start,
+        Booking.date <= end,
+        Booking.status.notin_(['cancelled', 'rejected', 'completed']),
+    ).order_by(Booking.date, Booking.slot).all()
+
+    return jsonify(
+        success=True,
+        count=len(bookings),
+        bookings=[{
+            'date': b.date.strftime('%-d %b'),
+            'slot': b.slot,
+            'dog':  b.dog.name if b.dog else '',
+        } for b in bookings],
+    )
+
+
+@client_bp.route("/pause-walks", methods=["POST"])
+@login_required
+def pause_walks():
+    """Cancel all active bookings for the client's dogs within a date range."""
+    if current_user.role != 'client':
+        return jsonify(success=False, error="Forbidden"), 403
+    try:
+        data  = request.get_json(silent=True) or {}
+        start = date_type.fromisoformat(data.get('start', ''))
+        end   = date_type.fromisoformat(data.get('end', ''))
+    except (ValueError, TypeError):
+        return jsonify(success=False, error="Invalid dates"), 400
+
+    today = datetime.now(timezone.utc).date()
+    if start <= today:
+        return jsonify(success=False, error="Start date must be in the future"), 400
+    if end < start:
+        return jsonify(success=False, error="End date must be after start date"), 400
+    if (end - start).days > 365:
+        return jsonify(success=False, error="Range cannot exceed one year"), 400
+
+    dog_ids = get_accessible_dog_ids(current_user.id)
+    bookings = Booking.query.filter(
+        Booking.dog_id.in_(dog_ids),
+        Booking.date >= start,
+        Booking.date <= end,
+        Booking.status.notin_(['cancelled', 'rejected', 'completed']),
+    ).order_by(Booking.date).all()
+
+    if not bookings:
+        return jsonify(success=True, cancelled_count=0)
+
+    now       = datetime.now(timezone.utc)
+    dog_names = sorted({b.dog.name for b in bookings if b.dog})
+    dogs_str  = ', '.join(dog_names)
+    start_fmt = start.strftime('%-d %b')
+    end_fmt   = end.strftime('%-d %b')
+    n         = len(bookings)
+
+    for b in bookings:
+        b.status       = 'cancelled'
+        b.cancelled_at = now
+        b.cancelled_by = 'client'
+        b.walker_id    = None
+
+    # One admin notification covering the whole pause
+    for admin in User.query.filter_by(is_admin=True).all():
+        create_notification(
+            recipient_id      = admin.id,
+            notification_type = 'booking_cancelled',
+            title             = f"{current_user.firstname} paused walks {start_fmt}–{end_fmt}",
+            body              = f"{n} booking{'s' if n != 1 else ''} cancelled · {dogs_str}",
+            link              = f'/admin/clients/{current_user.id}',
+            sender_id         = current_user.id,
+        )
+
+    # One notification per co-owner (not one per booking)
+    notified = {current_user.id}
+    for b in bookings:
+        if not b.dog_id:
+            continue
+        for ownership in DogOwner.query.filter(
+            DogOwner.dog_id == b.dog_id,
+            DogOwner.user_id != current_user.id,
+        ).all():
+            if ownership.user_id not in notified and not (ownership.user and ownership.user.is_admin):
+                create_notification(
+                    recipient_id      = ownership.user_id,
+                    notification_type = 'booking_cancelled',
+                    title             = f"{current_user.firstname} paused walks {start_fmt}–{end_fmt}",
+                    body              = f"{n} booking{'s' if n != 1 else ''} cancelled",
+                    link              = '/bookings',
+                    sender_id         = current_user.id,
+                )
+                notified.add(ownership.user_id)
+
+    db.session.commit()
+    return jsonify(success=True, cancelled_count=n)
+
+
 @client_bp.route("/cancel_booking", methods=["POST"])
 @login_required
 def cancel_booking():
@@ -1340,7 +1467,7 @@ def recurring_booking():
 
     POST body (JSON):
         start_date  (str)  'YYYY-MM-DD' — must be tomorrow or later
-        end_date    (str)  'YYYY-MM-DD' — max 4 weeks from start_date (client limit)
+        end_date    (str)  'YYYY-MM-DD' — max 1 year from start_date (client limit)
         slot        (str)  'Morning' or 'Afternoon'
         frequency   (str)  'daily' (weekdays only) or 'weekly'
 
@@ -1352,7 +1479,7 @@ def recurring_booking():
 
     Returns JSON: { success, created, waitlisted, skipped }
 
-    Note: the 4-week cap is a client-facing safeguard. Admins booking on behalf
+    Note: the 1-year cap is a client-facing safeguard. Admins booking on behalf
     of clients via /admin/recurring_for_dog have no such cap.
     """
     try:
@@ -1376,15 +1503,15 @@ def recurring_booking():
 
         today = datetime.now(timezone.utc).date()
         tomorrow = today + timedelta(days=1)
-        max_end = start_date + timedelta(weeks=4)
+        max_end = start_date + timedelta(days=365)
 
         if start_date < tomorrow:
             return jsonify(success=False, message="Start date must be in the future"), 400
         if end_date > max_end:
-            return jsonify(success=False, message="End date must be within 4 weeks of the start date"), 400
+            return jsonify(success=False, message="End date must be within one year of the start date"), 400
         if end_date < start_date:
             return jsonify(success=False, message="End date must be after start date"), 400
-        if slot not in ('Morning', 'Afternoon'):
+        if slot not in ('Morning', 'Afternoon', 'Both'):
             return jsonify(success=False, message="Invalid slot"), 400
         if frequency not in ('daily', 'weekly'):
             return jsonify(success=False, message="Invalid frequency"), 400
@@ -1412,53 +1539,67 @@ def recurring_booking():
         except ValueError as e:
             return jsonify(success=False, message=str(e)), 400
 
-        default_service = ServiceType.query.filter_by(slug='group-walk', active=True).first()
+        service_type_param = data.get('service_type', 'walk')
+        is_drop_in = (service_type_param == ServiceType.DROP_IN)
+        service_slug = ServiceType.DROP_IN if is_drop_in else ServiceType.WALK
+        default_service = ServiceType.query.filter_by(slug=service_slug, active=True).first()
         if not default_service:
             return jsonify(success=False, message="No service type available"), 400
+
+        # Drop-ins are single-slot only — reject 'Both' for drop-in
+        if is_drop_in and slot == 'Both':
+            return jsonify(success=False, message="Drop-ins cannot use the 'Both' slot"), 400
 
         active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
         created = waitlisted = skipped = 0
 
+        slots_to_book = ['Morning', 'Afternoon'] if slot == 'Both' else [slot]
+
         for d in target_dates:
-            # Skip duplicates
-            existing = Booking.query.filter(
-                Booking.dog_id == dog.id,
-                Booking.date == d,
-                Booking.slot == slot,
-                Booking.status.in_(active_statuses)
-            ).first()
-            if existing:
-                skipped += 1
-                continue
+            for s in slots_to_book:
+                # Skip duplicates
+                existing = Booking.query.filter(
+                    Booking.dog_id == dog.id,
+                    Booking.date == d,
+                    Booking.slot == s,
+                    Booking.status.in_(active_statuses)
+                ).first()
+                if existing:
+                    skipped += 1
+                    continue
 
-            # Skip if already 2 bookings that day
-            day_count = Booking.query.filter(
-                Booking.dog_id == dog.id,
-                Booking.date == d,
-                Booking.status.in_(active_statuses)
-            ).count()
-            if day_count >= 2:
-                skipped += 1
-                continue
+                # Skip if already 2 bookings that day
+                day_count = Booking.query.filter(
+                    Booking.dog_id == dog.id,
+                    Booking.date == d,
+                    Booking.status.in_(active_statuses)
+                ).count()
+                if day_count >= 2:
+                    skipped += 1
+                    continue
 
-            available, can_waitlist, _ = check_availability(default_service, d, slot)
-            if not available and not can_waitlist:
-                skipped += 1
-                continue
+                if is_drop_in:
+                    # No capacity rules for drop-ins currently
+                    status = 'requested'
+                else:
+                    available, can_waitlist, _ = check_availability(default_service, d, s)
+                    if not available and not can_waitlist:
+                        skipped += 1
+                        continue
+                    status = 'requested' if available else 'waitlisted'
 
-            status = 'requested' if available else 'waitlisted'
-            db.session.add(Booking(
-                user_id=current_user.id,
-                dog_id=dog.id,
-                service_type_id=default_service.id,
-                date=d,
-                slot=slot,
-                status=status,
-            ))
-            if status == 'waitlisted':
-                waitlisted += 1
-            else:
-                created += 1
+                db.session.add(Booking(
+                    user_id=current_user.id,
+                    dog_id=dog.id,
+                    service_type_id=default_service.id,
+                    date=d,
+                    slot=s,
+                    status=status,
+                ))
+                if status == 'waitlisted':
+                    waitlisted += 1
+                else:
+                    created += 1
 
         db.session.commit()
 
@@ -1467,12 +1608,14 @@ def recurring_booking():
         if total > 0:
             admins = User.query.filter_by(is_admin=True).all()
             freq_label = 'daily' if frequency == 'daily' else 'weekly'
+            slot_label = 'AM + PM' if slot == 'Both' else slot
+            service_label = 'drop-ins' if is_drop_in else 'walks'
             for admin in admins:
                 create_notification(
                     recipient_id=admin.id,
                     notification_type='booking_requested',
-                    title=f'Recurring booking request — {total} walks',
-                    body=f'{current_user.firstname} requested {freq_label} {slot} walks for {dog.name}',
+                    title=f'Recurring booking request — {total} {service_label}',
+                    body=f'{current_user.firstname} requested {freq_label} {slot_label} {service_label} for {dog.name}',
                     link='/admin',
                     sender_id=current_user.id,
                 )

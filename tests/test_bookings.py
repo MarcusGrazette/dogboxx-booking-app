@@ -374,25 +374,27 @@ class TestClientRecurringBooking:
         assert data['skipped'] == 1
         assert data['created'] == 0
 
-    def test_end_date_beyond_4_weeks_rejected(self, app, client):
-        """Client cannot book beyond 4 weeks — should return error."""
+    def test_end_date_beyond_1_year_rejected(self, app, client):
+        """Client cannot book beyond 1 year — should return error."""
         with app.app_context():
             user = make_user(f'client_4w_{id(self)}@test.com')
             make_client_profile(user.id)
-            make_dog()
+            dog = make_dog()
+            attach_dog(dog.id, user.id)
             db.session.commit()
 
         login(client, f'client_4w_{id(self)}@test.com')
-        far_future = datetime.date.today() + datetime.timedelta(weeks=6)
+        start = tomorrow()
+        far_future = start + datetime.timedelta(days=366)
         resp = self._post(client, {
-            'start_date': tomorrow().isoformat(),
+            'start_date': start.isoformat(),
             'end_date': far_future.isoformat(),
             'slot': 'Morning',
             'frequency': 'daily',
         })
         data = resp.get_json()
         assert data['success'] is False
-        assert 'within 4 weeks' in data['message']
+        assert 'within one year' in data['message']
 
 
 # ---------------------------------------------------------------------------

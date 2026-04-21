@@ -24,7 +24,7 @@ def _double_booked_dog_ids(selected_date):
         db.session.query(Booking.dog_id)
         .filter(
             Booking.date == selected_date,
-            Booking.status.in_(['confirmed', 'completed']),
+            Booking.status.in_(Booking.WALKER_STATUSES),
             Booking.dog_id.isnot(None),
         )
         .group_by(Booking.dog_id)
@@ -319,7 +319,7 @@ def pickups(date_str=None):
         .filter(
             Booking.walker_id == walker.id,
             Booking.date == selected_date,
-            Booking.status.in_(['confirmed', 'completed']),
+            Booking.status.in_(Booking.WALKER_STATUSES),
         )
         .order_by(
             Booking.slot,
@@ -330,7 +330,7 @@ def pickups(date_str=None):
     )
 
     def _is_drop_in(b):
-        return b.service_type and b.service_type.slug == 'drop-in'
+        return b.service_type and b.service_type.slug == ServiceType.DROP_IN
 
     # Order: AM drop-ins → AM walks → PM walks → PM drop-ins
     morning_drop_ins   = [b for b in bookings if b.slot == 'Morning'   and     _is_drop_in(b)]
@@ -393,7 +393,7 @@ def monthly_summary():
             Booking.walker_id == walker.id,
             Booking.date >= month_start,
             Booking.date < month_end,
-            Booking.status.in_(['confirmed', 'completed']),
+            Booking.status.in_(Booking.WALKER_STATUSES),
         )
         .order_by(Booking.date, Booking.slot)
         .all()
@@ -402,8 +402,8 @@ def monthly_summary():
     # Group individual dog bookings into slots: (date, slot, svc_key) → [bookings]
     groups = defaultdict(list)
     for b in bookings:
-        is_drop_in = b.service_type and b.service_type.slug == 'drop-in'
-        key = (b.date, b.slot, 'drop-in' if is_drop_in else 'walk')
+        is_drop_in = b.service_type and b.service_type.slug == ServiceType.DROP_IN
+        key = (b.date, b.slot, ServiceType.DROP_IN if is_drop_in else 'walk')
         groups[key].append(b)
 
     # Build sorted line items (one row per slot group)
@@ -414,7 +414,7 @@ def monthly_summary():
         line_items.append({
             'date':      d,
             'slot':      slot,
-            'is_drop_in': svc_key == 'drop-in',
+            'is_drop_in': svc_key == ServiceType.DROP_IN,
             'dog_count': len(grp),
             'dogs':      dogs,
         })
@@ -472,7 +472,7 @@ def api_pickup_days(year, month):
             Booking.walker_id == walker.id,
             Booking.date >= start,
             Booking.date <= end,
-            Booking.status.in_(['confirmed', 'completed']),
+            Booking.status.in_(Booking.WALKER_STATUSES),
         )
         .with_entities(Booking.date)
         .distinct()
@@ -507,7 +507,7 @@ def api_pickup_list(date_str):
         .filter(
             Booking.walker_id == walker.id,
             Booking.date == selected_date,
-            Booking.status.in_(['confirmed', 'completed']),
+            Booking.status.in_(Booking.WALKER_STATUSES),
         )
         .order_by(
             Booking.slot,
@@ -518,7 +518,7 @@ def api_pickup_list(date_str):
     )
 
     def _is_drop_in(b):
-        return b.service_type and b.service_type.slug == 'drop-in'
+        return b.service_type and b.service_type.slug == ServiceType.DROP_IN
 
     morning_drop_ins   = [b for b in bookings if b.slot == 'Morning'   and     _is_drop_in(b)]
     morning_pickups    = [b for b in bookings if b.slot == 'Morning'   and not _is_drop_in(b)]
