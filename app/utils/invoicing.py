@@ -6,7 +6,15 @@ client-facing monthly summary page.
 from collections import defaultdict
 from datetime import date as _date
 from sqlalchemy.orm import joinedload
-from app.models import DogOwner, Booking
+from app.models import DogOwner, Booking, ServiceType
+
+
+def _cancellation_notice_days(booking):
+    """Return the late-cancel threshold (days) from the booking's service type settings."""
+    try:
+        return booking.service_type.settings.get('cancellation_notice_days', 5)
+    except (AttributeError, TypeError):
+        return 5
 
 
 def invoice_for_client(user_id, month_start, month_end, all_configs):
@@ -14,7 +22,7 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
 
     Billable items:
       - confirmed / completed bookings (walks + drop-ins)
-      - cancelled bookings where notice < 5 days  (booking.date - cancelled_at.date() < 5)
+      - cancelled bookings where notice < cancellation_notice_days (from ServiceType.settings)
 
     Pricing:
       - Group walks: price_per_walk; double_slot_discount for same-day AM+PM;
@@ -44,7 +52,7 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
             Booking.dog_id.in_(dog_owner_ids),
             Booking.date >= month_start,
             Booking.date < month_end,
-            Booking.status.in_(['confirmed', 'completed', 'cancelled']),
+            Booking.status.in_(Booking.INVOICE_STATUSES),
         )
         .order_by(Booking.date, Booking.slot)
         .all()
@@ -55,12 +63,12 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
         b for b in bookings
         if b.status == 'cancelled'
         and b.cancelled_at is not None
-        and (b.date - b.cancelled_at.date()).days < 5
+        and (b.date - b.cancelled_at.date()).days < _cancellation_notice_days(b)
     ]
     all_billable = confirmed + late_cancels
 
     def is_drop_in(b):
-        return b.service_type and b.service_type.slug == 'drop-in'
+        return b.service_type and b.service_type.slug == ServiceType.DROP_IN
 
     # Group walk items by date → slot set (for double-slot discount)
     date_slots = defaultdict(set)

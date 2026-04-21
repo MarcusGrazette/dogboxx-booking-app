@@ -41,7 +41,7 @@ def index():
 
     # ── Stat cards ──────────────────────────────────────────────────────────
     pending_count = Booking.query.filter(
-        Booking.status.in_(['requested', 'waitlisted'])
+        Booking.status.in_(Booking.PENDING_STATUSES)
     ).count()
 
     active_clients = Client.query.join(User).filter(User.active == True).count()
@@ -62,7 +62,7 @@ def index():
         .filter(
             Booking.date >= today,
             Booking.date <= chart_end,
-            Booking.status.in_(['confirmed', 'requested', 'waitlisted']),
+            Booking.status.in_(Booking.ACTIVE_STATUSES),
             Booking.slot.in_(['Morning', 'Afternoon']),
         )
         .with_entities(
@@ -186,7 +186,7 @@ def chart_data():
         .filter(
             Booking.date >= start,
             Booking.date <= chart_end,
-            Booking.status.in_(['confirmed', 'requested', 'waitlisted']),
+            Booking.status.in_(Booking.ACTIVE_STATUSES),
             Booking.slot.in_(['Morning', 'Afternoon']),
         )
         .with_entities(
@@ -251,7 +251,7 @@ def board_chart_data():
         .filter(
             Booking.date >= week_start,
             Booking.date <= chart_end,
-            Booking.status.in_(['confirmed', 'requested', 'waitlisted']),
+            Booking.status.in_(Booking.ACTIVE_STATUSES),
             Booking.slot.in_(['Morning', 'Afternoon']),
         )
         .with_entities(
@@ -329,7 +329,7 @@ def _revenue_for_range(start, end):
             Booking.date <= end,
             Booking.status == 'confirmed',
             Booking.slot.in_(['Morning', 'Afternoon']),
-            ServiceType.slug == 'group-walk',
+            ServiceType.slug == ServiceType.WALK,
         )
         .with_entities(Booking.date, Booking.dog_id, Booking.slot)
         .all()
@@ -343,7 +343,7 @@ def _revenue_for_range(start, end):
             Booking.date >= start,
             Booking.date <= end,
             Booking.status == 'confirmed',
-            ServiceType.slug == 'drop-in',
+            ServiceType.slug == ServiceType.DROP_IN,
         )
         .with_entities(Booking.date)
         .all()
@@ -546,8 +546,8 @@ def drop_in_board():
 def pending_counts():
     """Return pending booking counts for sidebar badge updates."""
     PENDING = ('requested', 'waitlisted')
-    gw = ServiceType.query.filter_by(slug='group-walk').first()
-    di = ServiceType.query.filter_by(slug='drop-in').first()
+    gw = ServiceType.query.filter_by(slug=ServiceType.WALK).first()
+    di = ServiceType.query.filter_by(slug=ServiceType.DROP_IN).first()
     group_walks = (
         Booking.query
         .filter(Booking.status.in_(PENDING), Booking.service_type_id == gw.id)
@@ -571,7 +571,7 @@ def drop_in_board_data(date_str):
     except ValueError:
         return jsonify(success=False, message="Invalid date"), 400
 
-    drop_in_service = ServiceType.query.filter_by(slug='drop-in').first()
+    drop_in_service = ServiceType.query.filter_by(slug=ServiceType.DROP_IN).first()
     if not drop_in_service:
         return jsonify(success=False, message="Drop-in service type not configured"), 500
 
@@ -663,7 +663,7 @@ def drop_in_board_data(date_str):
         for w in walkers
     ]
 
-    max_capacity = get_max_per_walker('drop-in')
+    max_capacity = get_max_per_walker(ServiceType.DROP_IN)
 
     return jsonify(
         success=True,
@@ -685,7 +685,7 @@ def board_data(date_str):
     except ValueError:
         return jsonify(success=False, message="Invalid date"), 400
 
-    group_walk_service = ServiceType.query.filter_by(slug='group-walk').first()
+    group_walk_service = ServiceType.query.filter_by(slug=ServiceType.WALK).first()
     all_bookings = (
         Booking.query
         .options(
@@ -772,7 +772,7 @@ def board_data(date_str):
         for w in walkers
     ]
 
-    max_capacity = get_max_per_walker('group-walk')
+    max_capacity = get_max_per_walker(ServiceType.WALK)
 
     return jsonify(
         success=True,
@@ -860,7 +860,7 @@ def assign_walker():
 
         # Check walker capacity for the given slot and date (scoped to same service type)
         if slot:
-            service_slug = booking.service_type.slug if booking.service_type else 'group-walk'
+            service_slug = booking.service_type.slug if booking.service_type else ServiceType.WALK
             max_capacity = get_max_per_walker(service_slug)
             same_slot_bookings = Booking.query.join(ServiceType).filter(
                 Booking.walker_id == walker.id,
@@ -883,7 +883,7 @@ def assign_walker():
         # Notify client + walker — label differs by service type
         date_str_fmt = booking.date.strftime('%a %-d %b')
         dog_name = booking.dog.name if booking.dog else 'your dog'
-        service_label = 'drop-in visit' if (booking.service_type and booking.service_type.slug == 'drop-in') else 'walk'
+        service_label = 'drop-in visit' if (booking.service_type and booking.service_type.slug == ServiceType.DROP_IN) else 'walk'
 
         create_notification(
             recipient_id=booking.user_id,
@@ -2073,7 +2073,7 @@ def book_for_dog():
         if existing:
             return jsonify(success=False, message="This dog already has a booking for that slot on that date"), 400
 
-        default_service = ServiceType.query.filter_by(slug='group-walk', active=True).first()
+        default_service = ServiceType.query.filter_by(slug=ServiceType.WALK, active=True).first()
         if not default_service:
             return jsonify(success=False, message="No service type available"), 400
 
@@ -2145,7 +2145,7 @@ def recurring_for_dog():
         if not dog:
             return jsonify(success=False, message="Dog not found"), 404
 
-        default_service = ServiceType.query.filter_by(slug='group-walk', active=True).first()
+        default_service = ServiceType.query.filter_by(slug=ServiceType.WALK, active=True).first()
         if not default_service:
             return jsonify(success=False, message="No service type available"), 400
 
@@ -2351,7 +2351,7 @@ def invoicing_detail(client_id):
     late_cancel_ids = {b.id for b in inv['late_cancels']}
     for b in sorted(inv['all_billable'], key=lambda x: (x.date, x.slot)):
         cfg = config_for(b.date)
-        is_drop_in_booking = b.service_type and b.service_type.slug == 'drop-in'
+        is_drop_in_booking = b.service_type and b.service_type.slug == ServiceType.DROP_IN
         if cfg:
             unit_price = float(cfg.price_per_drop_in) if is_drop_in_booking else float(cfg.price_per_walk)
         else:
@@ -2366,7 +2366,7 @@ def invoicing_detail(client_id):
     from collections import defaultdict
     date_slots = defaultdict(set)
     for b in inv['all_billable']:
-        if not (b.service_type and b.service_type.slug == 'drop-in'):
+        if not (b.service_type and b.service_type.slug == ServiceType.DROP_IN):
             date_slots[b.date].add(b.slot)
     discount_days = sorted(
         d for d, slots in date_slots.items()
@@ -2396,8 +2396,8 @@ def invoicing_detail(client_id):
         wk_items = [li for li in line_items if wk_start <= li['booking'].date < wk_end]
         wk_discounts = [d for d in discounts if wk_start <= d['date'] < wk_end]
 
-        wk_confirmed  = sum(1 for li in wk_items if not li['is_cancel'] and not (li['booking'].service_type and li['booking'].service_type.slug == 'drop-in'))
-        wk_drop_ins   = sum(1 for li in wk_items if not li['is_cancel'] and li['booking'].service_type and li['booking'].service_type.slug == 'drop-in')
+        wk_confirmed  = sum(1 for li in wk_items if not li['is_cancel'] and not (li['booking'].service_type and li['booking'].service_type.slug == ServiceType.DROP_IN))
+        wk_drop_ins   = sum(1 for li in wk_items if not li['is_cancel'] and li['booking'].service_type and li['booking'].service_type.slug == ServiceType.DROP_IN)
         wk_cancels    = sum(1 for li in wk_items if li['is_cancel'])
         wk_double_discount = sum(d['amount'] for d in wk_discounts)
 

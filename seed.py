@@ -69,6 +69,15 @@ def seed():
             db.session.add(drop_in)
             print("✓ Created service type: Drop In")
 
+        # Ensure Lydia's walker record has does_drop_ins=True (idempotent)
+        lydia_user = User.query.filter_by(email='lydia@dogboxx.org').first()
+        if lydia_user:
+            lydia_walker = Walker.query.filter_by(user_id=lydia_user.id).first()
+            if lydia_walker and not lydia_walker.does_drop_ins:
+                lydia_walker.does_drop_ins = True
+                db.session.commit()
+                print("✓ Enabled does_drop_ins for Lydia's walker record")
+
         # Owner / admin account
         if not User.query.filter_by(email='lydia@dogboxx.org').first():
             admin = User(

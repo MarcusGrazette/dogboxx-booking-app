@@ -37,6 +37,8 @@
   /* Dropdown active state — overrides Bootstrap's default blue highlight */
   --bs-dropdown-link-active-bg:    var(--db-primary-subtle);
   --bs-dropdown-link-active-color: var(--bs-body-color);
+  --bs-dropdown-link-hover-bg:     var(--db-primary-subtle);
+  --bs-dropdown-link-hover-color:  var(--bs-body-color);
 }
 
 /* ---- Form switches ---- */
@@ -110,6 +112,20 @@
   background-color: #fff;
   border-bottom: 2px solid #E02FAC;
   font-weight: 600;
+}
+
+.dropdown-item:hover,
+.dropdown-item:focus {
+  background-color: var(--db-primary-subtle);
+  color: var(--bs-body-color);
+}
+.dropdown-item:active {
+  background-color: #f5d0ee;
+  color: var(--bs-body-color);
+}
+.dropdown-item:focus-visible {
+  outline: 2px solid #E02FAC;
+  outline-offset: -2px;
 }
 
 /* ---- Form controls ---- */

@@ -336,18 +336,17 @@ def create_app(config_name=None):
         from flask_login import current_user
         if current_user.is_authenticated and current_user.is_admin:
             from app.models import Booking, ServiceType
-            PENDING = ('requested', 'waitlisted')
-            gw = ServiceType.query.filter_by(slug='group-walk').first()
-            di = ServiceType.query.filter_by(slug='drop-in').first()
+            gw = ServiceType.query.filter_by(slug=ServiceType.WALK).first()
+            di = ServiceType.query.filter_by(slug=ServiceType.DROP_IN).first()
             pending_group_walks = (
                 Booking.query
-                .filter(Booking.status.in_(PENDING),
+                .filter(Booking.status.in_(Booking.PENDING_STATUSES),
                         Booking.service_type_id == gw.id)
                 .count()
             ) if gw else 0
             pending_drop_ins = (
                 Booking.query
-                .filter(Booking.status.in_(PENDING),
+                .filter(Booking.status.in_(Booking.PENDING_STATUSES),
                         Booking.service_type_id == di.id)
                 .count()
             ) if di else 0

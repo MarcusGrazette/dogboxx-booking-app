@@ -222,7 +222,7 @@ def seed_bookings(bookings_data, users, dogs, walkers):
     walker_map = {f"{walker.firstname.lower()}_{walker.lastname.lower()}": walker for walker in walkers}
     
     # Look up service type once before the loop
-    group_walk = ServiceType.query.filter_by(slug='group-walk').first()
+    group_walk = ServiceType.query.filter_by(slug=ServiceType.WALK).first()
     if not group_walk:
         print("  Error: 'group-walk' service type not found. Run seed_service_types() first.")
         return

@@ -38,7 +38,7 @@
         height: 64px;
         border-radius: 50%;
         object-fit: cover;
-        border: 3px solid var(--db-primary-subtle);
+        border: 3px solid #E02FAC;
         display: block;
     }
     .dog-photo-placeholder {
@@ -251,7 +251,7 @@
                             <img src="{{ url_for('static', filename='uploads/dogs/' + sdog.pic) if sdog.pic else url_for('static', filename='uploads/dogs/default-dog.png') }}"
                                  onerror="this.onerror=null;this.src='{{ url_for('static', filename='uploads/dogs/default-dog.png') }}'"
                                  alt="{{ sdog.name }}"
-                                 style="width:64px; height:64px; border-radius:50%; object-fit:cover; border:3px solid var(--db-primary-subtle); display:block;">
+                                 style="width:64px; height:64px; border-radius:50%; object-fit:cover; border:3px solid #E02FAC; display:block;">
                         </div>
                         <div>
                             <div class="fw-bold lh-sm">{{ sdog.name }}</div>

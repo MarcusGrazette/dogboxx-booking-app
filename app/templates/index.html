@@ -3,47 +3,19 @@
 
 {% block title %}Home{% endblock %}
 
+{% block main_class %}container py-3 text-start{% endblock %}
+
 {% block head_extra %}
 <style>
-    /* ── Service tabs ─────────────────────────────────────────────────────────
-       Pill tabs sit on a light background. Override Bootstrap's default
-       link colour (which inherits brand pink via --bs-link-color) with a
-       readable dark-grey for the inactive state.
-       Active state: Bootstrap's nav-pills already picks up --bs-primary
-       (#E02FAC) via brand.css — no override needed.                         */
-    #service-tabs {
-        font-size: 0.85rem;
-        /* Bootstrap 5.3 hardcodes --bs-nav-pills-link-active-bg: #0d6efd directly
-           on .nav-pills (not via var(--bs-primary)), so overriding --bs-primary in
-           brand.css has no effect here. Set the component variable directly. */
-        --bs-nav-pills-link-active-bg: #E02FAC;
-        --bs-nav-pills-link-active-color: #fff;
-    }
-
-    #service-tabs .nav-link {
-        /* !important needed: --bs-link-color is #E02FAC in brand.css, which bleeds
-           into --bs-nav-link-color, making inactive pills pink on a light bg. */
-        color: #495057 !important;
-        transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
-    }
-
-    #service-tabs .nav-link.active {
-        color: #fff !important;
-    }
-
-    #service-tabs .nav-link:hover:not(.active) {
-        background-color: #e9ecef;
-        color: #212529 !important;
-    }
-
     /* ── Booking type segmented control ───────────────────────────────────── */
     .booking-type-group .btn {
         font-size: 0.8rem;
     }
 
-    /* ── Slot select ──────────────────────────────────────────────────────── */
-    .slot-select {
-        max-width: 160px;
+    /* ── Availability hint below slot select ─────────────────────────────── */
+    #slot-availability {
+        font-size: 0.75rem;
+        display: block;
     }
 
     /* ── Info note below booking form ─────────────────────────────────────── */
@@ -100,6 +72,11 @@
         text-decoration: line-through;
         opacity: 0.5;
     }
+
+    .collapse-toggle { cursor: pointer; }
+    .collapse-toggle:hover { background-color: #FAFAFA !important; }
+    .collapse-toggle .bi-chevron-down { transition: transform 0.2s ease; }
+    .collapse-toggle[aria-expanded="true"] .bi-chevron-down { transform: rotate(180deg); }
 </style>
 {% endblock %}
 
@@ -113,148 +90,192 @@
 
 <div class="row g-4 text-start">
 
-    <!-- LEFT: Booking form -->
+    <!-- LEFT: Calendar + collapsible forms -->
     <div class="col-12 col-md-4">
-        <div class="card shadow-sm border-0" style="border-radius: 1rem;">
+
+        {# ── Calendar card (always visible) ── #}
+        <div class="card shadow-sm border-0 mb-3" style="border-radius: 1rem;">
             <div class="card-body p-3">
-                <h6 class="fw-bold text-uppercase text-muted small mb-3 letter-spacing-1">
-                    <i class="bi bi-calendar-plus-fill me-1 text-primary"></i>
-                    Request a Service
-                </h6>
-
-                {# Shared Calendar widget #}
                 {{ calendar_widget('client-booking-cal', config={'selectable': true}, show_loading=false) }}
-
-                {# Legend #}
                 <div class="cal-legend mb-3">
                     <span><span class="cal-legend-dot pending"></span>Pending</span>
                     <span><span class="cal-legend-dot confirmed"></span>Confirmed</span>
                 </div>
-
-                {# Selected date display #}
-                <p class="small text-muted mb-3" id="selected-date-label">
+                <p class="small text-muted mb-0" id="selected-date-label">
                     <i class="bi bi-calendar3 me-1"></i>
                     <span id="selected-date-text">Select a date above</span>
                 </p>
+            </div>
+        </div>
 
-                {# Service Tabs #}
-                <ul class="nav nav-pills mb-3 nav-fill bg-light p-1 rounded" id="service-tabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active py-1 fw-semibold" id="walk-tab" data-bs-toggle="pill"
-                            data-bs-target="#walk-pane" type="button" role="tab">Walk</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link py-1 fw-semibold" id="dropin-tab" data-bs-toggle="pill"
-                            data-bs-target="#dropin-pane" type="button" role="tab">Drop-in</button>
-                    </li>
-                </ul>
+        {# ── Request a Service (open by default) ── #}
+        <div class="card shadow-sm border-0 mb-3" style="border-radius: 1rem; overflow: hidden;">
+            <button class="collapse-toggle d-flex align-items-center justify-content-between w-100 border-0 bg-white p-3"
+                    type="button" data-bs-toggle="collapse" data-bs-target="#service-collapse" aria-expanded="true">
+                <span class="fw-bold text-uppercase text-muted small letter-spacing-1">
+                    <i class="bi bi-calendar-plus-fill me-1 text-primary"></i>Request a Service
+                </span>
+                <i class="bi bi-chevron-down text-muted" style="font-size:0.8rem;"></i>
+            </button>
+            <div id="service-collapse" class="collapse show">
+                <div class="px-3 pt-2 pb-3">
 
-                {# Tab Content #}
-                <div class="tab-content" id="service-tabContent">
+                    <form action="{{ url_for('client.index') }}" method="post" id="BookingForm" novalidate>
+                        {{ form.hidden_tag() }}
+                        <input type="hidden" name="date" id="booking-date-hidden">
 
-                    {# WALK PANE #}
-                    <div class="tab-pane fade show active" id="walk-pane" role="tabpanel" tabindex="0">
-                        <form action="{{ url_for('client.index') }}" method="post" id="BookingForm" novalidate>
-                            {{ form.hidden_tag() }}
-                            <input type="hidden" name="date" id="booking-date-hidden">
-
-                            {# Dog selector — only shown when client has multiple dogs #}
-                            {% if dogs|length > 1 %}
-                            <div class="mb-3">
-                                <label class="form-label small fw-semibold mb-1" for="dog-selector">Which dog?</label>
-                                <select class="form-select form-select-sm" id="dog-selector" name="dog_id">
-                                    {% for d in dogs %}
-                                    <option value="{{ d.id }}">{{ d.name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            {% else %}
-                            <input type="hidden" name="dog_id" id="dog-selector" value="{{ dogs[0].id if dogs else '' }}">
-                            {% endif %}
-
-                            {# Booking Type Segmented Control #}
-                            <div class="btn-group w-100 mb-3 booking-type-group" role="group">
-                                <input type="radio" class="btn-check" name="booking_type" id="type-single"
-                                    value="single" autocomplete="off" checked>
-                                <label class="btn btn-outline-dark btn-sm fw-semibold"
-                                    for="type-single">Single</label>
-
-                                <input type="radio" class="btn-check" name="booking_type" id="type-both" value="both"
-                                    autocomplete="off">
-                                <label class="btn btn-outline-dark btn-sm fw-semibold" for="type-both">Both
-                                    walks</label>
-
-                                <input type="radio" class="btn-check" name="booking_type" id="type-recurring"
-                                    value="recurring" autocomplete="off">
-                                <label class="btn btn-outline-dark btn-sm fw-semibold"
-                                    for="type-recurring">Recurring</label>
-                            </div>
-
-                            {# Slot row #}
-                            <div class="mb-3" id="slot-row">
-                                <label class="form-label small fw-semibold mb-1">Time Slot</label>
-                                <div class="d-flex align-items-center gap-2">
-                                    {{ form.slot(class="form-select form-select-sm slot-select", id="booking-slot") }}
-                                    <span id="slot-availability" class="small text-nowrap"></span>
-                                </div>
-                                {% for error in form.slot.errors %}
-                                <div class="text-danger small mt-1">{{ error }}</div>
-                                {% endfor %}
-                            </div>
-
-                            {# Recurring panel #}
-                            <div id="recurring-panel" style="display:none;" class="p-2 mb-3 bg-light border rounded">
-                                <div class="row g-2 mb-2">
-                                    <div class="col-6">
-                                        <label class="form-label small fw-semibold mb-1">Frequency</label>
-                                        <select class="form-select form-select-sm" id="recurring-frequency">
-                                            <option value="weekly">Weekly</option>
-                                            <option value="daily">Daily (weekdays)</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-6">
-                                        <label class="form-label small fw-semibold mb-1">Until</label>
-                                        <input type="date" class="form-control form-control-sm" id="recurring-end-date">
-                                    </div>
-                                </div>
-                                <div id="recurring-preview"></div>
-                            </div>
-
-                            <button type="submit" class="btn btn-primary btn-sm w-100 fw-semibold" id="booking-submit"
-                                disabled>
-                                Request walk
-                            </button>
-                        </form>
-                        <p class="text-muted small mt-3 mb-0 booking-info-note">
-                            <i class="bi bi-info-circle me-1"></i>
-                            We review all requests to ensure dogs walk with friends they get on with.
-                        </p>
-                    </div>
-
-                    {# DROP-IN PANE #}
-                    <div class="tab-pane fade" id="dropin-pane" role="tabpanel" tabindex="0">
-                        <p class="text-muted small mb-3">A short comfort-break visit at your home.</p>
-
+                        {# Service type selector — only shown when drop-ins are available #}
+                        {% if has_drop_in_walkers %}
                         <div class="mb-3">
-                            <label class="form-label small fw-semibold mb-1">Time Slot</label>
-                            <select id="dropin-slot" class="form-select form-select-sm slot-select">
-                                <option value="Morning">Morning</option>
-                                <option value="Afternoon">Afternoon</option>
+                            <select class="form-select form-select-sm" id="service-type-select">
+                                <option value="walk">Walk</option>
+                                <option value="drop-in">Drop-in</option>
                             </select>
                         </div>
-                        <button id="dropin-submit" class="btn btn-primary btn-sm w-100 fw-semibold" disabled>
-                            <i class="bi bi-house-door me-1"></i>Request drop-in
+                        {% endif %}
+
+                        {# Dog selector — only shown when client has multiple dogs #}
+                        {% if dogs|length > 1 %}
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold mb-1" for="dog-selector">Which dog?</label>
+                            <select class="form-select form-select-sm" id="dog-selector" name="dog_id">
+                                {% for d in dogs %}
+                                <option value="{{ d.id }}">{{ d.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% else %}
+                        <input type="hidden" name="dog_id" id="dog-selector" value="{{ dogs[0].id if dogs else '' }}">
+                        {% endif %}
+
+                        {# Slot row #}
+                        <div class="mb-3" id="slot-row">
+                            <select class="form-select form-select-sm" id="booking-slot" name="slot">
+                                <option value="">Time Slot</option>
+                                <option value="Morning">Morning</option>
+                                <option value="Afternoon">Afternoon</option>
+                                <option value="Both" id="slot-both-option">Both walks</option>
+                            </select>
+                            <span id="slot-availability" class="mt-1 ms-1"></span>
+                        </div>
+
+                        {# Recurring toggle #}
+                        <div class="form-check form-switch d-flex align-items-center gap-2 ps-0 mb-3">
+                            <input class="form-check-input flex-shrink-0 mt-0 ms-0" type="checkbox" role="switch" id="recurring-toggle">
+                            <label class="form-check-label small fw-semibold text-muted mb-0" for="recurring-toggle">Recurring</label>
+                        </div>
+
+                        {# Recurring panel #}
+                        <div id="recurring-panel" style="display:none;" class="p-2 mb-3 bg-light border rounded">
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <label class="form-label small fw-semibold mb-1">Frequency</label>
+                                    <select class="form-select form-select-sm" id="recurring-frequency">
+                                        <option value="weekly">Weekly</option>
+                                        <option value="daily">Daily (weekdays)</option>
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small fw-semibold mb-1">Until</label>
+                                    <input type="date" class="form-control form-control-sm" id="recurring-end-date">
+                                </div>
+                            </div>
+                            <div id="recurring-preview"></div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-sm w-100 fw-semibold" id="booking-submit" disabled>
+                            Request walk
                         </button>
-                        <div id="dropin-feedback" class="mt-2 small" style="display:none;"></div>
+                    </form>
+                    <p class="text-muted small mt-3 mb-0 booking-info-note" id="walk-info-note">
+                        <i class="bi bi-info-circle me-1"></i>
+                        We review all requests to ensure dogs walk with friends they get on with.
+                    </p>
+                    <p class="text-muted small mt-3 mb-0 booking-info-note" id="dropin-info-note" style="display:none;">
+                        <i class="bi bi-info-circle me-1"></i>
+                        A short comfort-break visit at your home.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        {# ── Pause Walks (collapsed by default) ── #}
+        <div class="card shadow-sm border-0" style="border-radius: 1rem; overflow: hidden;">
+            <button class="collapse-toggle d-flex align-items-center justify-content-between w-100 border-0 bg-white p-3"
+                    type="button" data-bs-toggle="collapse" data-bs-target="#pause-collapse" aria-expanded="false">
+                <span class="fw-bold text-uppercase text-muted small letter-spacing-1">
+                    <i class="bi bi-pause-circle-fill me-1" style="color:#f59e0b;"></i>Pause Walks
+                </span>
+                <i class="bi bi-chevron-down text-muted" style="font-size:0.8rem;"></i>
+            </button>
+            <div id="pause-collapse" class="collapse">
+                <div class="px-3 pt-2 pb-3">
+
+                    {# Step 1 — date range picker #}
+                    <div id="pause-step-1">
+                        <p class="text-muted small mb-3">Going away? Cancel all walks in a date range at once.</p>
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold mb-1">From</label>
+                                <input type="date" class="form-control form-control-sm" id="pause-start-date">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold mb-1">To</label>
+                                <input type="date" class="form-control form-control-sm" id="pause-end-date">
+                            </div>
+                        </div>
+                        <button class="btn btn-sm w-100 fw-semibold" id="pause-preview-btn" disabled
+                                style="background:#fff3cd;border:1px solid #f59e0b;color:#92400e;">
+                            Preview affected walks<i class="bi bi-arrow-right ms-1"></i>
+                        </button>
+                        <div id="pause-step1-error" class="text-danger small mt-2" style="display:none;"></div>
+                    </div>
+
+                    {# Step 2 — preview + confirm #}
+                    <div id="pause-step-2" style="display:none;">
+                        <p class="small fw-semibold mb-2" id="pause-preview-summary"></p>
+                        <div id="pause-preview-list" class="mb-3 rounded"
+                             style="max-height:180px;overflow-y:auto;border:1px solid #E5E5E5;background:#FAFAFA;padding:0.5rem;"></div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-outline-secondary btn-sm flex-grow-1" id="pause-back-btn">
+                                <i class="bi bi-arrow-left me-1"></i>Back
+                            </button>
+                            <button class="btn btn-danger btn-sm flex-grow-1 fw-semibold" id="pause-confirm-btn">
+                                <i class="bi bi-x-circle me-1"></i>Cancel all
+                            </button>
+                        </div>
+                    </div>
+
+                    {# Step 3 — success #}
+                    <div id="pause-step-3" style="display:none;">
+                        <div class="text-center py-3">
+                            <i class="bi bi-check-circle-fill text-success" style="font-size:2rem;"></i>
+                            <p class="mt-2 mb-3 fw-semibold small" id="pause-success-msg"></p>
+                            <button class="btn btn-outline-secondary btn-sm" id="pause-reset-btn">Done</button>
+                        </div>
                     </div>
 
                 </div>
             </div>
         </div>
+
     </div>
 
     <!-- RIGHT: Dog diaries -->
     <div class="col-12 col-md-8">
+
+        {# Date filter pill — shown when a calendar date is selected #}
+        <div id="date-filter-bar" class="mb-3" style="display:none;">
+            <span class="d-inline-flex align-items-center gap-2 px-3 py-2 fw-semibold"
+                  style="background:#fce8f6;color:#E02FAC;border-radius:2rem;font-size:0.82rem;">
+                <i class="bi bi-calendar3"></i>
+                <span id="date-filter-label"></span>
+                <button type="button" id="date-filter-clear" class="btn p-0 border-0 lh-1 ms-1"
+                        style="background:none;color:#E02FAC;" aria-label="Clear filter">
+                    <i class="bi bi-x-lg" style="font-size:0.75rem;"></i>
+                </button>
+            </span>
+        </div>
 
         {% if dogs %}
         {% for dog in dogs %}
@@ -269,7 +290,7 @@
                         style="width: 64px; height: 64px; object-fit: cover; border: 3px solid var(--db-primary-subtle);">
                     <div>
                         <h5 class="fw-bold mb-0">{{ dog.name }}</h5>
-                        <span class="text-muted small">Upcoming walks</span>
+                        <span class="text-muted small" id="dog-subtitle-{{ dog.id }}">Upcoming walks</span>
                     </div>
                 </div>
 
@@ -281,7 +302,8 @@
                         data-total="{{ dog_bookings | length }}">
                         {% for booking in dog_bookings %}
                         <li class="list-group-item px-0 py-3 border-bottom d-flex align-items-center justify-content-between gap-2{% if loop.index0 >= 10 %} d-none{% endif %}"
-                            data-walk-idx="{{ loop.index0 }}">
+                            data-walk-idx="{{ loop.index0 }}"
+                            data-date="{{ booking.date.isoformat() }}">
                             <div class="d-flex align-items-center gap-3">
                                 <!-- Status pill -->
                                 {% if booking.status == 'confirmed' %}
@@ -323,7 +345,9 @@
                                 <button class="btn btn-link p-1 cancel-booking-btn text-danger"
                                     data-booking-id="{{ booking.id }}" data-booking-slot="{{ booking.slot }}"
                                     data-booking-date="{{ booking.date_display }}"
-                                    data-booking-date-iso="{{ booking.date.isoformat() }}" title="Cancel booking"
+                                    data-booking-date-iso="{{ booking.date.isoformat() }}"
+                                    data-is-drop-in="{{ 'true' if booking.is_drop_in else 'false' }}"
+                                    title="Cancel booking"
                                     style="line-height: 1; font-size: 1.1rem;">
                                     <i class="bi bi-x-circle"></i>
                                 </button>
@@ -331,6 +355,10 @@
                         </li>
                         {% endfor %}
                     </ul>
+
+                    <div id="dog-filter-empty-{{ dog.id }}" class="rounded p-3 mt-1 mb-1" style="display:none;background:#fafafa;border:1px solid #E5E5E5;">
+                        <p class="mb-0 small" style="color:#888;"></p>
+                    </div>
 
                     {% if dog_bookings | length > 10 %}
                     <div class="d-flex align-items-center justify-content-between mt-2 pt-1"
@@ -348,13 +376,6 @@
                     </div>
                     {% endif %}
 
-                    {% if bookings %}
-                    <p class="text-muted mt-3 mb-0" style="font-size: 0.75rem;">
-                        <i class="bi bi-info-circle me-1"></i>
-                        Our cancellation policy applies to confirmed bookings cancelled within 5 days.
-                    </p>
-                    {% endif %}
-
                     {% else %}
                     <div class="text-center py-4" id="dog-empty-{{ dog.id }}">
                         <i class="bi bi-calendar2-x fs-2 text-muted mb-2 d-block"></i>
@@ -367,6 +388,13 @@
 
         </div>
         {% endfor %}
+
+        {% if bookings %}
+        <p class="text-muted mt-1 mb-0 px-1" style="font-size: 0.75rem;">
+            <i class="bi bi-info-circle me-1"></i>
+            Our cancellation policy applies to confirmed bookings cancelled within 5 days.
+        </p>
+        {% endif %}
 
         {% else %}
         <div class="card shadow-sm border-0 text-center py-5" style="border-radius: 1rem;">
@@ -453,34 +481,29 @@
         // ─── State ───────────────────────────────────────────────
         const dateHidden = document.getElementById('booking-date-hidden');
         const slotSelect = document.getElementById('booking-slot');
+        const slotBothOption = document.getElementById('slot-both-option');
         const availHint = document.getElementById('slot-availability');
         const submitBtn = document.getElementById('booking-submit');
         const dateText = document.getElementById('selected-date-text');
+        const serviceTypeSelect = document.getElementById('service-type-select'); // null when no drop-in walkers
+        const walkInfoNote = document.getElementById('walk-info-note');
+        const dropinInfoNote = document.getElementById('dropin-info-note');
 
-        const typeRadios = document.querySelectorAll('input[name="booking_type"]');
-        const slotRow = document.getElementById('slot-row');
+        const recurringToggle = document.getElementById('recurring-toggle');
         const recurPanel = document.getElementById('recurring-panel');
         const recurFreq = document.getElementById('recurring-frequency');
         const recurEnd = document.getElementById('recurring-end-date');
         const recurPreview = document.getElementById('recurring-preview');
 
-        const dropinSubmit = document.getElementById('dropin-submit');
-        const dropinSlot = document.getElementById('dropin-slot');
-        const dropinFeedback = document.getElementById('dropin-feedback');
-
         let slotData = null;
         let selectedDate = null;   // 'YYYY-MM-DD'
-
-        const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
-            'August', 'September', 'October', 'November', 'December'];
-        const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
         // ─── Calendar ────────────────────────────────────────────
         // loadCalendarData uses getCalendar() rather than the outer `cal` variable
         // so it's safe to call during createCalendar's synchronous init (when cal
         // is still undefined) — getCalendar returns null and we bail early,
         // then the manual call below fires once cal is properly assigned.
-        function loadCalendarData(year, month) {
+        window.loadCalendarData = function loadCalendarData(year, month) {
             const instance = getCalendar('client-booking-cal');
             if (!instance) return;
             const url = `{{ url_for('client.calendar_data', year=0, month=0) }}`
@@ -503,6 +526,7 @@
                 fetchAvailability();
                 updateRecurringEndMax();
                 renderRecurPreview();
+                applyDateFilter(dateStr);
             },
             onMonthChange(year, month) {
                 loadCalendarData(year, month);
@@ -512,17 +536,50 @@
         // Initial data load — now that cal is assigned and registered
         loadCalendarData(cal.year, cal.month);
 
+        // ─── Service type helper ─────────────────────────────────
+        function getServiceType() {
+            return serviceTypeSelect ? serviceTypeSelect.value : 'walk';
+        }
+
+        // ─── Service type change ─────────────────────────────────
+        function onServiceTypeChange() {
+            const isDropIn = getServiceType() === 'drop-in';
+
+            // Remove/restore "Both walks" — hidden attribute doesn't work in iOS Safari
+            if (isDropIn) {
+                if (slotBothOption && slotBothOption.parentNode) slotSelect.removeChild(slotBothOption);
+                if (slotSelect.value === 'Both') slotSelect.value = '';
+            } else {
+                if (slotBothOption && !slotBothOption.parentNode) slotSelect.appendChild(slotBothOption);
+            }
+
+            // Re-fetch availability for the selected service type
+            fetchAvailability();
+
+            // Toggle info notes
+            if (walkInfoNote) walkInfoNote.style.display = isDropIn ? 'none' : '';
+            if (dropinInfoNote) dropinInfoNote.style.display = isDropIn ? '' : 'none';
+
+            updateSubmitState();
+            renderRecurPreview();
+        }
+
+        if (serviceTypeSelect) serviceTypeSelect.addEventListener('change', onServiceTypeChange);
+
         // ─── Slot availability ───────────────────────────────────
         function fetchAvailability() {
-            if (!selectedDate) { slotData = null; updateAvailabilityHint(); return; }
-            fetch(`{{ url_for('api.slot_availability') }}?date=${selectedDate}`)
+            if (!selectedDate) {
+                slotData = null; updateAvailabilityHint(); return;
+            }
+            const svc = getServiceType() === 'drop-in' ? 'drop-in' : 'walk';
+            fetch(`{{ url_for('api.slot_availability') }}?date=${selectedDate}&service=${svc}`)
                 .then(r => r.json())
                 .then(data => { slotData = data.error ? null : data; updateAvailabilityHint(); })
                 .catch(() => { slotData = null; updateAvailabilityHint(); });
         }
 
         function updateAvailabilityHint() {
-            if (!slotData || !slotSelect.value) {
+            if (!slotData || !slotSelect.value || slotSelect.value === 'Both') {
                 availHint.textContent = '';
                 return;
             }
@@ -538,48 +595,47 @@
             }
         }
 
-        if (slotSelect) slotSelect.addEventListener('change', () => {
-            updateAvailabilityHint();
-            renderRecurPreview();
-        });
+        // ─── Derived booking type ────────────────────────────────
+        function getBookingType() {
+            const isDropIn = getServiceType() === 'drop-in';
+            if (recurringToggle.checked) return 'recurring';
+            if (!isDropIn && slotSelect.value === 'Both') return 'both';
+            if (isDropIn) return 'single-dropin';
+            return 'single';
+        }
 
         // ─── Submit state ────────────────────────────────────────
         function updateSubmitState() {
             const hasDate = !!selectedDate;
-            if (dropinSubmit) dropinSubmit.disabled = !hasDate;
-            if (submitBtn) submitBtn.disabled = !hasDate;
-
-            const typeEl = document.querySelector('input[name="booking_type"]:checked');
-            if (submitBtn && typeEl) {
-                if (typeEl.value === 'recurring') {
-                    submitBtn.textContent = 'Request recurring walks';
-                } else if (typeEl.value === 'both') {
+            const type = getBookingType();
+            const hasSlot = !!slotSelect.value;
+            if (submitBtn) {
+                submitBtn.disabled = !hasDate || !hasSlot;
+                if (type === 'recurring') {
+                    const svc = getServiceType();
+                    submitBtn.textContent = svc === 'drop-in' ? 'Request recurring drop-ins' : 'Request recurring walks';
+                } else if (type === 'both') {
                     submitBtn.textContent = 'Request both walks';
+                } else if (type === 'single-dropin') {
+                    submitBtn.textContent = 'Request drop-in';
                 } else {
                     submitBtn.textContent = 'Request walk';
                 }
             }
         }
 
-        // ─── Booking Type Radio ──────────────────────────────────
-        typeRadios.forEach(radio => {
-            radio.addEventListener('change', function () {
-                const val = this.value;
-                if (val === 'single') {
-                    slotRow.style.display = '';
-                    recurPanel.style.display = 'none';
-                } else if (val === 'both') {
-                    slotRow.style.display = 'none';
-                    recurPanel.style.display = 'none';
-                } else if (val === 'recurring') {
-                    slotRow.style.display = '';
-                    recurPanel.style.display = '';
-                }
-                updateSubmitState();
-                renderRecurPreview();
-            });
+        // ─── Recurring toggle ────────────────────────────────────
+        recurringToggle.addEventListener('change', function () {
+            recurPanel.style.display = this.checked ? '' : 'none';
+            updateSubmitState();
+            renderRecurPreview();
         });
 
+        slotSelect.addEventListener('change', function () {
+            updateAvailabilityHint();
+            updateSubmitState();
+            renderRecurPreview();
+        });
         recurFreq.addEventListener('change', renderRecurPreview);
         recurEnd.addEventListener('change', renderRecurPreview);
 
@@ -587,10 +643,10 @@
             if (!selectedDate) return;
             const start = new Date(selectedDate + 'T00:00:00');
             const max = new Date(start);
-            max.setDate(max.getDate() + 28);
+            max.setFullYear(max.getFullYear() + 1);
             recurEnd.min = selectedDate;
             recurEnd.max = max.toISOString().slice(0, 10);
-            // Default end date to 4 weeks out
+            // Default end date to 1 year out (user can shorten it)
             if (!recurEnd.value || recurEnd.value < selectedDate) {
                 recurEnd.value = max.toISOString().slice(0, 10);
             }
@@ -615,8 +671,7 @@
         }
 
         function renderRecurPreview() {
-            const typeEl = document.querySelector('input[name="booking_type"]:checked');
-            if (!typeEl || typeEl.value !== 'recurring') {
+            if (!recurringToggle.checked) {
                 recurPreview.innerHTML = '';
                 return;
             }
@@ -625,26 +680,32 @@
                 recurPreview.innerHTML = '<span class="text-muted small">No dates in range</span>';
                 return;
             }
-            recurPreview.innerHTML = dates.map(d =>
-                `<span class="recurring-chip">${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>`
+            const isBoth = slotSelect.value === 'Both';
+            const chips = dates.map(d =>
+                `<span class="recurring-chip">${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}${isBoth ? ' ×2' : ''}</span>`
             ).join('');
+            const total = isBoth ? dates.length * 2 : dates.length;
+            const unit = getServiceType() === 'drop-in' ? 'drop-in' : 'walk';
+            recurPreview.innerHTML = chips + `<div class="text-muted small mt-1">${total} ${unit}${total !== 1 ? 's' : ''} total</div>`;
         }
 
-        // ─── Form submit — single vs recurring ───────────────────
+        // ─── Form submit — all booking types ─────────────────────
         const bookingForm = document.getElementById('BookingForm');
         bookingForm.addEventListener('submit', function (e) {
             e.preventDefault(); // Always intercept — both paths are AJAX now
 
             const csrfToken = document.querySelector('input[name=csrf_token]')?.value;
 
-            const bookingType = document.querySelector('input[name="booking_type"]:checked')?.value;
+            const bookingType = getBookingType();
+            const serviceType = getServiceType();
 
             if (bookingType === 'recurring') {
-                // ── Recurring: existing AJAX path ─────────────────
+                // ── Recurring: walk or drop-in ────────────────────
                 if (!selectedDate) { showToast('Please select a start date.', 'warning'); return; }
                 if (!recurEnd.value) { showToast('Please choose an end date.', 'warning'); return; }
                 if (!slotSelect.value) { showToast('Please choose a slot.', 'warning'); return; }
 
+                const recurLabel = serviceType === 'drop-in' ? 'Request recurring drop-ins' : 'Request recurring walks';
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Requesting…';
 
@@ -657,6 +718,7 @@
                         slot: slotSelect.value,
                         frequency: recurFreq.value,
                         dog_id: document.getElementById('dog-selector')?.value || null,
+                        service_type: serviceType,
                     }),
                 })
                     .then(r => r.json())
@@ -671,13 +733,55 @@
                         } else {
                             showToast(data.message || 'Something went wrong.', 'danger');
                             submitBtn.disabled = false;
-                            submitBtn.textContent = 'Request recurring walks';
+                            submitBtn.textContent = recurLabel;
                         }
                     })
-                    .catch(() => {
+                    .catch((err) => {
+                        console.error('recurring booking error:', err);
                         showToast('Network error — please try again.', 'danger');
                         submitBtn.disabled = false;
-                        submitBtn.textContent = 'Request recurring walks';
+                        submitBtn.textContent = recurLabel;
+                    });
+
+            } else if (bookingType === 'single-dropin') {
+                // ── Single drop-in ────────────────────────────────
+                if (!selectedDate) { showToast('Please select a date.', 'warning'); return; }
+                if (!slotSelect.value) { showToast('Please choose a time slot.', 'warning'); return; }
+
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Requesting…';
+
+                fetch('{{ url_for("client.book_drop_in") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({ date: selectedDate, slot: slotSelect.value, dog_id: document.getElementById('dog-selector')?.value || null }),
+                })
+                    .then(r => r.json())
+                    .then(data => {
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Request drop-in';
+                        if (data.success) {
+                            showToast(data.message, data.status === 'waitlisted' ? 'info' : 'success');
+                            if (data.booking) {
+                                data.booking.is_drop_in = true;
+                                injectBooking(data.booking);
+                            }
+                            loadCalendarData(cal.year, cal.month);
+                            // Reset
+                            selectedDate = null;
+                            dateHidden.value = '';
+                            dateText.textContent = 'Select a date above';
+                            slotSelect.value = '';
+                            submitBtn.disabled = true;
+                        } else {
+                            showToast(data.message || 'Something went wrong.', 'danger');
+                        }
+                    })
+                    .catch((err) => {
+                        console.error('drop-in booking error:', err);
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Request drop-in';
+                        showToast('Network error — please try again.', 'danger');
                     });
 
             } else if (bookingType === 'both') {
@@ -704,16 +808,16 @@
                             // Reset
                             selectedDate = null;
                             dateHidden.value = '';
-                            dateText.textContent = 'Select a date above and pick morning or afternoon below';
+                            dateText.textContent = 'Select a date above';
                             availHint.textContent = '';
-                            document.getElementById('type-single').checked = true;
-                            slotRow.style.display = '';
+                            slotSelect.value = '';
                             submitBtn.disabled = true;
                         } else {
                             showToast(data.message || 'Something went wrong.', 'danger');
                         }
                     })
-                    .catch(() => {
+                    .catch((err) => {
+                        console.error('both-walks booking error:', err);
                         submitBtn.disabled = false;
                         submitBtn.textContent = 'Request walk';
                         showToast('Network error — please try again.', 'danger');
@@ -743,14 +847,16 @@
                             // Reset form state
                             selectedDate = null;
                             dateHidden.value = '';
-                            dateText.textContent = 'Select a date above and pick morning or afternoon below';
+                            dateText.textContent = 'Select a date above';
                             availHint.textContent = '';
+                            slotSelect.value = '';
                             submitBtn.disabled = true;
                         } else {
                             showToast(data.message || 'Something went wrong.', 'danger');
                         }
                     })
-                    .catch(() => {
+                    .catch((err) => {
+                        console.error('single-walk booking error:', err);
                         submitBtn.disabled = false;
                         submitBtn.textContent = 'Request walk';
                         showToast('Network error — please try again.', 'danger');
@@ -763,6 +869,7 @@
         const walkPages = {}; // dogId → current page (0-indexed)
 
         function renderWalkPage(dogId) {
+            if (filterDate) return; // filter controls visibility instead
             const list = document.getElementById(`bookings-list-${dogId}`);
             if (!list) return;
             const total = parseInt(list.dataset.total, 10);
@@ -796,6 +903,72 @@
             });
         });
 
+        // ─── Date filter ─────────────────────────────────────────
+        const filterBar   = document.getElementById('date-filter-bar');
+        const filterLabel = document.getElementById('date-filter-label');
+        const filterClear = document.getElementById('date-filter-clear');
+
+        function applyDateFilter(isoDate) {
+            filterDate = isoDate;
+            const d = new Date(isoDate + 'T00:00:00');
+            const label = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+            filterLabel.textContent = label;
+            filterBar.style.display = '';
+
+            document.querySelectorAll('[id^="bookings-list-"]').forEach(list => {
+                const dogId = list.dataset.dogId;
+                let matchCount = 0;
+
+                list.querySelectorAll('li[data-date]').forEach(li => {
+                    const matches = li.dataset.date === isoDate;
+                    li.classList.toggle('d-none', !matches);
+                    if (matches) matchCount++;
+                });
+
+                const pager = document.getElementById(`walk-pager-${dogId}`);
+                if (pager) pager.style.display = 'none';
+
+                const subtitle = document.getElementById(`dog-subtitle-${dogId}`);
+                if (subtitle) subtitle.textContent = label;
+
+                const filterEmpty = document.getElementById(`dog-filter-empty-${dogId}`);
+                if (filterEmpty) {
+                    filterEmpty.style.display = matchCount === 0 ? '' : 'none';
+                    if (matchCount === 0) {
+                        filterEmpty.querySelector('p').innerHTML =
+                            `<i class="bi bi-calendar2-x me-2"></i>No bookings on ${label}. ` +
+                            `<button type="button" class="btn btn-link p-0 border-0 align-baseline inline-filter-clear" ` +
+                            `style="font-size:inherit;color:#E02FAC;vertical-align:baseline;">Clear the filter</button> to see all bookings.`;
+                    }
+                }
+            });
+        }
+
+        function clearDateFilter() {
+            filterDate = null;
+            filterBar.style.display = 'none';
+
+            document.querySelectorAll('[id^="bookings-list-"]').forEach(list => {
+                const dogId = list.dataset.dogId;
+
+                const subtitle = document.getElementById(`dog-subtitle-${dogId}`);
+                if (subtitle) subtitle.textContent = 'Upcoming walks';
+
+                const filterEmpty = document.getElementById(`dog-filter-empty-${dogId}`);
+                if (filterEmpty) filterEmpty.style.display = 'none';
+
+                const pager = document.getElementById(`walk-pager-${dogId}`);
+                if (pager) pager.style.display = '';
+
+                renderWalkPage(dogId);
+            });
+        }
+
+        filterClear.addEventListener('click', clearDateFilter);
+        document.addEventListener('click', e => {
+            if (e.target.closest('.inline-filter-clear')) clearDateFilter();
+        });
+
         // ─── Cancel booking — event delegation ──────────────────
         // Using delegation so dynamically-injected bookings get the handler too
         const cancelModal = new bootstrap.Modal(document.getElementById('cancelModal'));
@@ -815,7 +988,9 @@
             const date = btn.getAttribute('data-booking-date');
             const dateIso = btn.getAttribute('data-booking-date-iso');
 
-            cancelModalBody.textContent = `Are you sure you want to cancel the ${slot} walk on ${date}?`;
+            const isDropIn = btn.getAttribute('data-is-drop-in') === 'true';
+            const serviceLabel = isDropIn ? 'drop-in' : 'walk';
+            cancelModalBody.textContent = `Are you sure you want to cancel the ${slot} ${serviceLabel} on ${date}?`;
 
             // Show late-cancel warning if within 5 days
             const walkDate = new Date(dateIso);
@@ -835,6 +1010,9 @@
         });
 
     }); // DOMContentLoaded
+
+    // filterDate is script-level so injectBooking (outside DOMContentLoaded) can read it
+    let filterDate = null;
 
     // ─── Inject a new booking row into the DOM ───────────────────────────────────
     function injectBooking(booking) {
@@ -886,6 +1064,14 @@
         const li = document.createElement('li');
         li.className = 'list-group-item px-0 py-3 border-bottom d-flex align-items-center justify-content-between gap-2';
         li.setAttribute('data-walk-idx', '0');
+        if (booking.date_iso) li.setAttribute('data-date', booking.date_iso);
+        if (filterDate && booking.date_iso !== filterDate) li.classList.add('d-none');
+
+        // If a filter is active for this exact date, dismiss the "no bookings" empty state
+        if (filterDate && booking.date_iso === filterDate) {
+            const filterEmpty = document.getElementById(`dog-filter-empty-${booking.dog_id}`);
+            if (filterEmpty) filterEmpty.style.display = 'none';
+        }
 
         li.innerHTML = `
         <div class="d-flex align-items-center gap-3">
@@ -910,6 +1096,7 @@
                     data-booking-slot="${booking.slot}"
                     data-booking-date="${booking.date_display}"
                     data-booking-date-iso="${booking.date_iso}"
+                    data-is-drop-in="${booking.is_drop_in ? 'true' : 'false'}"
                     title="Cancel booking"
                     style="line-height:1;font-size:1.1rem;">
                 <i class="bi bi-x-circle"></i>
@@ -1025,6 +1212,12 @@
                 if (data.success) {
                     const item = buttonElement.closest('li');
                     if (item) {
+                        // Decrement data-total so pagination stays accurate
+                        const list = item.closest('ul[data-total]');
+                        if (list) {
+                            const curr = parseInt(list.getAttribute('data-total'), 10);
+                            if (curr > 0) list.setAttribute('data-total', String(curr - 1));
+                        }
                         item.style.transition = 'opacity 0.3s ease';
                         item.style.opacity = '0';
                         setTimeout(() => item.remove(), 300);
@@ -1043,61 +1236,131 @@
             });
     }
 
-    // ── Drop-in booking ──────────────────────────────────────────────────────────
+    // ── Pause Walks ──────────────────────────────────────────────────────────────
     (function () {
-        const btn = document.getElementById('dropin-submit');
-        const slotEl = document.getElementById('dropin-slot');
-        const feedback = document.getElementById('dropin-feedback');
-        const csrfToken = document.querySelector('input[name=csrf_token]')?.value;
+        const startEl   = document.getElementById('pause-start-date');
+        const endEl     = document.getElementById('pause-end-date');
+        const previewBtn = document.getElementById('pause-preview-btn');
+        const step1     = document.getElementById('pause-step-1');
+        const step2     = document.getElementById('pause-step-2');
+        const step3     = document.getElementById('pause-step-3');
+        const step1Err  = document.getElementById('pause-step1-error');
+        const summary   = document.getElementById('pause-preview-summary');
+        const listEl    = document.getElementById('pause-preview-list');
+        const backBtn   = document.getElementById('pause-back-btn');
+        const confirmBtn = document.getElementById('pause-confirm-btn');
+        const successMsg = document.getElementById('pause-success-msg');
+        const resetBtn  = document.getElementById('pause-reset-btn');
 
-        if (!btn) return;
+        if (!startEl) return;
 
-        btn.addEventListener('click', function () {
-            const date = document.getElementById('booking-date-hidden')?.value;
-            const slot = slotEl.value;
+        // Start date must be strictly tomorrow or later
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+        startEl.min = tomorrowStr;
+        endEl.min   = tomorrowStr;
 
-            if (!date) {
-                showDropInFeedback('Please select a date on the calendar first.', 'warning');
-                return;
-            }
+        function checkDates() {
+            step1Err.style.display = 'none';
+            previewBtn.disabled = !(startEl.value && endEl.value && endEl.value >= startEl.value);
+        }
 
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Requesting…';
+        startEl.addEventListener('change', function () {
+            if (endEl.value && endEl.value < startEl.value) endEl.value = startEl.value;
+            endEl.min = startEl.value || tomorrowStr;
+            checkDates();
+        });
+        endEl.addEventListener('change', checkDates);
 
-            fetch('{{ url_for("client.book_drop_in") }}', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-                body: JSON.stringify({ date, slot, dog_id: document.getElementById('dog-selector')?.value || null }),
+        previewBtn.addEventListener('click', function () {
+            const csrf = document.querySelector('input[name=csrf_token]')?.value;
+            previewBtn.disabled = true;
+            previewBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Loading…';
+            step1Err.style.display = 'none';
+
+            fetch(`{{ url_for('client.pause_walks_preview') }}?start=${startEl.value}&end=${endEl.value}`, {
+                headers: { 'X-CSRFToken': csrf }
             })
-                .then(r => r.json())
-                .then(data => {
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="bi bi-house-door me-1"></i>Request drop-in';
-                    if (data.success) {
-                        showDropInFeedback(data.message, data.status === 'waitlisted' ? 'info' : 'success');
-                        // Inject the new booking into the dog's list
-                        if (data.booking) {
-                            data.booking.is_drop_in = true;
-                            injectBooking(data.booking);
-                        }
-                        // Calendar selection remains
-                    } else {
-                        showDropInFeedback(data.message || 'Something went wrong.', 'danger');
-                    }
-                })
-                .catch(() => {
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="bi bi-house-door me-1"></i>Request drop-in';
-                    showDropInFeedback('Network error — please try again.', 'danger');
-                });
+            .then(r => r.json())
+            .then(data => {
+                previewBtn.disabled = false;
+                previewBtn.innerHTML = 'Preview affected walks<i class="bi bi-arrow-right ms-1"></i>';
+                if (!data.success) {
+                    step1Err.textContent = data.error || 'Something went wrong.';
+                    step1Err.style.display = '';
+                    return;
+                }
+                if (data.count === 0) {
+                    step1Err.textContent = 'No active walks found in that date range.';
+                    step1Err.style.display = '';
+                    return;
+                }
+                const n = data.count;
+                summary.textContent = `${n} walk${n !== 1 ? 's' : ''} will be cancelled:`;
+                listEl.innerHTML = data.bookings.map(b =>
+                    `<div class="d-flex align-items-center gap-2 py-1 border-bottom small last-child-no-border">
+                        <span class="text-muted" style="width:70px;">${b.date}</span>
+                        <span class="badge bg-secondary fw-normal">${b.slot}</span>
+                        ${b.dog ? `<span class="text-muted">· ${b.dog}</span>` : ''}
+                    </div>`
+                ).join('');
+                step1.style.display = 'none';
+                step2.style.display = '';
+            })
+            .catch(() => {
+                previewBtn.disabled = false;
+                previewBtn.innerHTML = 'Preview affected walks<i class="bi bi-arrow-right ms-1"></i>';
+                step1Err.textContent = 'Network error — please try again.';
+                step1Err.style.display = '';
+            });
         });
 
-        function showDropInFeedback(msg, type) {
-            feedback.style.display = '';
-            feedback.className = `mt-2 small alert alert-${type} py-1 px-2`;
-            feedback.textContent = msg;
-            setTimeout(() => { feedback.style.display = 'none'; }, 6000);
-        }
+        backBtn.addEventListener('click', function () {
+            step2.style.display = 'none';
+            step1.style.display = '';
+        });
+
+        confirmBtn.addEventListener('click', function () {
+            const csrf = document.querySelector('input[name=csrf_token]')?.value;
+            confirmBtn.disabled = true;
+            confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Cancelling…';
+
+            fetch('{{ url_for("client.pause_walks") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                body: JSON.stringify({ start: startEl.value, end: endEl.value })
+            })
+            .then(r => r.json())
+            .then(data => {
+                confirmBtn.disabled = false;
+                confirmBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Cancel all';
+                if (data.success) {
+                    const n = data.cancelled_count;
+                    successMsg.textContent = `${n} walk${n !== 1 ? 's' : ''} cancelled successfully.`;
+                    step2.style.display = 'none';
+                    step3.style.display = '';
+                } else {
+                    showToast(data.error || 'Could not pause walks.', 'danger');
+                    step2.style.display = 'none';
+                    step1.style.display = '';
+                }
+            })
+            .catch(() => {
+                confirmBtn.disabled = false;
+                confirmBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Cancel all';
+                showToast('Network error — please try again.', 'danger');
+            });
+        });
+
+        resetBtn.addEventListener('click', function () {
+            startEl.value = '';
+            endEl.value   = '';
+            previewBtn.disabled = true;
+            step3.style.display = 'none';
+            step1.style.display = '';
+            window.location.reload();
+        });
     })();
 </script>
 {% endblock %}

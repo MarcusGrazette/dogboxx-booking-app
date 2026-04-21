@@ -1,5 +1,8 @@
 """Capacity checking logic for booking availability."""
 
+from sqlalchemy import func
+from sqlalchemy.orm import joinedload
+
 from app.models import WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, Booking, ServiceType, Walker
 from app import db
 
@@ -43,7 +46,13 @@ def get_available_walkers(date, slot, drop_in=False, ignore_unavailability=False
         )
         unavail_walker_ids = {u.walker_id for u in unavail}
 
-    all_walkers = Walker.query.filter(Walker.id.in_(all_walker_ids)).all()
+    # Eager-load user to avoid N+1 on w.user.active
+    all_walkers = (
+        Walker.query
+        .filter(Walker.id.in_(all_walker_ids))
+        .options(joinedload(Walker.user))
+        .all()
+    )
     walkers = [
         w for w in all_walkers
         if w.user.active and w.id not in unavail_walker_ids
@@ -55,18 +64,34 @@ def get_available_walkers(date, slot, drop_in=False, ignore_unavailability=False
     return walkers
 
 
-def get_max_per_walker(service_slug='group-walk'):
-    """Get the max capacity per walker from ServiceType config."""
+def get_max_per_walker(service_slug=ServiceType.WALK):
+    """Get the max capacity per walker from ServiceType config.
+
+    Result is cached in Flask's g for the duration of the request so repeated
+    calls within a single booking operation don't hit the DB multiple times.
+    """
+    try:
+        from flask import g
+        if not hasattr(g, '_max_per_walker'):
+            g._max_per_walker = {}
+        if service_slug in g._max_per_walker:
+            return g._max_per_walker[service_slug]
+        cache = g._max_per_walker
+    except RuntimeError:
+        cache = None  # no request context (tests, CLI)
+
     service = ServiceType.query.filter_by(slug=service_slug).first()
-    if service and service.default_max_capacity:
-        return service.default_max_capacity
-    return 6  # fallback default
+    result = service.default_max_capacity if (service and service.default_max_capacity) else 6
+
+    if cache is not None:
+        cache[service_slug] = result
+    return result
 
 
 def get_walk_capacity(date, slot):
     """Return (total_slots, booked_slots, available_slots) for group walks on a date+slot."""
     walkers = get_available_walkers(date, slot, drop_in=False)
-    max_per_walker = get_max_per_walker('group-walk')
+    max_per_walker = get_max_per_walker(ServiceType.WALK)
     total_slots = len(walkers) * max_per_walker
 
     booked = (
@@ -75,8 +100,8 @@ def get_walk_capacity(date, slot):
         .filter(
             Booking.date == date,
             Booking.slot == slot,
-            Booking.status.in_(['requested', 'confirmed', 'modified']),
-            ServiceType.slug == 'group-walk',
+            Booking.status.in_(Booking.CAPACITY_STATUSES),
+            ServiceType.slug == ServiceType.WALK,
         )
         .count()
     )
@@ -87,7 +112,7 @@ def get_walk_capacity(date, slot):
 def get_drop_in_capacity(date, slot):
     """Return (total_slots, booked_slots, available_slots) for drop-ins on a date+slot."""
     walkers = get_available_walkers(date, slot, drop_in=True)
-    max_per_walker = get_max_per_walker('drop-in')
+    max_per_walker = get_max_per_walker(ServiceType.DROP_IN)
     total_slots = len(walkers) * max_per_walker
 
     booked = (
@@ -96,8 +121,8 @@ def get_drop_in_capacity(date, slot):
         .filter(
             Booking.date == date,
             Booking.slot == slot,
-            Booking.status.in_(['requested', 'confirmed', 'modified']),
-            ServiceType.slug == 'drop-in',
+            Booking.status.in_(Booking.CAPACITY_STATUSES),
+            ServiceType.slug == ServiceType.DROP_IN,
         )
         .count()
     )
@@ -114,7 +139,7 @@ def get_walker_slot_count(walker_id, date, slot, service_slug=None):
         Booking.walker_id == walker_id,
         Booking.date == date,
         Booking.slot == slot,
-        Booking.status.in_(['requested', 'confirmed', 'modified']),
+        Booking.status.in_(Booking.CAPACITY_STATUSES),
     )
     if service_slug:
         q = q.join(ServiceType).filter(ServiceType.slug == service_slug)
@@ -123,7 +148,7 @@ def get_walker_slot_count(walker_id, date, slot, service_slug=None):
 
 def get_daycare_capacity(date):
     """Return (total_slots, booked_slots, available_slots) for daycare on a date."""
-    service = ServiceType.query.filter_by(slug='day-care').first()
+    service = ServiceType.query.filter_by(slug=ServiceType.DAY_CARE).first()
     if not service or not service.default_max_capacity:
         return 0, 0, 0
 
@@ -134,7 +159,7 @@ def get_daycare_capacity(date):
         .filter(
             Booking.date == date,
             Booking.service_type_id == service.id,
-            Booking.status.in_(['requested', 'confirmed', 'modified']),
+            Booking.status.in_(Booking.CAPACITY_STATUSES),
         )
         .count()
     )
@@ -142,23 +167,38 @@ def get_daycare_capacity(date):
     return total, booked, max(0, total - booked)
 
 
-def auto_assign_walker(date, slot, service_slug='group-walk'):
+def auto_assign_walker(date, slot, service_slug=ServiceType.WALK):
     """Return the least-loaded available walker for a date+slot who still has capacity.
 
     Picks the walker with the fewest confirmed/requested bookings for that slot,
     as long as they're under max_per_walker. Returns None if no walker has space.
     """
-    drop_in = (service_slug == 'drop-in')
+    drop_in = (service_slug == ServiceType.DROP_IN)
     walkers = get_available_walkers(date, slot, drop_in=drop_in)
     if not walkers:
         return None
 
     max_cap = get_max_per_walker(service_slug)
+    walker_ids = [w.id for w in walkers]
+
+    # Single GROUP BY query instead of one COUNT per walker
+    q = (
+        db.session.query(Booking.walker_id, func.count(Booking.id).label('cnt'))
+        .filter(
+            Booking.walker_id.in_(walker_ids),
+            Booking.date == date,
+            Booking.slot == slot,
+            Booking.status.in_(Booking.CAPACITY_STATUSES),
+        )
+    )
+    if service_slug:
+        q = q.join(ServiceType).filter(ServiceType.slug == service_slug)
+    counts = {row.walker_id: row.cnt for row in q.group_by(Booking.walker_id).all()}
+
     best_walker = None
     best_count = max_cap  # only accept walkers strictly under capacity
-
     for walker in walkers:
-        count = get_walker_slot_count(walker.id, date, slot, service_slug=service_slug)
+        count = counts.get(walker.id, 0)
         if count < best_count:
             best_count = count
             best_walker = walker
@@ -175,7 +215,7 @@ def check_availability(service_type, date, slot=None, admin_override=False):
     on the board, so capacity is not a hard constraint. The slot must still have
     at least one walker scheduled (ignoring unavailability) to allow override.
     """
-    if service_type.slug == 'group-walk':
+    if service_type.slug == ServiceType.WALK:
         if not slot:
             return False, False, "Slot is required for walk bookings."
         total, booked, available = get_walk_capacity(date, slot)
@@ -190,7 +230,7 @@ def check_availability(service_type, date, slot=None, admin_override=False):
             return False, True, f"All {total} walk slots are booked for {slot} on {date.strftime('%d %b')}. You can join the waitlist."
         return True, False, f"{available} of {total} slots available."
 
-    elif service_type.slug == 'drop-in':
+    elif service_type.slug == ServiceType.DROP_IN:
         if not slot:
             return False, False, "Slot is required for drop-in bookings."
         total, booked, available = get_drop_in_capacity(date, slot)
@@ -204,7 +244,7 @@ def check_availability(service_type, date, slot=None, admin_override=False):
             return False, True, f"All {total} drop-in slots are booked for {slot} on {date.strftime('%d %b')}. You can join the waitlist."
         return True, False, f"{available} of {total} slots available."
 
-    elif service_type.slug == 'day-care':
+    elif service_type.slug == ServiceType.DAY_CARE:
         total, booked, available = get_daycare_capacity(date)
         if available <= 0:
             return False, True, f"Day care is fully booked for {date.strftime('%d %b')} ({total} dogs max). You can join the waitlist."
