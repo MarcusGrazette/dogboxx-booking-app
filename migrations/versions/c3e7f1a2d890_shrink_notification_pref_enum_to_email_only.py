@@ -24,7 +24,8 @@ def upgrade():
         return  # SQLite has no named enum types
 
     # Recreate the enum with only 'email'.
-    # PostgreSQL doesn't support DROP VALUE, so: convert to text → normalise data → drop → recreate → cast back.
+    # Must drop the column default first — it references the type and blocks DROP TYPE.
+    op.execute("ALTER TABLE users ALTER COLUMN notification_preference DROP DEFAULT")
     op.execute("ALTER TABLE users ALTER COLUMN notification_preference TYPE VARCHAR(50)")
     op.execute("UPDATE users SET notification_preference = 'email' WHERE notification_preference != 'email'")
     op.execute("DROP TYPE notification_pref")
@@ -33,6 +34,7 @@ def upgrade():
         "ALTER TABLE users ALTER COLUMN notification_preference "
         "TYPE notification_pref USING notification_preference::notification_pref"
     )
+    op.execute("ALTER TABLE users ALTER COLUMN notification_preference SET DEFAULT 'email'::notification_pref")
 
 
 def downgrade():
@@ -40,6 +42,7 @@ def downgrade():
     if conn.dialect.name != 'postgresql':
         return
 
+    op.execute("ALTER TABLE users ALTER COLUMN notification_preference DROP DEFAULT")
     op.execute("ALTER TABLE users ALTER COLUMN notification_preference TYPE VARCHAR(50)")
     op.execute("DROP TYPE notification_pref")
     op.execute("CREATE TYPE notification_pref AS ENUM ('email', 'whatsapp', 'both')")
@@ -47,3 +50,4 @@ def downgrade():
         "ALTER TABLE users ALTER COLUMN notification_preference "
         "TYPE notification_pref USING notification_preference::notification_pref"
     )
+    op.execute("ALTER TABLE users ALTER COLUMN notification_preference SET DEFAULT 'email'::notification_pref")
