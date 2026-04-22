@@ -28,11 +28,11 @@
 .cal-weekend { color: #999; }
 .cal-today {
   font-weight: 700;
-  color: var(--bs-primary);
-  box-shadow: inset 0 0 0 2px var(--bs-primary);
+  color: #C0258F;
+  box-shadow: inset 0 0 0 2px #C0258F;
 }
 .cal-selected {
-  background: var(--bs-primary) !important;
+  background: #E02FAC !important;
   color: #fff !important;
   font-weight: 700;
 }
@@ -42,7 +42,7 @@
 }
 .cal-pending:hover { background: #ffe69c; }
 .cal-pending.cal-selected {
-  background: var(--bs-primary) !important;
+  background: #E02FAC !important;
   color: #fff !important;
 }
 .cal-confirmed {
@@ -51,7 +51,7 @@
 }
 .cal-confirmed:hover { background: #a3cfbb; }
 .cal-confirmed.cal-selected {
-  background: var(--bs-primary) !important;
+  background: #E02FAC !important;
   color: #fff !important;
 }
 .calendar-loading { top: 0; left: 0; }
@@ -62,6 +62,6 @@
 }
 .cal-pickup:hover { background: #f9c0df; }
 .cal-pickup.cal-selected {
-    background: var(--bs-primary) !important;
+    background: #E02FAC !important;
     color: #fff !important;
 }
