@@ -318,6 +318,7 @@ class Booking(db.Model):
             unique=True,
             postgresql_where=db.text("status NOT IN ('cancelled', 'rejected', 'completed')")
         ),
+        db.Index('ix_booking_date_slot_status', 'date', 'slot', 'status'),
     )
 
     # Named status groups — use these instead of inline string tuples

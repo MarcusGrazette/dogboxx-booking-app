@@ -545,20 +545,22 @@ def drop_in_board():
 @admin_required
 def pending_counts():
     """Return pending booking counts for sidebar badge updates."""
-    PENDING = ('requested', 'waitlisted')
-    gw = ServiceType.query.filter_by(slug=ServiceType.WALK).first()
-    di = ServiceType.query.filter_by(slug=ServiceType.DROP_IN).first()
-    group_walks = (
-        Booking.query
-        .filter(Booking.status.in_(PENDING), Booking.service_type_id == gw.id)
-        .count()
-    ) if gw else 0
-    drop_ins = (
-        Booking.query
-        .filter(Booking.status.in_(PENDING), Booking.service_type_id == di.id)
-        .count()
-    ) if di else 0
-    return jsonify(group_walks=group_walks, drop_ins=drop_ins)
+    from sqlalchemy import func
+    rows = (
+        db.session.query(ServiceType.slug, func.count(Booking.id))
+        .join(Booking, Booking.service_type_id == ServiceType.id)
+        .filter(
+            ServiceType.slug.in_([ServiceType.WALK, ServiceType.DROP_IN]),
+            Booking.status.in_(Booking.PENDING_STATUSES),
+        )
+        .group_by(ServiceType.slug)
+        .all()
+    )
+    counts = {slug: cnt for slug, cnt in rows}
+    return jsonify(
+        group_walks=counts.get(ServiceType.WALK, 0),
+        drop_ins=counts.get(ServiceType.DROP_IN, 0),
+    )
 
 
 @admin_bp.route("/api/drop-in-board-data/<date_str>")
@@ -628,7 +630,8 @@ def drop_in_board_data(date_str):
     all_board_walker_ids = set(walker_sched_slots.keys()) | set(walker_adhoc_slots.keys())
     walkers = (
         Walker.query.options(joinedload(Walker.user))
-        .filter(Walker.id.in_(all_board_walker_ids))
+        .join(User, Walker.user_id == User.id)
+        .filter(Walker.id.in_(all_board_walker_ids), User.active == True)
         .all()
     ) if all_board_walker_ids else []
 
@@ -723,7 +726,8 @@ def board_data(date_str):
     all_board_walker_ids = set(walker_sched_slots.keys()) | set(walker_adhoc_slots.keys())
     walkers = (
         Walker.query.options(joinedload(Walker.user))
-        .filter(Walker.id.in_(all_board_walker_ids))
+        .join(User, Walker.user_id == User.id)
+        .filter(Walker.id.in_(all_board_walker_ids), User.active == True)
         .all()
     ) if all_board_walker_ids else []
 
