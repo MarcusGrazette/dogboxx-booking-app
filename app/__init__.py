@@ -398,6 +398,14 @@ def create_app(config_name=None):
             app.logger.error(f'Health check failed: {e}')
             return '', 503
 
+    from flask_wtf.csrf import CSRFError
+
+    @app.errorhandler(CSRFError)
+    def handle_csrf_error(e):
+        from flask import flash, redirect, request, url_for
+        flash("Your session timed out — please try again.", "warning")
+        return redirect(request.referrer or url_for('auth.login'))
+
     @app.route('/sw.js')
     def service_worker():
         static_js = os.path.join(app.root_path, 'static', 'js')
