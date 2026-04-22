@@ -8,15 +8,18 @@
     .help-hero {
         background: #1B1B1B;
         color: #fff;
-        padding: 3rem 0 2.5rem;
+        padding: 2rem 0 1.75rem;
     }
     .help-hero h1 {
         font-size: clamp(1.6rem, 4vw, 2.4rem);
         font-weight: 800;
+        color: #fff;
+        margin-bottom: 0.5rem;
     }
     .help-hero .lead {
         color: #aaa;
         font-size: 1rem;
+        margin-bottom: 0;
     }
 
     /* ── Section anchors ─────────────────────────────────────────────── */
@@ -118,7 +121,7 @@
                 <p class="lead mb-0">Everything you need to know about using DogBoxx.</p>
             </div>
             {% if not current_user.is_authenticated %}
-            <div class="col-auto">
+            <div class="col-auto d-none d-md-block">
                 <a href="{{ url_for('auth.login') }}" class="btn btn-primary fw-semibold px-4">Sign in</a>
             </div>
             {% endif %}
