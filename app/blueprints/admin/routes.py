@@ -933,6 +933,38 @@ def assign_walker():
         return jsonify(success=False, message="Server error"), 500
 
 
+@admin_bp.route("/booking/<int:booking_id>/decline", methods=["POST"])
+@login_required
+@admin_required
+def decline_booking(booking_id):
+    """Decline a pending or waitlisted booking. Sets status to 'rejected' and notifies the client."""
+    booking = db.session.get(Booking, booking_id)
+    if not booking:
+        return jsonify(success=False, message="Booking not found"), 404
+    if booking.status not in Booking.PENDING_STATUSES:
+        return jsonify(success=False, message="Only pending or waitlisted bookings can be declined"), 400
+
+    booking.status = 'rejected'
+    booking.cancelled_at = datetime.now(timezone.utc)
+    booking.cancelled_by = 'admin'
+    db.session.commit()
+
+    service_label = 'drop-in' if (booking.service_type and booking.service_type.slug == ServiceType.DROP_IN) else 'walk'
+    dog_name = booking.dog.name if booking.dog else 'your dog'
+    date_str = booking.date.strftime('%a %-d %b')
+
+    create_notification(
+        recipient_id=booking.user_id,
+        notification_type='booking_cancelled',
+        title=f"{dog_name}'s {booking.slot.lower()} {service_label} on {date_str} has been declined",
+        body="Please contact us if you have any questions.",
+        link='/',
+        sender_id=current_user.id,
+    )
+
+    return jsonify(success=True)
+
+
 @admin_bp.route("/reorder_pickups", methods=["POST"])
 @login_required
 @admin_required

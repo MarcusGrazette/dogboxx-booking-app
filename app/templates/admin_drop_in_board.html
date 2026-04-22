@@ -13,6 +13,23 @@
 
 {% block main %}
 
+<!-- Decline confirmation modal -->
+<div class="modal fade" id="declineModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-body pt-4 pb-2 text-center">
+                <i class="bi bi-x-circle text-danger mb-2" style="font-size:1.75rem;"></i>
+                <p class="mb-0 fw-semibold" id="decline-modal-body">Decline this booking?</p>
+                <p class="text-muted small mt-1">The client will be notified.</p>
+            </div>
+            <div class="modal-footer border-0 justify-content-center gap-2 pt-0 pb-3">
+                <button type="button" class="btn btn-outline-secondary btn-sm px-4" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger btn-sm px-4" id="decline-confirm-btn">Decline</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row mb-3">
     <div class="{{ 'col-6' if is_mobile else 'col-3' }}">
         {{ calendar_widget('dropin-cal', config={
@@ -49,6 +66,7 @@
     const CSRF        = document.querySelector('meta[name="csrf-token"]')?.content;
     const ASSIGN_URL  = '{{ url_for("admin.assign_walker") }}';
     const REORDER_URL = '{{ url_for("admin.reorder_pickups") }}';
+    const DECLINE_URL = (id) => `/admin/booking/${id}/decline`;
 
     let state = {
         date: null,
@@ -97,6 +115,12 @@
                 ${b.status === 'waitlisted' ? '<span class="modifier-pill modifier-waitlisted" title="Waitlisted"><i class="bi bi-clock-history"></i></span>' : ''}
                 <span class="modifier-pill" style="background:#e8f4fd;color:#0c63e4;border:1px solid #9ec5fe;" title="Drop-in"><i class="bi bi-house-door-fill"></i></span>
                 <span class="slot-pill bg-${slotColor} bg-opacity-10 text-${slotColor} border border-${slotColor}">${b.slot === 'Morning' ? 'AM' : 'PM'}</span>
+                <button class="btn btn-link p-0 ms-1 text-muted decline-btn"
+                        data-id="${b.id}" data-dog="${escHtml(b.dog_name)}" data-slot="${b.slot}"
+                        title="Decline booking" style="font-size:0.9rem; opacity:0.55; line-height:1;"
+                        onclick="event.stopPropagation(); openDeclineModal(this)">
+                    <i class="bi bi-x-circle"></i>
+                </button>
             </div>`;
 
         el.addEventListener('click', () => selectBooking(b.id));
@@ -411,6 +435,45 @@
         document.body.appendChild(el);
         setTimeout(() => el.parentNode?.removeChild(el), 4000);
     }
+
+    // ── Decline booking ──────────────────────────────────────────────────────
+    function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    let _declineBookingId = null;
+    const declineModal = new bootstrap.Modal(document.getElementById('declineModal'));
+
+    function openDeclineModal(btn) {
+        _declineBookingId = parseInt(btn.dataset.id, 10);
+        const dog  = btn.dataset.dog;
+        const slot = btn.dataset.slot;
+        const date = state.date ? new Date(state.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : '';
+        document.getElementById('decline-modal-body').textContent =
+            `Decline ${dog}'s ${slot.toLowerCase()} drop-in on ${date}?`;
+        declineModal.show();
+    }
+
+    document.getElementById('decline-confirm-btn').addEventListener('click', async () => {
+        if (!_declineBookingId) return;
+        const id = _declineBookingId;
+        declineModal.hide();
+        try {
+            const res = await fetch(DECLINE_URL(id), {
+                method: 'POST',
+                headers: { 'X-CSRFToken': CSRF },
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.message || 'Could not decline');
+            state.pending = state.pending.filter(b => b.id !== id);
+            render();
+            refreshPendingBadges();
+            showToast('Booking declined.', 'success');
+        } catch (err) {
+            console.error(err);
+            showToast(err.message || 'Could not decline — please try again.', 'danger');
+        }
+    });
 
     // ── Calendar ──────────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', () => {
