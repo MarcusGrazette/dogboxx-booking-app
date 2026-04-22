@@ -148,9 +148,7 @@
                 </div>
 
             {% else %}
-                <a class="nav-link small fw-semibold lh-1" href="{{ url_for('auth.login') }}">
-                    <i class="bi bi-door-open me-1"></i>Log In
-                </a>
+                <a class="btn btn-primary btn-sm fw-semibold px-3" href="{{ url_for('auth.login') }}">Sign in</a>
             {% endif %}
 
         </div>

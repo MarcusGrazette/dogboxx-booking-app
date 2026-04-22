@@ -120,11 +120,6 @@
                 <h1>Help &amp; User Guide</h1>
                 <p class="lead mb-0">Everything you need to know about using DogBoxx.</p>
             </div>
-            {% if not current_user.is_authenticated %}
-            <div class="col-auto d-none d-md-block">
-                <a href="{{ url_for('auth.login') }}" class="btn btn-primary fw-semibold px-4">Sign in</a>
-            </div>
-            {% endif %}
         </div>
     </div>
 </div>
