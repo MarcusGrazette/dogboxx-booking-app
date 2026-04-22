@@ -179,10 +179,10 @@
 
     <footer class="mb-5 pt-2 pb-1 text-center">
         {% if current_user.is_authenticated %}
-        <button type="button" class="btn btn-link btn-sm text-muted p-0"
-                style="font-size:0.78rem;text-decoration:none;"
+        <button type="button" class="btn btn-link btn-sm p-0"
+                style="font-size:0.78rem;color:#6c757d;text-decoration:none;"
                 data-bs-toggle="modal" data-bs-target="#bugReportModal">
-            <i class="bi bi-bug me-1"></i>Something not working? Report a bug
+            <i class="bi bi-bug me-1"></i>Something not working? <span style="text-decoration:underline;text-underline-offset:2px;">Report a bug</span>.
         </button>
         {% endif %}
     </footer>
