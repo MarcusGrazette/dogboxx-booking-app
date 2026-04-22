@@ -24,6 +24,11 @@ from app.blueprints.client import client_bp
 from app.utils.notifications import create_notification
 
 
+@client_bp.route("/help")
+def help_page():
+    return render_template('help.html')
+
+
 def _maybe_auto_confirm(booking, dog, service_slug=ServiceType.WALK):
     """Try to auto-assign a walker to a newly-created 'requested' booking.
 
