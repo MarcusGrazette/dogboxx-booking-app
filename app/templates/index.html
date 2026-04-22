@@ -725,6 +725,7 @@
                     .then(data => {
                         if (data.success) {
                             const parts = [];
+                            if (data.confirmed) parts.push(`${data.confirmed} confirmed`);
                             if (data.created) parts.push(`${data.created} requested`);
                             if (data.waitlisted) parts.push(`${data.waitlisted} waitlisted`);
                             if (data.skipped) parts.push(`${data.skipped} skipped (already booked)`);

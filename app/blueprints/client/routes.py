@@ -14,7 +14,7 @@ from app import db, limiter
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
 from app.utils.uploads import process_dog_photo, process_cropped_photo
 from app.utils.booking_access import get_accessible_dog_ids, user_can_access_booking
-from app.capacity import check_availability, get_slot_availability_summary, auto_assign_walker
+from app.capacity import check_availability, get_slot_availability_summary, auto_assign_walker, get_walker_slot_count
 from app.forms import OnboardingForm, BookingForm, ProfileForm
 import logging
 import traceback
@@ -1607,7 +1607,7 @@ def recurring_booking():
             return jsonify(success=False, message="Drop-ins cannot use the 'Both' slot"), 400
 
         active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
-        created = waitlisted = skipped = 0
+        confirmed = created = waitlisted = skipped = 0
 
         slots_to_book = ['Morning', 'Afternoon'] if slot == 'Both' else [slot]
 
@@ -1634,49 +1634,69 @@ def recurring_booking():
                     skipped += 1
                     continue
 
-                if is_drop_in:
-                    # No capacity rules for drop-ins currently
-                    status = 'requested'
-                else:
-                    available, can_waitlist, _ = check_availability(default_service, d, s)
-                    if not available and not can_waitlist:
-                        skipped += 1
-                        continue
-                    status = 'requested' if available else 'waitlisted'
+                available, can_waitlist, _ = check_availability(default_service, d, s)
+                if not available and not can_waitlist:
+                    skipped += 1
+                    continue
+                status = 'requested' if available else 'waitlisted'
 
-                db.session.add(Booking(
+                booking = Booking(
                     user_id=current_user.id,
                     dog_id=dog.id,
                     service_type_id=default_service.id,
                     date=d,
                     slot=s,
                     status=status,
-                ))
+                )
+                db.session.add(booking)
+
                 if status == 'waitlisted':
                     waitlisted += 1
+                elif not is_drop_in:
+                    # Try to auto-assign a walker, same as single bookings
+                    walker = auto_assign_walker(d, s, service_slug=service_slug)
+                    if walker:
+                        booking.walker_id    = walker.id
+                        booking.status       = 'confirmed'
+                        booking.confirmed_at = datetime.now(timezone.utc)
+                        booking.pickup_order = get_walker_slot_count(walker.id, d, s, service_slug=service_slug)
+                        confirmed += 1
+                    else:
+                        created += 1
                 else:
                     created += 1
 
         db.session.commit()
 
-        # Notify admins once for the whole batch
-        total = created + waitlisted
-        if total > 0:
+        freq_label    = 'daily' if frequency == 'daily' else 'weekly'
+        slot_label    = 'AM + PM' if slot == 'Both' else slot
+        service_label = 'drop-ins' if is_drop_in else 'walks'
+
+        # Single client notification summarising auto-confirmed bookings
+        if confirmed > 0:
+            create_notification(
+                recipient_id=current_user.id,
+                notification_type='booking_confirmed',
+                title=f'{confirmed} recurring {service_label} confirmed',
+                body=f'Your {freq_label} {slot_label} {service_label} for {dog.name} have been booked.',
+                link='/bookings',
+            )
+
+        # Single admin notification for anything still pending / waitlisted
+        pending_total = created + waitlisted
+        if pending_total > 0:
             admins = User.query.filter_by(is_admin=True).all()
-            freq_label = 'daily' if frequency == 'daily' else 'weekly'
-            slot_label = 'AM + PM' if slot == 'Both' else slot
-            service_label = 'drop-ins' if is_drop_in else 'walks'
             for admin in admins:
                 create_notification(
                     recipient_id=admin.id,
                     notification_type='booking_requested',
-                    title=f'Recurring booking request — {total} {service_label}',
+                    title=f'Recurring booking request — {pending_total} {service_label}',
                     body=f'{current_user.firstname} requested {freq_label} {slot_label} {service_label} for {dog.name}',
                     link='/admin',
                     sender_id=current_user.id,
                 )
 
-        return jsonify(success=True, created=created, waitlisted=waitlisted, skipped=skipped)
+        return jsonify(success=True, confirmed=confirmed, created=created, waitlisted=waitlisted, skipped=skipped)
 
     except Exception as e:
         db.session.rollback()
