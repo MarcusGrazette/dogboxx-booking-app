@@ -1018,38 +1018,36 @@ def calendar_data(year, month):
     except ValueError:
         return jsonify(success=False, message="Invalid date"), 400
         
+    service_slug = request.args.get('service')
+
     # Get bookings for the month
-    bookings = Booking.query.filter(
+    q = Booking.query.filter(
         Booking.date >= start_date,
         Booking.date < end_date,
         Booking.status != 'cancelled'
-    ).all()
-    
+    )
+    if service_slug:
+        q = q.join(ServiceType).filter(ServiceType.slug == service_slug)
+    bookings = q.all()
+
     # Group by date
     booking_counts = {}
-    pending_dates = set()  # Use a set to track unique dates with pending bookings
-    
+    pending_dates = set()
+
     for booking in bookings:
         date_str = booking.date.strftime('%Y-%m-%d')
-        date_day = booking.date.day  # Extract just the day number
-        
+        date_day = booking.date.day
+
         if date_str not in booking_counts:
-            booking_counts[date_str] = {
-                'total': 0,
-                'assigned': 0
-            }
+            booking_counts[date_str] = {'total': 0, 'assigned': 0}
         booking_counts[date_str]['total'] += 1
-        
+
         if booking.walker_id:
             booking_counts[date_str]['assigned'] += 1
         elif booking.status == 'requested':
-            # Track dates with pending bookings
             pending_dates.add(date_day)
-    
-    # Convert the set to a list for JSON serialization
-    pending_dates_list = list(pending_dates)
-    
-    return jsonify(success=True, data=booking_counts, pending_dates=pending_dates_list)
+
+    return jsonify(success=True, data=booking_counts, pending_dates=list(pending_dates))
 
 
 def _get_slot_color(slot):

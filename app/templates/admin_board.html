@@ -679,7 +679,7 @@
         const cal = createCalendar('board-cal', {
             onMonthChange(year, month) {
                 const baseUrl = '{{ url_for("admin.calendar_data", year=0, month=0) }}';
-                fetch(baseUrl.replace('/0/0', `/${year}/${month}`))
+                fetch(baseUrl.replace('/0/0', `/${year}/${month}`) + '?service=group-walk')
                     .then(r => r.json())
                     .then(data => {
                         if (!data.success) return;

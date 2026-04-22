@@ -479,7 +479,22 @@
     document.addEventListener('DOMContentLoaded', () => {
         const todayStr = new Date().toISOString().slice(0, 10);
 
+        const calDataBase = '{{ url_for("admin.calendar_data", year=0, month=0) }}';
+
         const cal = createCalendar('dropin-cal', {
+            onMonthChange(year, month) {
+                fetch(calDataBase.replace('/0/0', `/${year}/${month}`) + '?service=drop-in')
+                    .then(r => r.json())
+                    .then(data => {
+                        if (!data.success) return;
+                        const highlighted = {};
+                        data.pending_dates.forEach(d => {
+                            const ds = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                            highlighted[ds] = { type: 'pending' };
+                        });
+                        cal.setHighlightedDates(highlighted);
+                    });
+            },
             onDateClick(year, month, day, dateStr) {
                 loadBoard(dateStr);
             }
