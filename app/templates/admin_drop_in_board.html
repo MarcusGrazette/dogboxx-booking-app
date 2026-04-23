@@ -7,6 +7,10 @@
 
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin-board.css') }}">
+{% if not is_mobile %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+{% endif %}
 {% endblock %}
 
 {% block page_actions %}{% endblock %}
@@ -22,14 +26,38 @@
             'autoSelectToday': true
         }, show_loading=false, footer_text='Highlighted days have pending bookings.') }}
     </div>
+    {% if not is_mobile %}<div class="col-9">
+        <div class="card mb-0" id="week-chart-card">
+            <div class="card-body d-flex flex-column py-3">
+                <div class="d-flex align-items-center justify-content-between mb-1">
+                    <span class="fw-semibold small text-muted" id="week-chart-title">—</span>
+                    <div class="d-flex gap-3" style="font-size: 0.75rem; color: #555;">
+                        <span>
+                            <span class="d-inline-block rounded-1 me-1 align-middle" style="width:11px;height:11px;background:#E02FAC;"></span>Confirmed
+                        </span>
+                        <span>
+                            <span class="d-inline-block rounded-1 me-1 align-middle" style="width:11px;height:11px;background:#1B1B1B;"></span>Pending
+                        </span>
+                        <span>
+                            <span class="d-inline-block rounded-1 me-1 align-middle border border-dark" style="width:11px;height:11px;background:#fff;"></span>Waitlisted
+                        </span>
+                        <span class="text-muted">↑ AM &nbsp; ↑ PM</span>
+                    </div>
+                </div>
+                <div class="flex-grow-1" style="min-height: 0; position: relative;">
+                    <canvas id="weekChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>{% endif %}
 </div>
 
-<!-- Selection hint bar -->
+<!-- Selection hint bar — always visible; grey idle state, pink active state -->
 <div id="selection-hint" class="alert d-flex align-items-center gap-2 py-2 mb-3"
-     style="display:none !important; font-size:0.88rem; background:#fce8f6; border-color:#C0258F; color:#7a0057;">
-    <i class="bi bi-cursor-fill" style="color:#C0258F;"></i>
-    <span id="hint-text">Select a dog, then click a walker slot to assign</span>
-    <button class="btn btn-sm ms-auto py-0" id="hint-deselect"
+     style="font-size:0.88rem; background:#f8f9fa; border-color:#dee2e6; color:#6c757d;">
+    <i class="bi bi-cursor" id="hint-icon"></i>
+    <span id="hint-text">Select a dog to assign</span>
+    <button class="btn btn-sm ms-auto py-0 d-none" id="hint-deselect"
             style="border-color:#C0258F; color:#C0258F;">Cancel</button>
 </div>
 
@@ -39,6 +67,23 @@
     Select a date from the calendar
 </div>
 <div id="board-columns" style="display:none;"></div>
+
+<!-- Slot override confirmation modal -->
+<div class="modal fade" id="slotOverrideModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-body pt-4 pb-2 text-center">
+                <i class="bi bi-arrow-left-right text-warning mb-2" style="font-size:1.75rem;"></i>
+                <p class="mb-0 fw-semibold">Change booking slot?</p>
+                <p class="text-muted small mt-1" id="slot-override-body"></p>
+            </div>
+            <div class="modal-footer border-0 justify-content-center gap-2 pt-0 pb-3">
+                <button type="button" class="btn btn-outline-secondary btn-sm px-4" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning btn-sm px-4" id="slot-override-confirm-btn">Change slot</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Decline confirmation modal -->
 <div class="modal fade" id="declineModal" tabindex="-1" aria-hidden="true">
@@ -78,6 +123,133 @@
                   title="Drop-in"><i class="bi bi-house-door-fill"></i></span>
         </div>`;
 
+    {% if not is_mobile %}
+    // ── Week chart ────────────────────────────────────────────────────────────
+    Chart.register(ChartDataLabels);
+
+    let weekChart         = null;
+    let weekIsWeekend     = [];
+    let weekSelectedIndex = null;
+
+    const PINK  = '#E02FAC';
+    const DARK  = '#1B1B1B';
+    const WHITE = '#ffffff';
+
+    const highlightPlugin = {
+        id: 'selectedHighlight',
+        beforeDraw(chart) {
+            const idx = chart.options.plugins.selectedHighlight?.index;
+            if (idx == null) return;
+            const { ctx: c, chartArea, scales } = chart;
+            const barWidth = (chartArea.right - chartArea.left) / chart.data.labels.length;
+            const xPx = scales.x.getPixelForValue(idx);
+            c.save();
+            c.fillStyle = 'rgba(192,37,143,0.08)';
+            c.fillRect(xPx - barWidth / 2, chartArea.top, barWidth, chartArea.bottom - chartArea.top);
+            c.restore();
+        }
+    };
+
+    function makeWeekDatasets(d) {
+        return [
+            { label: 'AM Confirmed',  stack: 'morning',   data: d.morning_confirmed,    backgroundColor: PINK,  borderRadius: 2 },
+            { label: 'AM Pending',    stack: 'morning',   data: d.morning_pending,      backgroundColor: DARK,  borderRadius: 2 },
+            { label: 'AM Waitlisted', stack: 'morning',   data: d.morning_waitlisted,   backgroundColor: WHITE, borderColor: DARK, borderWidth: 1, borderRadius: 2 },
+            { label: 'PM Confirmed',  stack: 'afternoon', data: d.afternoon_confirmed,  backgroundColor: PINK,  borderRadius: 2 },
+            { label: 'PM Pending',    stack: 'afternoon', data: d.afternoon_pending,    backgroundColor: DARK,  borderRadius: 2 },
+            { label: 'PM Waitlisted', stack: 'afternoon', data: d.afternoon_waitlisted, backgroundColor: WHITE, borderColor: DARK, borderWidth: 1, borderRadius: 2 },
+        ];
+    }
+
+    async function loadWeekChart(dateStr) {
+        try {
+            const resp = await fetch(`/admin/api/board-chart-data?date=${dateStr}&service=drop-in`);
+            const d    = await resp.json();
+
+            weekIsWeekend     = d.is_weekend;
+            weekSelectedIndex = d.selected_index;
+
+            const ws  = new Date(d.week_start + 'T00:00:00');
+            const we  = new Date(d.week_end   + 'T00:00:00');
+            const fmt = dt => dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+            document.getElementById('week-chart-title').textContent = `${fmt(ws)} – ${fmt(we)}`;
+
+            const tickFont  = ctx => ({
+                size:   weekIsWeekend[ctx.index] ? 9 : 11,
+                weight: ctx.index === weekSelectedIndex ? 'bold' : 'normal',
+            });
+            const tickColor = ctx =>
+                ctx.index === weekSelectedIndex ? '#C0258F'
+                : weekIsWeekend[ctx.index]      ? '#ccc'
+                : '#555';
+
+            if (weekChart) {
+                weekChart.data.labels   = d.labels;
+                weekChart.data.datasets = makeWeekDatasets(d);
+                weekChart.options.plugins.selectedHighlight = { index: weekSelectedIndex };
+                weekChart.options.scales.x.ticks.font  = tickFont;
+                weekChart.options.scales.x.ticks.color = tickColor;
+                weekChart.update();
+                return;
+            }
+
+            const canvas = document.getElementById('weekChart');
+            if (!canvas) return;
+
+            weekChart = new Chart(canvas, {
+                type: 'bar',
+                data: { labels: d.labels, datasets: makeWeekDatasets(d) },
+                plugins: [highlightPlugin],
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 500 },
+                    plugins: {
+                        legend:    { display: false },
+                        tooltip:   { enabled: false },
+                        selectedHighlight: { index: weekSelectedIndex },
+                        datalabels: {
+                            display:   ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+                            color:     ctx => ctx.datasetIndex % 3 === 2 ? '#1B1B1B' : '#ffffff',
+                            font:      { size: 10, weight: 'bold' },
+                            formatter: val => val,
+                            clip:      true,
+                        },
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            grid:    { display: false },
+                            ticks:   { font: tickFont, color: tickColor },
+                        },
+                        y: {
+                            stacked:     true,
+                            beginAtZero: true,
+                            ticks:       { stepSize: 2, precision: 0 },
+                            grid:        { color: 'rgba(0,0,0,0.05)' },
+                        },
+                    },
+                },
+            });
+        } catch (err) {
+            console.error('Week chart load failed:', err);
+        }
+    }
+
+    function syncChartHeight() {
+        const calCard   = document.querySelector('.calendar-component');
+        const chartCard = document.getElementById('week-chart-card');
+        if (calCard && chartCard) chartCard.style.height = calCard.offsetHeight + 'px';
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        requestAnimationFrame(() => requestAnimationFrame(syncChartHeight));
+        window.addEventListener('resize', syncChartHeight);
+    });
+    {% else %}
+    function loadWeekChart() {}
+    {% endif %}
+
     initBoard({
         assignUrl:      '{{ url_for("admin.assign_walker") }}',
         reorderUrl:     '{{ url_for("admin.reorder_pickups") }}',
@@ -90,6 +262,9 @@
         declineLabel:   'drop-in',
         makePendingCardBadges:  () => DROP_IN_BADGE_PENDING,
         makeAssignedCardBadges: () => DROP_IN_BADGE_ASSIGNED,
+        onAfterAssign:   loadWeekChart,
+        onAfterUnassign: loadWeekChart,
+        onDateSelect:    loadWeekChart,
     });
 
 }());

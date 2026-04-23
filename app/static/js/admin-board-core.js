@@ -286,16 +286,31 @@
         }
 
         function updateSelectionUI() {
-            const hint     = document.getElementById('selection-hint');
-            const hintText = document.getElementById('hint-text');
+            const hint       = document.getElementById('selection-hint');
+            const hintText   = document.getElementById('hint-text');
+            const hintIcon   = document.getElementById('hint-icon');
+            const cancelBtn  = document.getElementById('hint-deselect');
             if (state.selectedId) {
                 const b = findBooking(state.selectedId);
-                hint.style.removeProperty('display');
-                hintText.textContent = b
+                // Active state — brand pink
+                hint.style.background   = '#fce8f6';
+                hint.style.borderColor  = '#C0258F';
+                hint.style.color        = '#7a0057';
+                hintIcon.className      = 'bi bi-cursor-fill';
+                hintIcon.style.color    = '#C0258F';
+                hintText.textContent    = b
                     ? `${b.dog_name} selected — click a walker's ${b.slot} slot to assign${b.walker_id ? ', or click again to unassign' : ''}`
                     : 'Click a walker slot to assign';
+                cancelBtn.classList.remove('d-none');
             } else {
-                hint.style.setProperty('display', 'none', 'important');
+                // Idle state — neutral grey
+                hint.style.background   = '#f8f9fa';
+                hint.style.borderColor  = '#dee2e6';
+                hint.style.color        = '#6c757d';
+                hintIcon.className      = 'bi bi-cursor';
+                hintIcon.style.color    = '';
+                hintText.textContent    = 'Select a dog to assign';
+                cancelBtn.classList.add('d-none');
             }
         }
 
@@ -305,8 +320,20 @@
             updateSelectionUI();
         });
 
+        // ── Slot override modal ───────────────────────────────────────────────
+        let _slotOverride = null;
+        const slotOverrideModal = new bootstrap.Modal(document.getElementById('slotOverrideModal'));
+
+        document.getElementById('slot-override-confirm-btn').addEventListener('click', async () => {
+            if (!_slotOverride) return;
+            const { bookingId, walkerId, slot } = _slotOverride;
+            _slotOverride = null;
+            slotOverrideModal.hide();
+            await doAssign(bookingId, walkerId, slot, true);
+        });
+
         // ── API calls ──────────────────────────────────────────────────────────
-        async function assignCard(bookingId, walkerId, slot) {
+        async function doAssign(bookingId, walkerId, slot, slotOverride = false) {
             const booking = findBooking(bookingId);
             if (!booking) return;
 
@@ -324,7 +351,7 @@
                 const res  = await fetch(cfg.assignUrl, {
                     method:  'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
-                    body:    JSON.stringify({ booking_id: bookingId, walker_id: walkerId, slot }),
+                    body:    JSON.stringify({ booking_id: bookingId, walker_id: walkerId, slot, slot_override: slotOverride }),
                 });
                 const data = await res.json();
                 if (!data.success) throw new Error(data.message || 'Assignment failed');
@@ -336,6 +363,30 @@
                 render();
                 showToast(err.message || 'Could not assign — please try again.', 'danger');
             }
+        }
+
+        async function assignCard(bookingId, walkerId, slot) {
+            const booking = findBooking(bookingId);
+            if (!booking) return;
+
+            if (booking.slot !== slot) {
+                // Cross-slot assignment — confirm first
+                _slotOverride = { bookingId, walkerId, slot };
+                const dateLabel = state.date
+                    ? new Date(state.date + 'T00:00:00').toLocaleDateString('en-GB', {
+                        weekday: 'short', day: 'numeric', month: 'short'
+                      })
+                    : '';
+                document.getElementById('slot-override-body').innerHTML =
+                    `<strong>${escHtml(booking.dog_name)}</strong> was booked for `
+                    + `<strong>${escHtml(booking.slot)}</strong> but you're assigning them to a `
+                    + `<strong>${escHtml(slot)}</strong> slot on ${escHtml(dateLabel)}. `
+                    + `The client will be notified of the change.`;
+                slotOverrideModal.show();
+                return;
+            }
+
+            await doAssign(bookingId, walkerId, slot);
         }
 
         async function unassignCard(bookingId) {

@@ -343,7 +343,7 @@ class TestBookDropIn:
         assert resp.status_code == 409
         data = resp.get_json()
         assert data['success'] is False
-        assert 'already booked' in data['message']
+        assert 'already has a' in data['message']
 
     def test_no_drop_in_service_returns_503(self, app, client):
         """If no active drop-in ServiceType exists, return 503."""

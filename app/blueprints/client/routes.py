@@ -233,13 +233,14 @@ def index():
                 errors.append(str(e))
 
         if not errors:
-            # Prevent duplicate booking: same dog + date + slot (only active bookings)
+            # Prevent duplicate booking: same dog + date + slot (any service type)
             active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
+            walk_service = ServiceType.query.filter_by(slug=ServiceType.WALK, active=True).first()
             existing = Booking.query.filter(
                 Booking.dog_id == dog_id,
                 Booking.date == booking_date,
                 Booking.slot == booking_slot,
-                Booking.status.in_(active_statuses)
+                Booking.status.in_(active_statuses),
             ).first()
             if existing:
                 errors.append("This dog already has a booking for that slot on that date.")
@@ -265,11 +266,10 @@ def index():
                     OperationalError: "Our booking system is temporarily unavailable. Please try again later."
                 }
             ):
-                # Look up default service type by slug
-                default_service = ServiceType.query.filter_by(slug=ServiceType.WALK, active=True).first()
-                if not default_service:
+                if not walk_service:
                     flash("No service type available. Please contact support.", "danger")
                     return redirect(url_for("client.index"))
+                default_service = walk_service
 
                 # Check capacity before creating booking
                 available, can_waitlist, capacity_msg = check_availability(
@@ -372,16 +372,21 @@ def book():
         return jsonify({'success': False, 'message': str(e)}), 400
     dog_id = dog.id
 
-    # ── Duplicate / cap checks ────────────────────────────────────────────────
+    # ── Service type + duplicate / cap checks ────────────────────────────────
+    default_service = ServiceType.query.filter_by(slug=ServiceType.WALK, active=True).first()
+    if not default_service:
+        return jsonify({'success': False, 'message': 'No service type available. Please contact support.'}), 500
+
     active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
     existing = Booking.query.filter(
-        Booking.dog_id   == dog_id,
-        Booking.date     == booking_date,
-        Booking.slot     == booking_slot,
+        Booking.dog_id == dog_id,
+        Booking.date   == booking_date,
+        Booking.slot   == booking_slot,
         Booking.status.in_(active_statuses),
     ).first()
     if existing:
-        return jsonify({'success': False, 'message': 'This dog already has a booking for that slot on that date.'}), 409
+        svc_label = existing.service_type.name.lower() if existing.service_type else 'booking'
+        return jsonify({'success': False, 'message': f'{dog.name} already has a {svc_label} booked for that slot.'}), 409
 
     day_count = Booking.query.filter(
         Booking.dog_id == dog_id,
@@ -393,10 +398,6 @@ def book():
 
     # ── Capacity check + create ───────────────────────────────────────────────
     try:
-        default_service = ServiceType.query.filter_by(slug=ServiceType.WALK, active=True).first()
-        if not default_service:
-            return jsonify({'success': False, 'message': 'No service type available. Please contact support.'}), 500
-
         available, can_waitlist, capacity_msg = check_availability(default_service, booking_date, booking_slot)
 
         if not available and not can_waitlist:
@@ -507,11 +508,12 @@ def book_both():
         return jsonify({'success': False, 'message': 'No service type available.'}), 500
 
     active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
+
     created = []   # (slot, status, booking_obj)
     skipped = []   # slot names skipped (duplicate / no walkers)
 
     for slot in ('Morning', 'Afternoon'):
-        # Skip if already booked for this slot
+        # Skip if any active booking already exists for this slot (any service type)
         if Booking.query.filter(
             Booking.dog_id == dog_id,
             Booking.date   == booking_date,
@@ -648,17 +650,17 @@ def book_drop_in():
     if not drop_in_service:
         return jsonify({'success': False, 'message': 'Drop-in service is not currently available.'}), 503
 
-    # Prevent duplicate
+    # Prevent duplicate (any service type for this slot)
     active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
     existing = Booking.query.filter(
-        Booking.dog_id   == dog_id,
-        Booking.date     == booking_date,
-        Booking.slot     == booking_slot,
+        Booking.dog_id == dog_id,
+        Booking.date   == booking_date,
+        Booking.slot   == booking_slot,
         Booking.status.in_(active_statuses),
-        Booking.service_type_id == drop_in_service.id,
     ).first()
     if existing:
-        return jsonify({'success': False, 'message': 'A drop-in is already booked for that slot.'}), 409
+        svc_label = existing.service_type.name.lower() if existing.service_type else 'booking'
+        return jsonify({'success': False, 'message': f'{dog.name} already has a {svc_label} booked for that slot.'}), 409
 
     available, can_waitlist, capacity_msg = _check(drop_in_service, booking_date, booking_slot)
     if not available and not can_waitlist:
@@ -1613,12 +1615,13 @@ def recurring_booking():
 
         for d in target_dates:
             for s in slots_to_book:
-                # Skip duplicates
+                # Skip duplicates for the same service type only
                 existing = Booking.query.filter(
-                    Booking.dog_id == dog.id,
-                    Booking.date == d,
-                    Booking.slot == s,
-                    Booking.status.in_(active_statuses)
+                    Booking.dog_id          == dog.id,
+                    Booking.date            == d,
+                    Booking.slot            == s,
+                    Booking.status.in_(active_statuses),
+                    Booking.service_type_id == default_service.id,
                 ).first()
                 if existing:
                     skipped += 1

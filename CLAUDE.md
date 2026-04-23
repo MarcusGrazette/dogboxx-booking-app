@@ -52,7 +52,8 @@ app/
 config.py       Dev / Test / Production config classes
 migrations/     Alembic migration files
 seed.py         Base seed data
-seed_demo_bookings.py  Demo booking data for presentations
+seed_demo_bookings.py  Legacy demo seed
+seed_may_demo.py       Demo bookings for May 18–29 2026: 10 walks/slot/weekday (randomised ±2) + 3–5 drop-ins/day
 ```
 
 ---
@@ -202,6 +203,8 @@ flask seed-service-types  # seed Group Walk / Drop In / Day Care service types (
 - **Client profile DOB/allergies**: clients can edit these on `/profile`; name/gender/breed remain admin-managed (hidden form fields round-trip the values).
 - **CSV import dog gender**: CSV accepts `M`/`F`; must be mapped to `male`/`female` before writing to the `Dog` model (PostgreSQL enum). Already fixed in `csv_import_confirm`.
 - **`ClientCreateForm` dog validation**: name + gender required together if either is provided; DOB is optional.
+- **Slot override in `assign_walker`**: POST accepts `slot_override: true` (JSON boolean) to bypass the walker schedule check and allow assigning a booking to a different slot than booked. The route captures `old_slot` before updating and sends a `system` notification to the client if the slot changed. A pre-commit conflict check (409) guards against the case where the dog already has an active booking for the target slot.
+- **Cross-service duplicate bookings**: a partial unique index on `(dog_id, date, slot)` for active bookings means a dog cannot have two bookings in the same slot regardless of service type. The booking flow treats any same-slot duplicate as an error with a descriptive message (e.g. "Fido already has a drop in booked for that slot") — no override UX.
 
 ---
 

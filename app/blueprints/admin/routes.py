@@ -223,11 +223,15 @@ def chart_data():
 @login_required
 @admin_required
 def board_chart_data():
-    """Return 7-day booking chart data for the week (Mon–Sun) containing ?date=YYYY-MM-DD."""
+    """Return 7-day booking chart data for the week (Mon–Sun) containing ?date=YYYY-MM-DD.
+
+    Optional ?service=group-walk|drop-in filters by service type.
+    """
     from datetime import date, timedelta
     from sqlalchemy import func
 
-    date_str = request.args.get('date')
+    date_str    = request.args.get('date')
+    service_slug = request.args.get('service')
     try:
         selected = date.fromisoformat(date_str)
     except (TypeError, ValueError):
@@ -246,14 +250,19 @@ def board_chart_data():
     chart_days = [week_start + timedelta(days=i) for i in range(5)]
     chart_end  = chart_days[-1]
 
+    q = Booking.query.filter(
+        Booking.date >= week_start,
+        Booking.date <= chart_end,
+        Booking.status.in_(Booking.ACTIVE_STATUSES),
+        Booking.slot.in_(['Morning', 'Afternoon']),
+    )
+    if service_slug:
+        svc = ServiceType.query.filter_by(slug=service_slug, active=True).first()
+        if svc:
+            q = q.filter(Booking.service_type_id == svc.id)
+
     chart_bookings = (
-        Booking.query
-        .filter(
-            Booking.date >= week_start,
-            Booking.date <= chart_end,
-            Booking.status.in_(Booking.ACTIVE_STATUSES),
-            Booking.slot.in_(['Morning', 'Afternoon']),
-        )
+        q
         .with_entities(
             Booking.date,
             Booking.slot,
@@ -818,7 +827,8 @@ def assign_walker():
     data = request.get_json(silent=True) or request.form
     booking_id = data.get("booking_id")
     walker_id = data.get("walker_id")
-    slot = data.get("slot")  # New parameter for slot assignment
+    slot = data.get("slot")
+    slot_override = bool(data.get("slot_override"))
 
     try:
         if not booking_id:
@@ -850,17 +860,18 @@ def assign_walker():
         if not walker:
             return jsonify(success=False, message="Walker not found"), 404
 
-        # Check walker is scheduled for this date+slot
+        # Check walker is scheduled for this date+slot (skip if admin explicitly overriding slot)
         assign_slot = slot or booking.slot
         day_of_week = booking.date.weekday()
-        schedule_exists = WalkerSchedule.query.filter_by(
-            walker_id=walker.id,
-            day_of_week=day_of_week,
-            slot=assign_slot,
-            active=True
-        ).first()
-        if not schedule_exists:
-            return jsonify(success=False, message=f"{walker.user.firstname} is not scheduled for {assign_slot} on this day"), 400
+        if not slot_override:
+            schedule_exists = WalkerSchedule.query.filter_by(
+                walker_id=walker.id,
+                day_of_week=day_of_week,
+                slot=assign_slot,
+                active=True
+            ).first()
+            if not schedule_exists:
+                return jsonify(success=False, message=f"{walker.user.firstname} is not scheduled for {assign_slot} on this day"), 400
 
         # Check walker capacity for the given slot and date (scoped to same service type)
         if slot:
@@ -878,6 +889,22 @@ def assign_walker():
             if same_slot_bookings >= max_capacity:
                 return jsonify(success=False, message=f"Walker already has maximum bookings ({max_capacity}) for {slot} slot"), 400
 
+        # If slot is being overridden, check the dog doesn't already have an active booking for the target slot
+        old_slot = booking.slot
+        if slot_override and slot and old_slot != slot:
+            conflict = Booking.query.filter(
+                Booking.dog_id == booking.dog_id,
+                Booking.date == booking.date,
+                Booking.slot == slot,
+                Booking.status.in_(Booking.CAPACITY_STATUSES),
+                Booking.id != booking.id,
+            ).first()
+            if conflict:
+                return jsonify(
+                    success=False,
+                    message=f"{booking.dog.name} already has an active {slot.lower()} booking on this date"
+                ), 409
+
         # Update walker assignment and slot
         booking.walker_id = walker.id
         booking.status = 'confirmed'
@@ -889,14 +916,27 @@ def assign_walker():
         dog_name = booking.dog.name if booking.dog else 'your dog'
         service_label = 'drop-in visit' if (booking.service_type and booking.service_type.slug == ServiceType.DROP_IN) else 'walk'
 
-        create_notification(
-            recipient_id=booking.user_id,
-            notification_type='booking_confirmed',
-            title=f"{dog_name}'s {service_label} on {date_str_fmt} has been confirmed",
-            body=booking.slot,
-            link=f'/bookings/{booking.id}',
-            sender_id=current_user.id,
-        )
+        # Send slot-change notification if the slot was overridden
+        if slot_override and old_slot and slot and old_slot != slot:
+            create_notification(
+                recipient_id=booking.user_id,
+                notification_type='system',
+                title=f"{dog_name}'s {service_label} on {date_str_fmt} has been moved to {slot}",
+                body=f'Originally booked for {old_slot}',
+                link=f'/bookings/{booking.id}',
+                sender_id=current_user.id,
+            )
+
+        slot_was_changed = slot_override and old_slot and slot and old_slot != slot
+        if not slot_was_changed:
+            create_notification(
+                recipient_id=booking.user_id,
+                notification_type='booking_confirmed',
+                title=f"{dog_name}'s {service_label} on {date_str_fmt} has been confirmed",
+                body=booking.slot,
+                link=f'/bookings/{booking.id}',
+                sender_id=current_user.id,
+            )
 
         create_notification(
             recipient_id=walker.user_id,
