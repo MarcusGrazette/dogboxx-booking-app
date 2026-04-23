@@ -217,6 +217,7 @@
     }
 
     function decrementBadge(n) {
+        // External bell badge
         const badge = document.getElementById('notif-badge');
         if (!badge) return;
         const next = Math.max(0, (parseInt(badge.textContent) || 0) - n);
@@ -226,6 +227,19 @@
             badge.textContent = next > 99 ? '99+' : next;
         }
         syncAppBadge(next);
+
+        // Header badge inside the dropdown ("Notifications 3")
+        const headerBadge = document.querySelector('#notification-bell .dropdown-menu .fw-bold .badge');
+        if (headerBadge) {
+            const headerNext = Math.max(0, (parseInt(headerBadge.textContent) || 0) - n);
+            if (headerNext <= 0) {
+                headerBadge.remove();
+                const markAllBtn = document.getElementById('mark-all-read-btn');
+                if (markAllBtn) markAllBtn.remove();
+            } else {
+                headerBadge.textContent = String(headerNext);
+            }
+        }
     }
 
     function incrementBadge(n) {
