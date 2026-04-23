@@ -27,9 +27,6 @@
             <span class="fw-bold text-white small">
                 <i class="bi bi-bell-fill me-1" style="color:#E02FAC;"></i>
                 Notifications
-                {% if unread_notification_count > 0 %}
-                <span class="badge ms-1" style="background:#E02FAC;">{{ unread_notification_count }}</span>
-                {% endif %}
             </span>
             {% if unread_notification_count > 0 %}
             <button class="btn btn-link btn-sm text-white p-0 text-decoration-none"
@@ -217,29 +214,14 @@
     }
 
     function decrementBadge(n) {
-        // External bell badge
         const badge = document.getElementById('notif-badge');
         if (!badge) return;
         const next = Math.max(0, (parseInt(badge.textContent) || 0) - n);
+        badge.textContent = next > 99 ? '99+' : String(next);
         if (next <= 0) {
             badge.classList.add('d-none');
-        } else {
-            badge.textContent = next > 99 ? '99+' : next;
         }
         syncAppBadge(next);
-
-        // Header badge inside the dropdown ("Notifications 3")
-        const headerBadge = document.querySelector('#notification-bell .dropdown-menu .fw-bold .badge');
-        if (headerBadge) {
-            const headerNext = Math.max(0, (parseInt(headerBadge.textContent) || 0) - n);
-            if (headerNext <= 0) {
-                headerBadge.remove();
-                const markAllBtn = document.getElementById('mark-all-read-btn');
-                if (markAllBtn) markAllBtn.remove();
-            } else {
-                headerBadge.textContent = String(headerNext);
-            }
-        }
     }
 
     function incrementBadge(n) {
@@ -259,13 +241,9 @@
             el.remove();
         });
         const badge = document.getElementById('notif-badge');
-        if (badge) badge.classList.add('d-none');
-        // Remove header badge count + "mark all" button
-        const headerBadge = document.querySelector('#notification-bell .dropdown-menu .fw-bold .badge');
-        if (headerBadge) headerBadge.remove();
+        if (badge) { badge.textContent = '0'; badge.classList.add('d-none'); }
         const btn = document.getElementById('mark-all-read-btn');
         if (btn) btn.remove();
-        // Clear the PWA home screen badge
         syncAppBadge(0);
     }
 
@@ -285,7 +263,6 @@
             const d = JSON.parse(e.data);
             incrementBadge(1);
             prependNotification(d);
-            updateHeaderUnreadCount(1);
         });
 
         // A read event from another surface
@@ -347,15 +324,6 @@
             panel.insertBefore(item, footer);
         } else {
             panel.appendChild(item);
-        }
-    }
-
-    function updateHeaderUnreadCount(delta) {
-        // Update the count badge in the dropdown header
-        const headerBadge = document.querySelector('#notification-bell .dropdown-menu .fw-bold .badge');
-        if (headerBadge) {
-            const next = (parseInt(headerBadge.textContent) || 0) + delta;
-            headerBadge.textContent = next;
         }
     }
 
