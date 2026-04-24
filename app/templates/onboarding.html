@@ -5,14 +5,8 @@ Complete Your Profile
 {% endblock %}
 
 {% block head_extra %}
-<!-- FilePond plugins CSS -->
-<link href="https://unpkg.com/filepond-plugin-image-preview/dist/filepond-plugin-image-preview.css" rel="stylesheet" />
-<link href="https://unpkg.com/filepond/dist/filepond.css" rel="stylesheet" />
-<!-- FilePond plugins JS -->
-<script src="https://unpkg.com/filepond-plugin-image-preview/dist/filepond-plugin-image-preview.js"></script>
-<script src="https://unpkg.com/filepond-plugin-file-validate-type/dist/filepond-plugin-file-validate-type.js"></script>
-<script src="https://unpkg.com/filepond-plugin-image-crop/dist/filepond-plugin-image-crop.js"></script>
-<script src="https://unpkg.com/filepond/dist/filepond.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js" defer></script>
 {% endblock %}
 
 {% block main %}
@@ -26,20 +20,30 @@ Complete Your Profile
                     <p class="text-muted">Your account is set up — we just need a couple more details before you can start booking.</p>
                 </div>
 
-                <!-- Progress indicator -->
+                {% if not has_address %}
                 <div class="mb-4">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <small id="progress-step" class="text-muted">Part 1 of 2</small>
                         <small id="progress-text" class="text-muted">Your address</small>
                     </div>
                     <div class="progress" style="height: 4px;">
-                        <div class="progress-bar" role="progressbar" style="width: 50%"></div>
+                        <div class="progress-bar" id="progress-bar" role="progressbar" style="width: 50%"></div>
                     </div>
                 </div>
+                {% endif %}
 
-                <!-- Single form encompassing both steps -->
                 <form action="{{ url_for('client.onboard') }}" method="post" novalidate id="onboardingForm" enctype="multipart/form-data">
                     {{ form.hidden_tag() }}
+
+                    {% if has_address %}
+                    {# Address already provided by admin — pass through as hidden so DataRequired validators pass #}
+                    <input type="hidden" name="address_line_1" value="{{ form.address_line_1.data or '' }}">
+                    <input type="hidden" name="address_line_2" value="{{ form.address_line_2.data or '' }}">
+                    <input type="hidden" name="address_line_3" value="{{ form.address_line_3.data or '' }}">
+                    <input type="hidden" name="postcode" value="{{ form.postcode.data or '' }}">
+                    <input type="hidden" name="maps_url" value="{{ form.maps_url.data or '' }}">
+                    <input type="hidden" name="pickup_instructions" value="{{ form.pickup_instructions.data or '' }}">
+                    {% else %}
 
                     <!-- Part 1: Address -->
                     <div id="step-1">
@@ -64,9 +68,8 @@ Complete Your Profile
                             {% endfor %}
                         </div>
 
-                        <!-- Pickup instructions -->
                         <div class="mb-4">
-                            {{ form.pickup_instructions.label(class="text-start")}}
+                            {{ form.pickup_instructions.label(class="text-start") }}
                             {{ form.pickup_instructions(autocomplete="off", class="form-control") }}
                             {% for error in form.pickup_instructions.errors %}
                             <div class="text-danger small">{{ error }}</div>
@@ -81,8 +84,10 @@ Complete Your Profile
 
                     </div>
 
-                    <!-- Part 2: Dog information -->
-                    <div id="step-2" style="display: none;">
+                    {% endif %}
+
+                    <!-- Part 2: Dog information (shown immediately if address already provided) -->
+                    <div id="step-2" {% if not has_address %}style="display: none;"{% endif %}>
 
                         <div class="card mb-4">
                             <div class="card-header">
@@ -110,9 +115,6 @@ Complete Your Profile
                                     <span class="input-group-text"><i class="bi bi-heart fs-5 text-secondary"></i></span>
                                     {{ form.dog_breed(class="form-control", placeholder="Breed") }}
                                 </div>
-                                {% for error in form.dog_breed.errors %}
-                                <div class="text-danger small mb-1">{{ error }}</div>
-                                {% endfor %}
 
                                 <div class="mb-3">
                                     <div class="input-group">
@@ -122,7 +124,7 @@ Complete Your Profile
                                     {% for error in form.dog_dob.errors %}
                                     <div class="text-danger small mt-1">{{ error }}</div>
                                     {% endfor %}
-                                    <div class="form-text">Date of birth (approximate is fine)</div>
+                                    <div class="form-text">Date of birth (optional — approximate is fine)</div>
                                 </div>
                             </div>
                         </div>
@@ -146,9 +148,31 @@ Complete Your Profile
                             <div class="card-header">
                                 <h5 class="mb-0"><i class="bi bi-camera"></i> Photo</h5>
                             </div>
-                            <div class="card-body">
-                                <p class="text-muted small mb-2">Upload a photo of your dog</p>
-                                <input type="file" name="file" id="filepond-input" accept="image/*">
+                            <div class="card-body text-center">
+                                <p class="text-muted small mb-3">Add a photo so the team recognises your dog on the street.</p>
+
+                                <div id="photo-zone" style="position:relative; display:inline-block; cursor:pointer; margin-bottom:0.5rem;">
+                                    {% if existing_dog and existing_dog.pic %}
+                                    <img id="photo-preview"
+                                         src="{{ url_for('static', filename='uploads/dogs/' ~ existing_dog.pic) }}"
+                                         alt="{{ existing_dog.name }}"
+                                         style="width:120px; height:120px; border-radius:50%; object-fit:cover; border:3px solid #E02FAC;">
+                                    {% else %}
+                                    <div id="photo-preview-placeholder"
+                                         style="width:120px; height:120px; border-radius:50%; background:#f5f5f5; display:flex; align-items:center; justify-content:center; border:2px dashed #dee2e6;">
+                                        <i class="bi bi-camera fs-2 text-secondary"></i>
+                                    </div>
+                                    {% endif %}
+                                    <div style="position:absolute; bottom:4px; right:4px; width:28px; height:28px; border-radius:50%; background:#E02FAC; display:flex; align-items:center; justify-content:center;">
+                                        <i class="bi bi-pencil-fill text-white" style="font-size:0.65rem;"></i>
+                                    </div>
+                                </div>
+                                <div class="text-muted small">Tap to add a photo</div>
+
+                                {# Picker: triggers file dialog, not submitted with the form #}
+                                <input type="file" id="photo-picker" accept="image/*" style="display:none">
+                                {# Submit input: receives the cropped blob via DataTransfer #}
+                                <input type="file" id="photo-submit" name="file" style="display:none">
                             </div>
                         </div>
 
@@ -164,46 +188,65 @@ Complete Your Profile
     </div>
 </div>
 
+{# ── Crop modal (same pattern as /profile) ─────────────────────────────────── #}
+<div class="modal fade" id="cropModal" tabindex="-1" aria-labelledby="cropModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:360px;">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-1">
+                <h6 class="modal-title fw-bold" id="cropModalLabel">
+                    <i class="bi bi-crop me-1"></i>Adjust photo
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div style="height:300px; background:#1B1B1B; border-radius:0.5rem; overflow:hidden;">
+                    <img id="crop-image" src="" alt="Crop preview"
+                         style="max-width:100%; display:block; opacity:0;">
+                </div>
+                <p class="text-muted small text-center mt-2 mb-0">
+                    <i class="bi bi-arrows-move me-1"></i>Drag to reposition &nbsp;·&nbsp;
+                    <i class="bi bi-zoom-in me-1"></i>Pinch to zoom
+                </p>
+            </div>
+            <div class="modal-footer border-0 pt-1">
+                <button type="button" class="btn btn-outline-secondary btn-sm"
+                        data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm fw-semibold" id="crop-save-btn">
+                    Save photo
+                    <span id="crop-spinner" class="spinner-border spinner-border-sm ms-1"
+                          role="status" style="display:none;"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+document.addEventListener('DOMContentLoaded', function () {
+
+    // ── Two-step navigation (only active when address step is shown) ──────────
+    {% if not has_address %}
+    const nextBtn   = document.getElementById('nextBtn');
+    const step1     = document.getElementById('step-1');
+    const step2     = document.getElementById('step-2');
+    const progressBar  = document.getElementById('progress-bar');
+    const progressStep = document.getElementById('progress-step');
+    const progressText = document.getElementById('progress-text');
+
     function showError(message) {
         const alertDiv = document.createElement('div');
         alertDiv.className = 'alert alert-danger alert-dismissible fade show';
-        alertDiv.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-        const progressDiv = document.querySelector('.progress').parentElement;
-        progressDiv.insertAdjacentElement('afterend', alertDiv);
-        setTimeout(() => { if (alertDiv.parentElement) alertDiv.remove(); }, 5000);
+        alertDiv.innerHTML = message + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+        const progressEl = document.querySelector('.progress');
+        if (progressEl) progressEl.parentElement.insertAdjacentElement('afterend', alertDiv);
+        setTimeout(function () { if (alertDiv.parentElement) alertDiv.remove(); }, 5000);
     }
 
-    document.addEventListener('DOMContentLoaded', function () {
-        // Initialize FilePond
-        FilePond.registerPlugin(
-            FilePondPluginImagePreview,
-            FilePondPluginFileValidateType,
-            FilePondPluginImageCrop
-        );
-
-        FilePond.create(document.getElementById('filepond-input'), {
-            allowMultiple: false,
-            acceptedFileTypes: ['image/*'],
-            imageCropAspectRatio: '1:1',
-            styleItemPanelAspectRatio: 1,
-            storeAsFile: true,
-            credits: false,
-            labelIdle: '<i class="bi bi-cloud-upload fs-3"></i><br>Drag & drop or <span class="filepond--label-action">browse</span>'
-        });
-
-        // Part 1 → Part 2 transition
-        const nextButton = document.getElementById('nextBtn');
-        const step1 = document.getElementById('step-1');
-        const step2 = document.getElementById('step-2');
-
-        nextButton.addEventListener('click', function (e) {
+    if (nextBtn) {
+        nextBtn.addEventListener('click', function (e) {
             e.preventDefault();
-            const addr1 = document.getElementById('address_line_1');
-            const postcode = document.getElementById('postcode');
+            const addr1     = document.getElementById('address_line_1');
+            const postcode  = document.getElementById('postcode');
             if (!addr1 || !addr1.value.trim()) {
                 showError('Please enter your street address.');
                 if (addr1) addr1.focus();
@@ -216,21 +259,124 @@ Complete Your Profile
             }
             step1.style.display = 'none';
             step2.style.display = 'block';
-            document.querySelector('.progress-bar').style.width = '100%';
-            document.getElementById('progress-step').textContent = 'Part 2 of 2';
-            document.getElementById('progress-text').textContent = 'Your dog';
+            if (progressBar)  progressBar.style.width  = '100%';
+            if (progressStep) progressStep.textContent = 'Part 2 of 2';
+            if (progressText) progressText.textContent = 'Your dog';
         });
+    }
+    {% endif %}
 
-        // Handle form submission
-        const onboardingForm = document.getElementById('onboardingForm');
-        onboardingForm.addEventListener('submit', function (e) {
-            const submitBtn = onboardingForm.querySelector('input[type="submit"]');
-            if (submitBtn) {
-                submitBtn.disabled = true;
-                submitBtn.value = 'Saving...';
-            }
-        });
+    // ── Cropper.js photo upload ───────────────────────────────────────────────
+    // Flow: tap photo circle → file picker → crop modal → Save →
+    //   getCroppedCanvas.toBlob() → DataTransfer injects blob into #photo-submit
+    //   → form submits the cropped file via multipart POST (server unchanged)
+
+    const photoZone    = document.getElementById('photo-zone');
+    const photoPicker  = document.getElementById('photo-picker');
+    const photoSubmit  = document.getElementById('photo-submit');
+    const cropImageEl  = document.getElementById('crop-image');
+    const cropSaveBtn  = document.getElementById('crop-save-btn');
+    const cropSpinner  = document.getElementById('crop-spinner');
+
+    if (!photoZone) return;
+
+    let cropper   = null;
+    let cropModal = null;
+
+    function getCropModal() {
+        if (!cropModal) cropModal = new bootstrap.Modal(document.getElementById('cropModal'));
+        return cropModal;
+    }
+
+    photoZone.addEventListener('click', function () {
+        photoPicker.value = '';
+        photoPicker.click();
     });
+
+    photoPicker.addEventListener('change', function () {
+        const file = this.files[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            alert('Please choose an image file (JPG, PNG, etc.).');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            if (cropper) { cropper.destroy(); cropper = null; }
+            cropImageEl.src = e.target.result;
+            cropImageEl.style.opacity = '1';
+            getCropModal().show();
+
+            document.getElementById('cropModal').addEventListener('shown.bs.modal', function initCropper() {
+                cropper = new Cropper(cropImageEl, {
+                    aspectRatio: 1,
+                    viewMode: 1,
+                    dragMode: 'move',
+                    autoCropArea: 0.85,
+                    cropBoxMovable: false,
+                    cropBoxResizable: false,
+                    toggleDragModeOnDblClick: false,
+                    guides: false,
+                    center: false,
+                    highlight: false,
+                    background: false,
+                    responsive: true,
+                    restore: false,
+                    minContainerHeight: 300,
+                });
+            }, { once: true });
+        };
+        reader.readAsDataURL(file);
+    });
+
+    cropSaveBtn.addEventListener('click', function () {
+        if (!cropper) return;
+        cropSaveBtn.disabled = true;
+        cropSpinner.style.display = 'inline-block';
+
+        cropper.getCroppedCanvas({ width: 400, height: 400 }).toBlob(function (blob) {
+            // Inject the cropped blob into the form's file input
+            const dt = new DataTransfer();
+            dt.items.add(new File([blob], 'photo.jpg', { type: 'image/jpeg' }));
+            photoSubmit.files = dt.files;
+
+            // Update the preview circle in-place
+            const previewUrl = URL.createObjectURL(blob);
+            const existingImg = document.getElementById('photo-preview');
+            const placeholder = document.getElementById('photo-preview-placeholder');
+            if (existingImg) {
+                existingImg.src = previewUrl;
+            } else if (placeholder) {
+                const img = document.createElement('img');
+                img.id = 'photo-preview';
+                img.alt = 'Dog photo';
+                img.src = previewUrl;
+                img.style.cssText = 'width:120px; height:120px; border-radius:50%; object-fit:cover; border:3px solid #E02FAC;';
+                placeholder.replaceWith(img);
+            }
+
+            getCropModal().hide();
+            cropSaveBtn.disabled = false;
+            cropSpinner.style.display = 'none';
+        }, 'image/jpeg', 0.88);
+    });
+
+    document.getElementById('cropModal').addEventListener('hidden.bs.modal', function () {
+        if (cropper) { cropper.destroy(); cropper = null; }
+        cropImageEl.src = '';
+        cropImageEl.style.opacity = '0';
+    });
+
+    // Disable submit button on form submission to prevent double-submit
+    document.getElementById('onboardingForm').addEventListener('submit', function () {
+        const submitBtn = this.querySelector('[type="submit"]');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.value = 'Saving...';
+        }
+    });
+});
 </script>
 
 {% endblock %}
