@@ -28,13 +28,11 @@
                 <i class="bi bi-bell-fill me-1" style="color:#E02FAC;"></i>
                 Notifications
             </span>
-            {% if unread_notification_count > 0 %}
-            <button class="btn btn-link btn-sm text-white p-0 text-decoration-none"
+            <button class="btn btn-link btn-sm text-white p-0 text-decoration-none{{ ' d-none' if unread_notification_count == 0 else '' }}"
                     style="font-size:0.72rem; opacity:0.7;"
                     id="mark-all-read-btn" type="button">
                 Mark all read
             </button>
-            {% endif %}
         </div>
 
         {# Notification list #}
@@ -172,16 +170,14 @@
             const id = this.dataset.notifId;
             if (!id) return;
             const wasUnread = item.classList.contains('notif-dropdown-unread');
+            // Clear local highlight immediately for instant feedback.
+            // Badge decrement is handled by the SSE read_one event to avoid double-counting.
+            if (wasUnread) clearUnreadItem(item);
             fetch('/notifications/' + id + '/read', {
                 method: 'POST',
                 headers: {
                     'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content,
                     'X-Requested-With': 'XMLHttpRequest',
-                }
-            }).then(function() {
-                if (wasUnread) {
-                    clearUnreadItem(item);
-                    decrementBadge(1);
                 }
             });
         });
@@ -220,6 +216,8 @@
         badge.textContent = next > 99 ? '99+' : String(next);
         if (next <= 0) {
             badge.classList.add('d-none');
+            const btn = document.getElementById('mark-all-read-btn');
+            if (btn) btn.classList.add('d-none');
         }
         syncAppBadge(next);
     }
@@ -230,6 +228,8 @@
         const next = (parseInt(badge.textContent) || 0) + n;
         badge.textContent = next > 99 ? '99+' : next;
         badge.classList.remove('d-none');
+        const btn = document.getElementById('mark-all-read-btn');
+        if (btn) btn.classList.remove('d-none');
         syncAppBadge(next);
     }
 
@@ -243,7 +243,7 @@
         const badge = document.getElementById('notif-badge');
         if (badge) { badge.textContent = '0'; badge.classList.add('d-none'); }
         const btn = document.getElementById('mark-all-read-btn');
-        if (btn) btn.remove();
+        if (btn) btn.classList.add('d-none');
         syncAppBadge(0);
     }
 

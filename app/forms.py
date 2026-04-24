@@ -122,7 +122,7 @@ class OnboardingForm(FlaskForm):
 
     dog_dob = DateField(
         'Date of Birth',
-        validators=[DataRequired(message="Please enter your dog's date of birth")]
+        validators=[Optional()]
     )
     
     submit = SubmitField("Next")

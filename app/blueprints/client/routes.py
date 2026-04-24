@@ -1180,6 +1180,9 @@ def onboard():
     existing_dog_owner = DogOwner.query.filter_by(user_id=current_user.id, role='primary').first()
     existing_dog = db.session.get(Dog, existing_dog_owner.dog_id) if existing_dog_owner else None
 
+    has_address = bool(client and client.street_address)
+    has_dog_info = bool(existing_dog and existing_dog.name and existing_dog.gender)
+
     form = OnboardingForm()
 
     if form.validate_on_submit():
@@ -1211,11 +1214,11 @@ def onboard():
                 except ValueError as e:
                     logging.error(f"Invalid file upload: {e}")
                     flash(f"Upload error: {str(e)}. Please try a different file.", "error")
-                    return render_template("onboarding.html", form=form, existing_dog=existing_dog, today=datetime.now().strftime('%Y-%m-%d'))
+                    return render_template("onboarding.html", form=form, existing_dog=existing_dog, has_address=has_address, has_dog_info=has_dog_info, today=datetime.now().strftime('%Y-%m-%d'))
                 except Exception as e:
                     logging.error(f"Error processing uploaded file: {e}")
                     flash("There was an error processing your image. Please try a different file.", "error")
-                    return render_template("onboarding.html", form=form, existing_dog=existing_dog, today=datetime.now().strftime('%Y-%m-%d'))
+                    return render_template("onboarding.html", form=form, existing_dog=existing_dog, has_address=has_address, has_dog_info=has_dog_info, today=datetime.now().strftime('%Y-%m-%d'))
 
             # Dog: update existing record if admin already created one, else create fresh
             dog_name = form.dog_name.data.strip()
@@ -1287,7 +1290,7 @@ def onboard():
             form.dog_dob.data = existing_dog.date_of_birth
             form.dog_allergies.data = existing_dog.allergies
 
-    return render_template("onboarding.html", form=form, existing_dog=existing_dog, today=datetime.now().strftime('%Y-%m-%d'))
+    return render_template("onboarding.html", form=form, existing_dog=existing_dog, has_address=has_address, has_dog_info=has_dog_info, today=datetime.now().strftime('%Y-%m-%d'))
 
 
 @client_bp.route("/pause-walks/preview")
