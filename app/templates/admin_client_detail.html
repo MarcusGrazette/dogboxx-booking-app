@@ -359,7 +359,7 @@
                             {% for e in add_dog_form.dog_gender.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
                         </div>
                         <div class="col-sm-6">
-                            <label class="form-label fw-semibold" for="add_dog_dob">Date of birth <span class="text-danger">*</span></label>
+                            <label class="form-label fw-semibold" for="add_dog_dob">Date of birth</label>
                             {{ add_dog_form.dog_dob(class="form-control" + (" is-invalid" if add_dog_form.dog_dob.errors else ""), id="add_dog_dob") }}
                             {% for e in add_dog_form.dog_dob.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
                         </div>

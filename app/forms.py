@@ -350,7 +350,7 @@ class AddDogForm(FlaskForm):
     )
     dog_dob = DateField(
         'Date of Birth',
-        validators=[DataRequired(message="Date of birth is required")]
+        validators=[Optional()]
     )
     dog_breed = StringField('Breed', validators=[Optional()])
     dog_allergies = TextAreaField(

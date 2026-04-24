@@ -1362,7 +1362,7 @@ def new_client():
             db.session.flush()  # get client.id
 
             # Create Dog record if core dog fields are present
-            has_dog = bool(form.dog_name.data and form.dog_gender.data and form.dog_dob.data)
+            has_dog = bool(form.dog_name.data and form.dog_name.data.strip() and form.dog_gender.data)
             if has_dog:
                 new_dog = Dog(
                     name=form.dog_name.data.strip(),
@@ -1450,7 +1450,7 @@ def edit_client(client_id):
                 client.postal_code = None
             client.maps_url = form.maps_url.data.strip() if form.maps_url.data else None
 
-            has_dog = bool(form.dog_name.data and form.dog_gender.data and form.dog_dob.data)
+            has_dog = bool(form.dog_name.data and form.dog_name.data.strip() and form.dog_gender.data)
             pickup_notes = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
             if has_dog:
                 if dog:
