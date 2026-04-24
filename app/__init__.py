@@ -335,24 +335,22 @@ def create_app(config_name=None):
         """Inject pending booking counts for sidebar badges (admin only)."""
         from flask_login import current_user
         if current_user.is_authenticated and current_user.is_admin:
+            from sqlalchemy import func
             from app.models import Booking, ServiceType
-            gw = ServiceType.query.filter_by(slug=ServiceType.WALK).first()
-            di = ServiceType.query.filter_by(slug=ServiceType.DROP_IN).first()
-            pending_group_walks = (
-                Booking.query
-                .filter(Booking.status.in_(Booking.PENDING_STATUSES),
-                        Booking.service_type_id == gw.id)
-                .count()
-            ) if gw else 0
-            pending_drop_ins = (
-                Booking.query
-                .filter(Booking.status.in_(Booking.PENDING_STATUSES),
-                        Booking.service_type_id == di.id)
-                .count()
-            ) if di else 0
+            rows = (
+                db.session.query(ServiceType.slug, func.count(Booking.id))
+                .join(Booking, Booking.service_type_id == ServiceType.id)
+                .filter(
+                    ServiceType.slug.in_([ServiceType.WALK, ServiceType.DROP_IN]),
+                    Booking.status.in_(Booking.PENDING_STATUSES),
+                )
+                .group_by(ServiceType.slug)
+                .all()
+            )
+            counts = {slug: cnt for slug, cnt in rows}
             return dict(
-                pending_group_walks=pending_group_walks,
-                pending_drop_ins=pending_drop_ins,
+                pending_group_walks=counts.get(ServiceType.WALK, 0),
+                pending_drop_ins=counts.get(ServiceType.DROP_IN, 0),
             )
         return dict(pending_group_walks=0, pending_drop_ins=0)
 
@@ -397,6 +395,14 @@ def create_app(config_name=None):
         except Exception as e:
             app.logger.error(f'Health check failed: {e}')
             return '', 503
+
+    from flask_wtf.csrf import CSRFError
+
+    @app.errorhandler(CSRFError)
+    def handle_csrf_error(e):
+        from flask import flash, redirect, request, url_for
+        flash("Your session timed out — please try again.", "warning")
+        return redirect(request.referrer or url_for('auth.login'))
 
     @app.route('/sw.js')
     def service_worker():

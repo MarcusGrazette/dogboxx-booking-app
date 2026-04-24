@@ -265,3 +265,5 @@ def unsubscribe(token):
         flash("Something went wrong. Please try again.", "error")
 
     return redirect(url_for('auth.login'))
+
+

@@ -102,15 +102,6 @@
                         {% endfor %}
                     </div>
 
-                    <div class="mb-3 mt-3">
-                        <label class="form-label fw-semibold small">Access instructions</label>
-                        {{ form.pickup_instructions(class="form-control") }}
-                        {% for error in form.pickup_instructions.errors %}
-                        <div class="text-danger small mt-1">{{ error }}</div>
-                        {% endfor %}
-                        <div class="form-text">Door codes, concierge notes, fiddly keys, or special pickup/drop-off instructions.</div>
-                    </div>
-
                     <div class="mb-1">
                         <label class="form-label fw-semibold small">Google Maps pin URL</label>
                         <div class="input-group">
@@ -165,7 +156,7 @@
                     <p class="text-muted small mb-3">
                         Add the dog's details now and they'll be there when the client first logs in.
                         If you leave this blank the client will add it during onboarding.
-                        Name, gender, and date of birth are all required together.
+                        Name and gender are required to save dog info; date of birth is optional.
                     </p>
 
                     <div class="row g-3 mb-3">
@@ -212,12 +203,21 @@
                         </div>
                     </div>
 
-                    <div class="mb-1">
+                    <div class="mb-3">
                         <label class="form-label fw-semibold small">Allergies / health notes</label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="bi bi-bandaid text-secondary"></i></span>
                             {{ form.dog_allergies(class="form-control") }}
                         </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Access / pickup instructions</label>
+                        {{ form.pickup_instructions(class="form-control") }}
+                        {% for error in form.pickup_instructions.errors %}
+                        <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
+                        <div class="form-text">Door codes, concierge notes, fiddly keys, or special pickup/drop-off instructions.</div>
                     </div>
 
                     <div class="mb-1">

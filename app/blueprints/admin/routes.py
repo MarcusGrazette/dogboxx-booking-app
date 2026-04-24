@@ -223,11 +223,15 @@ def chart_data():
 @login_required
 @admin_required
 def board_chart_data():
-    """Return 7-day booking chart data for the week (Mon–Sun) containing ?date=YYYY-MM-DD."""
+    """Return 7-day booking chart data for the week (Mon–Sun) containing ?date=YYYY-MM-DD.
+
+    Optional ?service=group-walk|drop-in filters by service type.
+    """
     from datetime import date, timedelta
     from sqlalchemy import func
 
-    date_str = request.args.get('date')
+    date_str    = request.args.get('date')
+    service_slug = request.args.get('service')
     try:
         selected = date.fromisoformat(date_str)
     except (TypeError, ValueError):
@@ -246,14 +250,19 @@ def board_chart_data():
     chart_days = [week_start + timedelta(days=i) for i in range(5)]
     chart_end  = chart_days[-1]
 
+    q = Booking.query.filter(
+        Booking.date >= week_start,
+        Booking.date <= chart_end,
+        Booking.status.in_(Booking.ACTIVE_STATUSES),
+        Booking.slot.in_(['Morning', 'Afternoon']),
+    )
+    if service_slug:
+        svc = ServiceType.query.filter_by(slug=service_slug, active=True).first()
+        if svc:
+            q = q.filter(Booking.service_type_id == svc.id)
+
     chart_bookings = (
-        Booking.query
-        .filter(
-            Booking.date >= week_start,
-            Booking.date <= chart_end,
-            Booking.status.in_(Booking.ACTIVE_STATUSES),
-            Booking.slot.in_(['Morning', 'Afternoon']),
-        )
+        q
         .with_entities(
             Booking.date,
             Booking.slot,
@@ -545,20 +554,22 @@ def drop_in_board():
 @admin_required
 def pending_counts():
     """Return pending booking counts for sidebar badge updates."""
-    PENDING = ('requested', 'waitlisted')
-    gw = ServiceType.query.filter_by(slug=ServiceType.WALK).first()
-    di = ServiceType.query.filter_by(slug=ServiceType.DROP_IN).first()
-    group_walks = (
-        Booking.query
-        .filter(Booking.status.in_(PENDING), Booking.service_type_id == gw.id)
-        .count()
-    ) if gw else 0
-    drop_ins = (
-        Booking.query
-        .filter(Booking.status.in_(PENDING), Booking.service_type_id == di.id)
-        .count()
-    ) if di else 0
-    return jsonify(group_walks=group_walks, drop_ins=drop_ins)
+    from sqlalchemy import func
+    rows = (
+        db.session.query(ServiceType.slug, func.count(Booking.id))
+        .join(Booking, Booking.service_type_id == ServiceType.id)
+        .filter(
+            ServiceType.slug.in_([ServiceType.WALK, ServiceType.DROP_IN]),
+            Booking.status.in_(Booking.PENDING_STATUSES),
+        )
+        .group_by(ServiceType.slug)
+        .all()
+    )
+    counts = {slug: cnt for slug, cnt in rows}
+    return jsonify(
+        group_walks=counts.get(ServiceType.WALK, 0),
+        drop_ins=counts.get(ServiceType.DROP_IN, 0),
+    )
 
 
 @admin_bp.route("/api/drop-in-board-data/<date_str>")
@@ -628,7 +639,8 @@ def drop_in_board_data(date_str):
     all_board_walker_ids = set(walker_sched_slots.keys()) | set(walker_adhoc_slots.keys())
     walkers = (
         Walker.query.options(joinedload(Walker.user))
-        .filter(Walker.id.in_(all_board_walker_ids))
+        .join(User, Walker.user_id == User.id)
+        .filter(Walker.id.in_(all_board_walker_ids), User.active == True)
         .all()
     ) if all_board_walker_ids else []
 
@@ -723,7 +735,8 @@ def board_data(date_str):
     all_board_walker_ids = set(walker_sched_slots.keys()) | set(walker_adhoc_slots.keys())
     walkers = (
         Walker.query.options(joinedload(Walker.user))
-        .filter(Walker.id.in_(all_board_walker_ids))
+        .join(User, Walker.user_id == User.id)
+        .filter(Walker.id.in_(all_board_walker_ids), User.active == True)
         .all()
     ) if all_board_walker_ids else []
 
@@ -814,7 +827,8 @@ def assign_walker():
     data = request.get_json(silent=True) or request.form
     booking_id = data.get("booking_id")
     walker_id = data.get("walker_id")
-    slot = data.get("slot")  # New parameter for slot assignment
+    slot = data.get("slot")
+    slot_override = bool(data.get("slot_override"))
 
     try:
         if not booking_id:
@@ -846,17 +860,18 @@ def assign_walker():
         if not walker:
             return jsonify(success=False, message="Walker not found"), 404
 
-        # Check walker is scheduled for this date+slot
+        # Check walker is scheduled for this date+slot (skip if admin explicitly overriding slot)
         assign_slot = slot or booking.slot
         day_of_week = booking.date.weekday()
-        schedule_exists = WalkerSchedule.query.filter_by(
-            walker_id=walker.id,
-            day_of_week=day_of_week,
-            slot=assign_slot,
-            active=True
-        ).first()
-        if not schedule_exists:
-            return jsonify(success=False, message=f"{walker.user.firstname} is not scheduled for {assign_slot} on this day"), 400
+        if not slot_override:
+            schedule_exists = WalkerSchedule.query.filter_by(
+                walker_id=walker.id,
+                day_of_week=day_of_week,
+                slot=assign_slot,
+                active=True
+            ).first()
+            if not schedule_exists:
+                return jsonify(success=False, message=f"{walker.user.firstname} is not scheduled for {assign_slot} on this day"), 400
 
         # Check walker capacity for the given slot and date (scoped to same service type)
         if slot:
@@ -874,6 +889,22 @@ def assign_walker():
             if same_slot_bookings >= max_capacity:
                 return jsonify(success=False, message=f"Walker already has maximum bookings ({max_capacity}) for {slot} slot"), 400
 
+        # If slot is being overridden, check the dog doesn't already have an active booking for the target slot
+        old_slot = booking.slot
+        if slot_override and slot and old_slot != slot:
+            conflict = Booking.query.filter(
+                Booking.dog_id == booking.dog_id,
+                Booking.date == booking.date,
+                Booking.slot == slot,
+                Booking.status.in_(Booking.CAPACITY_STATUSES),
+                Booking.id != booking.id,
+            ).first()
+            if conflict:
+                return jsonify(
+                    success=False,
+                    message=f"{booking.dog.name} already has an active {slot.lower()} booking on this date"
+                ), 409
+
         # Update walker assignment and slot
         booking.walker_id = walker.id
         booking.status = 'confirmed'
@@ -885,14 +916,27 @@ def assign_walker():
         dog_name = booking.dog.name if booking.dog else 'your dog'
         service_label = 'drop-in visit' if (booking.service_type and booking.service_type.slug == ServiceType.DROP_IN) else 'walk'
 
-        create_notification(
-            recipient_id=booking.user_id,
-            notification_type='booking_confirmed',
-            title=f"{dog_name}'s {service_label} on {date_str_fmt} has been confirmed",
-            body=booking.slot,
-            link=f'/bookings/{booking.id}',
-            sender_id=current_user.id,
-        )
+        # Send slot-change notification if the slot was overridden
+        if slot_override and old_slot and slot and old_slot != slot:
+            create_notification(
+                recipient_id=booking.user_id,
+                notification_type='system',
+                title=f"{dog_name}'s {service_label} on {date_str_fmt} has been moved to {slot}",
+                body=f'Originally booked for {old_slot}',
+                link=f'/bookings/{booking.id}',
+                sender_id=current_user.id,
+            )
+
+        slot_was_changed = slot_override and old_slot and slot and old_slot != slot
+        if not slot_was_changed:
+            create_notification(
+                recipient_id=booking.user_id,
+                notification_type='booking_confirmed',
+                title=f"{dog_name}'s {service_label} on {date_str_fmt} has been confirmed",
+                body=booking.slot,
+                link=f'/bookings/{booking.id}',
+                sender_id=current_user.id,
+            )
 
         create_notification(
             recipient_id=walker.user_id,
@@ -931,6 +975,38 @@ def assign_walker():
         logging.error(f"Error assigning/unassigning walker: {e}")
         logging.debug(traceback.format_exc())
         return jsonify(success=False, message="Server error"), 500
+
+
+@admin_bp.route("/booking/<int:booking_id>/decline", methods=["POST"])
+@login_required
+@admin_required
+def decline_booking(booking_id):
+    """Decline a pending or waitlisted booking. Sets status to 'rejected' and notifies the client."""
+    booking = db.session.get(Booking, booking_id)
+    if not booking:
+        return jsonify(success=False, message="Booking not found"), 404
+    if booking.status not in Booking.PENDING_STATUSES:
+        return jsonify(success=False, message="Only pending or waitlisted bookings can be declined"), 400
+
+    booking.status = 'rejected'
+    booking.cancelled_at = datetime.now(timezone.utc)
+    booking.cancelled_by = 'admin'
+    db.session.commit()
+
+    service_label = 'drop-in' if (booking.service_type and booking.service_type.slug == ServiceType.DROP_IN) else 'walk'
+    dog_name = booking.dog.name if booking.dog else 'your dog'
+    date_str = booking.date.strftime('%a %-d %b')
+
+    create_notification(
+        recipient_id=booking.user_id,
+        notification_type='booking_cancelled',
+        title=f"{dog_name}'s {booking.slot.lower()} {service_label} on {date_str} has been declined",
+        body="Please contact us if you have any questions.",
+        link='/',
+        sender_id=current_user.id,
+    )
+
+    return jsonify(success=True)
 
 
 @admin_bp.route("/reorder_pickups", methods=["POST"])
@@ -986,38 +1062,36 @@ def calendar_data(year, month):
     except ValueError:
         return jsonify(success=False, message="Invalid date"), 400
         
+    service_slug = request.args.get('service')
+
     # Get bookings for the month
-    bookings = Booking.query.filter(
+    q = Booking.query.filter(
         Booking.date >= start_date,
         Booking.date < end_date,
         Booking.status != 'cancelled'
-    ).all()
-    
+    )
+    if service_slug:
+        q = q.join(ServiceType).filter(ServiceType.slug == service_slug)
+    bookings = q.all()
+
     # Group by date
     booking_counts = {}
-    pending_dates = set()  # Use a set to track unique dates with pending bookings
-    
+    pending_dates = set()
+
     for booking in bookings:
         date_str = booking.date.strftime('%Y-%m-%d')
-        date_day = booking.date.day  # Extract just the day number
-        
+        date_day = booking.date.day
+
         if date_str not in booking_counts:
-            booking_counts[date_str] = {
-                'total': 0,
-                'assigned': 0
-            }
+            booking_counts[date_str] = {'total': 0, 'assigned': 0}
         booking_counts[date_str]['total'] += 1
-        
+
         if booking.walker_id:
             booking_counts[date_str]['assigned'] += 1
         elif booking.status == 'requested':
-            # Track dates with pending bookings
             pending_dates.add(date_day)
-    
-    # Convert the set to a list for JSON serialization
-    pending_dates_list = list(pending_dates)
-    
-    return jsonify(success=True, data=booking_counts, pending_dates=pending_dates_list)
+
+    return jsonify(success=True, data=booking_counts, pending_dates=list(pending_dates))
 
 
 def _get_slot_color(slot):
@@ -1288,7 +1362,7 @@ def new_client():
             db.session.flush()  # get client.id
 
             # Create Dog record if core dog fields are present
-            has_dog = bool(form.dog_name.data and form.dog_gender.data and form.dog_dob.data)
+            has_dog = bool(form.dog_name.data and form.dog_name.data.strip() and form.dog_gender.data)
             if has_dog:
                 new_dog = Dog(
                     name=form.dog_name.data.strip(),
@@ -1376,7 +1450,7 @@ def edit_client(client_id):
                 client.postal_code = None
             client.maps_url = form.maps_url.data.strip() if form.maps_url.data else None
 
-            has_dog = bool(form.dog_name.data and form.dog_gender.data and form.dog_dob.data)
+            has_dog = bool(form.dog_name.data and form.dog_name.data.strip() and form.dog_gender.data)
             pickup_notes = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
             if has_dog:
                 if dog:

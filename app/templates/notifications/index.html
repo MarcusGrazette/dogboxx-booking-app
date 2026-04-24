@@ -53,7 +53,8 @@
                         {% endif %}
                         {% if not n.is_unread %}
                         <div class="mt-1">
-                            <small class="text-muted" style="font-size:0.72rem;">
+                            <small class="text-muted notif-time" style="font-size:0.72rem;"
+                                   data-ts="{{ n.read_at.isoformat() }}">
                                 Read {{ n.read_at.strftime('%d %b %H:%M') }}
                             </small>
                         </div>
@@ -85,17 +86,61 @@
 
 {% block scripts %}
 <script>
-// Relative timestamps
-document.querySelectorAll('.notif-time[data-ts]').forEach(function(el) {
-    const ts = new Date(el.dataset.ts);
-    const diff = Date.now() - ts;
-    const mins = Math.floor(diff / 60000);
-    const hours = Math.floor(mins / 60);
-    const days = Math.floor(hours / 24);
-    if (mins < 1) el.textContent = 'Just now';
-    else if (mins < 60) el.textContent = mins + 'm ago';
-    else if (hours < 24) el.textContent = hours + 'h ago';
-    else if (days < 7) el.textContent = days + 'd ago';
-});
+(function () {
+    const CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+
+    // Normalise a naive UTC isostring to a proper UTC Date
+    function parseUTC(iso) {
+        const s = iso.replace(/\+00:00$/, 'Z');
+        return new Date(s.endsWith('Z') ? s : s + 'Z');
+    }
+
+    function formatRelTime(iso) {
+        const ts   = parseUTC(iso);
+        const diff = Date.now() - ts;
+        const mins  = Math.floor(diff / 60000);
+        const hours = Math.floor(mins / 60);
+        const days  = Math.floor(hours / 24);
+        if (mins < 1)   return 'Just now';
+        if (mins < 60)  return mins + 'm ago';
+        if (hours < 24) return hours + 'h ago';
+        if (days < 7)   return days + 'd ago';
+        return ts.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    // Fix all timestamps (created_at and read_at)
+    document.querySelectorAll('.notif-time[data-ts]').forEach(function (el) {
+        const formatted = formatRelTime(el.dataset.ts);
+        const prefix = el.textContent.trim().startsWith('Read') ? 'Read ' : '';
+        el.textContent = prefix + formatted;
+    });
+
+    // Decrement the bell badge directly (decrementBadge lives inside the bell IIFE)
+    function decrementBellBadge() {
+        const badge = document.getElementById('notif-badge');
+        if (!badge) return;
+        const next = Math.max(0, (parseInt(badge.textContent) || 0) - 1);
+        if (next <= 0) {
+            badge.classList.add('d-none');
+        } else {
+            badge.textContent = String(next);
+        }
+    }
+
+    // Click-to-mark-read on unread list items
+    document.querySelectorAll('.list-group-item.notif-unread[data-notif-id]').forEach(function (li) {
+        li.style.cursor = 'pointer';
+        li.addEventListener('click', function () {
+            const id = li.dataset.notifId;
+            if (!id) return;
+            li.classList.remove('notif-unread');
+            decrementBellBadge();
+            fetch('/notifications/' + id + '/read', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': CSRF, 'X-Requested-With': 'XMLHttpRequest' },
+            });
+        });
+    });
+}());
 </script>
 {% endblock %}

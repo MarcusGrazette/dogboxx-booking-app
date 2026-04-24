@@ -309,8 +309,8 @@ class TestClientRecurringBooking:
         data = resp.get_json()
         assert resp.status_code == 200
         assert data['success'] is True
-        # 5 weekdays in Mon–Fri (Sat+Sun skipped)
-        assert data['created'] + data['waitlisted'] == 5
+        # 5 weekdays in Mon–Fri (Sat+Sun skipped); some may auto-confirm
+        assert data.get('confirmed', 0) + data['created'] + data['waitlisted'] == 5
 
     def test_weekly_booking_creates_correct_count(self, app, client):
         """Weekly frequency over 3 weeks creates 3 bookings."""
@@ -338,7 +338,7 @@ class TestClientRecurringBooking:
         })
         data = resp.get_json()
         assert data['success'] is True
-        assert data['created'] + data['waitlisted'] == 3
+        assert data.get('confirmed', 0) + data['created'] + data['waitlisted'] == 3
 
     def test_duplicate_dates_skipped(self, app, client):
         """Dates where dog already has an active booking in that slot are skipped."""
@@ -578,8 +578,8 @@ class TestAdminRecurringForDog:
         })
         data = resp.get_json()
         assert data['success'] is True
-        # Mon–Fri = 5 (Sat+Sun skipped)
-        assert data['created'] + data['waitlisted'] == 5
+        # Mon–Fri = 5 (Sat+Sun skipped); some may auto-confirm
+        assert data.get('confirmed', 0) + data['created'] + data['waitlisted'] == 5
 
     def test_admin_not_capped_at_4_weeks(self, app, client):
         """Admin recurring has no 4-week cap (unlike client recurring)."""
@@ -611,9 +611,9 @@ class TestAdminRecurringForDog:
             'frequency': 'weekly',
         })
         data = resp.get_json()
-        # 9 Mondays over 8 weeks (inclusive)
+        # 9 Mondays over 8 weeks (inclusive); some may auto-confirm
         assert data['success'] is True
-        assert data['created'] + data['waitlisted'] == 9
+        assert data.get('confirmed', 0) + data['created'] + data['waitlisted'] == 9
 
     def test_duplicate_dates_skipped(self, app, client):
         mon = next_monday()

@@ -8,9 +8,24 @@ formatting and handling.
 import logging
 import os
 import sys
+from collections import deque
 from typing import Optional
 
-def configure_logging(app_name: str = "app", 
+
+recent_log_buffer: deque = deque(maxlen=50)
+
+
+class _RecentLogHandler(logging.Handler):
+    """Keeps the last N WARNING+ log records in memory for bug reports."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            recent_log_buffer.append(self.format(record))
+        except Exception:
+            pass
+
+
+def configure_logging(app_name: str = "app",
                      log_level: Optional[str] = None,
                      log_file: Optional[str] = None) -> None:
     """
@@ -64,6 +79,12 @@ def configure_logging(app_name: str = "app",
     # Flask app logger
     app_logger = logging.getLogger(app_name)
     app_logger.setLevel(numeric_level)
-    
+
+    # In-memory buffer for bug reports — WARNING and above only
+    buf_handler = _RecentLogHandler()
+    buf_handler.setLevel(logging.WARNING)
+    buf_handler.setFormatter(formatter)
+    logger.addHandler(buf_handler)
+
     # Log startup message
     logging.info(f"Logging configured with level: {log_level}")

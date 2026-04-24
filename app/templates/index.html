@@ -466,6 +466,7 @@
     </div>
 </div>
 
+
 <script src="{{ url_for('static', filename='js/reusable-calendar.js') }}"></script>
 <script>
     // ─── Greeting ────────────────────────────────────────────────
@@ -725,6 +726,7 @@
                     .then(data => {
                         if (data.success) {
                             const parts = [];
+                            if (data.confirmed) parts.push(`${data.confirmed} confirmed`);
                             if (data.created) parts.push(`${data.created} requested`);
                             if (data.waitlisted) parts.push(`${data.waitlisted} waitlisted`);
                             if (data.skipped) parts.push(`${data.skipped} skipped (already booked)`);
@@ -750,7 +752,6 @@
 
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Requesting…';
-
                 fetch('{{ url_for("client.book_drop_in") }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
@@ -767,7 +768,6 @@
                                 injectBooking(data.booking);
                             }
                             loadCalendarData(cal.year, cal.month);
-                            // Reset
                             selectedDate = null;
                             dateHidden.value = '';
                             dateText.textContent = 'Select a date above';
@@ -790,7 +790,6 @@
 
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Requesting…';
-
                 fetch('{{ url_for("client.book_both") }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
@@ -805,7 +804,6 @@
                             showToast(data.message, hasWaitlist ? 'info' : 'success');
                             data.bookings.forEach(b => injectBooking(b));
                             loadCalendarData(cal.year, cal.month);
-                            // Reset
                             selectedDate = null;
                             dateHidden.value = '';
                             dateText.textContent = 'Select a date above';
@@ -830,7 +828,6 @@
 
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Requesting…';
-
                 fetch('{{ url_for("client.book") }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
@@ -844,7 +841,6 @@
                             showToast(data.message, data.status === 'waitlisted' ? 'info' : 'success');
                             injectBooking(data.booking);
                             loadCalendarData(cal.year, cal.month);
-                            // Reset form state
                             selectedDate = null;
                             dateHidden.value = '';
                             dateText.textContent = 'Select a date above';

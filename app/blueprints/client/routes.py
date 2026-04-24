@@ -10,11 +10,11 @@ from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from app.models import User, Client, Dog, Booking, DogOwner, ServiceType, Walker
-from app import db
+from app import db, limiter
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
 from app.utils.uploads import process_dog_photo, process_cropped_photo
 from app.utils.booking_access import get_accessible_dog_ids, user_can_access_booking
-from app.capacity import check_availability, get_slot_availability_summary, auto_assign_walker
+from app.capacity import check_availability, get_slot_availability_summary, auto_assign_walker, get_walker_slot_count
 from app.forms import OnboardingForm, BookingForm, ProfileForm
 import logging
 import traceback
@@ -22,6 +22,62 @@ from datetime import datetime, timezone, timedelta, date as date_type
 
 from app.blueprints.client import client_bp
 from app.utils.notifications import create_notification
+
+
+@client_bp.route("/help")
+def help_page():
+    return render_template('help.html')
+
+
+@client_bp.route("/report-bug", methods=["POST"])
+@login_required
+@limiter.limit("3 per hour", key_func=lambda: f"report-bug:{current_user.id}")
+def report_bug():
+    from app.utils.email import send_email
+    from app.utils.logging_config import recent_log_buffer
+    from html import escape
+
+    description = (request.form.get("description") or "").strip()
+    if not description:
+        return jsonify(success=False, message="Please describe the issue."), 400
+
+    user = current_user
+    user_agent = request.headers.get("User-Agent", "unknown")
+    referrer = request.form.get("page_url") or request.referrer or "unknown"
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    logs = list(recent_log_buffer)
+    log_section = "\n".join(logs) if logs else "(no recent warnings or errors)"
+
+    html = f"""
+    <h2 style="color:#1B1B1B;font-family:sans-serif;">Bug Report</h2>
+    <table style="font-family:sans-serif;font-size:14px;border-collapse:collapse;width:100%;">
+      <tr><td style="padding:6px 12px 6px 0;color:#555;white-space:nowrap;"><strong>User</strong></td>
+          <td style="padding:6px 0;">{escape(user.firstname)} {escape(user.lastname or '')} &lt;{escape(user.email)}&gt; — {escape(user.role)}</td></tr>
+      <tr><td style="padding:6px 12px 6px 0;color:#555;"><strong>URL</strong></td>
+          <td style="padding:6px 0;">{escape(referrer)}</td></tr>
+      <tr><td style="padding:6px 12px 6px 0;color:#555;"><strong>Browser</strong></td>
+          <td style="padding:6px 0;">{escape(user_agent)}</td></tr>
+      <tr><td style="padding:6px 12px 6px 0;color:#555;"><strong>Time</strong></td>
+          <td style="padding:6px 0;">{timestamp}</td></tr>
+    </table>
+
+    <h3 style="font-family:sans-serif;margin-top:24px;">Description</h3>
+    <p style="font-family:sans-serif;font-size:14px;white-space:pre-wrap;">{escape(description)}</p>
+
+    <h3 style="font-family:sans-serif;margin-top:24px;">Recent server logs (WARNING / ERROR)</h3>
+    <pre style="background:#f4f4f4;padding:12px;font-size:12px;overflow-x:auto;border-radius:4px;">{escape(log_section)}</pre>
+    """
+
+    ok = send_email(
+        to="lydia@dogboxx.org",
+        subject=f"Bug report from {user.firstname} {user.lastname or ''}".strip(),
+        html=html,
+    )
+
+    if ok:
+        return jsonify(success=True)
+    return jsonify(success=False, message="Failed to send — please try again."), 500
 
 
 def _maybe_auto_confirm(booking, dog, service_slug=ServiceType.WALK):
@@ -177,13 +233,14 @@ def index():
                 errors.append(str(e))
 
         if not errors:
-            # Prevent duplicate booking: same dog + date + slot (only active bookings)
+            # Prevent duplicate booking: same dog + date + slot (any service type)
             active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
+            walk_service = ServiceType.query.filter_by(slug=ServiceType.WALK, active=True).first()
             existing = Booking.query.filter(
                 Booking.dog_id == dog_id,
                 Booking.date == booking_date,
                 Booking.slot == booking_slot,
-                Booking.status.in_(active_statuses)
+                Booking.status.in_(active_statuses),
             ).first()
             if existing:
                 errors.append("This dog already has a booking for that slot on that date.")
@@ -209,11 +266,10 @@ def index():
                     OperationalError: "Our booking system is temporarily unavailable. Please try again later."
                 }
             ):
-                # Look up default service type by slug
-                default_service = ServiceType.query.filter_by(slug=ServiceType.WALK, active=True).first()
-                if not default_service:
+                if not walk_service:
                     flash("No service type available. Please contact support.", "danger")
                     return redirect(url_for("client.index"))
+                default_service = walk_service
 
                 # Check capacity before creating booking
                 available, can_waitlist, capacity_msg = check_availability(
@@ -316,16 +372,21 @@ def book():
         return jsonify({'success': False, 'message': str(e)}), 400
     dog_id = dog.id
 
-    # ── Duplicate / cap checks ────────────────────────────────────────────────
+    # ── Service type + duplicate / cap checks ────────────────────────────────
+    default_service = ServiceType.query.filter_by(slug=ServiceType.WALK, active=True).first()
+    if not default_service:
+        return jsonify({'success': False, 'message': 'No service type available. Please contact support.'}), 500
+
     active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
     existing = Booking.query.filter(
-        Booking.dog_id   == dog_id,
-        Booking.date     == booking_date,
-        Booking.slot     == booking_slot,
+        Booking.dog_id == dog_id,
+        Booking.date   == booking_date,
+        Booking.slot   == booking_slot,
         Booking.status.in_(active_statuses),
     ).first()
     if existing:
-        return jsonify({'success': False, 'message': 'This dog already has a booking for that slot on that date.'}), 409
+        svc_label = existing.service_type.name.lower() if existing.service_type else 'booking'
+        return jsonify({'success': False, 'message': f'{dog.name} already has a {svc_label} booked for that slot.'}), 409
 
     day_count = Booking.query.filter(
         Booking.dog_id == dog_id,
@@ -337,10 +398,6 @@ def book():
 
     # ── Capacity check + create ───────────────────────────────────────────────
     try:
-        default_service = ServiceType.query.filter_by(slug=ServiceType.WALK, active=True).first()
-        if not default_service:
-            return jsonify({'success': False, 'message': 'No service type available. Please contact support.'}), 500
-
         available, can_waitlist, capacity_msg = check_availability(default_service, booking_date, booking_slot)
 
         if not available and not can_waitlist:
@@ -451,11 +508,12 @@ def book_both():
         return jsonify({'success': False, 'message': 'No service type available.'}), 500
 
     active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
+
     created = []   # (slot, status, booking_obj)
     skipped = []   # slot names skipped (duplicate / no walkers)
 
     for slot in ('Morning', 'Afternoon'):
-        # Skip if already booked for this slot
+        # Skip if any active booking already exists for this slot (any service type)
         if Booking.query.filter(
             Booking.dog_id == dog_id,
             Booking.date   == booking_date,
@@ -592,17 +650,17 @@ def book_drop_in():
     if not drop_in_service:
         return jsonify({'success': False, 'message': 'Drop-in service is not currently available.'}), 503
 
-    # Prevent duplicate
+    # Prevent duplicate (any service type for this slot)
     active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
     existing = Booking.query.filter(
-        Booking.dog_id   == dog_id,
-        Booking.date     == booking_date,
-        Booking.slot     == booking_slot,
+        Booking.dog_id == dog_id,
+        Booking.date   == booking_date,
+        Booking.slot   == booking_slot,
         Booking.status.in_(active_statuses),
-        Booking.service_type_id == drop_in_service.id,
     ).first()
     if existing:
-        return jsonify({'success': False, 'message': 'A drop-in is already booked for that slot.'}), 409
+        svc_label = existing.service_type.name.lower() if existing.service_type else 'booking'
+        return jsonify({'success': False, 'message': f'{dog.name} already has a {svc_label} booked for that slot.'}), 409
 
     available, can_waitlist, capacity_msg = _check(drop_in_service, booking_date, booking_slot)
     if not available and not can_waitlist:
@@ -1551,18 +1609,19 @@ def recurring_booking():
             return jsonify(success=False, message="Drop-ins cannot use the 'Both' slot"), 400
 
         active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
-        created = waitlisted = skipped = 0
+        confirmed = created = waitlisted = skipped = 0
 
         slots_to_book = ['Morning', 'Afternoon'] if slot == 'Both' else [slot]
 
         for d in target_dates:
             for s in slots_to_book:
-                # Skip duplicates
+                # Skip duplicates for the same service type only
                 existing = Booking.query.filter(
-                    Booking.dog_id == dog.id,
-                    Booking.date == d,
-                    Booking.slot == s,
-                    Booking.status.in_(active_statuses)
+                    Booking.dog_id          == dog.id,
+                    Booking.date            == d,
+                    Booking.slot            == s,
+                    Booking.status.in_(active_statuses),
+                    Booking.service_type_id == default_service.id,
                 ).first()
                 if existing:
                     skipped += 1
@@ -1578,49 +1637,69 @@ def recurring_booking():
                     skipped += 1
                     continue
 
-                if is_drop_in:
-                    # No capacity rules for drop-ins currently
-                    status = 'requested'
-                else:
-                    available, can_waitlist, _ = check_availability(default_service, d, s)
-                    if not available and not can_waitlist:
-                        skipped += 1
-                        continue
-                    status = 'requested' if available else 'waitlisted'
+                available, can_waitlist, _ = check_availability(default_service, d, s)
+                if not available and not can_waitlist:
+                    skipped += 1
+                    continue
+                status = 'requested' if available else 'waitlisted'
 
-                db.session.add(Booking(
+                booking = Booking(
                     user_id=current_user.id,
                     dog_id=dog.id,
                     service_type_id=default_service.id,
                     date=d,
                     slot=s,
                     status=status,
-                ))
+                )
+                db.session.add(booking)
+
                 if status == 'waitlisted':
                     waitlisted += 1
+                elif not is_drop_in:
+                    # Try to auto-assign a walker, same as single bookings
+                    walker = auto_assign_walker(d, s, service_slug=service_slug)
+                    if walker:
+                        booking.walker_id    = walker.id
+                        booking.status       = 'confirmed'
+                        booking.confirmed_at = datetime.now(timezone.utc)
+                        booking.pickup_order = get_walker_slot_count(walker.id, d, s, service_slug=service_slug)
+                        confirmed += 1
+                    else:
+                        created += 1
                 else:
                     created += 1
 
         db.session.commit()
 
-        # Notify admins once for the whole batch
-        total = created + waitlisted
-        if total > 0:
+        freq_label    = 'daily' if frequency == 'daily' else 'weekly'
+        slot_label    = 'AM + PM' if slot == 'Both' else slot
+        service_label = 'drop-ins' if is_drop_in else 'walks'
+
+        # Single client notification summarising auto-confirmed bookings
+        if confirmed > 0:
+            create_notification(
+                recipient_id=current_user.id,
+                notification_type='booking_confirmed',
+                title=f'{confirmed} recurring {service_label} confirmed',
+                body=f'Your {freq_label} {slot_label} {service_label} for {dog.name} have been booked.',
+                link='/bookings',
+            )
+
+        # Single admin notification for anything still pending / waitlisted
+        pending_total = created + waitlisted
+        if pending_total > 0:
             admins = User.query.filter_by(is_admin=True).all()
-            freq_label = 'daily' if frequency == 'daily' else 'weekly'
-            slot_label = 'AM + PM' if slot == 'Both' else slot
-            service_label = 'drop-ins' if is_drop_in else 'walks'
             for admin in admins:
                 create_notification(
                     recipient_id=admin.id,
                     notification_type='booking_requested',
-                    title=f'Recurring booking request — {total} {service_label}',
+                    title=f'Recurring booking request — {pending_total} {service_label}',
                     body=f'{current_user.firstname} requested {freq_label} {slot_label} {service_label} for {dog.name}',
                     link='/admin',
                     sender_id=current_user.id,
                 )
 
-        return jsonify(success=True, created=created, waitlisted=waitlisted, skipped=skipped)
+        return jsonify(success=True, confirmed=confirmed, created=created, waitlisted=waitlisted, skipped=skipped)
 
     except Exception as e:
         db.session.rollback()
