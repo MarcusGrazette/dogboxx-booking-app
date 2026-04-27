@@ -186,7 +186,7 @@ def index():
     # Get user's dogs through DogOwner relationship
     user_dogs = Dog.query.join(DogOwner).filter(DogOwner.user_id == current_user.id).all()
 
-    # Return upcoming bookings for all dogs the user has access to
+    # Return all non-cancelled bookings (past and upcoming) for date-filter support
     today = datetime.now(timezone.utc).date()
     _index_dog_ids = get_accessible_dog_ids(current_user.id)
     upcoming_bookings_query = Booking.query.options(
@@ -195,7 +195,6 @@ def index():
     ).filter(
         Booking.dog_id.in_(_index_dog_ids),
         Booking.status != 'cancelled',
-        Booking.date >= today
     ).order_by(Booking.date.asc())
 
     upcoming_bookings = list(upcoming_bookings_query)
@@ -205,6 +204,7 @@ def index():
         else:
             b.date_display = None
         b.is_drop_in = b.service_type and b.service_type.slug == ServiceType.DROP_IN
+        b.is_past = (b.date < today) if b.date else False
 
     form = BookingForm()
     if form.validate_on_submit():
@@ -331,7 +331,8 @@ def index():
 
     return render_template("index.html", user=user, client=user.client, dogs=user_dogs,
                            bookings=upcoming_bookings, form=form,
-                           has_drop_in_walkers=has_drop_in_walkers) # type: ignore
+                           has_drop_in_walkers=has_drop_in_walkers,
+                           today=today) # type: ignore
 
 
 @client_bp.route("/book", methods=["POST"])
@@ -1202,9 +1203,7 @@ def onboard():
             client.onboarding_completed = True
             client.onboarding_completed_at = datetime.now(timezone.utc)
 
-            # Notification preferences
             current_user.notification_preference = 'email'
-            current_user.email_marketing = bool(form.notify_email.data)
 
             # Handle file upload
             pic_filename = None
