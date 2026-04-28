@@ -115,26 +115,14 @@
         el.textContent = prefix + formatted;
     });
 
-    // Decrement the bell badge directly (decrementBadge lives inside the bell IIFE)
-    function decrementBellBadge() {
-        const badge = document.getElementById('notif-badge');
-        if (!badge) return;
-        const next = Math.max(0, (parseInt(badge.textContent) || 0) - 1);
-        if (next <= 0) {
-            badge.classList.add('d-none');
-        } else {
-            badge.textContent = String(next);
-        }
-    }
-
     // Click-to-mark-read on unread list items
+    // Badge decrement is handled by the SSE read_one event to avoid double-counting
     document.querySelectorAll('.list-group-item.notif-unread[data-notif-id]').forEach(function (li) {
         li.style.cursor = 'pointer';
         li.addEventListener('click', function () {
             const id = li.dataset.notifId;
             if (!id) return;
             li.classList.remove('notif-unread');
-            decrementBellBadge();
             fetch('/notifications/' + id + '/read', {
                 method: 'POST',
                 headers: { 'X-CSRFToken': CSRF, 'X-Requested-With': 'XMLHttpRequest' },

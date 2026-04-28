@@ -1,0 +1,187 @@
+{% extends "layout.html" %}
+
+{% block title %}Dogs{% endblock %}
+
+{% block main %}
+<div class="container" style="max-width:700px;">
+    <div class="page-header">
+        <h2><i class="bi bi-heart me-2"></i>Dogs</h2>
+    </div>
+
+    <div class="mb-3">
+        <div class="input-group">
+            <input type="text" id="dog-search" class="form-control"
+                   placeholder="Search by name…" autocomplete="off" autocorrect="off">
+            <button class="btn btn-outline-secondary" type="button" id="dog-search-clear"
+                    style="display:none;" aria-label="Clear search">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="list-group" id="dog-list">
+        {% for dog in dogs %}
+        {% set owner = primary_owners.get(dog.id) %}
+        <div class="dog-row" data-search="{{ dog.name | lower }}">
+            <button type="button"
+                    class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-3 w-100"
+                    data-bs-toggle="modal"
+                    data-bs-target="#dog-modal-{{ dog.id }}">
+
+                <img src="{{ '/static/uploads/dogs/' + dog.pic if dog.pic else '/static/uploads/dogs/default-dog.png' }}"
+                     class="rounded-circle flex-shrink-0"
+                     width="44" height="44" style="object-fit:cover;"
+                     alt="{{ dog.name }}"
+                     onerror="this.onerror=null;this.src='/static/uploads/dogs/default-dog.png'">
+
+                <span class="fw-semibold flex-grow-1 text-start">{{ dog.name }}</span>
+
+                {% if dog.hold_key %}
+                <span class="badge" style="background:#f59e0b;color:#fff;font-size:0.72rem;">
+                    <i class="bi bi-key-fill me-1"></i>Key
+                </span>
+                {% endif %}
+
+                <i class="bi bi-chevron-right text-muted" style="font-size:0.8rem;"></i>
+            </button>
+        </div>
+        {% endfor %}
+    </div>
+
+    <p id="no-results" class="text-muted text-center mt-4" style="display:none;">No dogs match your search.</p>
+</div>
+
+{# ── Per-dog modals ────────────────────────────────────────────────────────── #}
+{% for dog in dogs %}
+{% set owner = primary_owners.get(dog.id) %}
+{% set client = owner.client if owner else none %}
+
+{# Age calculation #}
+{% if dog.date_of_birth %}
+    {% set age_days = (today - dog.date_of_birth).days %}
+    {% set age_years = (age_days / 365.25) | int %}
+    {% if age_years < 1 %}
+        {% set age_str = (age_days // 30) ~ " month" ~ ("s" if age_days // 30 != 1 else "") %}
+    {% else %}
+        {% set age_str = age_years ~ " year" ~ ("s" if age_years != 1 else "") %}
+    {% endif %}
+{% else %}
+    {% set age_str = none %}
+{% endif %}
+
+<div class="modal fade" id="dog-modal-{{ dog.id }}"
+     tabindex="-1"
+     aria-labelledby="dog-modal-label-{{ dog.id }}"
+     data-bs-backdrop="static"
+     data-bs-keyboard="false"
+     aria-modal="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+
+            <div class="modal-header align-items-center gap-3">
+                <img src="{{ '/static/uploads/dogs/' + dog.pic if dog.pic else '/static/uploads/dogs/default-dog.png' }}"
+                     class="rounded-circle flex-shrink-0"
+                     width="48" height="48" style="object-fit:cover;"
+                     alt="{{ dog.name }}"
+                     onerror="this.onerror=null;this.src='/static/uploads/dogs/default-dog.png'">
+                <h5 class="modal-title fw-bold mb-0" id="dog-modal-label-{{ dog.id }}">{{ dog.name }}</h5>
+                <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body" style="text-align:left;">
+
+                {% if age_str or dog.breed %}
+                <div class="d-flex gap-3 mb-3 flex-wrap">
+                    {% if age_str %}
+                    <span class="small text-muted"><i class="bi bi-calendar3 me-1"></i>{{ age_str }}</span>
+                    {% endif %}
+                    {% if dog.breed %}
+                    <span class="small text-muted"><i class="bi bi-heart me-1"></i>{{ dog.breed }}</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {% if owner %}
+                <div class="d-flex align-items-start gap-2 mb-2">
+                    <i class="bi bi-person text-muted flex-shrink-0" style="margin-top:1px;"></i>
+                    <span class="small fw-semibold">{{ dog.owners_display }}</span>
+                </div>
+                {% endif %}
+
+                {% if client and client.street_address %}
+                <div class="d-flex align-items-start gap-2 flex-wrap {% if dog.whatsapp_group_url or dog.allergies or dog.pickup_instructions %}mb-3{% endif %}">
+                    <i class="bi bi-house text-muted flex-shrink-0" style="margin-top:1px;"></i>
+                    <span class="small flex-grow-1">{{ client.street_address.replace('\n', ', ') }}{% if client.postal_code %}, {{ client.postal_code | upper }}{% endif %}</span>
+                    {% if client.maps_url %}
+                    <a href="{{ client.maps_url }}" target="_blank" rel="noopener"
+                       class="btn btn-primary btn-sm fw-semibold flex-shrink-0"
+                       style="font-size:0.72rem;line-height:1.8;padding:0 0.6rem;">
+                        <i class="bi bi-geo-alt-fill me-1"></i>Map
+                    </a>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {% if dog.whatsapp_group_url %}
+                <a href="{{ dog.whatsapp_group_url }}" target="_blank" rel="noopener"
+                   class="btn btn-sm fw-semibold w-100 {% if dog.allergies %}mb-3{% endif %}"
+                   style="background:#25D366;color:#fff;">
+                    <i class="bi bi-whatsapp me-1"></i>WhatsApp group
+                </a>
+                {% endif %}
+
+                {% if dog.pickup_instructions %}
+                <div class="rounded p-3 {% if dog.allergies %}mb-3{% endif %}" style="background:#e8f4fd;color:#0a58ca;border-left:3px solid #3d8bcd;">
+                    <div class="small fw-semibold mb-1"><i class="bi bi-info-circle me-1"></i>Pickup notes</div>
+                    <div class="small" style="white-space:pre-wrap;line-height:1.5;">{{ dog.pickup_instructions }}</div>
+                </div>
+                {% endif %}
+
+                {% if dog.allergies %}
+                <div class="rounded p-3" style="background:#fff8e1;color:#7a5800;border-left:3px solid #ffc107;">
+                    <div class="small fw-semibold mb-1"><i class="bi bi-bandaid me-1"></i>Health &amp; allergies</div>
+                    <div class="small" style="white-space:pre-wrap;line-height:1.5;">{{ dog.allergies }}</div>
+                </div>
+                {% endif %}
+
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary fw-semibold w-100" data-bs-dismiss="modal">Close</button>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const search = document.getElementById('dog-search');
+    const clear  = document.getElementById('dog-search-clear');
+    const rows   = document.querySelectorAll('.dog-row');
+    const none   = document.getElementById('no-results');
+
+    function applyFilter() {
+        const q = search.value.toLowerCase().trim();
+        clear.style.display = q ? '' : 'none';
+        let visible = 0;
+        rows.forEach(function (row) {
+            const match = !q || row.dataset.search.includes(q);
+            row.style.display = match ? '' : 'none';
+            if (match) visible++;
+        });
+        none.style.display = visible === 0 ? '' : 'none';
+    }
+
+    search.addEventListener('input', applyFilter);
+    clear.addEventListener('click', function () {
+        search.value = '';
+        applyFilter();
+        search.focus();
+    });
+})();
+</script>
+{% endblock %}

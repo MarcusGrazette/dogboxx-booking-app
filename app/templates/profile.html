@@ -334,6 +334,12 @@
                         {% if primary_dogs|length > 1 %}
                         <p class="fw-semibold small mb-1">{{ dog.name }}</p>
                         {% endif %}
+                        {% if dog.hold_key %}
+                        <div class="d-flex align-items-center gap-2 mb-2 small" style="color:#92400e;">
+                            <i class="bi bi-key-fill" style="color:#f59e0b;flex-shrink:0;"></i>
+                            <span>DogBoxx holds a key for {{ dog.name }}</span>
+                        </div>
+                        {% endif %}
                         <p class="text-muted mb-2" style="font-size:0.8rem;">
                             Anything we need to know when collecting {{ dog.name }}?
                         </p>

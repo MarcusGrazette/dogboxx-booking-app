@@ -54,17 +54,14 @@
                         {% endif %}
                     </dd>
 
-                    {% if client.client %}
-                    {% set addr = client.client.formatted_address or client.client.street_address %}
-                    {% if addr %}
+                    {% if client.client and client.client.street_address %}
                     <dt class="col-sm-4 text-muted fw-semibold">Address</dt>
                     <dd class="col-sm-8">
-                        <div>{{ addr }}</div>
-                        {% if not client.client.formatted_address and client.client.postal_code %}
+                        <div>{{ client.client.street_address.replace('\n', ', ') }}</div>
+                        {% if client.client.postal_code %}
                         <div class="fw-semibold">{{ client.client.postal_code | upper }}</div>
                         {% endif %}
                     </dd>
-                    {% endif %}
                     {% endif %}
 
                     <dt class="col-sm-4 text-muted fw-semibold">Joined</dt>

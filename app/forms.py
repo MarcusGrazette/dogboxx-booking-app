@@ -317,6 +317,7 @@ class ClientCreateForm(FlaskForm):
         validators=[Optional(), Length(max=2048)],
         render_kw={"placeholder": "https://chat.whatsapp.com/…"}
     )
+    hold_key = BooleanField('DogBoxx holds a house key for this dog', default=False)
 
     submit = SubmitField('Save Client')
 
@@ -368,6 +369,7 @@ class AddDogForm(FlaskForm):
         validators=[Optional(), Length(max=2048)],
         render_kw={"placeholder": "https://chat.whatsapp.com/…"}
     )
+    hold_key = BooleanField('DogBoxx holds a house key for this dog', default=False)
     submit = SubmitField('Add Dog')
 
 
