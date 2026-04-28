@@ -107,12 +107,10 @@
         {% endif %}
 
         <div class="card mb-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span>
-                    <i class="bi bi-heart-fill me-2" style="color:#E02FAC;"></i>{{ dog.name }}
-                    <span class="badge bg-secondary ms-1 fw-normal" style="font-size:.7rem;">Primary owner</span>
-                </span>
-                <button class="btn btn-sm btn-outline-success"
+            <div class="card-header d-flex align-items-center">
+                <i class="bi bi-heart-fill me-2" style="color:#E02FAC;"></i>{{ dog.name }}
+                <span class="badge bg-secondary ms-2 fw-normal" style="font-size:.7rem;">Primary owner</span>
+                <button class="btn btn-sm btn-outline-success ms-auto"
                         data-dog-id="{{ dog.id }}"
                         data-dog-name="{{ dog.name }}"
                         onclick="openJoinModal(this)">
@@ -230,13 +228,11 @@
         {% endif %}
 
         <div class="card mb-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span>
-                    <i class="bi bi-heart-fill me-2" style="color:#E02FAC;"></i>{{ dog.name }}
-                    <span class="badge bg-info text-dark ms-1 fw-normal" style="font-size:.7rem;">Shared access</span>
-                </span>
+            <div class="card-header d-flex align-items-center">
+                <i class="bi bi-heart-fill me-2" style="color:#E02FAC;"></i>{{ dog.name }}
+                <span class="badge bg-info text-dark ms-2 fw-normal" style="font-size:.7rem;">Shared access</span>
                 {% if primary_owner %}
-                <button class="btn btn-sm btn-outline-danger"
+                <button class="btn btn-sm btn-outline-danger ms-auto"
                         onclick="revokeAccess({{ primary_owner.id }}, {{ dog.id }}, {{ client.id }}, '{{ client.full_name|e }}', null)">
                     <i class="bi bi-person-dash me-1"></i>Revoke access
                 </button>
@@ -285,47 +281,25 @@
     {# ══ RIGHT COLUMN — pickup + notifications ══ #}
     <div class="col-12 col-lg-7">
 
-        {# --- Pickup details --- #}
+        {# --- Pickup notes --- #}
         <div class="card mb-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-geo-alt me-2" style="color:#E02FAC;"></i>Pickup Details</span>
-                <button class="btn btn-sm btn-outline-primary" id="pickup-edit-btn">
+            <div class="card-header d-flex align-items-center">
+                <span><i class="bi bi-geo-alt me-2" style="color:#E02FAC;"></i>Pickup Notes</span>
+                <button class="btn btn-sm btn-outline-primary ms-auto" id="pickup-edit-btn">
                     <i class="bi bi-pencil me-1"></i>Edit
                 </button>
             </div>
             <div class="card-body">
                 {# Read view #}
                 <div id="pickup-read-view">
-                    <dl class="row mb-0">
-                        <dt class="col-sm-4 text-muted fw-semibold">Pickup notes</dt>
-                        <dd class="col-sm-8" id="read-pickup-instructions">
-                            {{ dog.pickup_instructions if dog and dog.pickup_instructions else '—' }}
-                        </dd>
-                        <dt class="col-sm-4 text-muted fw-semibold">Maps pin</dt>
-                        <dd class="col-sm-8">
-                            {% if client.client and client.client.maps_url %}
-                            <a href="{{ client.client.maps_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-success">
-                                <i class="bi bi-geo-alt-fill me-1"></i>Open in Maps
-                            </a>
-                            {% else %}
-                            <span id="read-maps-url">—</span>
-                            {% endif %}
-                        </dd>
-                    </dl>
+                    <div id="read-pickup-instructions" class="small" style="white-space:pre-wrap;">{{ dog.pickup_instructions if dog and dog.pickup_instructions else '—' }}</div>
                 </div>
                 {# Edit view #}
                 <div id="pickup-edit-view" style="display:none;">
                     <div class="mb-3">
-                        <label class="form-label fw-semibold small">Pickup notes</label>
-                        <textarea id="edit-pickup-instructions" class="form-control" rows="3" maxlength="500"
+                        <textarea id="edit-pickup-instructions" class="form-control" rows="4" maxlength="1000"
                                   placeholder="Door codes, concierge notes, special instructions...">{{ dog.pickup_instructions if dog else '' }}</textarea>
-                        <div class="text-muted small text-end mt-1"><span id="instr-char-count">{{ (dog.pickup_instructions or '' if dog else '')|length }}</span> / 500</div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold small">Google Maps pin URL</label>
-                        <input type="url" id="edit-maps-url" class="form-control"
-                               placeholder="https://maps.app.goo.gl/..."
-                               value="{{ client.client.maps_url or '' if client.client else '' }}">
+                        <div class="text-muted small text-end mt-1"><span id="instr-char-count">{{ (dog.pickup_instructions or '' if dog else '')|length }}</span> / 1000</div>
                     </div>
                     <div class="d-flex gap-2">
                         <button class="btn btn-primary btn-sm fw-semibold" id="pickup-save-btn">Save</button>
@@ -338,9 +312,8 @@
 
         {# --- Notification audit trail --- #}
         <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-bell me-2" style="color:#E02FAC;"></i>Notification History</span>
-                <span class="text-muted small">Last 10</span>
+            <div class="card-header">
+                <i class="bi bi-bell me-2" style="color:#E02FAC;"></i>Last 10 Notifications
             </div>
             <div class="card-body p-0">
                 {% if notifications %}
@@ -510,7 +483,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const readView   = document.getElementById('pickup-read-view');
     const editView   = document.getElementById('pickup-edit-view');
     const instrEl    = document.getElementById('edit-pickup-instructions');
-    const mapsEl     = document.getElementById('edit-maps-url');
     const errorEl    = document.getElementById('pickup-save-error');
     const charCount  = document.getElementById('instr-char-count');
 
@@ -536,7 +508,7 @@ document.addEventListener('DOMContentLoaded', function () {
         fetch('{{ url_for("admin.update_client_pickup_details", client_id=client.id) }}', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
-            body: JSON.stringify({ pickup_instructions: instrEl.value, maps_url: mapsEl.value })
+            body: JSON.stringify({ pickup_instructions: instrEl.value })
         })
         .then(r => r.json())
         .then(data => {
