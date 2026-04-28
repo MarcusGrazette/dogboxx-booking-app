@@ -11,7 +11,7 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError
 from app.models import User, Booking, Walker, Dog, Client, WalkerSchedule, DogOwner, WalkerUnavailability, WalkerAdHocAvailability, ServiceType, Notification
 from app import db
-from app.capacity import get_max_per_walker, get_walker_slot_count, get_drop_in_capacity
+from app.capacity import get_max_per_walker, get_walker_slot_count, get_drop_in_capacity, auto_assign_walker
 from app.utils.db_error_handler import handle_db_errors
 from app.forms import ClientCreateForm, WalkerCreateForm, WalkerScheduleForm
 from app.utils.uploads import process_dog_photo
@@ -2271,20 +2271,30 @@ def book_for_dog():
         if not available and not can_waitlist:
             return jsonify(success=False, message=capacity_msg), 400
 
-        status = 'requested' if available else 'waitlisted'
         booking = Booking(
             user_id=user_id,
             dog_id=dog_id,
             service_type_id=default_service.id,
             date=booking_date,
             slot=slot,
-            status=status,
+            status='waitlisted',
         )
         db.session.add(booking)
+
+        if available:
+            walker = auto_assign_walker(booking_date, slot)
+            if walker:
+                booking.walker_id = walker.id
+                booking.status = 'confirmed'
+                booking.confirmed_at = datetime.now(timezone.utc)
+                booking.pickup_order = get_walker_slot_count(walker.id, booking_date, slot)
+            else:
+                booking.status = 'requested'
+
         db.session.commit()
 
-        return jsonify(success=True, status=status,
-                       message=f"Booking {'requested' if status == 'requested' else 'waitlisted'} for {dog.name} on {booking_date.strftime('%-d %b %Y')}")
+        return jsonify(success=True, status=booking.status,
+                       message=f"Booking {booking.status} for {dog.name} on {booking_date.strftime('%-d %b %Y')}")
 
     except Exception as e:
         db.session.rollback()
@@ -2379,16 +2389,27 @@ def recurring_for_dog():
                 skipped += 1
                 continue
 
-            status = 'requested' if available else 'waitlisted'
-            db.session.add(Booking(
+            booking = Booking(
                 user_id=user_id,
                 dog_id=dog_id,
                 service_type_id=default_service.id,
                 date=d,
                 slot=slot,
-                status=status,
-            ))
-            if status == 'waitlisted':
+                status='waitlisted',
+            )
+            db.session.add(booking)
+
+            if available:
+                walker = auto_assign_walker(d, slot)
+                if walker:
+                    booking.walker_id = walker.id
+                    booking.status = 'confirmed'
+                    booking.confirmed_at = datetime.now(timezone.utc)
+                    booking.pickup_order = get_walker_slot_count(walker.id, d, slot)
+                else:
+                    booking.status = 'requested'
+
+            if booking.status == 'waitlisted':
                 waitlisted += 1
             else:
                 created += 1
