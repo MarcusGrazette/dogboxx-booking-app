@@ -400,7 +400,9 @@ def create_app(config_name=None):
 
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
-        from flask import flash, redirect, request, url_for
+        from flask import flash, redirect, request, url_for, jsonify
+        if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify(success=False, message="Session timed out — please refresh."), 400
         flash("Your session timed out — please try again.", "warning")
         return redirect(request.referrer or url_for('auth.login'))
 

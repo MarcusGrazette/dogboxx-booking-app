@@ -23,9 +23,8 @@
                     <thead>
                         <tr>
                             <th>Name</th>
-                            <th>Email</th>
-                            <th>Status</th>
                             <th>Admin Access</th>
+                            <th>Drop-ins</th>
                             <th>Created</th>
                             <th>Actions</th>
                         </tr>
@@ -33,14 +32,9 @@
                     <tbody>
                         {% for walker in walkers %}
                         <tr>
-                            <td>{{ walker.full_name }}</td>
-                            <td>{{ walker.email }}</td>
                             <td>
-                                {% if walker.active %}
-                                <span class="badge bg-success">Active</span>
-                                {% else %}
-                                <span class="badge bg-danger">Inactive</span>
-                                {% endif %}
+                                {{ walker.full_name }}
+                                <div class="text-muted small">{{ walker.email }}</div>
                             </td>
                             <td>
                                 {% if walker.is_super_admin %}
@@ -53,13 +47,33 @@
                                                role="switch"
                                                id="admin-toggle-{{ walker.id }}"
                                                data-walker-id="{{ walker.id }}"
+                                               style="margin-top:0;"
                                                {% if walker.is_admin %}checked{% endif %}
                                                {% if not current_user.is_super_admin %}disabled{% endif %}>
-                                        <label class="form-check-label text-muted small"
+                                        <label class="form-check-label text-muted small mb-0"
                                                for="admin-toggle-{{ walker.id }}">
                                             {% if walker.is_admin %}Admin{% else %}Standard{% endif %}
                                         </label>
                                     </div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if walker.walker %}
+                                <div class="form-check form-switch mb-0">
+                                    <input class="form-check-input drop-in-toggle"
+                                           type="checkbox"
+                                           role="switch"
+                                           id="dropin-toggle-{{ walker.id }}"
+                                           data-walker-id="{{ walker.id }}"
+                                           style="margin-top:0;"
+                                           {% if walker.walker.does_drop_ins %}checked{% endif %}>
+                                    <label class="form-check-label text-muted small mb-0"
+                                           for="dropin-toggle-{{ walker.id }}">
+                                        {% if walker.walker.does_drop_ins %}Yes{% else %}No{% endif %}
+                                    </label>
+                                </div>
+                                {% else %}
+                                <span class="text-muted small">—</span>
                                 {% endif %}
                             </td>
                             <td>{{ walker.created_at.strftime('%Y-%m-%d') if walker.created_at }}</td>
@@ -112,6 +126,36 @@
 function toggleWalkerStatus(walkerId, action) {
     return toggleStatus('walkers', walkerId, action);
 }
+
+document.querySelectorAll('.drop-in-toggle').forEach(function(toggle) {
+    toggle.addEventListener('change', function() {
+        var walkerId = this.dataset.walkerId;
+        var label = this.closest('.form-check').querySelector('label');
+        var originalChecked = !this.checked;
+        this.disabled = true;
+
+        fetch('/admin/walkers/' + walkerId + '/toggle-drop-ins', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                label.textContent = data.does_drop_ins ? 'Yes' : 'No';
+            } else {
+                toggle.checked = originalChecked;
+                alert(data.message || 'Could not update drop-in setting.');
+            }
+        })
+        .catch(function() {
+            toggle.checked = originalChecked;
+            alert('Request failed. Please try again.');
+        })
+        .finally(function() {
+            toggle.disabled = false;
+        });
+    });
+});
 
 document.querySelectorAll('.admin-toggle').forEach(function(toggle) {
     toggle.addEventListener('change', function() {

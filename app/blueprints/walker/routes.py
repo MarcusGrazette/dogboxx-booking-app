@@ -9,7 +9,7 @@ from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy import case, func
-from app.models import Walker, Booking, User, WalkerUnavailability, WalkerAdHocAvailability, WalkerSchedule, Client, Dog, DailyMessage, ServiceType
+from app.models import Walker, Booking, User, WalkerUnavailability, WalkerAdHocAvailability, WalkerSchedule, Client, Dog, DogOwner, DailyMessage, ServiceType
 from app import db
 from datetime import datetime, timezone, timedelta, date
 
@@ -541,3 +541,27 @@ def api_pickup_list(date_str):
 
 
 
+
+
+@walker_bp.route("/dogs")
+@login_required
+@walker_required
+def dogs():
+    """Dog directory — all dogs with owner contact info."""
+    all_dogs = Dog.query.order_by(Dog.name).all()
+
+    # Pre-fetch primary owners (with client) in one query to avoid N+1
+    ownerships = (
+        DogOwner.query
+        .filter_by(role='primary')
+        .options(joinedload(DogOwner.user).joinedload(User.client))
+        .all()
+    )
+    primary_owners = {o.dog_id: o.user for o in ownerships}
+
+    return render_template(
+        "walker_dogs.html",
+        dogs=all_dogs,
+        primary_owners=primary_owners,
+        today=date.today(),
+    )

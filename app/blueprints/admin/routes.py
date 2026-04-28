@@ -896,7 +896,7 @@ def assign_walker():
                 Booking.dog_id == booking.dog_id,
                 Booking.date == booking.date,
                 Booking.slot == slot,
-                Booking.status.in_(Booking.CAPACITY_STATUSES),
+                Booking.status.notin_(('cancelled', 'rejected', 'completed')),
                 Booking.id != booking.id,
             ).first()
             if conflict:
@@ -1372,6 +1372,7 @@ def new_client():
                     date_of_birth=form.dog_dob.data,
                     whatsapp_group_url=(form.dog_whatsapp_group_url.data.strip() or None) if form.dog_whatsapp_group_url.data else None,
                     pickup_instructions=form.pickup_instructions.data.strip() if form.pickup_instructions.data else None,
+                    hold_key=bool(form.hold_key.data),
                 )
                 db.session.add(new_dog)
                 db.session.flush()
@@ -1461,6 +1462,7 @@ def edit_client(client_id):
                     dog.date_of_birth = form.dog_dob.data
                     dog.whatsapp_group_url = (form.dog_whatsapp_group_url.data.strip() or None) if form.dog_whatsapp_group_url.data else None
                     dog.pickup_instructions = pickup_notes
+                    dog.hold_key = bool(form.hold_key.data)
                 else:
                     new_dog = Dog(
                         name=form.dog_name.data.strip(),
@@ -1470,6 +1472,7 @@ def edit_client(client_id):
                         date_of_birth=form.dog_dob.data,
                         whatsapp_group_url=(form.dog_whatsapp_group_url.data.strip() or None) if form.dog_whatsapp_group_url.data else None,
                         pickup_instructions=pickup_notes,
+                        hold_key=bool(form.hold_key.data),
                     )
                     db.session.add(new_dog)
                     db.session.flush()
@@ -1514,6 +1517,7 @@ def edit_client(client_id):
             form.dog_dob.data = dog.date_of_birth
             form.dog_allergies.data = dog.allergies
             form.dog_whatsapp_group_url.data = dog.whatsapp_group_url
+            form.hold_key.data = dog.hold_key
 
     return render_template(
         "admin_client_form.html",
@@ -1543,6 +1547,7 @@ def add_dog(client_id):
                 allergies=form.dog_allergies.data.strip() if form.dog_allergies.data else "",
                 pickup_instructions=form.pickup_instructions.data.strip() if form.pickup_instructions.data else None,
                 whatsapp_group_url=(form.dog_whatsapp_group_url.data.strip() or None) if form.dog_whatsapp_group_url.data else None,
+                hold_key=bool(form.hold_key.data),
             )
             db.session.add(new_dog)
             db.session.flush()
@@ -1736,6 +1741,19 @@ def toggle_walker_admin(walker_user_id):
     return jsonify(success=True, is_admin=target.is_admin)
 
 
+@admin_bp.route("/walkers/<int:walker_user_id>/toggle-drop-ins", methods=["POST"])
+@login_required
+@admin_required
+def toggle_walker_drop_ins(walker_user_id):
+    """Toggle whether a walker does drop-in visits."""
+    target = User.query.filter_by(id=walker_user_id, role='walker').first_or_404()
+    if not target.walker:
+        return jsonify(success=False, message="No walker record found."), 400
+    target.walker.does_drop_ins = not target.walker.does_drop_ins
+    db.session.commit()
+    return jsonify(success=True, does_drop_ins=target.walker.does_drop_ins)
+
+
 @admin_bp.route("/walkers/new", methods=["GET", "POST"])
 @login_required
 @admin_required
@@ -1804,11 +1822,26 @@ def deactivate_walker(walker_id):
             return jsonify(success=False, message="You cannot deactivate your own account"), 400
 
         user.active = False
+
+        # Return future confirmed bookings to pending so they stay visible on the board
+        from datetime import date as _date
+        today = _date.today()
+        Booking.query.filter(
+            Booking.walker_id == user.walker.id,
+            Booking.date >= today,
+            Booking.status == 'confirmed',
+        ).update({'walker_id': None, 'status': 'requested'}, synchronize_session=False)
+
+        # Deactivate schedule rows so the walker no longer appears on future board dates
+        WalkerSchedule.query.filter_by(walker_id=user.walker.id).update(
+            {'active': False}, synchronize_session=False
+        )
+
         db.session.commit()
-        
+
         logging.info(f"Admin {current_user.id} deactivated walker {user.id}")
         return jsonify(success=True, message="Walker deactivated successfully")
-        
+
     except Exception as e:
         db.session.rollback()
         logging.error(f"Error deactivating walker {walker_id}: {e}")

@@ -79,11 +79,6 @@ def seed_clients(clients_data, users):
             
         client = Client(
             user_id=user.id,
-            place_id=client_data.get('place_id'),
-            formatted_address=client_data.get('formatted_address'),
-            display_name=client_data.get('display_name'),
-            latitude=client_data.get('latitude'),
-            longitude=client_data.get('longitude'),
             street_address=client_data.get('street_address'),
             city=client_data.get('city'),
             state=client_data.get('state'),

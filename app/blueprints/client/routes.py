@@ -1402,7 +1402,7 @@ def pause_walks():
                     notification_type = 'booking_cancelled',
                     title             = f"{current_user.firstname} paused walks {start_fmt}–{end_fmt}",
                     body              = f"{n} booking{'s' if n != 1 else ''} cancelled",
-                    link              = '/bookings',
+                    link              = '/',
                     sender_id         = current_user.id,
                 )
                 notified.add(ownership.user_id)
@@ -1617,13 +1617,11 @@ def recurring_booking():
 
         for d in target_dates:
             for s in slots_to_book:
-                # Skip duplicates for the same service type only
                 existing = Booking.query.filter(
-                    Booking.dog_id          == dog.id,
-                    Booking.date            == d,
-                    Booking.slot            == s,
+                    Booking.dog_id == dog.id,
+                    Booking.date   == d,
+                    Booking.slot   == s,
                     Booking.status.in_(active_statuses),
-                    Booking.service_type_id == default_service.id,
                 ).first()
                 if existing:
                     skipped += 1
@@ -1684,7 +1682,7 @@ def recurring_booking():
                 notification_type='booking_confirmed',
                 title=f'{confirmed} recurring {service_label} confirmed',
                 body=f'Your {freq_label} {slot_label} {service_label} for {dog.name} have been booked.',
-                link='/bookings',
+                link='/',
             )
 
         # Single admin notification for anything still pending / waitlisted

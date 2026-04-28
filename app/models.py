@@ -89,14 +89,6 @@ class Client(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
 
-    # Google Places data
-    place_id = db.Column(db.String(200), nullable=True)
-    formatted_address = db.Column(db.String(300), nullable=True)
-    display_name = db.Column(db.String(200), nullable=True)
-    latitude = db.Column(db.Float, nullable=True)
-    longitude = db.Column(db.Float, nullable=True)
-
-    # Legacy address fields
     street_address = db.Column(db.String(200), nullable=True)
     city = db.Column(db.String(100), nullable=True)
     state = db.Column(db.String(50), nullable=True)
@@ -124,11 +116,6 @@ class Client(db.Model):
         return {
             'id': self.id,
             'user_id': self.user_id,
-            'place_id': self.place_id,
-            'formatted_address': self.formatted_address,
-            'display_name': self.display_name,
-            'latitude': self.latitude,
-            'longitude': self.longitude,
             'street_address': self.street_address,
             'city': self.city,
             'state': self.state,
@@ -153,7 +140,8 @@ class Dog(db.Model):
     other_info = db.Column(db.String(500), nullable=True)
     pic = db.Column(db.String(300), nullable=True)
     whatsapp_group_url = db.Column(db.String(2048), nullable=True)
-    pickup_instructions = db.Column(db.String(500), nullable=True)
+    pickup_instructions = db.Column(db.String(1000), nullable=True)
+    hold_key = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Many-to-many relationship with owners via DogOwner
