@@ -45,16 +45,11 @@
                         <div class="fw-bold fs-5 text-truncate">{{ client.full_name }}</div>
                         <div class="text-muted small text-truncate">{{ client.email }}</div>
                     </div>
-                    <div class="d-flex flex-column gap-1 align-items-end flex-shrink-0">
-                        {% if client.active %}
-                        <span class="badge bg-success">Active</span>
-                        {% else %}
-                        <span class="badge bg-danger">Inactive</span>
-                        {% endif %}
-                        {% if client.must_change_password %}
+                    {% if client.must_change_password %}
+                    <div class="flex-shrink-0">
                         <span class="badge bg-warning text-dark">Never logged in</span>
-                        {% endif %}
                     </div>
+                    {% endif %}
                 </div>
 
                 {# Address — clickable if maps_url set #}
@@ -109,7 +104,6 @@
         <div class="card mb-4">
             <div class="card-header d-flex align-items-center">
                 <i class="bi bi-heart-fill me-2" style="color:#E02FAC;"></i>{{ dog.name }}
-                <span class="badge bg-secondary ms-2 fw-normal" style="font-size:.7rem;">Primary owner</span>
                 <button class="btn btn-sm btn-outline-success ms-auto"
                         data-dog-id="{{ dog.id }}"
                         data-dog-name="{{ dog.name }}"
@@ -230,7 +224,6 @@
         <div class="card mb-4">
             <div class="card-header d-flex align-items-center">
                 <i class="bi bi-heart-fill me-2" style="color:#E02FAC;"></i>{{ dog.name }}
-                <span class="badge bg-info text-dark ms-2 fw-normal" style="font-size:.7rem;">Shared access</span>
                 {% if primary_owner %}
                 <button class="btn btn-sm btn-outline-danger ms-auto"
                         onclick="revokeAccess({{ primary_owner.id }}, {{ dog.id }}, {{ client.id }}, '{{ client.full_name|e }}', null)">
