@@ -41,54 +41,68 @@
         </div>
     </div>
     <div class="card">
-        <div class="card-body">
+        <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-striped">
-                    <thead>
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
                         <tr>
-                            <th>Name</th>
+                            <th class="ps-3">Name</th>
                             <th>Email</th>
-                            <th>Status</th>
                             <th>Created</th>
-                            <th>Actions</th>
+                            <th class="text-end pe-3">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for client in clients %}
                         <tr data-search="{{ (client.full_name ~ ' ' ~ client.email) | lower }}">
-                            <td>{{ client.full_name }}</td>
-                            <td>{{ client.email }}</td>
-                            <td>
-                                {% if client.active %}
-                                <span class="badge bg-success">Active</span>
-                                {% else %}
-                                <span class="badge bg-danger">Inactive</span>
-                                {% endif %}
+                            <td class="ps-3 align-middle">
+                                <div class="d-flex align-items-center gap-2">
+                                    {% if client.profile_pic %}
+                                    <img src="{{ url_for('static', filename='uploads/profiles/' + client.profile_pic) }}"
+                                         class="rounded-circle flex-shrink-0"
+                                         width="32" height="32" style="object-fit:cover;"
+                                         alt="{{ client.full_name }}">
+                                    {% else %}
+                                    <div class="rounded-circle bg-light d-flex align-items-center justify-content-center flex-shrink-0"
+                                         style="width:32px;height:32px;">
+                                        <i class="bi bi-person-fill text-muted" style="font-size:0.9rem;"></i>
+                                    </div>
+                                    {% endif %}
+                                    <span class="fw-semibold">{{ client.full_name }}</span>
+                                    {% if not client.active %}
+                                    <span class="badge bg-secondary fw-normal" style="font-size:0.65rem;">Inactive</span>
+                                    {% endif %}
+                                </div>
                             </td>
-                            <td>{{ client.created_at.strftime('%Y-%m-%d') if client.created_at }}</td>
-                            <td>
-                                <a href="{{ url_for('admin.client_detail', client_id=client.id) }}" 
+                            <td class="align-middle text-muted small">{{ client.email }}</td>
+                            <td class="align-middle text-muted small">{{ client.created_at.strftime('%d %b %Y') if client.created_at else '—' }}</td>
+                            <td class="text-end pe-3 align-middle">
+                                <a href="{{ url_for('admin.edit_client', client_id=client.id) }}"
                                    class="btn btn-sm btn-outline-secondary me-1">
-                                    <i class="bi bi-eye"></i> View
+                                    <i class="bi bi-pencil me-1"></i>Edit
                                 </a>
-                                {% if client.active %}
+                                <a href="{{ url_for('admin.client_detail', client_id=client.id) }}"
+                                   class="btn btn-sm btn-outline-secondary me-1">
+                                    <i class="bi bi-eye me-1"></i>View
+                                </a>
                                 {% if client.id != current_user.id %}
+                                {% if client.active %}
                                 <button class="btn btn-sm btn-outline-danger"
-                                        onclick="toggleClientStatus({{ client.id }}, 'deactivate')">
-                                    <i class="bi bi-x-circle"></i> Deactivate
+                                        onclick="confirmToggle({{ client.id }}, 'deactivate', '{{ client.full_name | e }}')">
+                                    <i class="bi bi-x-circle me-1"></i>Deactivate
+                                </button>
+                                {% else %}
+                                <button class="btn btn-sm btn-outline-success"
+                                        onclick="confirmToggle({{ client.id }}, 'activate', '{{ client.full_name | e }}')">
+                                    <i class="bi bi-check-circle me-1"></i>Activate
                                 </button>
                                 {% endif %}
-                                {% else %}
-                                <button class="btn btn-sm btn-outline-success" 
-                                        onclick="toggleClientStatus({{ client.id }}, 'activate')">
-                                    <i class="bi bi-check-circle"></i> Activate
-                                </button>
                                 {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
                         <tr id="no-results-row" style="display:none;">
-                            <td colspan="5" class="text-center text-muted py-4">
+                            <td colspan="4" class="text-center text-muted py-4">
                                 <i class="bi bi-search me-2"></i>No clients match your filter.
                             </td>
                         </tr>
@@ -109,16 +123,59 @@
         </div>
     </div>
     {% endif %}
+
+<!-- ─── Activate / Deactivate confirmation modal ─────────────────────────── -->
+<div class="modal fade" id="toggleModal" tabindex="-1" aria-labelledby="toggleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="toggleModalLabel"></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-muted small" id="toggle-modal-body"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn fw-semibold" id="toggle-confirm-btn"></button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/admin-toggle-status.js') }}"></script>
 <script>
-function toggleClientStatus(clientId, action) {
-    return toggleStatus('clients', clientId, action);
+// ── Activate / deactivate confirmation modal ────────────────────────────────
+const toggleModal    = new bootstrap.Modal(document.getElementById('toggleModal'));
+const toggleTitle    = document.getElementById('toggleModalLabel');
+const toggleBody     = document.getElementById('toggle-modal-body');
+const toggleConfirm  = document.getElementById('toggle-confirm-btn');
+
+let pendingId     = null;
+let pendingAction = null;
+
+function confirmToggle(clientId, action, name) {
+    pendingId     = clientId;
+    pendingAction = action;
+    const isDeactivate = action === 'deactivate';
+    toggleTitle.textContent   = isDeactivate ? 'Deactivate client' : 'Activate client';
+    toggleBody.textContent    = isDeactivate
+        ? `Deactivate ${name}? They will no longer be able to log in.`
+        : `Activate ${name}? They will be able to log in again.`;
+    toggleConfirm.textContent = isDeactivate ? 'Deactivate' : 'Activate';
+    toggleConfirm.className   = isDeactivate
+        ? 'btn btn-danger fw-semibold'
+        : 'btn btn-success fw-semibold';
+    toggleModal.show();
 }
 
+toggleConfirm.addEventListener('click', function () {
+    toggleModal.hide();
+    toggleStatus('clients', pendingId, pendingAction);
+});
+
+// ── Live filter ─────────────────────────────────────────────────────────────
 (function () {
     const searchInput  = document.getElementById('client-search');
     const searchClear  = document.getElementById('client-search-clear');
