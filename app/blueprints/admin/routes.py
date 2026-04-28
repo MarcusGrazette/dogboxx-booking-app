@@ -1415,8 +1415,9 @@ def edit_client(client_id):
     """
     user = User.query.filter(User.role == 'client', User.id == client_id).first_or_404()
     client = Client.query.filter_by(user_id=user.id).first()
-    dog_owner = DogOwner.query.filter_by(user_id=user.id, role='primary').first()
-    dog = db.session.get(Dog, dog_owner.dog_id) if dog_owner else None
+    dog_owners = DogOwner.query.filter_by(user_id=user.id, role='primary').order_by(DogOwner.id).all()
+    dog = db.session.get(Dog, dog_owners[0].dog_id) if dog_owners else None
+    additional_dogs = [db.session.get(Dog, do.dog_id) for do in dog_owners[1:]] if len(dog_owners) > 1 else []
 
     form = ClientCreateForm()
 
@@ -1478,6 +1479,34 @@ def edit_client(client_id):
                     db.session.flush()
                     db.session.add(DogOwner(dog_id=new_dog.id, user_id=user.id, role='primary'))
 
+            # Additional dogs (rendered with raw name="dog_<field>_<id>" inputs)
+            import re as _re
+            for key in list(request.form.keys()):
+                m = _re.match(r'^dog_name_(\d+)$', key)
+                if not m:
+                    continue
+                did = int(m.group(1))
+                extra_dog = db.session.get(Dog, did)
+                if not extra_dog:
+                    continue
+                extra_name = request.form.get(f'dog_name_{did}', '').strip()
+                if extra_name:
+                    extra_dog.name = extra_name
+                extra_dog.breed = request.form.get(f'dog_breed_{did}', '').strip()
+                extra_dog.gender = request.form.get(f'dog_gender_{did}', extra_dog.gender) or extra_dog.gender
+                dob_str = request.form.get(f'dog_dob_{did}', '').strip()
+                if dob_str:
+                    try:
+                        extra_dog.date_of_birth = datetime.strptime(dob_str, '%Y-%m-%d').date()
+                    except ValueError:
+                        pass
+                else:
+                    extra_dog.date_of_birth = None
+                extra_dog.allergies = request.form.get(f'dog_allergies_{did}', '').strip()
+                extra_dog.pickup_instructions = request.form.get(f'dog_pickup_instructions_{did}', '').strip() or None
+                extra_dog.whatsapp_group_url = request.form.get(f'dog_whatsapp_{did}', '').strip() or None
+                extra_dog.hold_key = bool(request.form.get(f'dog_hold_key_{did}'))
+
             # Auto-complete onboarding when we now have the full picture
             if has_address and has_dog and not client.onboarding_completed:
                 client.onboarding_completed = True
@@ -1525,6 +1554,7 @@ def edit_client(client_id):
         title=f"Edit {user.full_name}",
         is_edit=True,
         client_user=user,
+        additional_dogs=additional_dogs,
     )
 
 
@@ -2133,6 +2163,55 @@ def dogs():
         for row in rows
     ]
     return render_template("admin_dogs.html", dogs_data=dogs_data)
+
+
+@admin_bp.route("/dogs/<int:dog_id>/update", methods=["POST"])
+@login_required
+@admin_required
+def update_dog(dog_id):
+    """AJAX: update a dog's details from the admin dogs table."""
+    from datetime import date as date_type
+    dog = db.session.get(Dog, dog_id)
+    if not dog:
+        return jsonify(success=False, message="Dog not found"), 404
+
+    data = request.get_json()
+    if not data:
+        return jsonify(success=False, message="No data received"), 400
+
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify(success=False, message="Name is required"), 400
+
+    gender = (data.get('gender') or '').strip()
+    if gender not in ('male', 'female', ''):
+        return jsonify(success=False, message="Invalid gender"), 400
+
+    dob_str = (data.get('date_of_birth') or '').strip()
+    dob = None
+    if dob_str:
+        try:
+            dob = datetime.strptime(dob_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify(success=False, message="Invalid date of birth"), 400
+
+    dog.name = name
+    dog.gender = gender or dog.gender
+    dog.breed = (data.get('breed') or '').strip()
+    dog.date_of_birth = dob
+    dog.allergies = (data.get('allergies') or '').strip()
+    dog.pickup_instructions = (data.get('pickup_instructions') or '').strip() or None
+    dog.whatsapp_group_url = (data.get('whatsapp_group_url') or '').strip() or None
+    dog.hold_key = bool(data.get('hold_key'))
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error updating dog {dog_id}: {e}")
+        return jsonify(success=False, message="Failed to save changes"), 500
+
+    return jsonify(success=True, name=dog.name, breed=dog.breed or '—')
 
 
 @admin_bp.route("/book_for_dog", methods=["POST"])

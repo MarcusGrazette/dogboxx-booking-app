@@ -240,6 +240,91 @@
                 </div>
             </div>
 
+            {# ── Additional dogs (edit mode only) ───────────────────────────── #}
+            {% if is_edit and additional_dogs %}
+            {% for edog in additional_dogs %}
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-heart me-2"></i>{{ edog.name }}</h5>
+                    <a href="{{ url_for('admin.client_detail', client_id=client_user.id) }}" class="badge bg-secondary fw-normal text-decoration-none">Dog {{ loop.index + 1 }}</a>
+                </div>
+                <div class="card-body">
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
+                            <label class="form-label fw-semibold small">Name</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-tag text-secondary"></i></span>
+                                <input type="text" class="form-control" name="dog_name_{{ edog.id }}" value="{{ edog.name }}" required>
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label fw-semibold small">Gender</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-gender-ambiguous text-secondary"></i></span>
+                                <select class="form-select" name="dog_gender_{{ edog.id }}">
+                                    <option value="" {% if not edog.gender %}selected{% endif %}></option>
+                                    <option value="male" {% if edog.gender == 'male' %}selected{% endif %}>Male</option>
+                                    <option value="female" {% if edog.gender == 'female' %}selected{% endif %}>Female</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
+                            <label class="form-label fw-semibold small">Breed</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-heart text-secondary"></i></span>
+                                <input type="text" class="form-control" name="dog_breed_{{ edog.id }}" value="{{ edog.breed or '' }}">
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label fw-semibold small">Date of birth</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-calendar-heart text-secondary"></i></span>
+                                <input type="date" class="form-control" name="dog_dob_{{ edog.id }}"
+                                       value="{{ edog.date_of_birth.isoformat() if edog.date_of_birth else '' }}">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Allergies / health notes</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-bandaid text-secondary"></i></span>
+                            <input type="text" class="form-control" name="dog_allergies_{{ edog.id }}" value="{{ edog.allergies or '' }}">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Access / pickup instructions</label>
+                        <textarea class="form-control" name="dog_pickup_instructions_{{ edog.id }}" rows="3">{{ edog.pickup_instructions or '' }}</textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">WhatsApp Group Link <span class="text-muted fw-normal">(optional)</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-whatsapp text-success"></i></span>
+                            <input type="url" class="form-control" name="dog_whatsapp_{{ edog.id }}"
+                                   value="{{ edog.whatsapp_group_url or '' }}" placeholder="https://chat.whatsapp.com/…">
+                        </div>
+                    </div>
+
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="dog_hold_key_{{ edog.id }}" id="dog_hold_key_{{ edog.id }}"
+                               {% if edog.hold_key %}checked{% endif %}>
+                        <label class="form-check-label small fw-semibold" for="dog_hold_key_{{ edog.id }}">
+                            <i class="bi bi-key-fill me-1 text-warning"></i>DogBoxx holds a house key for this dog
+                        </label>
+                        <div class="form-text">Tick if DogBoxx has a copy of the house key in the key safe.</div>
+                    </div>
+
+                </div>
+            </div>
+            {% endfor %}
+            {% endif %}
+
             {# ── Onboarding status hint ──────────────────────────────────────── #}
             <div class="alert alert-info mb-4">
                 <i class="bi bi-info-circle me-1"></i>
