@@ -1113,12 +1113,11 @@ def _get_slot_color(slot):
 @admin_required
 def clients():
     """List all clients (admin only)"""
-# Get all users with role='client' and their client records
     clients = (
         User.query
         .options(joinedload(User.client))
         .filter(User.role == 'client')
-        .order_by(User.lastname, User.firstname)
+        .order_by(User.active.desc(), User.lastname, User.firstname)
         .all()
     )
     

@@ -88,13 +88,15 @@
                                 {% if client.id != current_user.id %}
                                 {% if client.active %}
                                 <button class="btn btn-sm btn-outline-danger"
-                                        onclick="confirmToggle({{ client.id }}, 'deactivate', '{{ client.full_name | e }}')">
-                                    <i class="bi bi-x-circle me-1"></i>Deactivate
+                                        onclick="confirmToggle({{ client.id }}, 'deactivate', '{{ client.full_name | e }}')"
+                                        title="Deactivate">
+                                    <i class="bi bi-x-circle"></i>
                                 </button>
                                 {% else %}
                                 <button class="btn btn-sm btn-outline-success"
-                                        onclick="confirmToggle({{ client.id }}, 'activate', '{{ client.full_name | e }}')">
-                                    <i class="bi bi-check-circle me-1"></i>Activate
+                                        onclick="confirmToggle({{ client.id }}, 'activate', '{{ client.full_name | e }}')"
+                                        title="Activate">
+                                    <i class="bi bi-check-circle"></i>
                                 </button>
                                 {% endif %}
                                 {% endif %}
