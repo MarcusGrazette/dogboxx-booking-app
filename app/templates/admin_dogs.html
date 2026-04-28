@@ -74,7 +74,9 @@
                 </thead>
                 <tbody>
                     {% for row in dogs_data %}
-                    <tr data-search="{{ (row.dog.name ~ ' ' ~ (row.dog.breed or '') ~ ' ' ~ row.owner_name ~ ' ' ~ row.owner_email) | lower }}"
+                    <tr class="dog-row" style="cursor:pointer;"
+                        data-view-modal="#dog-view-{{ row.dog.id }}"
+                        data-search="{{ (row.dog.name ~ ' ' ~ (row.dog.breed or '') ~ ' ' ~ row.owner_name ~ ' ' ~ row.owner_email) | lower }}"
                         data-owner-search="{{ (row.owner_name ~ ' ' ~ row.owner_email) | lower }}">
                         <td class="ps-3 fw-semibold align-middle">
                             <img src="{{ url_for('static', filename='uploads/dogs/' ~ row.dog.pic) if row.dog.pic else url_for('static', filename='uploads/dogs/default-dog.png') }}"
@@ -86,7 +88,7 @@
                         <td class="align-middle text-muted">{{ row.dog.breed or '—' }}</td>
                         <td class="align-middle">{{ row.owner_name }}</td>
                         <td class="align-middle text-muted small">{{ row.owner_email }}</td>
-                        <td class="text-end pe-3 align-middle">
+                        <td class="text-end pe-3 align-middle" onclick="event.stopPropagation()">
                             <button class="btn btn-sm btn-outline-secondary edit-dog-btn me-1"
                                     data-dog-id="{{ row.dog.id }}"
                                     data-dog-name="{{ row.dog.name }}"
@@ -275,6 +277,79 @@
         </div>
     </div>
 </div>
+
+{# ── Per-dog view modals ─────────────────────────────────────────────────── #}
+{% for row in dogs_data %}
+{% set dog = row.dog %}
+{# Age calculation #}
+{% if dog.date_of_birth %}
+    {% set age_days = (today - dog.date_of_birth).days %}
+    {% set age_years = (age_days / 365.25) | int %}
+    {% if age_years < 1 %}
+        {% set age_str = (age_days // 30) ~ " month" ~ ("s" if age_days // 30 != 1 else "") %}
+    {% else %}
+        {% set age_str = age_years ~ " year" ~ ("s" if age_years != 1 else "") %}
+    {% endif %}
+{% else %}
+    {% set age_str = none %}
+{% endif %}
+
+<div class="modal fade" id="dog-view-{{ dog.id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header align-items-center gap-3">
+                <img src="{{ url_for('static', filename='uploads/dogs/' ~ dog.pic) if dog.pic else url_for('static', filename='uploads/dogs/default-dog.png') }}"
+                     onerror="this.onerror=null;this.src='{{ url_for('static', filename='uploads/dogs/default-dog.png') }}'"
+                     class="rounded-circle flex-shrink-0"
+                     width="44" height="44" style="object-fit:cover;" alt="{{ dog.name }}">
+                <h5 class="modal-title fw-bold mb-0">{{ dog.name }}</h5>
+                <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                {% if age_str or dog.breed or dog.gender %}
+                <div class="d-flex gap-2 flex-wrap mb-3">
+                    {% if dog.gender %}<span class="badge bg-light text-dark border">{{ dog.gender | capitalize }}</span>{% endif %}
+                    {% if dog.breed %}<span class="badge bg-light text-dark border">{{ dog.breed }}</span>{% endif %}
+                    {% if age_str %}<span class="badge bg-light text-dark border">{{ age_str }}</span>{% endif %}
+                    {% if dog.hold_key %}<span class="badge" style="background:#f59e0b;color:#fff;"><i class="bi bi-key-fill me-1"></i>Key</span>{% endif %}
+                </div>
+                {% endif %}
+
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <i class="bi bi-person text-muted flex-shrink-0"></i>
+                    <span class="small">{{ row.owner_name }}</span>
+                    <span class="text-muted small">{{ row.owner_email }}</span>
+                </div>
+
+                {% if dog.allergies %}
+                <div class="d-flex align-items-start gap-2 mt-3">
+                    <i class="bi bi-prescription2 text-muted flex-shrink-0" style="margin-top:2px;"></i>
+                    <span class="small" style="white-space:pre-wrap;">{{ dog.allergies }}</span>
+                </div>
+                {% endif %}
+
+                {% if dog.pickup_instructions %}
+                <div class="rounded p-3 mt-3" style="background:#e8f4fd;color:#0a58ca;border-left:3px solid #3d8bcd;">
+                    <div class="small fw-semibold mb-1"><i class="bi bi-info-circle me-1"></i>Pickup notes</div>
+                    <div class="small" style="white-space:pre-wrap;line-height:1.5;">{{ dog.pickup_instructions }}</div>
+                </div>
+                {% endif %}
+
+                {% if dog.whatsapp_group_url %}
+                <a href="{{ dog.whatsapp_group_url }}" target="_blank" rel="noopener"
+                   class="btn btn-sm fw-semibold w-100 mt-3"
+                   style="background:#25D366;color:#fff;">
+                    <i class="bi bi-whatsapp me-1"></i>WhatsApp group
+                </a>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
 {% endblock %}
 
 {% block scripts %}
@@ -492,6 +567,14 @@ document.addEventListener('DOMContentLoaded', function () {
         return document.querySelector('meta[name=csrf-token]')?.content ||
                document.querySelector('input[name=csrf_token]')?.value || '';
     }
+
+    // ── Row click → view modal ──────────────────────────────────────────────
+    document.querySelectorAll('tr.dog-row').forEach(row => {
+        row.addEventListener('click', function () {
+            const target = this.dataset.viewModal;
+            if (target) bootstrap.Modal.getOrCreateInstance(document.querySelector(target)).show();
+        });
+    });
 
     // ── Edit dog modal ──────────────────────────────────────────────────────
     const editModal      = new bootstrap.Modal(document.getElementById('editDogModal'));

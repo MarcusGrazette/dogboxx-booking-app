@@ -2163,7 +2163,8 @@ def dogs():
         }
         for row in rows
     ]
-    return render_template("admin_dogs.html", dogs_data=dogs_data)
+    from datetime import date as date_type
+    return render_template("admin_dogs.html", dogs_data=dogs_data, today=date_type.today())
 
 
 @admin_bp.route("/dogs/<int:dog_id>/update", methods=["POST"])

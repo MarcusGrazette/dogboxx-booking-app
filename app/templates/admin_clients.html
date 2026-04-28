@@ -54,7 +54,9 @@
                     </thead>
                     <tbody>
                         {% for client in clients %}
-                        <tr data-search="{{ (client.full_name ~ ' ' ~ client.email) | lower }}">
+                        <tr class="client-row" style="cursor:pointer;"
+                            data-href="{{ url_for('admin.client_detail', client_id=client.id) }}"
+                            data-search="{{ (client.full_name ~ ' ' ~ client.email) | lower }}">
                             <td class="ps-3 align-middle">
                                 <div class="d-flex align-items-center gap-2">
                                     {% if client.profile_pic %}
@@ -76,14 +78,10 @@
                             </td>
                             <td class="align-middle text-muted small">{{ client.email }}</td>
                             <td class="align-middle text-muted small">{{ client.created_at.strftime('%d %b %Y') if client.created_at else '—' }}</td>
-                            <td class="text-end pe-3 align-middle">
+                            <td class="text-end pe-3 align-middle" onclick="event.stopPropagation()">
                                 <a href="{{ url_for('admin.edit_client', client_id=client.id) }}"
                                    class="btn btn-sm btn-outline-secondary me-1">
                                     <i class="bi bi-pencil me-1"></i>Edit
-                                </a>
-                                <a href="{{ url_for('admin.client_detail', client_id=client.id) }}"
-                                   class="btn btn-sm btn-outline-secondary me-1">
-                                    <i class="bi bi-eye me-1"></i>View
                                 </a>
                                 {% if client.id != current_user.id %}
                                 {% if client.active %}
@@ -175,6 +173,13 @@ function confirmToggle(clientId, action, name) {
 toggleConfirm.addEventListener('click', function () {
     toggleModal.hide();
     toggleStatus('clients', pendingId, pendingAction);
+});
+
+// ── Row click → client detail ───────────────────────────────────────────────
+document.querySelectorAll('tr.client-row').forEach(row => {
+    row.addEventListener('click', function () {
+        window.location.href = this.dataset.href;
+    });
 });
 
 // ── Live filter ─────────────────────────────────────────────────────────────
