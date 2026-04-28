@@ -310,7 +310,7 @@ class TestClientRecurringBooking:
         assert resp.status_code == 200
         assert data['success'] is True
         # 5 weekdays in Mon–Fri (Sat+Sun skipped); some may auto-confirm
-        assert data.get('confirmed', 0) + data['created'] + data['waitlisted'] == 5
+        assert data.get('confirmed', 0) + data.get('requested', 0) + data['waitlisted'] == 5
 
     def test_weekly_booking_creates_correct_count(self, app, client):
         """Weekly frequency over 3 weeks creates 3 bookings."""
@@ -338,7 +338,7 @@ class TestClientRecurringBooking:
         })
         data = resp.get_json()
         assert data['success'] is True
-        assert data.get('confirmed', 0) + data['created'] + data['waitlisted'] == 3
+        assert data.get('confirmed', 0) + data.get('requested', 0) + data['waitlisted'] == 3
 
     def test_duplicate_dates_skipped(self, app, client):
         """Dates where dog already has an active booking in that slot are skipped."""
@@ -372,7 +372,7 @@ class TestClientRecurringBooking:
         data = resp.get_json()
         assert data['success'] is True
         assert data['skipped'] == 1
-        assert data['created'] == 0
+        assert data.get('confirmed', 0) + data.get('requested', 0) == 0
 
     def test_end_date_beyond_1_year_rejected(self, app, client):
         """Client cannot book beyond 1 year — should return error."""
@@ -579,7 +579,7 @@ class TestAdminRecurringForDog:
         data = resp.get_json()
         assert data['success'] is True
         # Mon–Fri = 5 (Sat+Sun skipped); some may auto-confirm
-        assert data.get('confirmed', 0) + data['created'] + data['waitlisted'] == 5
+        assert data.get('confirmed', 0) + data.get('requested', 0) + data['waitlisted'] == 5
 
     def test_admin_not_capped_at_4_weeks(self, app, client):
         """Admin recurring has no 4-week cap (unlike client recurring)."""
@@ -613,7 +613,7 @@ class TestAdminRecurringForDog:
         data = resp.get_json()
         # 9 Mondays over 8 weeks (inclusive); some may auto-confirm
         assert data['success'] is True
-        assert data.get('confirmed', 0) + data['created'] + data['waitlisted'] == 9
+        assert data.get('confirmed', 0) + data.get('requested', 0) + data['waitlisted'] == 9
 
     def test_duplicate_dates_skipped(self, app, client):
         mon = next_monday()
@@ -650,4 +650,4 @@ class TestAdminRecurringForDog:
         data = resp.get_json()
         assert data['success'] is True
         assert data['skipped'] == 1
-        assert data['created'] == 0
+        assert data.get('confirmed', 0) + data.get('requested', 0) == 0

@@ -84,8 +84,7 @@ def seed_clients(clients_data, users):
             state=client_data.get('state'),
             postal_code=client_data.get('postal_code'),
             country=client_data.get('country', 'USA'),
-            onboarding_completed=client_data.get('onboarding_completed', True),
-            pickup_instructions=client_data.get('pickup_instructions')
+            onboarding_completed=client_data.get('onboarding_completed', True)
         )
         
         # Set onboarding completion timestamp if completed

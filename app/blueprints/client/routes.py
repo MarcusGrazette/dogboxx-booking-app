@@ -194,7 +194,7 @@ def index():
         joinedload(Booking.service_type),
     ).filter(
         Booking.dog_id.in_(_index_dog_ids),
-        Booking.status != 'cancelled',
+        Booking.status.notin_(['cancelled', 'rejected']),
     ).order_by(Booking.date.asc())
 
     upcoming_bookings = list(upcoming_bookings_query)

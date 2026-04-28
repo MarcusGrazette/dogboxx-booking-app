@@ -1712,12 +1712,15 @@ def update_client_pickup_details(client_id):
 
     data = request.get_json(silent=True) or {}
     pickup_instructions = (data.get('pickup_instructions') or '').strip() or None
-    maps_url = (data.get('maps_url') or '').strip() or None
 
-    if maps_url and len(maps_url) > 2048:
-        return jsonify(success=False, message="Maps URL too long"), 400
-    if pickup_instructions and len(pickup_instructions) > 500:
-        return jsonify(success=False, message="Instructions too long (max 500 chars)"), 400
+    if pickup_instructions and len(pickup_instructions) > 1000:
+        return jsonify(success=False, message="Instructions too long (max 1000 chars)"), 400
+
+    if 'maps_url' in data:
+        maps_url = (data.get('maps_url') or '').strip() or None
+        if maps_url and len(maps_url) > 2048:
+            return jsonify(success=False, message="Maps URL too long"), 400
+        client.maps_url = maps_url
 
     # Pickup notes now live on the dog, not the client
     from app.models import DogOwner
@@ -1726,7 +1729,6 @@ def update_client_pickup_details(client_id):
     if not dog:
         return jsonify(success=False, message="No dog record found — add a dog first before saving pickup notes"), 404
     dog.pickup_instructions = pickup_instructions
-    client.maps_url = maps_url
     db.session.commit()
     return jsonify(success=True)
 
@@ -1890,8 +1892,11 @@ def activate_walker(walker_id):
             return jsonify(success=False, message="Walker not found"), 404
         
         user.active = True
+        WalkerSchedule.query.filter_by(walker_id=user.walker.id).update(
+            {'active': True}, synchronize_session=False
+        )
         db.session.commit()
-        
+
         logging.info(f"Admin {current_user.id} activated walker {user.id}")
         return jsonify(success=True, message="Walker activated successfully")
         
@@ -2291,6 +2296,27 @@ def book_for_dog():
             else:
                 booking.status = 'requested'
 
+        db.session.flush()  # populate booking.id before notifications
+
+        date_str_fmt = booking_date.strftime('%-d %b %Y')
+        if booking.status == 'confirmed':
+            create_notification(
+                recipient_id=user_id,
+                notification_type='booking_confirmed',
+                title=f"{dog.name}'s walk on {date_str_fmt} has been confirmed",
+                body=booking.slot,
+                link=f'/bookings/{booking.id}',
+                sender_id=current_user.id,
+            )
+            create_notification(
+                recipient_id=booking.walker.user_id,
+                notification_type='walker_assigned',
+                title=f'You have been assigned a walk on {date_str_fmt}',
+                body=f'{dog.name} — {booking.slot}',
+                link=f'/walker/pickups?date={booking_date.isoformat()}',
+                sender_id=current_user.id,
+            )
+
         db.session.commit()
 
         return jsonify(success=True, status=booking.status,
@@ -2362,7 +2388,8 @@ def recurring_for_dog():
             return jsonify(success=False, message="No valid dates in that range"), 400
 
         active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
-        created = waitlisted = skipped = 0
+        confirmed = requested = waitlisted = skipped = 0
+        notifications = []  # collect (recipient_id, type, title, body, link) tuples
 
         for d in target_dates:
             existing = Booking.query.filter(
@@ -2409,13 +2436,33 @@ def recurring_for_dog():
                 else:
                     booking.status = 'requested'
 
-            if booking.status == 'waitlisted':
+            if booking.status == 'confirmed':
+                confirmed += 1
+                date_str_fmt = d.strftime('%-d %b %Y')
+                notifications.append((user_id, 'booking_confirmed',
+                                       f"{dog.name}'s walk on {date_str_fmt} has been confirmed",
+                                       slot, booking))
+                notifications.append((walker.user_id, 'walker_assigned',
+                                       f'You have been assigned a walk on {date_str_fmt}',
+                                       f'{dog.name} — {slot}', booking))
+            elif booking.status == 'waitlisted':
                 waitlisted += 1
             else:
-                created += 1
+                requested += 1
+
+        db.session.flush()  # populate booking.id values before notifications
+        for recipient_id, ntype, title, body, bk in notifications:
+            create_notification(
+                recipient_id=recipient_id,
+                notification_type=ntype,
+                title=title,
+                body=body,
+                link=f'/bookings/{bk.id}' if ntype == 'booking_confirmed' else f'/walker/pickups?date={bk.date.isoformat()}',
+                sender_id=current_user.id,
+            )
 
         db.session.commit()
-        return jsonify(success=True, created=created, waitlisted=waitlisted, skipped=skipped)
+        return jsonify(success=True, confirmed=confirmed, requested=requested, waitlisted=waitlisted, skipped=skipped)
 
     except Exception as e:
         db.session.rollback()
