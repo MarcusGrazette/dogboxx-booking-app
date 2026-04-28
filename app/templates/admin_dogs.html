@@ -74,7 +74,10 @@
                 </thead>
                 <tbody>
                     {% for row in dogs_data %}
-                    <tr data-search="{{ (row.dog.name ~ ' ' ~ (row.dog.breed or '') ~ ' ' ~ row.owner_name ~ ' ' ~ row.owner_email) | lower }}">
+                    <tr class="dog-row" style="cursor:pointer;"
+                        data-view-modal="#dog-view-{{ row.dog.id }}"
+                        data-search="{{ (row.dog.name ~ ' ' ~ (row.dog.breed or '') ~ ' ' ~ row.owner_name ~ ' ' ~ row.owner_email) | lower }}"
+                        data-owner-search="{{ (row.owner_name ~ ' ' ~ row.owner_email) | lower }}">
                         <td class="ps-3 fw-semibold align-middle">
                             <img src="{{ url_for('static', filename='uploads/dogs/' ~ row.dog.pic) if row.dog.pic else url_for('static', filename='uploads/dogs/default-dog.png') }}"
                                  onerror="this.onerror=null;this.src='{{ url_for('static', filename='uploads/dogs/default-dog.png') }}'"
@@ -85,7 +88,19 @@
                         <td class="align-middle text-muted">{{ row.dog.breed or '—' }}</td>
                         <td class="align-middle">{{ row.owner_name }}</td>
                         <td class="align-middle text-muted small">{{ row.owner_email }}</td>
-                        <td class="text-end pe-3 align-middle">
+                        <td class="text-end pe-3 align-middle" onclick="event.stopPropagation()">
+                            <button class="btn btn-sm btn-outline-secondary edit-dog-btn me-1"
+                                    data-dog-id="{{ row.dog.id }}"
+                                    data-dog-name="{{ row.dog.name }}"
+                                    data-dog-breed="{{ row.dog.breed or '' }}"
+                                    data-dog-gender="{{ row.dog.gender or '' }}"
+                                    data-dog-dob="{{ row.dog.date_of_birth.isoformat() if row.dog.date_of_birth else '' }}"
+                                    data-dog-allergies="{{ row.dog.allergies or '' }}"
+                                    data-dog-pickup="{{ row.dog.pickup_instructions or '' }}"
+                                    data-dog-whatsapp="{{ row.dog.whatsapp_group_url or '' }}"
+                                    data-dog-hold-key="{{ 'true' if row.dog.hold_key else 'false' }}">
+                                <i class="bi bi-pencil me-1"></i>Edit
+                            </button>
                             <button class="btn btn-sm btn-primary book-btn"
                                     data-dog-id="{{ row.dog.id }}"
                                     data-dog-name="{{ row.dog.name }}"
@@ -189,6 +204,152 @@
         </div>
     </div>
 </div>
+<!-- ─── Edit Dog Modal ───────────────────────────────────────────────────── -->
+<div class="modal fade" id="editDogModal" tabindex="-1" aria-labelledby="editDogModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editDogModalLabel">
+                    <i class="bi bi-pencil me-2 text-secondary"></i>
+                    Edit <span id="edit-modal-dog-name"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+
+                <div class="row g-3 mb-3">
+                    <div class="col-sm-6">
+                        <label class="form-label fw-semibold small">Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="edit-dog-name">
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label fw-semibold small">Gender</label>
+                        <select class="form-select" id="edit-dog-gender">
+                            <option value=""></option>
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-sm-6">
+                        <label class="form-label fw-semibold small">Breed</label>
+                        <input type="text" class="form-control" id="edit-dog-breed" placeholder="e.g. Labrador">
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label fw-semibold small">Date of birth</label>
+                        <input type="date" class="form-control" id="edit-dog-dob">
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small">Allergies / health notes</label>
+                    <input type="text" class="form-control" id="edit-dog-allergies">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small">Access / pickup instructions</label>
+                    <textarea class="form-control" id="edit-dog-pickup" rows="3"></textarea>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small">WhatsApp Group Link</label>
+                    <input type="url" class="form-control" id="edit-dog-whatsapp" placeholder="https://chat.whatsapp.com/…">
+                </div>
+
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="edit-dog-hold-key">
+                    <label class="form-check-label small fw-semibold" for="edit-dog-hold-key">
+                        <i class="bi bi-key-fill me-1 text-warning"></i>DogBoxx holds a house key
+                    </label>
+                </div>
+
+                <div id="edit-dog-result" class="mt-3" style="display:none;"></div>
+
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary fw-semibold" id="edit-dog-submit-btn">
+                    <i class="bi bi-check-lg me-1"></i>Save changes
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Per-dog view modals ─────────────────────────────────────────────────── #}
+{% for row in dogs_data %}
+{% set dog = row.dog %}
+{# Age calculation #}
+{% if dog.date_of_birth %}
+    {% set age_days = (today - dog.date_of_birth).days %}
+    {% set age_years = (age_days / 365.25) | int %}
+    {% if age_years < 1 %}
+        {% set age_str = (age_days // 30) ~ " month" ~ ("s" if age_days // 30 != 1 else "") %}
+    {% else %}
+        {% set age_str = age_years ~ " year" ~ ("s" if age_years != 1 else "") %}
+    {% endif %}
+{% else %}
+    {% set age_str = none %}
+{% endif %}
+
+<div class="modal fade" id="dog-view-{{ dog.id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header align-items-center gap-3">
+                <img src="{{ url_for('static', filename='uploads/dogs/' ~ dog.pic) if dog.pic else url_for('static', filename='uploads/dogs/default-dog.png') }}"
+                     onerror="this.onerror=null;this.src='{{ url_for('static', filename='uploads/dogs/default-dog.png') }}'"
+                     class="rounded-circle flex-shrink-0"
+                     width="44" height="44" style="object-fit:cover;" alt="{{ dog.name }}">
+                <h5 class="modal-title fw-bold mb-0">{{ dog.name }}</h5>
+                <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                {% if age_str or dog.breed or dog.gender %}
+                <div class="d-flex gap-2 flex-wrap mb-3">
+                    {% if dog.gender %}<span class="badge bg-light text-dark border">{{ dog.gender | capitalize }}</span>{% endif %}
+                    {% if dog.breed %}<span class="badge bg-light text-dark border">{{ dog.breed }}</span>{% endif %}
+                    {% if age_str %}<span class="badge bg-light text-dark border">{{ age_str }}</span>{% endif %}
+                    {% if dog.hold_key %}<span class="badge" style="background:#f59e0b;color:#fff;"><i class="bi bi-key-fill me-1"></i>Key</span>{% endif %}
+                </div>
+                {% endif %}
+
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <i class="bi bi-person text-muted flex-shrink-0"></i>
+                    <span class="small">{{ row.owner_name }}</span>
+                    <span class="text-muted small">{{ row.owner_email }}</span>
+                </div>
+
+                {% if dog.allergies %}
+                <div class="d-flex align-items-start gap-2 mt-3">
+                    <i class="bi bi-prescription2 text-muted flex-shrink-0" style="margin-top:2px;"></i>
+                    <span class="small" style="white-space:pre-wrap;">{{ dog.allergies }}</span>
+                </div>
+                {% endif %}
+
+                {% if dog.pickup_instructions %}
+                <div class="rounded p-3 mt-3" style="background:#e8f4fd;color:#0a58ca;border-left:3px solid #3d8bcd;">
+                    <div class="small fw-semibold mb-1"><i class="bi bi-info-circle me-1"></i>Pickup notes</div>
+                    <div class="small" style="white-space:pre-wrap;line-height:1.5;">{{ dog.pickup_instructions }}</div>
+                </div>
+                {% endif %}
+
+                {% if dog.whatsapp_group_url %}
+                <a href="{{ dog.whatsapp_group_url }}" target="_blank" rel="noopener"
+                   class="btn btn-sm fw-semibold w-100 mt-3"
+                   style="background:#25D366;color:#fff;">
+                    <i class="bi bi-whatsapp me-1"></i>WhatsApp group
+                </a>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
 {% endblock %}
 
 {% block scripts %}
@@ -376,7 +537,8 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(data => {
                 if (data.success) {
                     const parts = [];
-                    if (data.created)    parts.push(`${data.created} requested`);
+                    if (data.confirmed)  parts.push(`${data.confirmed} confirmed`);
+                    if (data.requested)  parts.push(`${data.requested} requested`);
                     if (data.waitlisted) parts.push(`${data.waitlisted} waitlisted`);
                     if (data.skipped)    parts.push(`${data.skipped} skipped`);
                     showResult('success', `✓ Done — ${parts.join(', ')}.`);
@@ -405,6 +567,129 @@ document.addEventListener('DOMContentLoaded', function () {
     function getCsrf() {
         return document.querySelector('meta[name=csrf-token]')?.content ||
                document.querySelector('input[name=csrf_token]')?.value || '';
+    }
+
+    // ── Row click → view modal ──────────────────────────────────────────────
+    document.querySelectorAll('tr.dog-row').forEach(row => {
+        row.addEventListener('click', function () {
+            const target = this.dataset.viewModal;
+            if (target) bootstrap.Modal.getOrCreateInstance(document.querySelector(target)).show();
+        });
+    });
+
+    // ── Edit dog modal ──────────────────────────────────────────────────────
+    const editModal      = new bootstrap.Modal(document.getElementById('editDogModal'));
+    const editDogName    = document.getElementById('edit-modal-dog-name');
+    const editNameInp    = document.getElementById('edit-dog-name');
+    const editGenderSel  = document.getElementById('edit-dog-gender');
+    const editBreedInp   = document.getElementById('edit-dog-breed');
+    const editDobInp     = document.getElementById('edit-dog-dob');
+    const editAllergyInp = document.getElementById('edit-dog-allergies');
+    const editPickupTA   = document.getElementById('edit-dog-pickup');
+    const editWaInp      = document.getElementById('edit-dog-whatsapp');
+    const editHoldKey    = document.getElementById('edit-dog-hold-key');
+    const editResult     = document.getElementById('edit-dog-result');
+    const editSubmitBtn  = document.getElementById('edit-dog-submit-btn');
+
+    let editActiveDogId  = null;
+    let editActiveRow    = null;
+
+    document.querySelectorAll('.edit-dog-btn').forEach(btn => {
+        btn.addEventListener('click', function () {
+            editActiveDogId  = this.dataset.dogId;
+            editActiveRow    = this.closest('tr');
+
+            editDogName.textContent   = this.dataset.dogName;
+            editNameInp.value         = this.dataset.dogName;
+            editGenderSel.value       = this.dataset.dogGender;
+            editBreedInp.value        = this.dataset.dogBreed;
+            editDobInp.value          = this.dataset.dogDob;
+            editAllergyInp.value      = this.dataset.dogAllergies;
+            editPickupTA.value        = this.dataset.dogPickup;
+            editWaInp.value           = this.dataset.dogWhatsapp;
+            editHoldKey.checked       = this.dataset.dogHoldKey === 'true';
+            editResult.style.display  = 'none';
+            editSubmitBtn.disabled    = false;
+            editSubmitBtn.innerHTML   = '<i class="bi bi-check-lg me-1"></i>Save changes';
+
+            editModal.show();
+        });
+    });
+
+    editSubmitBtn.addEventListener('click', function () {
+        const name = editNameInp.value.trim();
+        if (!name) { showEditResult('danger', 'Name is required.'); return; }
+
+        editSubmitBtn.disabled = true;
+        editSubmitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving…';
+
+        fetch(`/admin/dogs/${editActiveDogId}/update`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrf(),
+            },
+            body: JSON.stringify({
+                name:                 name,
+                gender:               editGenderSel.value,
+                breed:                editBreedInp.value.trim(),
+                date_of_birth:        editDobInp.value,
+                allergies:            editAllergyInp.value.trim(),
+                pickup_instructions:  editPickupTA.value.trim(),
+                whatsapp_group_url:   editWaInp.value.trim(),
+                hold_key:             editHoldKey.checked,
+            }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                // Update the row's name and breed cells in place
+                if (editActiveRow) {
+                    const nameCell = editActiveRow.querySelector('td:first-child');
+                    if (nameCell) {
+                        const img = nameCell.querySelector('img');
+                        nameCell.textContent = data.name;
+                        if (img) nameCell.prepend(img);
+                    }
+                    const breedCell = editActiveRow.querySelectorAll('td')[1];
+                    if (breedCell) breedCell.textContent = data.breed;
+                    // Rebuild data-search with updated name/breed, preserving owner suffix
+                    const ownerText = editActiveRow.dataset.ownerSearch || '';
+                    editActiveRow.dataset.search = `${data.name.toLowerCase()} ${(editBreedInp.value.trim()).toLowerCase()} ${ownerText}`;
+                    // Update the button data-* so re-opening modal shows fresh values
+                    const editBtn = editActiveRow.querySelector('.edit-dog-btn');
+                    if (editBtn) {
+                        editBtn.dataset.dogName       = data.name;
+                        editBtn.dataset.dogBreed      = editBreedInp.value.trim();
+                        editBtn.dataset.dogGender     = editGenderSel.value;
+                        editBtn.dataset.dogDob        = editDobInp.value;
+                        editBtn.dataset.dogAllergies  = editAllergyInp.value.trim();
+                        editBtn.dataset.dogPickup     = editPickupTA.value.trim();
+                        editBtn.dataset.dogWhatsapp   = editWaInp.value.trim();
+                        editBtn.dataset.dogHoldKey    = editHoldKey.checked ? 'true' : 'false';
+                    }
+                    // Update book-btn dog name too
+                    const bookBtn = editActiveRow.querySelector('.book-btn');
+                    if (bookBtn) bookBtn.dataset.dogName = data.name;
+                }
+                editModal.hide();
+            } else {
+                showEditResult('danger', data.message || 'Something went wrong');
+                editSubmitBtn.disabled = false;
+                editSubmitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save changes';
+            }
+        })
+        .catch(() => {
+            showEditResult('danger', 'Network error — please try again.');
+            editSubmitBtn.disabled = false;
+            editSubmitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save changes';
+        });
+    });
+
+    function showEditResult(type, msg) {
+        editResult.className = `alert alert-${type} py-2 mb-0`;
+        editResult.textContent = msg;
+        editResult.style.display = 'block';
     }
 
     // ── Live filter ─────────────────────────────────────────────────────────

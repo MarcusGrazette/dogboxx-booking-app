@@ -11,7 +11,7 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError
 from app.models import User, Booking, Walker, Dog, Client, WalkerSchedule, DogOwner, WalkerUnavailability, WalkerAdHocAvailability, ServiceType, Notification
 from app import db
-from app.capacity import get_max_per_walker, get_walker_slot_count, get_drop_in_capacity
+from app.capacity import get_max_per_walker, get_walker_slot_count, get_drop_in_capacity, auto_assign_walker
 from app.utils.db_error_handler import handle_db_errors
 from app.forms import ClientCreateForm, WalkerCreateForm, WalkerScheduleForm
 from app.utils.uploads import process_dog_photo
@@ -1113,12 +1113,11 @@ def _get_slot_color(slot):
 @admin_required
 def clients():
     """List all clients (admin only)"""
-# Get all users with role='client' and their client records
     clients = (
         User.query
         .options(joinedload(User.client))
         .filter(User.role == 'client')
-        .order_by(User.lastname, User.firstname)
+        .order_by(User.active.desc(), User.lastname, User.firstname)
         .all()
     )
     
@@ -1178,10 +1177,11 @@ def client_detail(client_id):
         Notification.query
         .filter_by(recipient_id=user.id)
         .order_by(Notification.created_at.desc())
-        .limit(20)
+        .limit(10)
         .all()
     )
     from app.forms import AddDogForm
+    from datetime import date as date_type
     return render_template(
         "admin_client_detail.html",
         client=user,
@@ -1192,6 +1192,7 @@ def client_detail(client_id):
         notifications=notifications,
         add_dog_form=AddDogForm(),
         add_dog_modal_open=False,
+        today=date_type.today(),
     )
 
 
@@ -1415,8 +1416,9 @@ def edit_client(client_id):
     """
     user = User.query.filter(User.role == 'client', User.id == client_id).first_or_404()
     client = Client.query.filter_by(user_id=user.id).first()
-    dog_owner = DogOwner.query.filter_by(user_id=user.id, role='primary').first()
-    dog = db.session.get(Dog, dog_owner.dog_id) if dog_owner else None
+    dog_owners = DogOwner.query.filter_by(user_id=user.id, role='primary').order_by(DogOwner.id).all()
+    dog = db.session.get(Dog, dog_owners[0].dog_id) if dog_owners else None
+    additional_dogs = [db.session.get(Dog, do.dog_id) for do in dog_owners[1:]] if len(dog_owners) > 1 else []
 
     form = ClientCreateForm()
 
@@ -1478,6 +1480,34 @@ def edit_client(client_id):
                     db.session.flush()
                     db.session.add(DogOwner(dog_id=new_dog.id, user_id=user.id, role='primary'))
 
+            # Additional dogs (rendered with raw name="dog_<field>_<id>" inputs)
+            import re as _re
+            for key in list(request.form.keys()):
+                m = _re.match(r'^dog_name_(\d+)$', key)
+                if not m:
+                    continue
+                did = int(m.group(1))
+                extra_dog = db.session.get(Dog, did)
+                if not extra_dog:
+                    continue
+                extra_name = request.form.get(f'dog_name_{did}', '').strip()
+                if extra_name:
+                    extra_dog.name = extra_name
+                extra_dog.breed = request.form.get(f'dog_breed_{did}', '').strip()
+                extra_dog.gender = request.form.get(f'dog_gender_{did}', extra_dog.gender) or extra_dog.gender
+                dob_str = request.form.get(f'dog_dob_{did}', '').strip()
+                if dob_str:
+                    try:
+                        extra_dog.date_of_birth = datetime.strptime(dob_str, '%Y-%m-%d').date()
+                    except ValueError:
+                        pass
+                else:
+                    extra_dog.date_of_birth = None
+                extra_dog.allergies = request.form.get(f'dog_allergies_{did}', '').strip()
+                extra_dog.pickup_instructions = request.form.get(f'dog_pickup_instructions_{did}', '').strip() or None
+                extra_dog.whatsapp_group_url = request.form.get(f'dog_whatsapp_{did}', '').strip() or None
+                extra_dog.hold_key = bool(request.form.get(f'dog_hold_key_{did}'))
+
             # Auto-complete onboarding when we now have the full picture
             if has_address and has_dog and not client.onboarding_completed:
                 client.onboarding_completed = True
@@ -1525,6 +1555,7 @@ def edit_client(client_id):
         title=f"Edit {user.full_name}",
         is_edit=True,
         client_user=user,
+        additional_dogs=additional_dogs,
     )
 
 
@@ -1681,12 +1712,15 @@ def update_client_pickup_details(client_id):
 
     data = request.get_json(silent=True) or {}
     pickup_instructions = (data.get('pickup_instructions') or '').strip() or None
-    maps_url = (data.get('maps_url') or '').strip() or None
 
-    if maps_url and len(maps_url) > 2048:
-        return jsonify(success=False, message="Maps URL too long"), 400
-    if pickup_instructions and len(pickup_instructions) > 500:
-        return jsonify(success=False, message="Instructions too long (max 500 chars)"), 400
+    if pickup_instructions and len(pickup_instructions) > 1000:
+        return jsonify(success=False, message="Instructions too long (max 1000 chars)"), 400
+
+    if 'maps_url' in data:
+        maps_url = (data.get('maps_url') or '').strip() or None
+        if maps_url and len(maps_url) > 2048:
+            return jsonify(success=False, message="Maps URL too long"), 400
+        client.maps_url = maps_url
 
     # Pickup notes now live on the dog, not the client
     from app.models import DogOwner
@@ -1695,7 +1729,6 @@ def update_client_pickup_details(client_id):
     if not dog:
         return jsonify(success=False, message="No dog record found — add a dog first before saving pickup notes"), 404
     dog.pickup_instructions = pickup_instructions
-    client.maps_url = maps_url
     db.session.commit()
     return jsonify(success=True)
 
@@ -1859,8 +1892,11 @@ def activate_walker(walker_id):
             return jsonify(success=False, message="Walker not found"), 404
         
         user.active = True
+        WalkerSchedule.query.filter_by(walker_id=user.walker.id).update(
+            {'active': True}, synchronize_session=False
+        )
         db.session.commit()
-        
+
         logging.info(f"Admin {current_user.id} activated walker {user.id}")
         return jsonify(success=True, message="Walker activated successfully")
         
@@ -2132,7 +2168,57 @@ def dogs():
         }
         for row in rows
     ]
-    return render_template("admin_dogs.html", dogs_data=dogs_data)
+    from datetime import date as date_type
+    return render_template("admin_dogs.html", dogs_data=dogs_data, today=date_type.today())
+
+
+@admin_bp.route("/dogs/<int:dog_id>/update", methods=["POST"])
+@login_required
+@admin_required
+def update_dog(dog_id):
+    """AJAX: update a dog's details from the admin dogs table."""
+    from datetime import date as date_type
+    dog = db.session.get(Dog, dog_id)
+    if not dog:
+        return jsonify(success=False, message="Dog not found"), 404
+
+    data = request.get_json()
+    if not data:
+        return jsonify(success=False, message="No data received"), 400
+
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify(success=False, message="Name is required"), 400
+
+    gender = (data.get('gender') or '').strip()
+    if gender not in ('male', 'female', ''):
+        return jsonify(success=False, message="Invalid gender"), 400
+
+    dob_str = (data.get('date_of_birth') or '').strip()
+    dob = None
+    if dob_str:
+        try:
+            dob = datetime.strptime(dob_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify(success=False, message="Invalid date of birth"), 400
+
+    dog.name = name
+    dog.gender = gender or dog.gender
+    dog.breed = (data.get('breed') or '').strip()
+    dog.date_of_birth = dob
+    dog.allergies = (data.get('allergies') or '').strip()
+    dog.pickup_instructions = (data.get('pickup_instructions') or '').strip() or None
+    dog.whatsapp_group_url = (data.get('whatsapp_group_url') or '').strip() or None
+    dog.hold_key = bool(data.get('hold_key'))
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error updating dog {dog_id}: {e}")
+        return jsonify(success=False, message="Failed to save changes"), 500
+
+    return jsonify(success=True, name=dog.name, breed=dog.breed or '—')
 
 
 @admin_bp.route("/book_for_dog", methods=["POST"])
@@ -2190,20 +2276,51 @@ def book_for_dog():
         if not available and not can_waitlist:
             return jsonify(success=False, message=capacity_msg), 400
 
-        status = 'requested' if available else 'waitlisted'
         booking = Booking(
             user_id=user_id,
             dog_id=dog_id,
             service_type_id=default_service.id,
             date=booking_date,
             slot=slot,
-            status=status,
+            status='waitlisted',
         )
         db.session.add(booking)
+
+        if available:
+            walker = auto_assign_walker(booking_date, slot)
+            if walker:
+                booking.walker_id = walker.id
+                booking.status = 'confirmed'
+                booking.confirmed_at = datetime.now(timezone.utc)
+                booking.pickup_order = get_walker_slot_count(walker.id, booking_date, slot)
+            else:
+                booking.status = 'requested'
+
+        db.session.flush()  # populate booking.id before notifications
+
+        date_str_fmt = booking_date.strftime('%-d %b %Y')
+        if booking.status == 'confirmed':
+            create_notification(
+                recipient_id=user_id,
+                notification_type='booking_confirmed',
+                title=f"{dog.name}'s walk on {date_str_fmt} has been confirmed",
+                body=booking.slot,
+                link=f'/bookings/{booking.id}',
+                sender_id=current_user.id,
+            )
+            create_notification(
+                recipient_id=booking.walker.user_id,
+                notification_type='walker_assigned',
+                title=f'You have been assigned a walk on {date_str_fmt}',
+                body=f'{dog.name} — {booking.slot}',
+                link=f'/walker/pickups?date={booking_date.isoformat()}',
+                sender_id=current_user.id,
+            )
+
         db.session.commit()
 
-        return jsonify(success=True, status=status,
-                       message=f"Booking {'requested' if status == 'requested' else 'waitlisted'} for {dog.name} on {booking_date.strftime('%-d %b %Y')}")
+        return jsonify(success=True, status=booking.status,
+                       message=f"Booking {booking.status} for {dog.name} on {booking_date.strftime('%-d %b %Y')}")
 
     except Exception as e:
         db.session.rollback()
@@ -2271,7 +2388,8 @@ def recurring_for_dog():
             return jsonify(success=False, message="No valid dates in that range"), 400
 
         active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
-        created = waitlisted = skipped = 0
+        confirmed = requested = waitlisted = skipped = 0
+        notifications = []  # collect (recipient_id, type, title, body, link) tuples
 
         for d in target_dates:
             existing = Booking.query.filter(
@@ -2298,22 +2416,53 @@ def recurring_for_dog():
                 skipped += 1
                 continue
 
-            status = 'requested' if available else 'waitlisted'
-            db.session.add(Booking(
+            booking = Booking(
                 user_id=user_id,
                 dog_id=dog_id,
                 service_type_id=default_service.id,
                 date=d,
                 slot=slot,
-                status=status,
-            ))
-            if status == 'waitlisted':
+                status='waitlisted',
+            )
+            db.session.add(booking)
+
+            if available:
+                walker = auto_assign_walker(d, slot)
+                if walker:
+                    booking.walker_id = walker.id
+                    booking.status = 'confirmed'
+                    booking.confirmed_at = datetime.now(timezone.utc)
+                    booking.pickup_order = get_walker_slot_count(walker.id, d, slot)
+                else:
+                    booking.status = 'requested'
+
+            if booking.status == 'confirmed':
+                confirmed += 1
+                date_str_fmt = d.strftime('%-d %b %Y')
+                notifications.append((user_id, 'booking_confirmed',
+                                       f"{dog.name}'s walk on {date_str_fmt} has been confirmed",
+                                       slot, booking))
+                notifications.append((walker.user_id, 'walker_assigned',
+                                       f'You have been assigned a walk on {date_str_fmt}',
+                                       f'{dog.name} — {slot}', booking))
+            elif booking.status == 'waitlisted':
                 waitlisted += 1
             else:
-                created += 1
+                requested += 1
+
+        db.session.flush()  # populate booking.id values before notifications
+        for recipient_id, ntype, title, body, bk in notifications:
+            create_notification(
+                recipient_id=recipient_id,
+                notification_type=ntype,
+                title=title,
+                body=body,
+                link=f'/bookings/{bk.id}' if ntype == 'booking_confirmed' else f'/walker/pickups?date={bk.date.isoformat()}',
+                sender_id=current_user.id,
+            )
 
         db.session.commit()
-        return jsonify(success=True, created=created, waitlisted=waitlisted, skipped=skipped)
+        return jsonify(success=True, confirmed=confirmed, requested=requested, waitlisted=waitlisted, skipped=skipped)
 
     except Exception as e:
         db.session.rollback()

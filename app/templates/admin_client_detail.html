@@ -28,45 +28,58 @@
                 <i class="bi bi-person me-2" style="color:#E02FAC;"></i>Client Details
             </div>
             <div class="card-body">
-                <dl class="row mb-0">
-                    <dt class="col-sm-4 text-muted fw-semibold">Name</dt>
-                    <dd class="col-sm-8">{{ client.full_name }}</dd>
 
-                    <dt class="col-sm-4 text-muted fw-semibold">Email</dt>
-                    <dd class="col-sm-8">{{ client.email }}</dd>
-
-                    <dt class="col-sm-4 text-muted fw-semibold">Status</dt>
-                    <dd class="col-sm-8">
-                        {% if client.active %}
-                        <span class="badge bg-success">Active</span>
-                        {% else %}
-                        <span class="badge bg-danger">Inactive</span>
-                        {% endif %}
-                    </dd>
-
-                    <dt class="col-sm-4 text-muted fw-semibold">Onboarding</dt>
-                    <dd class="col-sm-8">
-                        {% if client.client and client.client.onboarding_completed %}
-                        <span class="badge bg-success">Complete</span>
-                        {% else %}
-                        <span class="badge bg-warning text-dark">Pending</span>
-                        <span class="text-muted small ms-2">Prompted on first login</span>
-                        {% endif %}
-                    </dd>
-
-                    {% if client.client and client.client.street_address %}
-                    <dt class="col-sm-4 text-muted fw-semibold">Address</dt>
-                    <dd class="col-sm-8">
-                        <div>{{ client.client.street_address.replace('\n', ', ') }}</div>
-                        {% if client.client.postal_code %}
-                        <div class="fw-semibold">{{ client.client.postal_code | upper }}</div>
-                        {% endif %}
-                    </dd>
+                {# Avatar + name + badges #}
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    {% if client.profile_pic %}
+                    <img src="{{ url_for('static', filename='uploads/profiles/' + client.profile_pic) }}"
+                         class="rounded-circle flex-shrink-0"
+                         width="56" height="56" style="object-fit:cover;" alt="{{ client.full_name }}">
+                    {% else %}
+                    <div class="rounded-circle bg-light d-flex align-items-center justify-content-center flex-shrink-0"
+                         style="width:56px;height:56px;">
+                        <i class="bi bi-person-fill text-muted" style="font-size:1.5rem;"></i>
+                    </div>
                     {% endif %}
+                    <div class="flex-grow-1 min-width-0">
+                        <div class="fw-bold fs-5 text-truncate">{{ client.full_name }}</div>
+                        <div class="text-muted small text-truncate">{{ client.email }}</div>
+                    </div>
+                    {% if client.must_change_password %}
+                    <div class="flex-shrink-0">
+                        <span class="badge bg-warning text-dark">Never logged in</span>
+                    </div>
+                    {% endif %}
+                </div>
 
-                    <dt class="col-sm-4 text-muted fw-semibold">Joined</dt>
-                    <dd class="col-sm-8">{{ client.created_at.strftime('%d %b %Y') if client.created_at else '—' }}</dd>
-                </dl>
+                {# Address — clickable if maps_url set #}
+                {% if client.client and client.client.street_address %}
+                {% set addr_text = client.client.street_address.replace('\n', ', ') ~ (', ' ~ client.client.postal_code | upper if client.client.postal_code else '') %}
+                <div class="d-flex align-items-start gap-2 mb-2">
+                    <i class="bi bi-house text-muted flex-shrink-0" style="margin-top:2px;"></i>
+                    {% if client.client.maps_url %}
+                    <a href="{{ client.client.maps_url }}" target="_blank" rel="noopener"
+                       class="small text-decoration-none">{{ addr_text }}</a>
+                    {% else %}
+                    <span class="small">{{ addr_text }}</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {# Phone #}
+                {% if client.phone %}
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <i class="bi bi-phone text-muted flex-shrink-0"></i>
+                    <span class="small">{{ client.phone }}</span>
+                </div>
+                {% endif %}
+
+                {# Joined #}
+                <div class="d-flex align-items-center gap-2 text-muted small">
+                    <i class="bi bi-calendar3 flex-shrink-0"></i>
+                    <span>Joined {{ client.created_at.strftime('%d %b %Y') if client.created_at else '—' }}</span>
+                </div>
+
             </div>
         </div>
 
@@ -74,13 +87,24 @@
         {% for entry in primary_dogs %}
         {% set dog = entry.dog %}
         {% set shared_with = entry.secondary_owners %}
+
+        {# Age calculation #}
+        {% if dog.date_of_birth %}
+            {% set age_days = (today - dog.date_of_birth).days %}
+            {% set age_years = (age_days / 365.25) | int %}
+            {% if age_years < 1 %}
+                {% set age_str = (age_days // 30) ~ " month" ~ ("s" if age_days // 30 != 1 else "") %}
+            {% else %}
+                {% set age_str = age_years ~ " year" ~ ("s" if age_years != 1 else "") %}
+            {% endif %}
+        {% else %}
+            {% set age_str = none %}
+        {% endif %}
+
         <div class="card mb-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span>
-                    <i class="bi bi-heart-fill me-2" style="color:#E02FAC;"></i>{{ dog.name }}
-                    <span class="badge bg-secondary ms-1 fw-normal" style="font-size:.7rem;">Primary owner</span>
-                </span>
-                <button class="btn btn-sm btn-outline-success"
+            <div class="card-header d-flex align-items-center">
+                <i class="bi bi-heart-fill me-2" style="color:#E02FAC;"></i>{{ dog.name }}
+                <button class="btn btn-sm btn-outline-success ms-auto"
                         data-dog-id="{{ dog.id }}"
                         data-dog-name="{{ dog.name }}"
                         onclick="openJoinModal(this)">
@@ -88,29 +112,37 @@
                 </button>
             </div>
             <div class="card-body">
+
+                {# Dog avatar + name row #}
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <img src="{{ '/static/uploads/dogs/' + dog.pic if dog.pic else '/static/uploads/dogs/default-dog.png' }}"
+                         class="rounded-circle flex-shrink-0"
+                         width="52" height="52" style="object-fit:cover;" alt="{{ dog.name }}"
+                         onerror="this.onerror=null;this.src='/static/uploads/dogs/default-dog.png'">
+                    <div>
+                        {% if dog.breed %}<div class="text-muted small">{{ dog.breed }}</div>{% endif %}
+                        <div class="d-flex gap-2 flex-wrap mt-1">
+                            {% if dog.gender %}<span class="badge bg-light text-dark border">{{ dog.gender | capitalize }}</span>{% endif %}
+                            {% if age_str %}<span class="badge bg-light text-dark border">{{ age_str }}</span>{% endif %}
+                            {% if dog.hold_key %}<span class="badge" style="background:#f59e0b;color:#fff;"><i class="bi bi-key-fill me-1"></i>Key</span>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
                 <dl class="row mb-0">
-                    <dt class="col-sm-4 text-muted fw-semibold">Gender</dt>
-                    <dd class="col-sm-8">{{ dog.gender | capitalize if dog.gender else '—' }}</dd>
+                    <dt class="col-sm-1 text-muted pt-1"><i class="bi bi-prescription2"></i></dt>
+                    <dd class="col-sm-11">{{ dog.allergies if dog.allergies else '—' }}</dd>
 
-                    <dt class="col-sm-4 text-muted fw-semibold">Breed</dt>
-                    <dd class="col-sm-8">{{ dog.breed if dog.breed else '—' }}</dd>
-
-                    <dt class="col-sm-4 text-muted fw-semibold">Date of birth</dt>
-                    <dd class="col-sm-8">{{ dog.date_of_birth.strftime('%d %b %Y') if dog.date_of_birth else '—' }}</dd>
-
-                    <dt class="col-sm-4 text-muted fw-semibold">Allergies / notes</dt>
-                    <dd class="col-sm-8">{{ dog.allergies if dog.allergies else '—' }}</dd>
-
-                    <dt class="col-sm-4 text-muted fw-semibold">WhatsApp group</dt>
-                    <dd class="col-sm-8">
-                        {% if dog.whatsapp_group_url %}
+                    {% if dog.whatsapp_group_url %}
+                    <dt class="col-sm-1 text-muted pt-1"><i class="bi bi-whatsapp" style="color:#25D366;"></i></dt>
+                    <dd class="col-sm-11">
                         <a href="{{ dog.whatsapp_group_url }}" target="_blank" rel="noopener"
                            class="btn btn-sm fw-semibold"
                            style="background:#25D366;color:#fff;font-size:0.78rem;">
                             <i class="bi bi-whatsapp me-1"></i>Open group
                         </a>
-                        {% else %}—{% endif %}
                     </dd>
+                    {% endif %}
                 </dl>
 
                 {# Shared access list — indented to align with dd column #}
@@ -175,20 +207,47 @@
         {% for entry in secondary_dogs %}
         {% set dog = entry.dog %}
         {% set primary_owner = entry.primary_owner %}
+
+        {# Age calculation #}
+        {% if dog.date_of_birth %}
+            {% set age_days = (today - dog.date_of_birth).days %}
+            {% set age_years = (age_days / 365.25) | int %}
+            {% if age_years < 1 %}
+                {% set age_str = (age_days // 30) ~ " month" ~ ("s" if age_days // 30 != 1 else "") %}
+            {% else %}
+                {% set age_str = age_years ~ " year" ~ ("s" if age_years != 1 else "") %}
+            {% endif %}
+        {% else %}
+            {% set age_str = none %}
+        {% endif %}
+
         <div class="card mb-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span>
-                    <i class="bi bi-heart-fill me-2" style="color:#E02FAC;"></i>{{ dog.name }}
-                    <span class="badge bg-info text-dark ms-1 fw-normal" style="font-size:.7rem;">Shared access</span>
-                </span>
+            <div class="card-header d-flex align-items-center">
+                <i class="bi bi-heart-fill me-2" style="color:#E02FAC;"></i>{{ dog.name }}
                 {% if primary_owner %}
-                <button class="btn btn-sm btn-outline-danger"
+                <button class="btn btn-sm btn-outline-danger ms-auto"
                         onclick="revokeAccess({{ primary_owner.id }}, {{ dog.id }}, {{ client.id }}, '{{ client.full_name|e }}', null)">
                     <i class="bi bi-person-dash me-1"></i>Revoke access
                 </button>
                 {% endif %}
             </div>
             <div class="card-body">
+
+                {# Dog avatar + name row #}
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <img src="{{ '/static/uploads/dogs/' + dog.pic if dog.pic else '/static/uploads/dogs/default-dog.png' }}"
+                         class="rounded-circle flex-shrink-0"
+                         width="52" height="52" style="object-fit:cover;" alt="{{ dog.name }}"
+                         onerror="this.onerror=null;this.src='/static/uploads/dogs/default-dog.png'">
+                    <div>
+                        {% if dog.breed %}<div class="text-muted small">{{ dog.breed }}</div>{% endif %}
+                        <div class="d-flex gap-2 flex-wrap mt-1">
+                            {% if dog.gender %}<span class="badge bg-light text-dark border">{{ dog.gender | capitalize }}</span>{% endif %}
+                            {% if age_str %}<span class="badge bg-light text-dark border">{{ age_str }}</span>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
                 <dl class="row mb-2">
                     <dt class="col-sm-4 text-muted fw-semibold">Primary owner</dt>
                     <dd class="col-sm-8">
@@ -201,15 +260,6 @@
                         <span class="text-muted">Unknown</span>
                         {% endif %}
                     </dd>
-
-                    <dt class="col-sm-4 text-muted fw-semibold">Gender</dt>
-                    <dd class="col-sm-8">{{ dog.gender | capitalize if dog.gender else '—' }}</dd>
-
-                    <dt class="col-sm-4 text-muted fw-semibold">Breed</dt>
-                    <dd class="col-sm-8">{{ dog.breed if dog.breed else '—' }}</dd>
-
-                    <dt class="col-sm-4 text-muted fw-semibold">Date of birth</dt>
-                    <dd class="col-sm-8">{{ dog.date_of_birth.strftime('%d %b %Y') if dog.date_of_birth else '—' }}</dd>
                 </dl>
                 <p class="text-muted small mb-0">
                     <i class="bi bi-info-circle me-1"></i>
@@ -224,47 +274,25 @@
     {# ══ RIGHT COLUMN — pickup + notifications ══ #}
     <div class="col-12 col-lg-7">
 
-        {# --- Pickup details --- #}
+        {# --- Pickup notes --- #}
         <div class="card mb-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-geo-alt me-2" style="color:#E02FAC;"></i>Pickup Details</span>
-                <button class="btn btn-sm btn-outline-primary" id="pickup-edit-btn">
+            <div class="card-header d-flex align-items-center">
+                <span><i class="bi bi-geo-alt me-2" style="color:#E02FAC;"></i>Pickup Notes</span>
+                <button class="btn btn-sm btn-outline-primary ms-auto" id="pickup-edit-btn">
                     <i class="bi bi-pencil me-1"></i>Edit
                 </button>
             </div>
             <div class="card-body">
                 {# Read view #}
                 <div id="pickup-read-view">
-                    <dl class="row mb-0">
-                        <dt class="col-sm-4 text-muted fw-semibold">Pickup notes</dt>
-                        <dd class="col-sm-8" id="read-pickup-instructions">
-                            {{ dog.pickup_instructions if dog and dog.pickup_instructions else '—' }}
-                        </dd>
-                        <dt class="col-sm-4 text-muted fw-semibold">Maps pin</dt>
-                        <dd class="col-sm-8">
-                            {% if client.client and client.client.maps_url %}
-                            <a href="{{ client.client.maps_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-success">
-                                <i class="bi bi-geo-alt-fill me-1"></i>Open in Maps
-                            </a>
-                            {% else %}
-                            <span id="read-maps-url">—</span>
-                            {% endif %}
-                        </dd>
-                    </dl>
+                    <div id="read-pickup-instructions" class="small" style="white-space:pre-wrap;">{{ dog.pickup_instructions if dog and dog.pickup_instructions else '—' }}</div>
                 </div>
                 {# Edit view #}
                 <div id="pickup-edit-view" style="display:none;">
                     <div class="mb-3">
-                        <label class="form-label fw-semibold small">Pickup notes</label>
-                        <textarea id="edit-pickup-instructions" class="form-control" rows="3" maxlength="500"
+                        <textarea id="edit-pickup-instructions" class="form-control" rows="4" maxlength="1000"
                                   placeholder="Door codes, concierge notes, special instructions...">{{ dog.pickup_instructions if dog else '' }}</textarea>
-                        <div class="text-muted small text-end mt-1"><span id="instr-char-count">{{ (dog.pickup_instructions or '' if dog else '')|length }}</span> / 500</div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold small">Google Maps pin URL</label>
-                        <input type="url" id="edit-maps-url" class="form-control"
-                               placeholder="https://maps.app.goo.gl/..."
-                               value="{{ client.client.maps_url or '' if client.client else '' }}">
+                        <div class="text-muted small text-end mt-1"><span id="instr-char-count">{{ (dog.pickup_instructions or '' if dog else '')|length }}</span> / 1000</div>
                     </div>
                     <div class="d-flex gap-2">
                         <button class="btn btn-primary btn-sm fw-semibold" id="pickup-save-btn">Save</button>
@@ -277,9 +305,8 @@
 
         {# --- Notification audit trail --- #}
         <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-bell me-2" style="color:#E02FAC;"></i>Notification History</span>
-                <span class="text-muted small">Last 20</span>
+            <div class="card-header">
+                <i class="bi bi-bell me-2" style="color:#E02FAC;"></i>Last 10 Notifications
             </div>
             <div class="card-body p-0">
                 {% if notifications %}
@@ -288,7 +315,6 @@
                         <thead class="table-light">
                             <tr>
                                 <th>Sent</th>
-                                <th>Type</th>
                                 <th>Title</th>
                                 <th>Read</th>
                             </tr>
@@ -296,15 +322,9 @@
                         <tbody>
                             {% for n in notifications %}
                             <tr>
-                                <td class="text-nowrap text-muted small">{{ n.created_at.strftime('%d %b %Y %H:%M') }}</td>
-                                <td><span class="badge bg-secondary">{{ n.notification_type }}</span></td>
-                                <td>
-                                    {{ n.title }}
-                                    {% if n.body %}
-                                    <div class="text-muted small">{{ n.body }}</div>
-                                    {% endif %}
-                                </td>
-                                <td>
+                                <td class="text-nowrap text-muted small align-middle">{{ n.created_at.strftime('%d %b %H:%M') }}</td>
+                                <td class="align-middle small">{{ n.title }}</td>
+                                <td class="text-nowrap align-middle">
                                     {% if n.read_at %}
                                     <span class="text-success small">{{ n.read_at.strftime('%d %b %H:%M') }}</span>
                                     {% else %}
@@ -448,7 +468,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const readView   = document.getElementById('pickup-read-view');
     const editView   = document.getElementById('pickup-edit-view');
     const instrEl    = document.getElementById('edit-pickup-instructions');
-    const mapsEl     = document.getElementById('edit-maps-url');
     const errorEl    = document.getElementById('pickup-save-error');
     const charCount  = document.getElementById('instr-char-count');
 
@@ -474,7 +493,7 @@ document.addEventListener('DOMContentLoaded', function () {
         fetch('{{ url_for("admin.update_client_pickup_details", client_id=client.id) }}', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
-            body: JSON.stringify({ pickup_instructions: instrEl.value, maps_url: mapsEl.value })
+            body: JSON.stringify({ pickup_instructions: instrEl.value })
         })
         .then(r => r.json())
         .then(data => {
