@@ -57,16 +57,16 @@
                     </div>
                 </div>
 
-                {# Address #}
+                {# Address — clickable if maps_url set #}
                 {% if client.client and client.client.street_address %}
+                {% set addr_text = client.client.street_address.replace('\n', ', ') ~ (', ' ~ client.client.postal_code | upper if client.client.postal_code else '') %}
                 <div class="d-flex align-items-start gap-2 mb-2">
                     <i class="bi bi-house text-muted flex-shrink-0" style="margin-top:2px;"></i>
-                    <span class="small flex-grow-1">{{ client.client.street_address.replace('\n', ', ') }}{% if client.client.postal_code %}, {{ client.client.postal_code | upper }}{% endif %}</span>
                     {% if client.client.maps_url %}
                     <a href="{{ client.client.maps_url }}" target="_blank" rel="noopener"
-                       class="btn btn-primary btn-sm fw-semibold flex-shrink-0" style="font-size:0.72rem;line-height:1.8;padding:0 0.6rem;">
-                        <i class="bi bi-geo-alt-fill me-1"></i>Map
-                    </a>
+                       class="small text-decoration-none">{{ addr_text }}</a>
+                    {% else %}
+                    <span class="small">{{ addr_text }}</span>
                     {% endif %}
                 </div>
                 {% endif %}
@@ -136,19 +136,19 @@
                 </div>
 
                 <dl class="row mb-0">
-                    <dt class="col-sm-4 text-muted fw-semibold">Allergies / notes</dt>
-                    <dd class="col-sm-8">{{ dog.allergies if dog.allergies else '—' }}</dd>
+                    <dt class="col-sm-1 text-muted pt-1"><i class="bi bi-prescription2"></i></dt>
+                    <dd class="col-sm-11">{{ dog.allergies if dog.allergies else '—' }}</dd>
 
-                    <dt class="col-sm-4 text-muted fw-semibold">WhatsApp group</dt>
-                    <dd class="col-sm-8">
-                        {% if dog.whatsapp_group_url %}
+                    {% if dog.whatsapp_group_url %}
+                    <dt class="col-sm-1 text-muted pt-1"><i class="bi bi-whatsapp" style="color:#25D366;"></i></dt>
+                    <dd class="col-sm-11">
                         <a href="{{ dog.whatsapp_group_url }}" target="_blank" rel="noopener"
                            class="btn btn-sm fw-semibold"
                            style="background:#25D366;color:#fff;font-size:0.78rem;">
                             <i class="bi bi-whatsapp me-1"></i>Open group
                         </a>
-                        {% else %}—{% endif %}
                     </dd>
+                    {% endif %}
                 </dl>
 
                 {# Shared access list — indented to align with dd column #}
@@ -329,16 +329,8 @@
                         <tbody>
                             {% for n in notifications %}
                             <tr>
-                                <td class="text-nowrap align-middle" style="min-width:120px;">
-                                    <div class="text-muted small">{{ n.created_at.strftime('%d %b %H:%M') }}</div>
-                                    <span class="badge bg-secondary" style="font-size:0.65rem;">{{ n.notification_type }}</span>
-                                </td>
-                                <td class="align-middle">
-                                    {{ n.title }}
-                                    {% if n.body %}
-                                    <div class="text-muted small">{{ n.body }}</div>
-                                    {% endif %}
-                                </td>
+                                <td class="text-nowrap text-muted small align-middle">{{ n.created_at.strftime('%d %b %H:%M') }}</td>
+                                <td class="align-middle small">{{ n.title }}</td>
                                 <td class="text-nowrap align-middle">
                                     {% if n.read_at %}
                                     <span class="text-success small">{{ n.read_at.strftime('%d %b %H:%M') }}</span>
