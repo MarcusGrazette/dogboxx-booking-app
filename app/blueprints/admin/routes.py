@@ -1178,10 +1178,11 @@ def client_detail(client_id):
         Notification.query
         .filter_by(recipient_id=user.id)
         .order_by(Notification.created_at.desc())
-        .limit(20)
+        .limit(10)
         .all()
     )
     from app.forms import AddDogForm
+    from datetime import date as date_type
     return render_template(
         "admin_client_detail.html",
         client=user,
@@ -1192,6 +1193,7 @@ def client_detail(client_id):
         notifications=notifications,
         add_dog_form=AddDogForm(),
         add_dog_modal_open=False,
+        today=date_type.today(),
     )
 
 

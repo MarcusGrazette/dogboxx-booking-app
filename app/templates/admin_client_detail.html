@@ -28,45 +28,65 @@
                 <i class="bi bi-person me-2" style="color:#E02FAC;"></i>Client Details
             </div>
             <div class="card-body">
-                <dl class="row mb-0">
-                    <dt class="col-sm-4 text-muted fw-semibold">Name</dt>
-                    <dd class="col-sm-8">{{ client.full_name }}</dd>
 
-                    <dt class="col-sm-4 text-muted fw-semibold">Email</dt>
-                    <dd class="col-sm-8">{{ client.email }}</dd>
-
-                    <dt class="col-sm-4 text-muted fw-semibold">Status</dt>
-                    <dd class="col-sm-8">
+                {# Avatar + name + badges #}
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    {% if client.profile_pic %}
+                    <img src="{{ url_for('static', filename='uploads/profiles/' + client.profile_pic) }}"
+                         class="rounded-circle flex-shrink-0"
+                         width="56" height="56" style="object-fit:cover;" alt="{{ client.full_name }}">
+                    {% else %}
+                    <div class="rounded-circle bg-light d-flex align-items-center justify-content-center flex-shrink-0"
+                         style="width:56px;height:56px;">
+                        <i class="bi bi-person-fill text-muted" style="font-size:1.5rem;"></i>
+                    </div>
+                    {% endif %}
+                    <div class="flex-grow-1 min-width-0">
+                        <div class="fw-bold fs-5 text-truncate">{{ client.full_name }}</div>
+                        <div class="text-muted small text-truncate">{{ client.email }}</div>
+                    </div>
+                    <div class="d-flex flex-column gap-1 align-items-end flex-shrink-0">
                         {% if client.active %}
                         <span class="badge bg-success">Active</span>
                         {% else %}
                         <span class="badge bg-danger">Inactive</span>
                         {% endif %}
-                    </dd>
-
-                    <dt class="col-sm-4 text-muted fw-semibold">Onboarding</dt>
-                    <dd class="col-sm-8">
-                        {% if client.client and client.client.onboarding_completed %}
-                        <span class="badge bg-success">Complete</span>
+                        {% if not client.must_change_password %}
+                        <span class="badge bg-primary">Logged in</span>
                         {% else %}
-                        <span class="badge bg-warning text-dark">Pending</span>
-                        <span class="text-muted small ms-2">Prompted on first login</span>
+                        <span class="badge bg-warning text-dark">Never logged in</span>
                         {% endif %}
-                    </dd>
+                    </div>
+                </div>
 
-                    {% if client.client and client.client.street_address %}
-                    <dt class="col-sm-4 text-muted fw-semibold">Address</dt>
-                    <dd class="col-sm-8">
-                        <div>{{ client.client.street_address.replace('\n', ', ') }}</div>
-                        {% if client.client.postal_code %}
-                        <div class="fw-semibold">{{ client.client.postal_code | upper }}</div>
-                        {% endif %}
-                    </dd>
+                {# Address #}
+                {% if client.client and client.client.street_address %}
+                <div class="d-flex align-items-start gap-2 mb-2">
+                    <i class="bi bi-house text-muted flex-shrink-0" style="margin-top:2px;"></i>
+                    <span class="small flex-grow-1">{{ client.client.street_address.replace('\n', ', ') }}{% if client.client.postal_code %}, {{ client.client.postal_code | upper }}{% endif %}</span>
+                    {% if client.client.maps_url %}
+                    <a href="{{ client.client.maps_url }}" target="_blank" rel="noopener"
+                       class="btn btn-primary btn-sm fw-semibold flex-shrink-0" style="font-size:0.72rem;line-height:1.8;padding:0 0.6rem;">
+                        <i class="bi bi-geo-alt-fill me-1"></i>Map
+                    </a>
                     {% endif %}
+                </div>
+                {% endif %}
 
-                    <dt class="col-sm-4 text-muted fw-semibold">Joined</dt>
-                    <dd class="col-sm-8">{{ client.created_at.strftime('%d %b %Y') if client.created_at else '—' }}</dd>
-                </dl>
+                {# Phone #}
+                {% if client.phone %}
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <i class="bi bi-phone text-muted flex-shrink-0"></i>
+                    <span class="small">{{ client.phone }}</span>
+                </div>
+                {% endif %}
+
+                {# Joined #}
+                <div class="d-flex align-items-center gap-2 text-muted small">
+                    <i class="bi bi-calendar3 flex-shrink-0"></i>
+                    <span>Joined {{ client.created_at.strftime('%d %b %Y') if client.created_at else '—' }}</span>
+                </div>
+
             </div>
         </div>
 
@@ -74,6 +94,20 @@
         {% for entry in primary_dogs %}
         {% set dog = entry.dog %}
         {% set shared_with = entry.secondary_owners %}
+
+        {# Age calculation #}
+        {% if dog.date_of_birth %}
+            {% set age_days = (today - dog.date_of_birth).days %}
+            {% set age_years = (age_days / 365.25) | int %}
+            {% if age_years < 1 %}
+                {% set age_str = (age_days // 30) ~ " month" ~ ("s" if age_days // 30 != 1 else "") %}
+            {% else %}
+                {% set age_str = age_years ~ " year" ~ ("s" if age_years != 1 else "") %}
+            {% endif %}
+        {% else %}
+            {% set age_str = none %}
+        {% endif %}
+
         <div class="card mb-4">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span>
@@ -88,16 +122,24 @@
                 </button>
             </div>
             <div class="card-body">
+
+                {# Dog avatar + name row #}
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <img src="{{ '/static/uploads/dogs/' + dog.pic if dog.pic else '/static/uploads/dogs/default-dog.png' }}"
+                         class="rounded-circle flex-shrink-0"
+                         width="52" height="52" style="object-fit:cover;" alt="{{ dog.name }}"
+                         onerror="this.onerror=null;this.src='/static/uploads/dogs/default-dog.png'">
+                    <div>
+                        {% if dog.breed %}<div class="text-muted small">{{ dog.breed }}</div>{% endif %}
+                        <div class="d-flex gap-2 flex-wrap mt-1">
+                            {% if dog.gender %}<span class="badge bg-light text-dark border">{{ dog.gender | capitalize }}</span>{% endif %}
+                            {% if age_str %}<span class="badge bg-light text-dark border">{{ age_str }}</span>{% endif %}
+                            {% if dog.hold_key %}<span class="badge" style="background:#f59e0b;color:#fff;"><i class="bi bi-key-fill me-1"></i>Key</span>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
                 <dl class="row mb-0">
-                    <dt class="col-sm-4 text-muted fw-semibold">Gender</dt>
-                    <dd class="col-sm-8">{{ dog.gender | capitalize if dog.gender else '—' }}</dd>
-
-                    <dt class="col-sm-4 text-muted fw-semibold">Breed</dt>
-                    <dd class="col-sm-8">{{ dog.breed if dog.breed else '—' }}</dd>
-
-                    <dt class="col-sm-4 text-muted fw-semibold">Date of birth</dt>
-                    <dd class="col-sm-8">{{ dog.date_of_birth.strftime('%d %b %Y') if dog.date_of_birth else '—' }}</dd>
-
                     <dt class="col-sm-4 text-muted fw-semibold">Allergies / notes</dt>
                     <dd class="col-sm-8">{{ dog.allergies if dog.allergies else '—' }}</dd>
 
@@ -175,6 +217,20 @@
         {% for entry in secondary_dogs %}
         {% set dog = entry.dog %}
         {% set primary_owner = entry.primary_owner %}
+
+        {# Age calculation #}
+        {% if dog.date_of_birth %}
+            {% set age_days = (today - dog.date_of_birth).days %}
+            {% set age_years = (age_days / 365.25) | int %}
+            {% if age_years < 1 %}
+                {% set age_str = (age_days // 30) ~ " month" ~ ("s" if age_days // 30 != 1 else "") %}
+            {% else %}
+                {% set age_str = age_years ~ " year" ~ ("s" if age_years != 1 else "") %}
+            {% endif %}
+        {% else %}
+            {% set age_str = none %}
+        {% endif %}
+
         <div class="card mb-4">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span>
@@ -189,6 +245,22 @@
                 {% endif %}
             </div>
             <div class="card-body">
+
+                {# Dog avatar + name row #}
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <img src="{{ '/static/uploads/dogs/' + dog.pic if dog.pic else '/static/uploads/dogs/default-dog.png' }}"
+                         class="rounded-circle flex-shrink-0"
+                         width="52" height="52" style="object-fit:cover;" alt="{{ dog.name }}"
+                         onerror="this.onerror=null;this.src='/static/uploads/dogs/default-dog.png'">
+                    <div>
+                        {% if dog.breed %}<div class="text-muted small">{{ dog.breed }}</div>{% endif %}
+                        <div class="d-flex gap-2 flex-wrap mt-1">
+                            {% if dog.gender %}<span class="badge bg-light text-dark border">{{ dog.gender | capitalize }}</span>{% endif %}
+                            {% if age_str %}<span class="badge bg-light text-dark border">{{ age_str }}</span>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
                 <dl class="row mb-2">
                     <dt class="col-sm-4 text-muted fw-semibold">Primary owner</dt>
                     <dd class="col-sm-8">
@@ -201,15 +273,6 @@
                         <span class="text-muted">Unknown</span>
                         {% endif %}
                     </dd>
-
-                    <dt class="col-sm-4 text-muted fw-semibold">Gender</dt>
-                    <dd class="col-sm-8">{{ dog.gender | capitalize if dog.gender else '—' }}</dd>
-
-                    <dt class="col-sm-4 text-muted fw-semibold">Breed</dt>
-                    <dd class="col-sm-8">{{ dog.breed if dog.breed else '—' }}</dd>
-
-                    <dt class="col-sm-4 text-muted fw-semibold">Date of birth</dt>
-                    <dd class="col-sm-8">{{ dog.date_of_birth.strftime('%d %b %Y') if dog.date_of_birth else '—' }}</dd>
                 </dl>
                 <p class="text-muted small mb-0">
                     <i class="bi bi-info-circle me-1"></i>
@@ -279,7 +342,7 @@
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-bell me-2" style="color:#E02FAC;"></i>Notification History</span>
-                <span class="text-muted small">Last 20</span>
+                <span class="text-muted small">Last 10</span>
             </div>
             <div class="card-body p-0">
                 {% if notifications %}
@@ -288,7 +351,6 @@
                         <thead class="table-light">
                             <tr>
                                 <th>Sent</th>
-                                <th>Type</th>
                                 <th>Title</th>
                                 <th>Read</th>
                             </tr>
@@ -296,15 +358,17 @@
                         <tbody>
                             {% for n in notifications %}
                             <tr>
-                                <td class="text-nowrap text-muted small">{{ n.created_at.strftime('%d %b %Y %H:%M') }}</td>
-                                <td><span class="badge bg-secondary">{{ n.notification_type }}</span></td>
-                                <td>
+                                <td class="text-nowrap align-middle" style="min-width:120px;">
+                                    <div class="text-muted small">{{ n.created_at.strftime('%d %b %H:%M') }}</div>
+                                    <span class="badge bg-secondary" style="font-size:0.65rem;">{{ n.notification_type }}</span>
+                                </td>
+                                <td class="align-middle">
                                     {{ n.title }}
                                     {% if n.body %}
                                     <div class="text-muted small">{{ n.body }}</div>
                                     {% endif %}
                                 </td>
-                                <td>
+                                <td class="text-nowrap align-middle">
                                     {% if n.read_at %}
                                     <span class="text-success small">{{ n.read_at.strftime('%d %b %H:%M') }}</span>
                                     {% else %}
