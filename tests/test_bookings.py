@@ -410,7 +410,7 @@ class TestAdminBookForDog:
             content_type='application/json',
         )
 
-    def test_happy_path_creates_requested_booking(self, app, client):
+    def test_happy_path_creates_confirmed_booking(self, app, client):
         with app.app_context():
             tom = tomorrow()
             make_walker_with_schedule(
@@ -438,7 +438,7 @@ class TestAdminBookForDog:
         data = resp.get_json()
         assert resp.status_code == 200
         assert data['success'] is True
-        assert data['status'] == 'requested'
+        assert data['status'] == 'confirmed'
 
     def test_duplicate_rejected(self, app, client):
         with app.app_context():
