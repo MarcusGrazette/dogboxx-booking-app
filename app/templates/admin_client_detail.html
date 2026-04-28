@@ -51,9 +51,7 @@
                         {% else %}
                         <span class="badge bg-danger">Inactive</span>
                         {% endif %}
-                        {% if not client.must_change_password %}
-                        <span class="badge bg-primary">Logged in</span>
-                        {% else %}
+                        {% if client.must_change_password %}
                         <span class="badge bg-warning text-dark">Never logged in</span>
                         {% endif %}
                     </div>
