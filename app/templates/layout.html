@@ -183,7 +183,13 @@
     </main>
 
     <footer class="mb-5 pt-2 pb-1 text-center">
+        <a href="{{ url_for('client.help_page') }}#privacy"
+           class="d-inline-block mb-2"
+           style="font-size:0.78rem;color:#6c757d;text-decoration:none;">
+            <i class="bi bi-shield-lock me-1"></i>Security &amp; privacy
+        </a>
         {% if current_user.is_authenticated %}
+        <br>
         <button type="button" class="btn btn-link btn-sm p-0"
                 style="font-size:0.78rem;color:#6c757d;text-decoration:none;"
                 data-bs-toggle="modal" data-bs-target="#bugReportModal">
