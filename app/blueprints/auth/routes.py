@@ -13,6 +13,7 @@ from app.models import User, Client
 from app import db, limiter
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
 from app.forms import LoginForm, RegisterForm, PasswordChangeForm
+import hashlib
 import logging
 import traceback
 from datetime import datetime, timezone
@@ -136,14 +137,26 @@ def _redirect_by_role(user):
 
 # ── Password reset helpers ────────────────────────────────────────────────────
 
+def _password_fingerprint(hashed_password: str) -> str:
+    """Stable 16-char fingerprint of a password hash, used inside reset
+    tokens so the token is invalidated when the password changes. Hashing
+    the hash avoids storing any password material in the token, and avoids
+    werkzeug's algorithm prefix problem (hashed_password[:16] equals
+    'scrypt:32768:8:1' for every scrypt-hashed password)."""
+    return hashlib.sha256(hashed_password.encode()).hexdigest()[:16]
+
+
 def _make_reset_token(user):
-    """Return a signed, time-limited token embedding the user's current password hash."""
+    """Return a signed, time-limited token embedding a fingerprint of the
+    user's current password hash so the token is invalidated the moment the
+    password changes."""
     from itsdangerous import URLSafeTimedSerializer
     from flask import current_app
     s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
-    # Include hashed_password so token is invalidated the moment the password changes
-    return s.dumps({'user_id': user.id, 'pw': user.hashed_password[:16]},
-                   salt='password-reset')
+    return s.dumps(
+        {'user_id': user.id, 'pw': _password_fingerprint(user.hashed_password)},
+        salt='password-reset',
+    )
 
 
 def _verify_reset_token(token, max_age=3600):
@@ -159,7 +172,7 @@ def _verify_reset_token(token, max_age=3600):
     if not user:
         return None
     # Reject if password has already been changed since token was issued
-    if user.hashed_password[:16] != data.get('pw'):
+    if _password_fingerprint(user.hashed_password) != data.get('pw'):
         return None
     return user
 

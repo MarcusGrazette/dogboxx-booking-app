@@ -178,18 +178,6 @@ class TestTokenLifecycle:
             # max_age=-1 forces SignatureExpired even with age=0
             assert _verify_reset_token(token, max_age=-1) is None
 
-    # Both tests below are marked xfail(strict=True) because the current
-    # implementation in app/blueprints/auth/routes.py:_make_reset_token embeds
-    # `user.hashed_password[:16]` in the token. Werkzeug's scrypt hashes start
-    # with `scrypt:32768:8:1$…`, so the first 16 chars are an algorithm prefix
-    # that is identical for every scrypt-hashed password — changing the
-    # password does not change those bytes, and the token continues to verify.
-    # The fix is to embed the full hashed_password (or a sha256 digest of it)
-    # rather than a fixed-length slice. When the bug is fixed these tests will
-    # pass and strict=True will turn the unexpected pass into a failure,
-    # forcing the xfail markers to be removed.
-
-    @pytest.mark.xfail(strict=True, reason="Token embeds scrypt prefix, not hash content — see auth/routes.py:_make_reset_token")
     def test_used_token_cannot_be_reused(self, app, client):
         """After a successful reset the password hash changes, so the embedded
         hash slice no longer matches and the same token is invalid."""
@@ -212,7 +200,6 @@ class TestTokenLifecycle:
         assert resp.status_code in (301, 302)
         assert '/auth/forgot-password' in resp.headers.get('Location', '')
 
-    @pytest.mark.xfail(strict=True, reason="Token embeds scrypt prefix, not hash content — see auth/routes.py:_make_reset_token")
     def test_password_change_invalidates_outstanding_token(self, app, client):
         """If a user changes their password via /auth/change-password, any
         previously-issued reset token must stop working."""
