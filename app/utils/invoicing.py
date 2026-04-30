@@ -70,11 +70,14 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
     def is_drop_in(b):
         return b.service_type and b.service_type.slug == ServiceType.DROP_IN
 
-    # Group walk items by date → slot set (for double-slot discount)
-    date_slots = defaultdict(set)
+    # Group walk items keyed by (dog_id, date) so the double-slot discount only
+    # fires when the SAME dog is booked AM+PM on the same day. Keying by date
+    # alone would over-discount multi-dog households where dog A took the
+    # morning and dog B took the afternoon.
+    dog_date_slots = defaultdict(set)
     for b in all_billable:
         if not is_drop_in(b):
-            date_slots[b.date].add(b.slot)
+            dog_date_slots[(b.dog_id, b.date)].add(b.slot)
 
     walk_confirmed    = [b for b in confirmed if not is_drop_in(b)]
     drop_in_confirmed = [b for b in confirmed if is_drop_in(b)]
@@ -88,7 +91,7 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
                 subtotal += float(cfg.price_per_drop_in)
             else:
                 subtotal += float(cfg.price_per_walk)
-    for d, slots in date_slots.items():
+    for (_dog_id, d), slots in dog_date_slots.items():
         if 'Morning' in slots and 'Afternoon' in slots:
             cfg = config_for(d)
             if cfg:
@@ -119,7 +122,7 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
         'total_drop_ins':         len(drop_in_confirmed),
         'total_cancels':          len(late_cancels),
         'total_billable':         len(all_billable),
-        'doubles':                sum(1 for s in date_slots.values()
+        'doubles':                sum(1 for s in dog_date_slots.values()
                                       if 'Morning' in s and 'Afternoon' in s),
         'weekly_discount_total':  round(weekly_discount_total, 2),
         'weekly_discount_weeks':  weekly_discount_weeks,
