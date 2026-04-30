@@ -7,7 +7,7 @@ Populates the database with test data from JSON files.
 import json
 import sys
 import os
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, timedelta
 from werkzeug.security import generate_password_hash
 
 # Add the project root to the path so we can import our Flask app when running this
@@ -238,8 +238,11 @@ def seed_bookings(bookings_data, users, dogs, walkers):
             print(f"  Warning: Dog {dog_name} for user {user_email} not found, skipping booking")
             continue
         
-        # Parse date string to date object
-        booking_date = datetime.strptime(booking_data['date'], '%Y-%m-%d').date()
+        # Resolve date: relative offset from today or absolute ISO string
+        if 'date_offset' in booking_data:
+            booking_date = date.today() + timedelta(days=int(booking_data['date_offset']))
+        else:
+            booking_date = datetime.strptime(booking_data['date'], '%Y-%m-%d').date()
         
         booking = Booking(
             user_id=user.id,
