@@ -269,6 +269,66 @@ class TestInvoiceForClient:
             assert inv['doubles'] == 0
             assert inv['subtotal'] == round(WALK_PRICE + DROP_IN_PRICE, 2)
 
+    def test_double_slot_discount_not_applied_across_different_dogs(self, app):
+        """Multi-dog household: dog A took the AM slot, dog B took the PM slot
+        on the same day. Neither dog has both slots, so no discount applies."""
+        with app.app_context():
+            u, dog_a = make_client_with_dog('inv_multidog_split@test.com')
+            dog_b = Dog(name='SecondDog', breed='Mutt')
+            db.session.add(dog_b)
+            db.session.flush()
+            db.session.add(DogOwner(dog_id=dog_b.id, user_id=u.id, role='primary'))
+            st = make_walk_service()
+            make_pricing_config()
+            add_booking(u, dog_a, st, MON_1, 'Morning',   status='confirmed')
+            add_booking(u, dog_b, st, MON_1, 'Afternoon', status='confirmed')
+            db.session.commit()
+            inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
+            assert inv['total_walks'] == 2
+            assert inv['doubles'] == 0
+            assert inv['subtotal'] == round(WALK_PRICE * 2, 2)
+
+    def test_double_slot_discount_per_dog_when_one_dog_has_both_slots(self, app):
+        """Multi-dog household: dog A has AM+PM, dog B has only AM.
+        Discount fires once (for dog A only)."""
+        with app.app_context():
+            u, dog_a = make_client_with_dog('inv_multidog_one_double@test.com')
+            dog_b = Dog(name='SecondDog', breed='Mutt')
+            db.session.add(dog_b)
+            db.session.flush()
+            db.session.add(DogOwner(dog_id=dog_b.id, user_id=u.id, role='primary'))
+            st = make_walk_service()
+            make_pricing_config()
+            add_booking(u, dog_a, st, MON_1, 'Morning',   status='confirmed')
+            add_booking(u, dog_a, st, MON_1, 'Afternoon', status='confirmed')
+            add_booking(u, dog_b, st, MON_1, 'Morning',   status='confirmed')
+            db.session.commit()
+            inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
+            assert inv['total_walks'] == 3
+            assert inv['doubles'] == 1
+            assert inv['subtotal'] == round(WALK_PRICE * 3 - DOUBLE_DISCOUNT, 2)
+
+    def test_double_slot_discount_per_dog_when_both_dogs_have_both_slots(self, app):
+        """Multi-dog household: dog A and dog B both have AM+PM on the same day.
+        Discount fires twice — once per dog."""
+        with app.app_context():
+            u, dog_a = make_client_with_dog('inv_multidog_both_double@test.com')
+            dog_b = Dog(name='SecondDog', breed='Mutt')
+            db.session.add(dog_b)
+            db.session.flush()
+            db.session.add(DogOwner(dog_id=dog_b.id, user_id=u.id, role='primary'))
+            st = make_walk_service()
+            make_pricing_config()
+            add_booking(u, dog_a, st, MON_1, 'Morning',   status='confirmed')
+            add_booking(u, dog_a, st, MON_1, 'Afternoon', status='confirmed')
+            add_booking(u, dog_b, st, MON_1, 'Morning',   status='confirmed')
+            add_booking(u, dog_b, st, MON_1, 'Afternoon', status='confirmed')
+            db.session.commit()
+            inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
+            assert inv['total_walks'] == 4
+            assert inv['doubles'] == 2
+            assert inv['subtotal'] == round(WALK_PRICE * 4 - DOUBLE_DISCOUNT * 2, 2)
+
     def test_late_cancel_is_billable(self, app):
         """Cancel with < 5 days notice → charged."""
         with app.app_context():
