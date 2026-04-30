@@ -16,11 +16,16 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column('dogs', sa.Column('date_of_birth', sa.Date(), nullable=True))
+    bind = op.get_bind()
+
+    from sqlalchemy import inspect as sa_inspect
+    existing = [c['name'] for c in sa_inspect(bind).get_columns('dogs')]
+    if 'date_of_birth' not in existing:
+        op.add_column('dogs', sa.Column('date_of_birth', sa.Date(), nullable=True))
 
     # Convert existing birth_year_month (e.g. 202301 = Jan 2023) to date (1st of that month).
     # make_date() and ::int casts are PostgreSQL-only; SQLite uses printf + CAST.
-    if op.get_bind().dialect.name == 'postgresql':
+    if bind.dialect.name == 'postgresql':
         op.execute("""
             UPDATE dogs
             SET date_of_birth = make_date(
