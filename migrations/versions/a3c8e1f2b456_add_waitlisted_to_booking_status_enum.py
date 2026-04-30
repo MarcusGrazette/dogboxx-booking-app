@@ -18,8 +18,9 @@ depends_on = None
 
 def upgrade():
     # PostgreSQL requires ALTER TYPE to add a new value to an existing enum.
-    # SQLite (dev) doesn't enforce enum types so this was never caught locally.
-    op.execute("ALTER TYPE booking_status ADD VALUE IF NOT EXISTS 'waitlisted'")
+    # SQLite has no named enum types — the value is stored as a plain string.
+    if op.get_bind().dialect.name == 'postgresql':
+        op.execute("ALTER TYPE booking_status ADD VALUE IF NOT EXISTS 'waitlisted'")
 
 
 def downgrade():

@@ -17,18 +17,26 @@ depends_on = None
 
 
 def upgrade():
-    # 1. Add is_admin column (default False)
-    op.add_column('users', sa.Column('is_admin', sa.Boolean(), nullable=False, server_default='false'))
+    bind = op.get_bind()
+
+    # 1. Add is_admin column (default False).
+    # Idempotency guard: SQLite doesn't wrap DDL in transactions, so a previous
+    # failed run may have added the column before hitting the PG-only SQL below.
+    from sqlalchemy import inspect as sa_inspect
+    existing = [c['name'] for c in sa_inspect(bind).get_columns('users')]
+    if 'is_admin' not in existing:
+        op.add_column('users', sa.Column('is_admin', sa.Boolean(), nullable=False, server_default='false'))
 
     # 2. Migrate existing admin users: set is_admin=True, role='walker'
     op.execute("UPDATE users SET is_admin = true WHERE role = 'admin'")
     op.execute("UPDATE users SET role = 'walker' WHERE role = 'admin'")
 
-    # 3. Replace the enum type (Postgres requires recreating it)
-    op.execute("ALTER TABLE users ALTER COLUMN role TYPE VARCHAR(10)")
-    op.execute("DROP TYPE IF EXISTS user_roles")
-    op.execute("CREATE TYPE user_roles AS ENUM ('client', 'walker')")
-    op.execute("ALTER TABLE users ALTER COLUMN role TYPE user_roles USING role::user_roles")
+    # 3. Replace the enum type — PostgreSQL only; SQLite stores role as a plain string.
+    if bind.dialect.name == 'postgresql':
+        op.execute("ALTER TABLE users ALTER COLUMN role TYPE VARCHAR(10)")
+        op.execute("DROP TYPE IF EXISTS user_roles")
+        op.execute("CREATE TYPE user_roles AS ENUM ('client', 'walker')")
+        op.execute("ALTER TABLE users ALTER COLUMN role TYPE user_roles USING role::user_roles")
 
 
 def downgrade():
