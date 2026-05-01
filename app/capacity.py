@@ -1,10 +1,30 @@
 """Capacity checking logic for booking availability."""
 
-from sqlalchemy import func
+import hashlib
+import struct
+
+from sqlalchemy import func, text
 from sqlalchemy.orm import joinedload
 
 from app.models import WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, Booking, ServiceType, Walker
 from app import db
+
+
+def acquire_booking_lock(service_slug: str, booking_date, slot: str | None) -> None:
+    """Acquire a transaction-scoped advisory lock for a given (service, date, slot).
+
+    Prevents TOCTOU races where two concurrent requests both pass check_availability
+    before either commits, over-filling a slot. The lock is released automatically
+    when the surrounding transaction commits or rolls back.
+
+    No-op on SQLite — it serialises all writes at the DB level anyway.
+    """
+    if db.engine.dialect.name != 'postgresql':
+        return
+    key_str = f"{service_slug}:{booking_date.isoformat()}:{slot or ''}"
+    raw = hashlib.sha256(key_str.encode()).digest()
+    lock_key = struct.unpack('>q', raw[:8])[0]  # signed 64-bit for pg bigint
+    db.session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_key})
 
 
 def get_available_walkers(date, slot, drop_in=False, ignore_unavailability=False):

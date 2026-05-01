@@ -26,7 +26,7 @@ import json
 from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
 from app.utils.notifications import create_notification
-from app.capacity import check_availability
+from app.capacity import check_availability, acquire_booking_lock
 
 
 @admin_bp.route("/")
@@ -2270,6 +2270,7 @@ def book_for_dog():
         if not default_service:
             return jsonify(success=False, message="No service type available"), 400
 
+        acquire_booking_lock(default_service.slug, booking_date, slot)
         available, can_waitlist, capacity_msg = check_availability(
             default_service, booking_date, slot, admin_override=True
         )
@@ -2411,6 +2412,7 @@ def recurring_for_dog():
                 skipped += 1
                 continue
 
+            acquire_booking_lock(default_service.slug, d, slot)
             available, can_waitlist, _ = check_availability(default_service, d, slot, admin_override=True)
             if not available and not can_waitlist:
                 skipped += 1

@@ -14,7 +14,7 @@ from app import db, limiter
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
 from app.utils.uploads import process_dog_photo, process_cropped_photo
 from app.utils.booking_access import get_accessible_dog_ids, user_can_access_booking
-from app.capacity import check_availability, get_slot_availability_summary, auto_assign_walker, get_walker_slot_count
+from app.capacity import check_availability, get_slot_availability_summary, auto_assign_walker, get_walker_slot_count, acquire_booking_lock
 from app.forms import OnboardingForm, BookingForm, ProfileForm
 import logging
 import traceback
@@ -271,7 +271,8 @@ def index():
                     return redirect(url_for("client.index"))
                 default_service = walk_service
 
-                # Check capacity before creating booking
+                # Serialize concurrent requests for the same slot before counting
+                acquire_booking_lock(default_service.slug, booking_date, booking_slot)
                 available, can_waitlist, capacity_msg = check_availability(
                     default_service, booking_date, booking_slot
                 )
@@ -399,6 +400,7 @@ def book():
 
     # ── Capacity check + create ───────────────────────────────────────────────
     try:
+        acquire_booking_lock(default_service.slug, booking_date, booking_slot)
         available, can_waitlist, capacity_msg = check_availability(default_service, booking_date, booking_slot)
 
         if not available and not can_waitlist:
@@ -524,6 +526,7 @@ def book_both():
             skipped.append(slot)
             continue
 
+        acquire_booking_lock(default_service.slug, booking_date, slot)
         available, can_waitlist, _ = check_availability(default_service, booking_date, slot)
         if not available and not can_waitlist:
             skipped.append(slot)
@@ -663,6 +666,7 @@ def book_drop_in():
         svc_label = existing.service_type.name.lower() if existing.service_type else 'booking'
         return jsonify({'success': False, 'message': f'{dog.name} already has a {svc_label} booked for that slot.'}), 409
 
+    acquire_booking_lock(drop_in_service.slug, booking_date, booking_slot)
     available, can_waitlist, capacity_msg = _check(drop_in_service, booking_date, booking_slot)
     if not available and not can_waitlist:
         return jsonify({'success': False, 'message': capacity_msg}), 409
@@ -1637,6 +1641,7 @@ def recurring_booking():
                     skipped += 1
                     continue
 
+                acquire_booking_lock(default_service.slug, d, s)
                 available, can_waitlist, _ = check_availability(default_service, d, s)
                 if not available and not can_waitlist:
                     skipped += 1
