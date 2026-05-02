@@ -165,18 +165,21 @@
                 <div class="row align-items-center g-4">
                     <div class="col-12 col-md-6 order-1">
                         <h2><i class="bi bi-calendar-plus-fill section-icon"></i>Booking a walk</h2>
-                        <p>To book a group walk, tap <strong>Request a Service</strong> on your home screen.</p>
+                        <p>In the <strong>Make a booking</strong> section on your home screen.</p>
                         <ol class="mb-0">
-                            <li>Tap a date on the calendar — available dates are highlighted.</li>
-                            <li>Choose <strong>Morning</strong> or <strong>Afternoon</strong> (or <strong>Both
-                                    walks</strong> to book the same day twice).</li>
-                            <li>If you have more than one dog, select which dog the booking is for.</li>
-                            <li>Tap <strong>Request walk</strong>. You'll see a confirmation immediately.</li>
+                            <li>Tap a date on the calendar — dates with existing bookings are highlighted.</li>
+                            <li>Choose <strong>Walk</strong> from the drop down</li>
+                            <li>Choose a time slot, either <strong>Morning</strong> or <strong>Afternoon</strong> or
+                                <strong>Both
+                                    walks</strong>.
+                            </li>
+                            <li>Tap <strong>Request walk</strong>. If we have availability, you'll see a confirmation
+                                message. Otherwise, you'll be waitlisted. If a slot becomes available, you'll get a
+                                notification in the app.</li>
                         </ol>
                         <div class="help-tip">
                             <i class="bi bi-info-circle me-1"></i>
-                            The availability hint below the slot selector shows whether spaces are open or the date is
-                            likely to waitlist.
+                            The availability hint below the slot drop down shows whether spaces are available.
                         </div>
                     </div>
                     <div class="col-12 col-md-6 order-2">
@@ -203,17 +206,18 @@
                     </div>
                     <div class="col-12 col-md-6 order-1 order-md-2">
                         <h2><i class="bi bi-house-heart-fill section-icon"></i>Booking a drop-in</h2>
-                        <p>A drop-in is a short comfort-break visit at your home — ideal when you need cover but not a
-                            full walk.</p>
+                        <p>A drop-in is a 15 - 20 minute comfort break and a cuddle. The morning drop in will be around
+                            10:30 am and the afternoon drop in will be around 3:30pm. In the <strong>Make a
+                                booking</strong> section on your home screen.</p>
                         <ol class="mb-0">
-                            <li>In the <strong>Request a Service</strong> card, change the service selector from
-                                <em>Walk</em> to <em>Drop-in</em>.</li>
-                            <li>Pick your date and slot (Morning or Afternoon).</li>
+                            <li>Choose <strong>Drop in</strong> from the drop down list</li>
+                            <li>Choose a slot (Morning or Afternoon).</li>
                             <li>Tap <strong>Request drop-in</strong>.</li>
                         </ol>
                         <div class="help-tip">
                             <i class="bi bi-info-circle me-1"></i>
-                            Drop-ins are only shown when a walker with drop-in availability is scheduled on that day.
+                            Drop ins show as 'pending' until Lydia confirms them. You'll see a notification when she
+                            does.
                         </div>
                     </div>
                 </div>
@@ -262,18 +266,16 @@
                     </div>
                     <div class="col-12 col-md-6 order-1 order-md-2">
                         <h2><i class="bi bi-list-check section-icon"></i>Managing bookings</h2>
-                        <p>Your upcoming bookings are listed below the booking form on your home screen, grouped by dog.
+                        <p>You'll see upcoming bookings on your home screen. The calendar on the home screen highlights
+                            dates with bookings. Green for confirmed and yellow for pending. Tap a date to filter the
+                            list.
                         </p>
                         <ul class="mb-0">
-                            <li><strong>Confirmed</strong> — your booking is locked in.</li>
+                            <li><strong>Confirmed</strong> — your booking is confirmed.</li>
                             <li><strong>Requested</strong> — awaiting confirmation from DogBoxx.</li>
                             <li><strong>Waitlisted</strong> — the slot was full; you'll be moved up if a space opens.
                             </li>
                         </ul>
-                        <div class="help-tip">
-                            <i class="bi bi-funnel me-1"></i>
-                            Use the date filter to jump to bookings on a specific day.
-                        </div>
                     </div>
                 </div>
             </section>
@@ -283,16 +285,9 @@
                 <div class="row align-items-center g-4">
                     <div class="col-12 col-md-6 order-1">
                         <h2><i class="bi bi-x-circle-fill section-icon"></i>Cancellations</h2>
-                        <p>You can cancel any upcoming booking directly from the home screen.</p>
-                        <ol class="mb-0">
-                            <li>Find the booking in your list and tap <strong>Cancel</strong>.</li>
-                            <li>Confirm in the popup.</li>
-                        </ol>
-                        <div class="help-tip">
-                            <i class="bi bi-exclamation-triangle me-1"></i>
-                            <strong>Late cancellations</strong> (less than 5 days before the booking date) are still
-                            charged at the full rate and will appear on your monthly summary.
-                        </div>
+                        <p>Click the x to cancel any upcoming booking directly from the home screen. A pop up message
+                            will ask you to confirm cancellation. Confirmed bookings cancelled within 5 days are still
+                            charged. The pop up will remind you of the cancellation policy.</p>
                     </div>
                     <div class="col-12 col-md-6 order-2">
                         {# Replace with: <img src="{{ url_for('static', filename='help/cancel.png') }}"
@@ -318,13 +313,14 @@
                     </div>
                     <div class="col-12 col-md-6 order-1 order-md-2">
                         <h2><i class="bi bi-pause-circle-fill section-icon"></i>Pausing walks</h2>
-                        <p>Going on holiday? Use <strong>Pause Walks</strong> to cancel all bookings across a date range
-                            at once.</p>
+                        <p>Going on holiday? Use <strong>Pause Walks</strong> to cancel all bookings in a date range.
+                        </p>
                         <ol class="mb-0">
-                            <li>Open the <strong>Pause Walks</strong> card on your home screen.</li>
+                            <li>Tap <strong>Pause Walks</strong> on your home screen.</li>
                             <li>Set a start and end date.</li>
-                            <li>A preview shows which bookings will be cancelled.</li>
-                            <li>Tap <strong>Confirm pause</strong>.</li>
+                            <li>Tap on <strong>Preview affected walks</strong> to see which bookings will be cancelled.
+                            </li>
+                            <li>Tap <strong>Cancel all</strong>.</li>
                         </ol>
                         <div class="help-tip">
                             <i class="bi bi-info-circle me-1"></i>
@@ -399,18 +395,20 @@
                 <h6 class="fw-semibold mt-3 mb-1">Your data is stored securely</h6>
                 <p class="mb-2">DogBoxx is hosted on <strong>Railway</strong>, on servers located in the
                     <strong>European Union</strong>. All data is encrypted in transit using HTTPS and encrypted at rest
-                    using industry-standard encryption. Your data is automatically backed up by
-                    <strong>Cloudflare</strong>, also on EU-based servers.</p>
+                    using industry-standard encryption. We back up your data on
+                    <strong>Cloudflare</strong>, also on EU-based servers.
+                </p>
 
                 <h6 class="fw-semibold mt-3 mb-1">Caching — faster loading</h6>
                 <p class="mb-2">The app stores a small set of static files on your device (stylesheets, scripts, and
                     images) using your browser's built-in cache. This is called an <em>app shell cache</em> and means
-                    pages load quickly even on a slow connection. No personal data is stored in this cache — only the
+                    pages load quickly even on a slow connection. <strong>No personal data is stored in this
+                        cache</strong> — only the
                     code and design assets needed to display the app. The cache is updated automatically whenever the
                     app is updated.</p>
 
                 <h6 class="fw-semibold mt-3 mb-1">Cookies &amp; staying logged in</h6>
-                <p class="mb-2">DogBoxx uses a small number of cookies — text files stored in your browser:</p>
+                <p class="mb-2">DogBoxx uses two cookies — text files stored in your browser:</p>
                 <ul class="mb-2">
                     <li><strong>Session cookie</strong> — keeps you logged in while you use the app. This is deleted
                         when you log out or close your browser (unless you tick <em>Remember me</em> at login, in which
@@ -418,13 +416,12 @@
                     <li><strong>Security token (CSRF)</strong> — a hidden value included with every form submission to
                         protect against cross-site request forgery attacks. It is never shared with third parties.</li>
                 </ul>
-                <p class="mb-0">We do not use advertising cookies or share your data with any third-party analytics
-                    providers.</p>
+                <p class="mb-0">We do not use advertising cookies or any tracking or analytics.</p>
 
                 <div class="help-tip mt-3">
                     <i class="bi bi-envelope me-1"></i>
                     Questions about your data? Email us at <a href="mailto:hello@dogboxx.org"
-                        style="color:#E02FAC;">hello@dogboxx.org</a>.
+                        style="color:#E02FAC;">lydia@dogboxx.org</a>.
                 </div>
             </section>
 
@@ -432,7 +429,7 @@
             <div class="py-4 text-center text-muted small">
                 Questions? Email us at
                 <a href="mailto:hello@dogboxx.org" class="text-decoration-none"
-                    style="color:#E02FAC;">hello@dogboxx.org</a>
+                    style="color:#E02FAC;">lydia@dogboxx.org</a>
             </div>
 
         </div>{# end col-lg-9 #}
