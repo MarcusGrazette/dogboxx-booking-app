@@ -1133,28 +1133,52 @@ def client_detail(client_id):
     """Show client detail with dog info, shared access, and notification audit trail (admin only)"""
     user = User.query.filter(User.role == 'client', User.id == client_id).first_or_404()
 
-    # Dogs where this user is the primary owner
+    # Batch all dog + co-owner lookups to avoid N+1 queries
     primary_ownerships = DogOwner.query.filter_by(user_id=user.id, role='primary').all()
+    sec_as_secondary = DogOwner.query.filter_by(user_id=user.id, role='secondary').all()
+
+    all_dog_ids = [o.dog_id for o in primary_ownerships + sec_as_secondary]
+    dogs_by_id = (
+        {d.id: d for d in Dog.query.filter(Dog.id.in_(all_dog_ids)).all()}
+        if all_dog_ids else {}
+    )
+
+    all_co_ownerships = (
+        DogOwner.query.filter(DogOwner.dog_id.in_(all_dog_ids)).all()
+        if all_dog_ids else []
+    )
+    co_user_ids = [o.user_id for o in all_co_ownerships if o.user_id != user.id]
+    co_users_by_id = (
+        {u.id: u for u in User.query.filter(User.id.in_(co_user_ids)).all()}
+        if co_user_ids else {}
+    )
+
+    # Index co-ownerships by dog_id + role for fast lookup
+    secondary_by_dog: dict = defaultdict(list)
+    primary_by_dog: dict = {}
+    for o in all_co_ownerships:
+        if o.role == 'secondary' and o.user_id != user.id:
+            u_obj = co_users_by_id.get(o.user_id)
+            if u_obj:
+                secondary_by_dog[o.dog_id].append(u_obj)
+        elif o.role == 'primary' and o.user_id != user.id:
+            primary_by_dog[o.dog_id] = co_users_by_id.get(o.user_id)
+
+    # Dogs where this user is the primary owner
     primary_dogs = []
     for ownership in primary_ownerships:
-        dog = db.session.get(Dog, ownership.dog_id)
+        dog = dogs_by_id.get(ownership.dog_id)
         if not dog:
             continue
-        secondary_ownerships = DogOwner.query.filter_by(dog_id=dog.id, role='secondary').all()
-        secondary_users = [db.session.get(User, so.user_id) for so in secondary_ownerships]
-        secondary_users = [u for u in secondary_users if u]  # filter None
-        primary_dogs.append({'dog': dog, 'secondary_owners': secondary_users})
+        primary_dogs.append({'dog': dog, 'secondary_owners': secondary_by_dog.get(dog.id, [])})
 
     # Dogs where this user is a secondary owner (joined from another account)
-    secondary_ownerships = DogOwner.query.filter_by(user_id=user.id, role='secondary').all()
     secondary_dogs = []
-    for ownership in secondary_ownerships:
-        dog = db.session.get(Dog, ownership.dog_id)
+    for ownership in sec_as_secondary:
+        dog = dogs_by_id.get(ownership.dog_id)
         if not dog:
             continue
-        primary_o = DogOwner.query.filter_by(dog_id=dog.id, role='primary').first()
-        primary_user = db.session.get(User, primary_o.user_id) if primary_o else None
-        secondary_dogs.append({'dog': dog, 'primary_owner': primary_user})
+        secondary_dogs.append({'dog': dog, 'primary_owner': primary_by_dog.get(dog.id)})
 
     # Clients available to join — exclude self and anyone already linked
     already_linked_ids = {user.id}
