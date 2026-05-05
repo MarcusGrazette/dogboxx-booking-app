@@ -5,6 +5,8 @@ This module defines routes for admin functionality, including dashboard, booking
 management, and user management.
 """
 
+from collections import defaultdict
+
 from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
@@ -2525,21 +2527,47 @@ def invoicing():
         .all()
     )
 
+    # Batch all DogOwner / Dog / secondary-User lookups — avoids ~2 queries per client
+    client_ids = [u.id for u in clients]
+
+    primary_ownership_by_user = {
+        o.user_id: o
+        for o in DogOwner.query.filter(
+            DogOwner.user_id.in_(client_ids),
+            DogOwner.role == 'primary',
+        ).all()
+    }
+
+    primary_dog_ids = [o.dog_id for o in primary_ownership_by_user.values()]
+    dogs_by_id = (
+        {d.id: d for d in Dog.query.filter(Dog.id.in_(primary_dog_ids)).all()}
+        if primary_dog_ids else {}
+    )
+
+    secondary_owners_by_dog: dict = defaultdict(list)
+    if primary_dog_ids:
+        sec_ownerships = DogOwner.query.filter(
+            DogOwner.dog_id.in_(primary_dog_ids),
+            DogOwner.role == 'secondary',
+        ).all()
+        sec_user_ids = [so.user_id for so in sec_ownerships]
+        sec_users_by_id = (
+            {u.id: u for u in User.query.filter(User.id.in_(sec_user_ids)).all()}
+            if sec_user_ids else {}
+        )
+        for so in sec_ownerships:
+            user = sec_users_by_id.get(so.user_id)
+            if user:
+                secondary_owners_by_dog[so.dog_id].append(user)
+
     rows = []
     for u in clients:
         inv = _invoice_for_client(u.id, month_start, month_end, all_configs)
         if inv is None or inv['total_billable'] == 0:
             continue
-        # Primary dog + secondary owners
-        do = DogOwner.query.filter_by(user_id=u.id, role='primary').first()
-        dog = db.session.get(Dog, do.dog_id) if do else None
-        secondary_owners = []
-        if dog:
-            secondary_owners = [
-                db.session.get(User, so.user_id)
-                for so in DogOwner.query.filter_by(dog_id=dog.id, role='secondary').all()
-            ]
-            secondary_owners = [s for s in secondary_owners if s]
+        primary_ownership = primary_ownership_by_user.get(u.id)
+        dog = dogs_by_id.get(primary_ownership.dog_id) if primary_ownership else None
+        secondary_owners = secondary_owners_by_dog.get(dog.id, []) if dog else []
         rows.append({
             'client':           u,
             'dog':              dog,
