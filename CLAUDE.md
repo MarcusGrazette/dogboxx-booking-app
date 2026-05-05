@@ -51,9 +51,10 @@ app/
   utils/        Notifications, decorators, DB error handling, uploads
 config.py       Dev / Test / Production config classes
 migrations/     Alembic migration files
-seed.py         Base seed data
-seed_demo_bookings.py  Legacy demo seed
+seed.py                Base seed data + loads test data from seed_data/ JSON files
 seed_may_demo.py       Demo bookings for May 18–29 2026: 10 walks/slot/weekday (randomised ±2) + 3–5 drop-ins/day
+seed_data/             JSON files (users, clients, dogs, walkers, bookings) loaded by seed.py
+app/seed_db/seeder.py  Seeder functions — called by seed.py, not run directly
 ```
 
 ---
@@ -133,7 +134,7 @@ pytest                    # run all tests (SQLite locally)
 pytest tests/test_auth.py # specific file
 ```
 
-151 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing. All should pass. CI runs on every push/PR — don't merge anything that breaks CI.
+168 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing, password reset. All should pass. CI runs on every push/PR — don't merge anything that breaks CI.
 
 CI runs three steps in order against a real Postgres instance:
 1. `flask db upgrade` — verifies the full migration chain runs cleanly from scratch
@@ -176,7 +177,7 @@ flask seed-service-types  # seed Group Walk / Drop In / Day Care service types (
 
 | File | Purpose |
 |---|---|
-| `app/capacity.py` | Walk capacity checks + `auto_assign_walker()` |
+| `app/capacity.py` | Walk capacity checks, `auto_assign_walker()`, `acquire_booking_lock()` (advisory lock for concurrent booking requests) |
 | `app/models.py` | All SQLAlchemy models |
 | `app/utils/notifications.py` | Notification creation helpers |
 | `app/templates/email/password_reset.html` | Password reset email — table-based Jinja template, CSS-only wordmark, no embedded image |
@@ -205,6 +206,10 @@ flask seed-service-types  # seed Group Walk / Drop In / Day Care service types (
 - **`ClientCreateForm` dog validation**: name + gender required together if either is provided; DOB is optional.
 - **Slot override in `assign_walker`**: POST accepts `slot_override: true` (JSON boolean) to bypass the walker schedule check and allow assigning a booking to a different slot than booked. The route captures `old_slot` before updating and sends a `system` notification to the client if the slot changed. A pre-commit conflict check (409) guards against the case where the dog already has an active booking for the target slot.
 - **Cross-service duplicate bookings**: a partial unique index on `(dog_id, date, slot)` for active bookings means a dog cannot have two bookings in the same slot regardless of service type. The booking flow treats any same-slot duplicate as an error with a descriptive message (e.g. "Fido already has a drop in booked for that slot") — no override UX.
+- **Concurrent booking safety**: `acquire_booking_lock()` in `capacity.py` acquires a PostgreSQL transaction-scoped advisory lock on `(service, date, slot)` before each capacity check. Called at all 7 booking-creation sites. No-op on SQLite.
+- **Admin notification fan-out**: all admin notifications use `User.query.filter_by(is_admin=True).all()` — any walker promoted to admin via the toggle on `/admin/walkers` (sets `is_admin=True`) immediately receives the full admin notification stream. They also get full access to `/admin/*` routes.
+- **Invoicing DogOwner queries**: `/admin/invoicing` and `/admin/clients/<id>` both use batched DogOwner lookups (4–5 fixed queries, not N+1). Pattern: collect all IDs, batch-fetch, index into dicts, loop body is pure lookups.
+- **`seed_data/bookings.json`** uses `date_offset` (integer days from today) instead of hard-coded dates, so test bookings are always relative to the current date. The seeder also accepts `date` (absolute ISO string) for backward compatibility.
 
 ---
 
