@@ -875,7 +875,12 @@ def assign_walker():
             if not schedule_exists:
                 return jsonify(success=False, message=f"{walker.user.firstname} is not scheduled for {assign_slot} on this day"), 400
 
-        # Check walker capacity for the given slot and date (scoped to same service type)
+        # Check walker capacity for the given slot and date (scoped to same service type).
+        # Booking.id != booking.id is correct in all reassignment cases:
+        #   A→B (different walkers): booking is on A, not B, so it wouldn't be counted
+        #     in B's query anyway — the exclusion is redundant but harmless.
+        #   A→A (same walker, slot_override): booking IS on A for the old slot, so
+        #     excluding it correctly avoids counting it when checking A's new-slot capacity.
         if slot:
             service_slug = booking.service_type.slug if booking.service_type else ServiceType.WALK
             max_capacity = get_max_per_walker(service_slug)

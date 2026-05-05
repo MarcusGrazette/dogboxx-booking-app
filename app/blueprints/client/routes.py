@@ -742,7 +742,7 @@ def profile():
     # Secondary-only owners (co-owners with no primary dog of their own) should be
     # allowed to view/edit their profile without going through onboarding.
     is_secondary_only = (not primary_ownerships and
-                         DogOwner.query.filter_by(user_id=current_user.id, role='secondary').count() > 0)
+                         DogOwner.query.filter_by(user_id=current_user.id, role='secondary').first() is not None)
 
     if not is_secondary_only and (not client or not client.onboarding_completed):
         return redirect(url_for('client.onboard'))
@@ -1440,7 +1440,9 @@ def cancel_booking():
         booking.cancelled_at = datetime.now(timezone.utc)
         booking.cancelled_by = 'admin' if is_admin_cancel else 'client'
         booking.walker_id = None  # Unassign walker
-        db.session.commit()
+        # Do NOT commit here — notifications are added below and everything
+        # commits atomically at the end. An early commit would make the
+        # cancellation irreversible if the notification step later raises.
 
         date_str_fmt = booking.date.strftime('%a %-d %b')
         dog_name = booking.dog.name if booking.dog else 'Unknown dog'
