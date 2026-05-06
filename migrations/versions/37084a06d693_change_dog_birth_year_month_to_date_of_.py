@@ -16,31 +16,55 @@ depends_on = None
 
 
 def upgrade():
-    # Add new column
-    op.add_column('dogs', sa.Column('date_of_birth', sa.Date(), nullable=True))
+    bind = op.get_bind()
 
-    # Convert existing birth_year_month (e.g. 202301 = Jan 2023) to date (1st of that month)
-    op.execute("""
-        UPDATE dogs
-        SET date_of_birth = make_date(
-            (birth_year_month / 100)::int,
-            (birth_year_month % 100)::int,
-            1
-        )
-        WHERE birth_year_month IS NOT NULL
-    """)
+    from sqlalchemy import inspect as sa_inspect
+    existing = [c['name'] for c in sa_inspect(bind).get_columns('dogs')]
+    if 'date_of_birth' not in existing:
+        op.add_column('dogs', sa.Column('date_of_birth', sa.Date(), nullable=True))
 
-    # Drop old column
+    # Convert existing birth_year_month (e.g. 202301 = Jan 2023) to date (1st of that month).
+    # make_date() and ::int casts are PostgreSQL-only; SQLite uses printf + CAST.
+    if bind.dialect.name == 'postgresql':
+        op.execute("""
+            UPDATE dogs
+            SET date_of_birth = make_date(
+                (birth_year_month / 100)::int,
+                (birth_year_month % 100)::int,
+                1
+            )
+            WHERE birth_year_month IS NOT NULL
+        """)
+    else:
+        op.execute("""
+            UPDATE dogs
+            SET date_of_birth = printf('%04d-%02d-01',
+                CAST(birth_year_month / 100 AS INTEGER),
+                CAST(birth_year_month % 100 AS INTEGER)
+            )
+            WHERE birth_year_month IS NOT NULL
+        """)
+
     op.drop_column('dogs', 'birth_year_month')
 
 
 def downgrade():
     op.add_column('dogs', sa.Column('birth_year_month', sa.NUMERIC(), nullable=True))
 
-    op.execute("""
-        UPDATE dogs
-        SET birth_year_month = EXTRACT(YEAR FROM date_of_birth) * 100 + EXTRACT(MONTH FROM date_of_birth)
-        WHERE date_of_birth IS NOT NULL
-    """)
+    # EXTRACT is PostgreSQL-only; SQLite uses strftime.
+    if op.get_bind().dialect.name == 'postgresql':
+        op.execute("""
+            UPDATE dogs
+            SET birth_year_month = EXTRACT(YEAR FROM date_of_birth) * 100
+                                 + EXTRACT(MONTH FROM date_of_birth)
+            WHERE date_of_birth IS NOT NULL
+        """)
+    else:
+        op.execute("""
+            UPDATE dogs
+            SET birth_year_month = CAST(strftime('%Y', date_of_birth) AS INTEGER) * 100
+                                 + CAST(strftime('%m', date_of_birth) AS INTEGER)
+            WHERE date_of_birth IS NOT NULL
+        """)
 
     op.drop_column('dogs', 'date_of_birth')

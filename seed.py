@@ -95,7 +95,40 @@ def seed():
             print("✓ Created owner account: lydia@dogboxx.org (password: changeme123!)")
 
         db.session.commit()
-        print("\n✓ Seed complete!")
+        print("\n✓ Base seed complete — loading test data from seed_data/...")
+
+        from app.seed_db.seeder import (
+            load_json_data, seed_users, seed_clients,
+            seed_dogs, seed_walkers, seed_bookings,
+        )
+
+        users_data = load_json_data('seed_data/users.json')
+        clients_data = load_json_data('seed_data/clients.json')
+        dogs_data = load_json_data('seed_data/dogs.json')
+        walkers_data = load_json_data('seed_data/walkers.json')
+        bookings_data = load_json_data('seed_data/bookings.json')
+
+        if not all([users_data, clients_data, dogs_data, walkers_data, bookings_data]):
+            print("⚠ One or more seed_data files missing — skipping test data.")
+            return
+
+        users = seed_users(users_data)
+        db.session.commit()
+
+        clients = seed_clients(clients_data, users)
+        db.session.commit()
+
+        dogs = seed_dogs(dogs_data, users)
+        db.session.commit()
+
+        walkers = seed_walkers(walkers_data, users)
+        db.session.commit()
+
+        seed_bookings(bookings_data, users, dogs, walkers)
+        db.session.commit()
+
+        print(f"\n✓ Seed complete! Created {len(users)} users, {len(clients)} clients, "
+              f"{len(dogs)} dogs, {len(walkers)} walkers.")
 
 
 if __name__ == '__main__':

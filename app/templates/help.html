@@ -10,12 +10,14 @@
         color: #fff;
         padding: 2rem 0 1.75rem;
     }
+
     .help-hero h1 {
         font-size: clamp(1.6rem, 4vw, 2.4rem);
         font-weight: 800;
         color: #fff;
         margin-bottom: 0.5rem;
     }
+
     .help-hero .lead {
         color: #aaa;
         font-size: 1rem;
@@ -27,25 +29,32 @@
         padding: 3rem 0;
         border-bottom: 1px solid #f0f0f0;
     }
+
     .help-section:last-of-type {
         border-bottom: none;
     }
+
     .help-section h2 {
         font-size: 1.35rem;
         font-weight: 700;
         margin-bottom: 0.75rem;
     }
+
     .help-section h2 .section-icon {
         color: #E02FAC;
         margin-right: 0.45rem;
     }
-    .help-section p, .help-section li {
+
+    .help-section p,
+    .help-section li {
         color: #444;
         line-height: 1.7;
     }
+
     .help-section ul {
         padding-left: 1.25rem;
     }
+
     .help-tip {
         background: #fff8fe;
         border-left: 3px solid #E02FAC;
@@ -60,9 +69,10 @@
     .help-screenshot {
         width: 100%;
         border-radius: 0.75rem;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.10);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.10);
         display: block;
     }
+
     .help-screenshot-placeholder {
         width: 100%;
         aspect-ratio: 16/10;
@@ -84,6 +94,7 @@
         top: 90px;
         font-size: 0.85rem;
     }
+
     .help-toc a {
         display: block;
         padding: 0.3rem 0.75rem;
@@ -92,11 +103,13 @@
         border-left: 2px solid #e5e5e5;
         transition: color 0.15s, border-color 0.15s;
     }
+
     .help-toc a:hover,
     .help-toc a.active {
         color: #E02FAC;
         border-left-color: #E02FAC;
     }
+
     .help-toc .toc-heading {
         font-weight: 700;
         text-transform: uppercase;
@@ -126,270 +139,356 @@
 
 {# ── Body: TOC sidebar + sections ── #}
 <div class="container py-4">
-<div class="row g-4">
+    <div class="row g-4">
 
-    {# ── Sticky TOC — hidden on mobile ── #}
-    <div class="col-lg-3 d-none d-lg-block">
-        <nav class="help-toc" aria-label="Help contents">
-            <div class="toc-heading">Contents</div>
-            <a href="#booking-a-walk">Booking a walk</a>
-            <a href="#booking-a-drop-in">Booking a drop-in</a>
-            <a href="#recurring-bookings">Recurring bookings</a>
-            <a href="#managing-bookings">Managing bookings</a>
-            <a href="#cancellations">Cancellations</a>
-            <a href="#pausing-walks">Pausing walks</a>
-            <a href="#your-profile">Your profile &amp; dogs</a>
-            <a href="#monthly-summary">Monthly summary</a>
-        </nav>
-    </div>
-
-    {# ── Sections ── #}
-    <div class="col-12 col-lg-9">
-
-        {# ─────────────────────────────── BOOKING A WALK ─ #}
-        <section class="help-section" id="booking-a-walk">
-            <div class="row align-items-center g-4">
-                <div class="col-12 col-md-6 order-1">
-                    <h2><i class="bi bi-calendar-plus-fill section-icon"></i>Booking a walk</h2>
-                    <p>To book a group walk, tap <strong>Request a Service</strong> on your home screen.</p>
-                    <ol class="mb-0">
-                        <li>Tap a date on the calendar — available dates are highlighted.</li>
-                        <li>Choose <strong>Morning</strong> or <strong>Afternoon</strong> (or <strong>Both walks</strong> to book the same day twice).</li>
-                        <li>If you have more than one dog, select which dog the booking is for.</li>
-                        <li>Tap <strong>Request walk</strong>. You'll see a confirmation immediately.</li>
-                    </ol>
-                    <div class="help-tip">
-                        <i class="bi bi-info-circle me-1"></i>
-                        The availability hint below the slot selector shows whether spaces are open or the date is likely to waitlist.
-                    </div>
-                </div>
-                <div class="col-12 col-md-6 order-2">
-                    {# Replace this div with: <img src="{{ url_for('static', filename='help/booking-walk.png') }}" alt="Booking a walk" class="help-screenshot"> #}
-                    <div class="help-screenshot-placeholder">
-                        <i class="bi bi-image" style="font-size:2rem;"></i>
-                        <span>help/booking-walk.png</span>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        {# ─────────────────────────────── BOOKING A DROP-IN ─ #}
-        <section class="help-section" id="booking-a-drop-in">
-            <div class="row align-items-center g-4">
-                <div class="col-12 col-md-6 order-2 order-md-1">
-                    {# Replace this div with: <img src="{{ url_for('static', filename='help/booking-dropin.png') }}" alt="Booking a drop-in" class="help-screenshot"> #}
-                    <div class="help-screenshot-placeholder">
-                        <i class="bi bi-image" style="font-size:2rem;"></i>
-                        <span>help/booking-dropin.png</span>
-                    </div>
-                </div>
-                <div class="col-12 col-md-6 order-1 order-md-2">
-                    <h2><i class="bi bi-house-heart-fill section-icon"></i>Booking a drop-in</h2>
-                    <p>A drop-in is a short comfort-break visit at your home — ideal when you need cover but not a full walk.</p>
-                    <ol class="mb-0">
-                        <li>In the <strong>Request a Service</strong> card, change the service selector from <em>Walk</em> to <em>Drop-in</em>.</li>
-                        <li>Pick your date and slot (Morning or Afternoon).</li>
-                        <li>Tap <strong>Request drop-in</strong>.</li>
-                    </ol>
-                    <div class="help-tip">
-                        <i class="bi bi-info-circle me-1"></i>
-                        Drop-ins are only shown when a walker with drop-in availability is scheduled on that day.
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        {# ─────────────────────────────── RECURRING BOOKINGS ─ #}
-        <section class="help-section" id="recurring-bookings">
-            <div class="row align-items-center g-4">
-                <div class="col-12 col-md-6 order-1">
-                    <h2><i class="bi bi-arrow-repeat section-icon"></i>Recurring bookings</h2>
-                    <p>Book the same slot every week without repeating the process each time.</p>
-                    <ol class="mb-0">
-                        <li>Enable the <strong>Repeat weekly</strong> toggle in the booking form.</li>
-                        <li>Tick the days of the week you want to repeat on.</li>
-                        <li>Set an end date (up to one year ahead).</li>
-                        <li>A preview shows how many bookings will be created.</li>
-                        <li>Tap <strong>Request recurring</strong> to submit.</li>
-                    </ol>
-                    <div class="help-tip">
-                        <i class="bi bi-info-circle me-1"></i>
-                        Dates that are already full will be waitlisted rather than skipped, so you keep your place in the queue.
-                    </div>
-                </div>
-                <div class="col-12 col-md-6 order-2">
-                    {# Replace with: <img src="{{ url_for('static', filename='help/recurring.png') }}" alt="Recurring bookings" class="help-screenshot"> #}
-                    <div class="help-screenshot-placeholder">
-                        <i class="bi bi-image" style="font-size:2rem;"></i>
-                        <span>help/recurring.png</span>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        {# ─────────────────────────────── MANAGING BOOKINGS ─ #}
-        <section class="help-section" id="managing-bookings">
-            <div class="row align-items-center g-4">
-                <div class="col-12 col-md-6 order-2 order-md-1">
-                    {# Replace with: <img src="{{ url_for('static', filename='help/bookings-list.png') }}" alt="Your bookings" class="help-screenshot"> #}
-                    <div class="help-screenshot-placeholder">
-                        <i class="bi bi-image" style="font-size:2rem;"></i>
-                        <span>help/bookings-list.png</span>
-                    </div>
-                </div>
-                <div class="col-12 col-md-6 order-1 order-md-2">
-                    <h2><i class="bi bi-list-check section-icon"></i>Managing bookings</h2>
-                    <p>Your upcoming bookings are listed below the booking form on your home screen, grouped by dog.</p>
-                    <ul class="mb-0">
-                        <li><strong>Confirmed</strong> — your booking is locked in.</li>
-                        <li><strong>Requested</strong> — awaiting confirmation from DogBoxx.</li>
-                        <li><strong>Waitlisted</strong> — the slot was full; you'll be moved up if a space opens.</li>
-                    </ul>
-                    <div class="help-tip">
-                        <i class="bi bi-funnel me-1"></i>
-                        Use the date filter to jump to bookings on a specific day.
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        {# ─────────────────────────────── CANCELLATIONS ─ #}
-        <section class="help-section" id="cancellations">
-            <div class="row align-items-center g-4">
-                <div class="col-12 col-md-6 order-1">
-                    <h2><i class="bi bi-x-circle-fill section-icon"></i>Cancellations</h2>
-                    <p>You can cancel any upcoming booking directly from the home screen.</p>
-                    <ol class="mb-0">
-                        <li>Find the booking in your list and tap <strong>Cancel</strong>.</li>
-                        <li>Confirm in the popup.</li>
-                    </ol>
-                    <div class="help-tip">
-                        <i class="bi bi-exclamation-triangle me-1"></i>
-                        <strong>Late cancellations</strong> (less than 5 days before the booking date) are still charged at the full rate and will appear on your monthly summary.
-                    </div>
-                </div>
-                <div class="col-12 col-md-6 order-2">
-                    {# Replace with: <img src="{{ url_for('static', filename='help/cancel.png') }}" alt="Cancelling a booking" class="help-screenshot"> #}
-                    <div class="help-screenshot-placeholder">
-                        <i class="bi bi-image" style="font-size:2rem;"></i>
-                        <span>help/cancel.png</span>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        {# ─────────────────────────────── PAUSING WALKS ─ #}
-        <section class="help-section" id="pausing-walks">
-            <div class="row align-items-center g-4">
-                <div class="col-12 col-md-6 order-2 order-md-1">
-                    {# Replace with: <img src="{{ url_for('static', filename='help/pause.png') }}" alt="Pausing walks" class="help-screenshot"> #}
-                    <div class="help-screenshot-placeholder">
-                        <i class="bi bi-image" style="font-size:2rem;"></i>
-                        <span>help/pause.png</span>
-                    </div>
-                </div>
-                <div class="col-12 col-md-6 order-1 order-md-2">
-                    <h2><i class="bi bi-pause-circle-fill section-icon"></i>Pausing walks</h2>
-                    <p>Going on holiday? Use <strong>Pause Walks</strong> to cancel all bookings across a date range at once.</p>
-                    <ol class="mb-0">
-                        <li>Open the <strong>Pause Walks</strong> card on your home screen.</li>
-                        <li>Set a start and end date.</li>
-                        <li>A preview shows which bookings will be cancelled.</li>
-                        <li>Tap <strong>Confirm pause</strong>.</li>
-                    </ol>
-                    <div class="help-tip">
-                        <i class="bi bi-info-circle me-1"></i>
-                        The same late cancellation policy applies — pauses within 5 days of a booking may still be charged.
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        {# ─────────────────────────────── YOUR PROFILE & DOGS ─ #}
-        <section class="help-section" id="your-profile">
-            <div class="row align-items-center g-4">
-                <div class="col-12 col-md-6 order-1">
-                    <h2><i class="bi bi-person-circle section-icon"></i>Your profile &amp; dogs</h2>
-                    <p>Access your profile from the avatar menu in the top-right corner.</p>
-                    <ul class="mb-0">
-                        <li><strong>Pickup instructions</strong> — per-dog notes for the walker (key safe code, gate info, etc.). Edit directly on the profile page.</li>
-                        <li><strong>Health notes</strong> — allergies, medication, or anything the walker should know.</li>
-                        <li><strong>Date of birth</strong> — used for age display and records.</li>
-                        <li><strong>Profile photo</strong> — tap your avatar to update it.</li>
-                        <li><strong>Home address</strong> — your pickup address. Contact DogBoxx to update this.</li>
-                    </ul>
-                </div>
-                <div class="col-12 col-md-6 order-2">
-                    {# Replace with: <img src="{{ url_for('static', filename='help/profile.png') }}" alt="Your profile" class="help-screenshot"> #}
-                    <div class="help-screenshot-placeholder">
-                        <i class="bi bi-image" style="font-size:2rem;"></i>
-                        <span>help/profile.png</span>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        {# ─────────────────────────────── MONTHLY SUMMARY ─ #}
-        <section class="help-section" id="monthly-summary">
-            <div class="row align-items-center g-4">
-                <div class="col-12 col-md-6 order-2 order-md-1">
-                    {# Replace with: <img src="{{ url_for('static', filename='help/monthly-summary.png') }}" alt="Monthly summary" class="help-screenshot"> #}
-                    <div class="help-screenshot-placeholder">
-                        <i class="bi bi-image" style="font-size:2rem;"></i>
-                        <span>help/monthly-summary.png</span>
-                    </div>
-                </div>
-                <div class="col-12 col-md-6 order-1 order-md-2">
-                    <h2><i class="bi bi-receipt section-icon"></i>Monthly summary</h2>
-                    <p>Find your <strong>Monthly Summary</strong> in the avatar menu. It shows an itemised estimate of your charges for any month.</p>
-                    <ul class="mb-0">
-                        <li>Walks, drop-ins, and late cancellations are listed individually.</li>
-                        <li>Same-day AM + PM walk discounts are applied automatically.</li>
-                        <li>Weekly discounts apply when you have 5 or more confirmed walks in a week.</li>
-                        <li>Use the arrows to navigate between months.</li>
-                    </ul>
-                    <div class="help-tip">
-                        <i class="bi bi-info-circle me-1"></i>
-                        This is an estimate based on confirmed bookings. DogBoxx will issue your invoice separately.
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        {# ─────────────────────────────── FOOTER ─ #}
-        <div class="py-4 text-center text-muted small">
-            Questions? Email us at
-            <a href="mailto:hello@dogboxx.org" class="text-decoration-none" style="color:#E02FAC;">hello@dogboxx.org</a>
+        {# ── Sticky TOC — hidden on mobile ── #}
+        <div class="col-lg-3 d-none d-lg-block">
+            <nav class="help-toc" aria-label="Help contents">
+                <div class="toc-heading">Contents</div>
+                <a href="#first-login">First login</a>
+                <a href="#booking-a-walk">Booking a walk</a>
+                <a href="#booking-a-drop-in">Booking a drop-in</a>
+                <a href="#recurring-bookings">Recurring bookings</a>
+                <a href="#managing-bookings">Managing bookings</a>
+                <a href="#cancellations">Cancellations</a>
+                <a href="#pausing-walks">Pausing walks</a>
+                <a href="#your-profile">Your profile &amp; dogs</a>
+                <a href="#monthly-summary">Monthly summary</a>
+                <a href="#privacy">Security &amp; privacy policy</a>
+            </nav>
         </div>
 
-    </div>{# end col-lg-9 #}
-</div>{# end row #}
+        {# ── Sections ── #}
+        <div class="col-12 col-lg-9">
+
+            {# ─────────────────────────────── FIRST LOGIN ─ #}
+            <section class="help-section" id="first-login">
+                <h2><i class="bi bi-door-open-fill section-icon"></i>First login</h2>
+
+                <h6 class="fw-semibold mt-3 mb-1">Visit the app</h6>
+                <p class="mb-2">Open <a href="https://app.dogboxx.org" style="color:#E02FAC;">app.dogboxx.org</a> in your browser. Lydia has already set up your account — tap <strong>Forgot password?</strong> on the login page to set your own password and log in for the first time.</p>
+
+                <h6 class="fw-semibold mt-3 mb-1">Your bookings are already there</h6>
+                <p class="mb-2">Lydia has added your existing recurring bookings (for example, every Monday afternoon) to your account so you're up and running straight away. You can manage, add, or cancel bookings from your home screen.</p>
+
+                <h6 class="fw-semibold mt-3 mb-1">Install the app — Android &amp; Chrome</h6>
+                <p class="mb-2">When you visit the site on Android, Chrome will show an <strong>Add to Home Screen</strong> or <strong>Install</strong> prompt at the bottom of the screen. Installing is optional, but it gives you a home screen icon and enables push notifications so you hear about booking confirmations, waitlist moves, and updates without needing to check the app.</p>
+
+                <h6 class="fw-semibold mt-3 mb-1">Install the app — iPhone &amp; iPad (iOS)</h6>
+                <p class="mb-1">Safari is required to install the app on iOS. Open <strong>app.dogboxx.org</strong> in Safari, then:</p>
+                <ol class="mb-2">
+                    <li>Tap the <strong>Share</strong> button <i class="bi bi-box-arrow-up"></i> at the bottom of the screen.</li>
+                    <li>Scroll down and tap <strong>Add to Home Screen</strong>.</li>
+                    <li>Tap <strong>Add</strong> to confirm.</li>
+                </ol>
+                <p class="mb-2">Once installed, open the app from your home screen. You'll be prompted to allow push notifications — tap <strong>Allow</strong> to receive booking updates.</p>
+
+                <div class="help-tip">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Push notifications only work when the app is installed to your home screen on iOS. If you skip the install, you can still use the app in the browser — you just won't get push notifications.
+                </div>
+            </section>
+
+            {# ─────────────────────────────── BOOKING A WALK ─ #}
+            <section class="help-section" id="booking-a-walk">
+                <div class="row align-items-center g-4">
+                    <div class="col-12 col-md-6 order-1">
+                        <h2><i class="bi bi-calendar-plus-fill section-icon"></i>Booking a walk</h2>
+                        <p>In the <strong>Make a booking</strong> section on your home screen.</p>
+                        <ol class="mb-0">
+                            <li>Tap a date on the calendar — dates with existing bookings are highlighted.</li>
+                            <li>Choose <strong>Walk</strong> from the drop down</li>
+                            <li>Choose a time slot, either <strong>Morning</strong> or <strong>Afternoon</strong> or
+                                <strong>Both
+                                    walks</strong>.
+                            </li>
+                            <li>Tap <strong>Request walk</strong>. If we have availability, you'll see a confirmation
+                                message. Otherwise, you'll be waitlisted. If a slot becomes available, you'll get a
+                                notification in the app.</li>
+                        </ol>
+                        <div class="help-tip">
+                            <i class="bi bi-info-circle me-1"></i>
+                            The availability hint below the slot drop down shows whether spaces are available.
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6 order-2">
+                        {# Replace this div with: <img src="{{ url_for('static', filename='help/booking-walk.png') }}"
+                            alt="Booking a walk" class="help-screenshot"> #}
+                        <div class="help-screenshot-placeholder">
+                            <i class="bi bi-image" style="font-size:2rem;"></i>
+                            <span>help/booking-walk.png</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {# ─────────────────────────────── BOOKING A DROP-IN ─ #}
+            <section class="help-section" id="booking-a-drop-in">
+                <div class="row align-items-center g-4">
+                    <div class="col-12 col-md-6 order-2 order-md-1">
+                        {# Replace this div with: <img src="{{ url_for('static', filename='help/booking-dropin.png') }}"
+                            alt="Booking a drop-in" class="help-screenshot"> #}
+                        <div class="help-screenshot-placeholder">
+                            <i class="bi bi-image" style="font-size:2rem;"></i>
+                            <span>help/booking-dropin.png</span>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6 order-1 order-md-2">
+                        <h2><i class="bi bi-house-heart-fill section-icon"></i>Booking a drop-in</h2>
+                        <p>A drop-in is a 15 - 20 minute comfort break and a cuddle. The morning drop in will be around
+                            10:30 am and the afternoon drop in will be around 3:30pm. In the <strong>Make a
+                                booking</strong> section on your home screen.</p>
+                        <ol class="mb-0">
+                            <li>Choose <strong>Drop in</strong> from the drop down list</li>
+                            <li>Choose a slot (Morning or Afternoon).</li>
+                            <li>Tap <strong>Request drop-in</strong>.</li>
+                        </ol>
+                        <div class="help-tip">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Drop ins show as 'pending' until Lydia confirms them. You'll see a notification when she
+                            does.
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {# ─────────────────────────────── RECURRING BOOKINGS ─ #}
+            <section class="help-section" id="recurring-bookings">
+                <div class="row align-items-center g-4">
+                    <div class="col-12 col-md-6 order-1">
+                        <h2><i class="bi bi-arrow-repeat section-icon"></i>Recurring bookings</h2>
+                        <p>Book the same slot every week without repeating the process each time.</p>
+                        <ol class="mb-0">
+                            <li>Enable the <strong>Repeat weekly</strong> toggle in the booking form.</li>
+                            <li>Tick the days of the week you want to repeat on.</li>
+                            <li>Set an end date (up to one year ahead).</li>
+                            <li>A preview shows how many bookings will be created.</li>
+                            <li>Tap <strong>Request recurring</strong> to submit.</li>
+                        </ol>
+                        <div class="help-tip">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Dates that are already full will be waitlisted rather than skipped, so you keep your place
+                            in the queue.
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6 order-2">
+                        {# Replace with: <img src="{{ url_for('static', filename='help/recurring.png') }}"
+                            alt="Recurring bookings" class="help-screenshot"> #}
+                        <div class="help-screenshot-placeholder">
+                            <i class="bi bi-image" style="font-size:2rem;"></i>
+                            <span>help/recurring.png</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {# ─────────────────────────────── MANAGING BOOKINGS ─ #}
+            <section class="help-section" id="managing-bookings">
+                <div class="row align-items-center g-4">
+                    <div class="col-12 col-md-6 order-2 order-md-1">
+                        {# Replace with: <img src="{{ url_for('static', filename='help/bookings-list.png') }}"
+                            alt="Your bookings" class="help-screenshot"> #}
+                        <div class="help-screenshot-placeholder">
+                            <i class="bi bi-image" style="font-size:2rem;"></i>
+                            <span>help/bookings-list.png</span>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6 order-1 order-md-2">
+                        <h2><i class="bi bi-list-check section-icon"></i>Managing bookings</h2>
+                        <p>You'll see upcoming bookings on your home screen. The calendar on the home screen highlights
+                            dates with bookings. Green for confirmed and yellow for pending. Tap a date to filter the
+                            list.
+                        </p>
+                        <ul class="mb-0">
+                            <li><strong>Confirmed</strong> — your booking is confirmed.</li>
+                            <li><strong>Requested</strong> — awaiting confirmation from DogBoxx.</li>
+                            <li><strong>Waitlisted</strong> — the slot was full; you'll be moved up if a space opens.
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            {# ─────────────────────────────── CANCELLATIONS ─ #}
+            <section class="help-section" id="cancellations">
+                <div class="row align-items-center g-4">
+                    <div class="col-12 col-md-6 order-1">
+                        <h2><i class="bi bi-x-circle-fill section-icon"></i>Cancellations</h2>
+                        <p>Click the x to cancel any upcoming booking directly from the home screen. A pop up message
+                            will ask you to confirm cancellation. Confirmed bookings cancelled within 5 days are still
+                            charged. The pop up will remind you of the cancellation policy.</p>
+                    </div>
+                    <div class="col-12 col-md-6 order-2">
+                        {# Replace with: <img src="{{ url_for('static', filename='help/cancel.png') }}"
+                            alt="Cancelling a booking" class="help-screenshot"> #}
+                        <div class="help-screenshot-placeholder">
+                            <i class="bi bi-image" style="font-size:2rem;"></i>
+                            <span>help/cancel.png</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {# ─────────────────────────────── PAUSING WALKS ─ #}
+            <section class="help-section" id="pausing-walks">
+                <div class="row align-items-center g-4">
+                    <div class="col-12 col-md-6 order-2 order-md-1">
+                        {# Replace with: <img src="{{ url_for('static', filename='help/pause.png') }}"
+                            alt="Pausing walks" class="help-screenshot"> #}
+                        <div class="help-screenshot-placeholder">
+                            <i class="bi bi-image" style="font-size:2rem;"></i>
+                            <span>help/pause.png</span>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6 order-1 order-md-2">
+                        <h2><i class="bi bi-pause-circle-fill section-icon"></i>Pausing walks</h2>
+                        <p>Going on holiday? Use <strong>Pause Walks</strong> to cancel all bookings in a date range.
+                        </p>
+                        <ol class="mb-0">
+                            <li>Tap <strong>Pause Walks</strong> on your home screen.</li>
+                            <li>Set a start and end date.</li>
+                            <li>Tap on <strong>Preview affected walks</strong> to see which bookings will be cancelled.
+                            </li>
+                            <li>Tap <strong>Cancel all</strong>.</li>
+                        </ol>
+                        <div class="help-tip">
+                            <i class="bi bi-info-circle me-1"></i>
+                            The same late cancellation policy applies — pauses within 5 days of a booking may still be
+                            charged.
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {# ─────────────────────────────── YOUR PROFILE & DOGS ─ #}
+            <section class="help-section" id="your-profile">
+                <div class="row align-items-center g-4">
+                    <div class="col-12 col-md-6 order-1">
+                        <h2><i class="bi bi-person-circle section-icon"></i>Your profile &amp; dogs</h2>
+                        <p>Access your profile from the avatar menu in the top-right corner.</p>
+                        <ul class="mb-0">
+                            <li><strong>Pickup instructions</strong> — per-dog notes for the walker (key safe code, gate
+                                info, etc.). Edit directly on the profile page.</li>
+                            <li><strong>Health notes</strong> — allergies, medication, or anything the walker should
+                                know.</li>
+                            <li><strong>Date of birth</strong> — used for age display and records.</li>
+                            <li><strong>Profile photo</strong> — tap your avatar to update it.</li>
+                            <li><strong>Home address</strong> — your pickup address. Contact DogBoxx to update this.
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="col-12 col-md-6 order-2">
+                        {# Replace with: <img src="{{ url_for('static', filename='help/profile.png') }}"
+                            alt="Your profile" class="help-screenshot"> #}
+                        <div class="help-screenshot-placeholder">
+                            <i class="bi bi-image" style="font-size:2rem;"></i>
+                            <span>help/profile.png</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {# ─────────────────────────────── MONTHLY SUMMARY ─ #}
+            <section class="help-section" id="monthly-summary">
+                <div class="row align-items-center g-4">
+                    <div class="col-12 col-md-6 order-2 order-md-1">
+                        {# Replace with: <img src="{{ url_for('static', filename='help/monthly-summary.png') }}"
+                            alt="Monthly summary" class="help-screenshot"> #}
+                        <div class="help-screenshot-placeholder">
+                            <i class="bi bi-image" style="font-size:2rem;"></i>
+                            <span>help/monthly-summary.png</span>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6 order-1 order-md-2">
+                        <h2><i class="bi bi-receipt section-icon"></i>Monthly summary</h2>
+                        <p>Find your <strong>Monthly Summary</strong> in the avatar menu. It shows an itemised estimate
+                            of your charges for any month.</p>
+                        <ul class="mb-0">
+                            <li>Walks, drop-ins, and late cancellations are listed individually.</li>
+                            <li>Same-day AM + PM walk discounts are applied automatically.</li>
+                            <li>Weekly discounts apply when you have 5 or more confirmed walks in a week.</li>
+                            <li>Use the arrows to navigate between months.</li>
+                        </ul>
+                        <div class="help-tip">
+                            <i class="bi bi-info-circle me-1"></i>
+                            This is an estimate based on confirmed bookings. DogBoxx will issue your invoice separately.
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {# ─────────────────────────────── SECURITY & PRIVACY ─ #}
+            <section class="help-section" id="privacy">
+                <h2><i class="bi bi-shield-lock-fill section-icon"></i>Security &amp; privacy</h2>
+
+                <h6 class="fw-semibold mt-3 mb-1">Your data is stored securely</h6>
+                <p class="mb-2">DogBoxx is hosted on <strong>Railway</strong>, on servers located in the
+                    <strong>European Union</strong>. All data is encrypted in transit using HTTPS and encrypted at rest
+                    using industry-standard encryption. We back up your data on
+                    <strong>Cloudflare</strong>, also on EU-based servers.
+                </p>
+
+                <h6 class="fw-semibold mt-3 mb-1">Caching — faster loading</h6>
+                <p class="mb-2">The app stores a small set of static files on your device (stylesheets, scripts, and
+                    images) using your browser's built-in cache. This is called an <em>app shell cache</em> and means
+                    pages load quickly even on a slow connection. <strong>No personal data is stored in this
+                        cache</strong> — only the
+                    code and design assets needed to display the app. The cache is updated automatically whenever the
+                    app is updated.</p>
+
+                <h6 class="fw-semibold mt-3 mb-1">Cookies &amp; staying logged in</h6>
+                <p class="mb-2">DogBoxx uses two cookies — text files stored in your browser:</p>
+                <ul class="mb-2">
+                    <li><strong>Session cookie</strong> — keeps you logged in while you use the app. This is deleted
+                        when you log out or close your browser (unless you tick <em>Remember me</em> at login, in which
+                        case it persists for up to 30 days).</li>
+                    <li><strong>Security token (CSRF)</strong> — a hidden value included with every form submission to
+                        protect against cross-site request forgery attacks. It is never shared with third parties.</li>
+                </ul>
+                <p class="mb-0">We do not use advertising cookies or any tracking or analytics.</p>
+
+                <div class="help-tip mt-3">
+                    <i class="bi bi-envelope me-1"></i>
+                    Questions about your data? Email us at <a href="mailto:hello@dogboxx.org"
+                        style="color:#E02FAC;">lydia@dogboxx.org</a>.
+                </div>
+            </section>
+
+            {# ─────────────────────────────── FOOTER ─ #}
+            <div class="py-4 text-center text-muted small">
+                Questions? Email us at
+                <a href="mailto:hello@dogboxx.org" class="text-decoration-none"
+                    style="color:#E02FAC;">lydia@dogboxx.org</a>
+            </div>
+
+        </div>{# end col-lg-9 #}
+    </div>{# end row #}
 </div>{# end container #}
 
 {% endblock %}
 
 {% block scripts %}
 <script>
-// Highlight active TOC link on scroll
-(function () {
-    var links = document.querySelectorAll('.help-toc a');
-    var sections = Array.from(links).map(function (a) {
-        return document.querySelector(a.getAttribute('href'));
-    }).filter(Boolean);
+    // Highlight active TOC link on scroll
+    (function () {
+        var links = document.querySelectorAll('.help-toc a');
+        var sections = Array.from(links).map(function (a) {
+            return document.querySelector(a.getAttribute('href'));
+        }).filter(Boolean);
 
-    function onScroll() {
-        var scrollY = window.scrollY + 120;
-        var active = sections[0];
-        sections.forEach(function (s) {
-            if (s.offsetTop <= scrollY) active = s;
-        });
-        links.forEach(function (a) {
-            a.classList.toggle('active', a.getAttribute('href') === '#' + active.id);
-        });
-    }
+        function onScroll() {
+            var scrollY = window.scrollY + 120;
+            var active = sections[0];
+            sections.forEach(function (s) {
+                if (s.offsetTop <= scrollY) active = s;
+            });
+            links.forEach(function (a) {
+                a.classList.toggle('active', a.getAttribute('href') === '#' + active.id);
+            });
+        }
 
-    window.addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
-}());
+        window.addEventListener('scroll', onScroll, { passive: true });
+        onScroll();
+    }());
 </script>
 {% endblock %}

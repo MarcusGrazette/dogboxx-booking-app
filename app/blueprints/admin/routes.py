@@ -5,6 +5,8 @@ This module defines routes for admin functionality, including dashboard, booking
 management, and user management.
 """
 
+from collections import defaultdict
+
 from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
@@ -26,7 +28,7 @@ import json
 from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
 from app.utils.notifications import create_notification
-from app.capacity import check_availability
+from app.capacity import check_availability, acquire_booking_lock
 
 
 @admin_bp.route("/")
@@ -873,7 +875,12 @@ def assign_walker():
             if not schedule_exists:
                 return jsonify(success=False, message=f"{walker.user.firstname} is not scheduled for {assign_slot} on this day"), 400
 
-        # Check walker capacity for the given slot and date (scoped to same service type)
+        # Check walker capacity for the given slot and date (scoped to same service type).
+        # Booking.id != booking.id is correct in all reassignment cases:
+        #   A→B (different walkers): booking is on A, not B, so it wouldn't be counted
+        #     in B's query anyway — the exclusion is redundant but harmless.
+        #   A→A (same walker, slot_override): booking IS on A for the old slot, so
+        #     excluding it correctly avoids counting it when checking A's new-slot capacity.
         if slot:
             service_slug = booking.service_type.slug if booking.service_type else ServiceType.WALK
             max_capacity = get_max_per_walker(service_slug)
@@ -1131,28 +1138,52 @@ def client_detail(client_id):
     """Show client detail with dog info, shared access, and notification audit trail (admin only)"""
     user = User.query.filter(User.role == 'client', User.id == client_id).first_or_404()
 
-    # Dogs where this user is the primary owner
+    # Batch all dog + co-owner lookups to avoid N+1 queries
     primary_ownerships = DogOwner.query.filter_by(user_id=user.id, role='primary').all()
+    sec_as_secondary = DogOwner.query.filter_by(user_id=user.id, role='secondary').all()
+
+    all_dog_ids = [o.dog_id for o in primary_ownerships + sec_as_secondary]
+    dogs_by_id = (
+        {d.id: d for d in Dog.query.filter(Dog.id.in_(all_dog_ids)).all()}
+        if all_dog_ids else {}
+    )
+
+    all_co_ownerships = (
+        DogOwner.query.filter(DogOwner.dog_id.in_(all_dog_ids)).all()
+        if all_dog_ids else []
+    )
+    co_user_ids = [o.user_id for o in all_co_ownerships if o.user_id != user.id]
+    co_users_by_id = (
+        {u.id: u for u in User.query.filter(User.id.in_(co_user_ids)).all()}
+        if co_user_ids else {}
+    )
+
+    # Index co-ownerships by dog_id + role for fast lookup
+    secondary_by_dog: dict = defaultdict(list)
+    primary_by_dog: dict = {}
+    for o in all_co_ownerships:
+        if o.role == 'secondary' and o.user_id != user.id:
+            u_obj = co_users_by_id.get(o.user_id)
+            if u_obj:
+                secondary_by_dog[o.dog_id].append(u_obj)
+        elif o.role == 'primary' and o.user_id != user.id:
+            primary_by_dog[o.dog_id] = co_users_by_id.get(o.user_id)
+
+    # Dogs where this user is the primary owner
     primary_dogs = []
     for ownership in primary_ownerships:
-        dog = db.session.get(Dog, ownership.dog_id)
+        dog = dogs_by_id.get(ownership.dog_id)
         if not dog:
             continue
-        secondary_ownerships = DogOwner.query.filter_by(dog_id=dog.id, role='secondary').all()
-        secondary_users = [db.session.get(User, so.user_id) for so in secondary_ownerships]
-        secondary_users = [u for u in secondary_users if u]  # filter None
-        primary_dogs.append({'dog': dog, 'secondary_owners': secondary_users})
+        primary_dogs.append({'dog': dog, 'secondary_owners': secondary_by_dog.get(dog.id, [])})
 
     # Dogs where this user is a secondary owner (joined from another account)
-    secondary_ownerships = DogOwner.query.filter_by(user_id=user.id, role='secondary').all()
     secondary_dogs = []
-    for ownership in secondary_ownerships:
-        dog = db.session.get(Dog, ownership.dog_id)
+    for ownership in sec_as_secondary:
+        dog = dogs_by_id.get(ownership.dog_id)
         if not dog:
             continue
-        primary_o = DogOwner.query.filter_by(dog_id=dog.id, role='primary').first()
-        primary_user = db.session.get(User, primary_o.user_id) if primary_o else None
-        secondary_dogs.append({'dog': dog, 'primary_owner': primary_user})
+        secondary_dogs.append({'dog': dog, 'primary_owner': primary_by_dog.get(dog.id)})
 
     # Clients available to join — exclude self and anyone already linked
     already_linked_ids = {user.id}
@@ -2270,6 +2301,7 @@ def book_for_dog():
         if not default_service:
             return jsonify(success=False, message="No service type available"), 400
 
+        acquire_booking_lock(default_service.slug, booking_date, slot)
         available, can_waitlist, capacity_msg = check_availability(
             default_service, booking_date, slot, admin_override=True
         )
@@ -2411,6 +2443,7 @@ def recurring_for_dog():
                 skipped += 1
                 continue
 
+            acquire_booking_lock(default_service.slug, d, slot)
             available, can_waitlist, _ = check_availability(default_service, d, slot, admin_override=True)
             if not available and not can_waitlist:
                 skipped += 1
@@ -2523,21 +2556,47 @@ def invoicing():
         .all()
     )
 
+    # Batch all DogOwner / Dog / secondary-User lookups — avoids ~2 queries per client
+    client_ids = [u.id for u in clients]
+
+    primary_ownership_by_user = {
+        o.user_id: o
+        for o in DogOwner.query.filter(
+            DogOwner.user_id.in_(client_ids),
+            DogOwner.role == 'primary',
+        ).all()
+    }
+
+    primary_dog_ids = [o.dog_id for o in primary_ownership_by_user.values()]
+    dogs_by_id = (
+        {d.id: d for d in Dog.query.filter(Dog.id.in_(primary_dog_ids)).all()}
+        if primary_dog_ids else {}
+    )
+
+    secondary_owners_by_dog: dict = defaultdict(list)
+    if primary_dog_ids:
+        sec_ownerships = DogOwner.query.filter(
+            DogOwner.dog_id.in_(primary_dog_ids),
+            DogOwner.role == 'secondary',
+        ).all()
+        sec_user_ids = [so.user_id for so in sec_ownerships]
+        sec_users_by_id = (
+            {u.id: u for u in User.query.filter(User.id.in_(sec_user_ids)).all()}
+            if sec_user_ids else {}
+        )
+        for so in sec_ownerships:
+            user = sec_users_by_id.get(so.user_id)
+            if user:
+                secondary_owners_by_dog[so.dog_id].append(user)
+
     rows = []
     for u in clients:
         inv = _invoice_for_client(u.id, month_start, month_end, all_configs)
         if inv is None or inv['total_billable'] == 0:
             continue
-        # Primary dog + secondary owners
-        do = DogOwner.query.filter_by(user_id=u.id, role='primary').first()
-        dog = db.session.get(Dog, do.dog_id) if do else None
-        secondary_owners = []
-        if dog:
-            secondary_owners = [
-                db.session.get(User, so.user_id)
-                for so in DogOwner.query.filter_by(dog_id=dog.id, role='secondary').all()
-            ]
-            secondary_owners = [s for s in secondary_owners if s]
+        primary_ownership = primary_ownership_by_user.get(u.id)
+        dog = dogs_by_id.get(primary_ownership.dog_id) if primary_ownership else None
+        secondary_owners = secondary_owners_by_dog.get(dog.id, []) if dog else []
         rows.append({
             'client':           u,
             'dog':              dog,

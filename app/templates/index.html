@@ -73,10 +73,21 @@
         opacity: 0.5;
     }
 
-    .collapse-toggle { cursor: pointer; }
-    .collapse-toggle:hover { background-color: #FAFAFA !important; }
-    .collapse-toggle .bi-chevron-down { transition: transform 0.2s ease; }
-    .collapse-toggle[aria-expanded="true"] .bi-chevron-down { transform: rotate(180deg); }
+    .collapse-toggle {
+        cursor: pointer;
+    }
+
+    .collapse-toggle:hover {
+        background-color: #FAFAFA !important;
+    }
+
+    .collapse-toggle .bi-chevron-down {
+        transition: transform 0.2s ease;
+    }
+
+    .collapse-toggle[aria-expanded="true"] .bi-chevron-down {
+        transform: rotate(180deg);
+    }
 </style>
 {% endblock %}
 
@@ -110,10 +121,11 @@
 
         {# ── Request a Service (open by default) ── #}
         <div class="card shadow-sm border-0 mb-3" style="border-radius: 1rem; overflow: hidden;">
-            <button class="collapse-toggle d-flex align-items-center justify-content-between w-100 border-0 bg-white p-3"
-                    type="button" data-bs-toggle="collapse" data-bs-target="#service-collapse" aria-expanded="true">
+            <button
+                class="collapse-toggle d-flex align-items-center justify-content-between w-100 border-0 bg-white p-3"
+                type="button" data-bs-toggle="collapse" data-bs-target="#service-collapse" aria-expanded="true">
                 <span class="fw-bold text-uppercase text-muted small letter-spacing-1">
-                    <i class="bi bi-calendar-plus-fill me-1 text-primary"></i>Request a Service
+                    <i class="bi bi-calendar-plus-fill me-1 text-primary"></i>Make a booking
                 </span>
                 <i class="bi bi-chevron-down text-muted" style="font-size:0.8rem;"></i>
             </button>
@@ -161,8 +173,10 @@
 
                         {# Recurring toggle #}
                         <div class="form-check form-switch d-flex align-items-center gap-2 ps-0 mb-3">
-                            <input class="form-check-input flex-shrink-0 mt-0 ms-0" type="checkbox" role="switch" id="recurring-toggle">
-                            <label class="form-check-label small fw-semibold text-muted mb-0" for="recurring-toggle">Recurring</label>
+                            <input class="form-check-input flex-shrink-0 mt-0 ms-0" type="checkbox" role="switch"
+                                id="recurring-toggle">
+                            <label class="form-check-label small fw-semibold text-muted mb-0"
+                                for="recurring-toggle">Recurring</label>
                         </div>
 
                         {# Recurring panel #}
@@ -183,17 +197,14 @@
                             <div id="recurring-preview"></div>
                         </div>
 
-                        <button type="submit" class="btn btn-primary btn-sm w-100 fw-semibold" id="booking-submit" disabled>
+                        <button type="submit" class="btn btn-primary btn-sm w-100 fw-semibold" id="booking-submit"
+                            disabled>
                             Request walk
                         </button>
                     </form>
-                    <p class="text-muted small mt-3 mb-0 booking-info-note" id="walk-info-note">
-                        <i class="bi bi-info-circle me-1"></i>
-                        We review all requests to ensure dogs walk with friends they get on with.
-                    </p>
                     <p class="text-muted small mt-3 mb-0 booking-info-note" id="dropin-info-note" style="display:none;">
                         <i class="bi bi-info-circle me-1"></i>
-                        A short comfort-break visit at your home.
+                        A 15 - 20 minute comfort break and a cuddle.
                     </p>
                 </div>
             </div>
@@ -201,8 +212,9 @@
 
         {# ── Pause Walks (collapsed by default) ── #}
         <div class="card shadow-sm border-0" style="border-radius: 1rem; overflow: hidden;">
-            <button class="collapse-toggle d-flex align-items-center justify-content-between w-100 border-0 bg-white p-3"
-                    type="button" data-bs-toggle="collapse" data-bs-target="#pause-collapse" aria-expanded="false">
+            <button
+                class="collapse-toggle d-flex align-items-center justify-content-between w-100 border-0 bg-white p-3"
+                type="button" data-bs-toggle="collapse" data-bs-target="#pause-collapse" aria-expanded="false">
                 <span class="fw-bold text-uppercase text-muted small letter-spacing-1">
                     <i class="bi bi-pause-circle-fill me-1" style="color:#f59e0b;"></i>Pause Walks
                 </span>
@@ -225,7 +237,7 @@
                             </div>
                         </div>
                         <button class="btn btn-sm w-100 fw-semibold" id="pause-preview-btn" disabled
-                                style="background:#fff3cd;border:1px solid #f59e0b;color:#92400e;">
+                            style="background:#fff3cd;border:1px solid #f59e0b;color:#92400e;">
                             Preview affected walks<i class="bi bi-arrow-right ms-1"></i>
                         </button>
                         <div id="pause-step1-error" class="text-danger small mt-2" style="display:none;"></div>
@@ -235,7 +247,8 @@
                     <div id="pause-step-2" style="display:none;">
                         <p class="small fw-semibold mb-2" id="pause-preview-summary"></p>
                         <div id="pause-preview-list" class="mb-3 rounded"
-                             style="max-height:180px;overflow-y:auto;border:1px solid #E5E5E5;background:#FAFAFA;padding:0.5rem;"></div>
+                            style="max-height:180px;overflow-y:auto;border:1px solid #E5E5E5;background:#FAFAFA;padding:0.5rem;">
+                        </div>
                         <div class="d-flex gap-2">
                             <button class="btn btn-outline-secondary btn-sm flex-grow-1" id="pause-back-btn">
                                 <i class="bi bi-arrow-left me-1"></i>Back
@@ -267,11 +280,11 @@
         {# Date filter pill — shown when a calendar date is selected #}
         <div id="date-filter-bar" class="mb-3" style="display:none;">
             <span class="d-inline-flex align-items-center gap-2 px-3 py-2 fw-semibold"
-                  style="background:#fce8f6;color:#E02FAC;border-radius:2rem;font-size:0.82rem;">
+                style="background:#fce8f6;color:#E02FAC;border-radius:2rem;font-size:0.82rem;">
                 <i class="bi bi-calendar3"></i>
                 <span id="date-filter-label"></span>
                 <button type="button" id="date-filter-clear" class="btn p-0 border-0 lh-1 ms-1"
-                        style="background:none;color:#E02FAC;" aria-label="Clear filter">
+                    style="background:none;color:#E02FAC;" aria-label="Clear filter">
                     <i class="bi bi-x-lg" style="font-size:0.75rem;"></i>
                 </button>
             </span>
@@ -306,8 +319,7 @@
                         {# ── Upcoming bookings (visible by default) ── #}
                         {% for booking in upcoming_dog_bookings %}
                         <li class="list-group-item px-0 py-3 border-bottom d-flex align-items-center justify-content-between gap-2{% if loop.index0 >= 10 %} d-none{% endif %}"
-                            data-walk-idx="{{ loop.index0 }}"
-                            data-date="{{ booking.date.isoformat() }}">
+                            data-walk-idx="{{ loop.index0 }}" data-date="{{ booking.date.isoformat() }}">
                             <div class="d-flex align-items-center gap-3">
                                 <!-- Status pill -->
                                 {% if booking.status == 'confirmed' %}
@@ -343,15 +355,15 @@
                                     data-current-note="{{ booking.client_notes or '' }}"
                                     title="{{ 'Edit note' if booking.client_notes else 'Add note' }}"
                                     style="line-height: 1; font-size: 1.1rem;">
-                                    <i class="bi bi-{{ 'pencil-square text-primary' if booking.client_notes else 'pencil-square' }}"></i>
+                                    <i
+                                        class="bi bi-{{ 'pencil-square text-primary' if booking.client_notes else 'pencil-square' }}"></i>
                                 </button>
                                 <button class="btn btn-link p-1 cancel-booking-btn text-danger"
                                     data-booking-id="{{ booking.id }}" data-booking-slot="{{ booking.slot }}"
                                     data-booking-date="{{ booking.date_display }}"
                                     data-booking-date-iso="{{ booking.date.isoformat() }}"
                                     data-is-drop-in="{{ 'true' if booking.is_drop_in else 'false' }}"
-                                    title="Cancel booking"
-                                    style="line-height: 1; font-size: 1.1rem;">
+                                    title="Cancel booking" style="line-height: 1; font-size: 1.1rem;">
                                     <i class="bi bi-x-circle"></i>
                                 </button>
                             </div>
@@ -361,8 +373,7 @@
                         {# ── Past bookings (hidden by default, revealed when a past date is selected) ── #}
                         {% for booking in past_dog_bookings %}
                         <li class="list-group-item px-0 py-3 border-bottom d-flex align-items-center justify-content-between gap-2 d-none"
-                            data-past="true"
-                            data-date="{{ booking.date.isoformat() }}">
+                            data-past="true" data-date="{{ booking.date.isoformat() }}">
                             <div class="d-flex align-items-center gap-3">
                                 <!-- Status pill -->
                                 {% if booking.status == 'confirmed' %}
@@ -398,7 +409,8 @@
                                     data-current-note="{{ booking.client_notes or '' }}"
                                     title="{{ 'Edit note' if booking.client_notes else 'Add note' }}"
                                     style="line-height: 1; font-size: 1.1rem;">
-                                    <i class="bi bi-{{ 'pencil-square text-primary' if booking.client_notes else 'pencil-square' }}"></i>
+                                    <i
+                                        class="bi bi-{{ 'pencil-square text-primary' if booking.client_notes else 'pencil-square' }}"></i>
                                 </button>
                             </div>
                         </li>
@@ -406,7 +418,8 @@
 
                     </ul>
 
-                    <div id="dog-filter-empty-{{ dog.id }}" class="rounded p-3 mt-1 mb-1" style="display:none;background:#fafafa;border:1px solid #E5E5E5;">
+                    <div id="dog-filter-empty-{{ dog.id }}" class="rounded p-3 mt-1 mb-1"
+                        style="display:none;background:#fafafa;border:1px solid #E5E5E5;">
                         <p class="mb-0 small" style="color:#888;"></p>
                     </div>
 
@@ -958,7 +971,7 @@
         });
 
         // ─── Date filter ─────────────────────────────────────────
-        const filterBar   = document.getElementById('date-filter-bar');
+        const filterBar = document.getElementById('date-filter-bar');
         const filterLabel = document.getElementById('date-filter-label');
         const filterClear = document.getElementById('date-filter-clear');
 
@@ -1095,8 +1108,8 @@
         const badgeHtml = booking.status === 'waitlisted'
             ? `<span class="badge rounded-pill text-bg-info py-2 text-center" style="min-width:90px;">Waitlisted</span>`
             : booking.status === 'confirmed'
-            ? `<span class="badge rounded-pill text-bg-success py-2 text-center" style="min-width:90px;">Confirmed</span>`
-            : `<span class="badge rounded-pill py-2 text-center" style="min-width:90px; background-color:#fff3cd; color:#856404;">Pending</span>`;
+                ? `<span class="badge rounded-pill text-bg-success py-2 text-center" style="min-width:90px;">Confirmed</span>`
+                : `<span class="badge rounded-pill py-2 text-center" style="min-width:90px; background-color:#fff3cd; color:#856404;">Pending</span>`;
 
         // "New" badge — fades out after 4s
         const newBadge = `<span class="badge bg-pink ms-1 new-booking-badge"
@@ -1295,19 +1308,19 @@
 
     // ── Pause Walks ──────────────────────────────────────────────────────────────
     (function () {
-        const startEl   = document.getElementById('pause-start-date');
-        const endEl     = document.getElementById('pause-end-date');
+        const startEl = document.getElementById('pause-start-date');
+        const endEl = document.getElementById('pause-end-date');
         const previewBtn = document.getElementById('pause-preview-btn');
-        const step1     = document.getElementById('pause-step-1');
-        const step2     = document.getElementById('pause-step-2');
-        const step3     = document.getElementById('pause-step-3');
-        const step1Err  = document.getElementById('pause-step1-error');
-        const summary   = document.getElementById('pause-preview-summary');
-        const listEl    = document.getElementById('pause-preview-list');
-        const backBtn   = document.getElementById('pause-back-btn');
+        const step1 = document.getElementById('pause-step-1');
+        const step2 = document.getElementById('pause-step-2');
+        const step3 = document.getElementById('pause-step-3');
+        const step1Err = document.getElementById('pause-step1-error');
+        const summary = document.getElementById('pause-preview-summary');
+        const listEl = document.getElementById('pause-preview-list');
+        const backBtn = document.getElementById('pause-back-btn');
         const confirmBtn = document.getElementById('pause-confirm-btn');
         const successMsg = document.getElementById('pause-success-msg');
-        const resetBtn  = document.getElementById('pause-reset-btn');
+        const resetBtn = document.getElementById('pause-reset-btn');
 
         if (!startEl) return;
 
@@ -1316,7 +1329,7 @@
         tomorrow.setDate(tomorrow.getDate() + 1);
         const tomorrowStr = tomorrow.toISOString().slice(0, 10);
         startEl.min = tomorrowStr;
-        endEl.min   = tomorrowStr;
+        endEl.min = tomorrowStr;
 
         function checkDates() {
             step1Err.style.display = 'none';
@@ -1339,38 +1352,38 @@
             fetch(`{{ url_for('client.pause_walks_preview') }}?start=${startEl.value}&end=${endEl.value}`, {
                 headers: { 'X-CSRFToken': csrf }
             })
-            .then(r => r.json())
-            .then(data => {
-                previewBtn.disabled = false;
-                previewBtn.innerHTML = 'Preview affected walks<i class="bi bi-arrow-right ms-1"></i>';
-                if (!data.success) {
-                    step1Err.textContent = data.error || 'Something went wrong.';
-                    step1Err.style.display = '';
-                    return;
-                }
-                if (data.count === 0) {
-                    step1Err.textContent = 'No active walks found in that date range.';
-                    step1Err.style.display = '';
-                    return;
-                }
-                const n = data.count;
-                summary.textContent = `${n} walk${n !== 1 ? 's' : ''} will be cancelled:`;
-                listEl.innerHTML = data.bookings.map(b =>
-                    `<div class="d-flex align-items-center gap-2 py-1 border-bottom small last-child-no-border">
+                .then(r => r.json())
+                .then(data => {
+                    previewBtn.disabled = false;
+                    previewBtn.innerHTML = 'Preview affected walks<i class="bi bi-arrow-right ms-1"></i>';
+                    if (!data.success) {
+                        step1Err.textContent = data.error || 'Something went wrong.';
+                        step1Err.style.display = '';
+                        return;
+                    }
+                    if (data.count === 0) {
+                        step1Err.textContent = 'No active walks found in that date range.';
+                        step1Err.style.display = '';
+                        return;
+                    }
+                    const n = data.count;
+                    summary.textContent = `${n} walk${n !== 1 ? 's' : ''} will be cancelled:`;
+                    listEl.innerHTML = data.bookings.map(b =>
+                        `<div class="d-flex align-items-center gap-2 py-1 border-bottom small last-child-no-border">
                         <span class="text-muted" style="width:70px;">${b.date}</span>
                         <span class="badge bg-secondary fw-normal">${b.slot}</span>
                         ${b.dog ? `<span class="text-muted">· ${b.dog}</span>` : ''}
                     </div>`
-                ).join('');
-                step1.style.display = 'none';
-                step2.style.display = '';
-            })
-            .catch(() => {
-                previewBtn.disabled = false;
-                previewBtn.innerHTML = 'Preview affected walks<i class="bi bi-arrow-right ms-1"></i>';
-                step1Err.textContent = 'Network error — please try again.';
-                step1Err.style.display = '';
-            });
+                    ).join('');
+                    step1.style.display = 'none';
+                    step2.style.display = '';
+                })
+                .catch(() => {
+                    previewBtn.disabled = false;
+                    previewBtn.innerHTML = 'Preview affected walks<i class="bi bi-arrow-right ms-1"></i>';
+                    step1Err.textContent = 'Network error — please try again.';
+                    step1Err.style.display = '';
+                });
         });
 
         backBtn.addEventListener('click', function () {
@@ -1388,31 +1401,31 @@
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
                 body: JSON.stringify({ start: startEl.value, end: endEl.value })
             })
-            .then(r => r.json())
-            .then(data => {
-                confirmBtn.disabled = false;
-                confirmBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Cancel all';
-                if (data.success) {
-                    const n = data.cancelled_count;
-                    successMsg.textContent = `${n} walk${n !== 1 ? 's' : ''} cancelled successfully.`;
-                    step2.style.display = 'none';
-                    step3.style.display = '';
-                } else {
-                    showToast(data.error || 'Could not pause walks.', 'danger');
-                    step2.style.display = 'none';
-                    step1.style.display = '';
-                }
-            })
-            .catch(() => {
-                confirmBtn.disabled = false;
-                confirmBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Cancel all';
-                showToast('Network error — please try again.', 'danger');
-            });
+                .then(r => r.json())
+                .then(data => {
+                    confirmBtn.disabled = false;
+                    confirmBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Cancel all';
+                    if (data.success) {
+                        const n = data.cancelled_count;
+                        successMsg.textContent = `${n} walk${n !== 1 ? 's' : ''} cancelled successfully.`;
+                        step2.style.display = 'none';
+                        step3.style.display = '';
+                    } else {
+                        showToast(data.error || 'Could not pause walks.', 'danger');
+                        step2.style.display = 'none';
+                        step1.style.display = '';
+                    }
+                })
+                .catch(() => {
+                    confirmBtn.disabled = false;
+                    confirmBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Cancel all';
+                    showToast('Network error — please try again.', 'danger');
+                });
         });
 
         resetBtn.addEventListener('click', function () {
             startEl.value = '';
-            endEl.value   = '';
+            endEl.value = '';
             previewBtn.disabled = true;
             step3.style.display = 'none';
             step1.style.display = '';

@@ -14,7 +14,7 @@ from app import db, limiter
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
 from app.utils.uploads import process_dog_photo, process_cropped_photo
 from app.utils.booking_access import get_accessible_dog_ids, user_can_access_booking
-from app.capacity import check_availability, get_slot_availability_summary, auto_assign_walker, get_walker_slot_count
+from app.capacity import check_availability, get_slot_availability_summary, auto_assign_walker, get_walker_slot_count, acquire_booking_lock
 from app.forms import OnboardingForm, BookingForm, ProfileForm
 import logging
 import traceback
@@ -271,7 +271,8 @@ def index():
                     return redirect(url_for("client.index"))
                 default_service = walk_service
 
-                # Check capacity before creating booking
+                # Serialize concurrent requests for the same slot before counting
+                acquire_booking_lock(default_service.slug, booking_date, booking_slot)
                 available, can_waitlist, capacity_msg = check_availability(
                     default_service, booking_date, booking_slot
                 )
@@ -399,6 +400,7 @@ def book():
 
     # ── Capacity check + create ───────────────────────────────────────────────
     try:
+        acquire_booking_lock(default_service.slug, booking_date, booking_slot)
         available, can_waitlist, capacity_msg = check_availability(default_service, booking_date, booking_slot)
 
         if not available and not can_waitlist:
@@ -524,6 +526,7 @@ def book_both():
             skipped.append(slot)
             continue
 
+        acquire_booking_lock(default_service.slug, booking_date, slot)
         available, can_waitlist, _ = check_availability(default_service, booking_date, slot)
         if not available and not can_waitlist:
             skipped.append(slot)
@@ -663,6 +666,7 @@ def book_drop_in():
         svc_label = existing.service_type.name.lower() if existing.service_type else 'booking'
         return jsonify({'success': False, 'message': f'{dog.name} already has a {svc_label} booked for that slot.'}), 409
 
+    acquire_booking_lock(drop_in_service.slug, booking_date, booking_slot)
     available, can_waitlist, capacity_msg = _check(drop_in_service, booking_date, booking_slot)
     if not available and not can_waitlist:
         return jsonify({'success': False, 'message': capacity_msg}), 409
@@ -738,7 +742,7 @@ def profile():
     # Secondary-only owners (co-owners with no primary dog of their own) should be
     # allowed to view/edit their profile without going through onboarding.
     is_secondary_only = (not primary_ownerships and
-                         DogOwner.query.filter_by(user_id=current_user.id, role='secondary').count() > 0)
+                         DogOwner.query.filter_by(user_id=current_user.id, role='secondary').first() is not None)
 
     if not is_secondary_only and (not client or not client.onboarding_completed):
         return redirect(url_for('client.onboard'))
@@ -1436,7 +1440,9 @@ def cancel_booking():
         booking.cancelled_at = datetime.now(timezone.utc)
         booking.cancelled_by = 'admin' if is_admin_cancel else 'client'
         booking.walker_id = None  # Unassign walker
-        db.session.commit()
+        # Do NOT commit here — notifications are added below and everything
+        # commits atomically at the end. An early commit would make the
+        # cancellation irreversible if the notification step later raises.
 
         date_str_fmt = booking.date.strftime('%a %-d %b')
         dog_name = booking.dog.name if booking.dog else 'Unknown dog'
@@ -1637,6 +1643,7 @@ def recurring_booking():
                     skipped += 1
                     continue
 
+                acquire_booking_lock(default_service.slug, d, s)
                 available, can_waitlist, _ = check_availability(default_service, d, s)
                 if not available and not can_waitlist:
                     skipped += 1
