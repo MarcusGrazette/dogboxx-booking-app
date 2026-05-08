@@ -1122,12 +1122,12 @@ def clients():
     """List all clients (admin only)"""
     clients = (
         User.query
-        .options(joinedload(User.client))
-        .filter(User.role == 'client')
+        .options(joinedload(User.client), joinedload(User.walker))
+        .filter(User.client != None)  # noqa: E711 — SQLAlchemy uses != None for EXISTS check
         .order_by(User.active.desc(), User.lastname, User.firstname)
         .all()
     )
-    
+
     return render_template("admin_clients.html", clients=clients)
 
 
@@ -1136,7 +1136,7 @@ def clients():
 @admin_required
 def client_detail(client_id):
     """Show client detail with dog info, shared access, and notification audit trail (admin only)"""
-    user = User.query.filter(User.role == 'client', User.id == client_id).first_or_404()
+    user = User.query.filter(User.client != None, User.id == client_id).first_or_404()
 
     # Batch all dog + co-owner lookups to avoid N+1 queries
     primary_ownerships = DogOwner.query.filter_by(user_id=user.id, role='primary').all()
@@ -1237,7 +1237,7 @@ def join_dog_access(client_id):
     The secondary user gains read/book/cancel access to the dog but is not
     the primary owner — they cannot modify the dog's profile.
     """
-    primary_user = User.query.filter(User.role == 'client', User.id == client_id).first_or_404()
+    primary_user = User.query.filter(User.client != None, User.id == client_id).first_or_404()
     data = request.get_json(silent=True) or {}
     dog_id = data.get('dog_id')
     secondary_user_id = data.get('secondary_user_id')
@@ -1298,7 +1298,7 @@ def revoke_dog_access(client_id):
     Can be called from either the primary or secondary client's detail page.
     Will not remove primary ownership.
     """
-    User.query.filter(User.role == 'client', User.id == client_id).first_or_404()
+    User.query.filter(User.client != None, User.id == client_id).first_or_404()
     data = request.get_json(silent=True) or {}
     dog_id = data.get('dog_id')
     secondary_user_id = data.get('secondary_user_id')
@@ -1445,7 +1445,7 @@ def edit_client(client_id):
     info.  Will create a dog record if one doesn't exist yet.  Marks
     onboarding complete automatically when address + dog are both present.
     """
-    user = User.query.filter(User.role == 'client', User.id == client_id).first_or_404()
+    user = User.query.filter(User.client != None, User.id == client_id).first_or_404()
     client = Client.query.filter_by(user_id=user.id).first()
     dog_owners = DogOwner.query.filter_by(user_id=user.id, role='primary').order_by(DogOwner.id).all()
     dog = db.session.get(Dog, dog_owners[0].dog_id) if dog_owners else None
@@ -1596,7 +1596,7 @@ def edit_client(client_id):
 def add_dog(client_id):
     """Add a second (or subsequent) primary dog to an existing client."""
     from app.forms import AddDogForm
-    user = User.query.filter(User.role == 'client', User.id == client_id).first_or_404()
+    user = User.query.filter(User.client != None, User.id == client_id).first_or_404()
 
     form = AddDogForm()
     if form.validate_on_submit():
@@ -1687,7 +1687,7 @@ def add_dog(client_id):
 def deactivate_client(client_id):
     """Deactivate a client (soft delete)"""
     try:
-        user = User.query.filter(User.role == 'client', User.id == client_id).first()
+        user = User.query.filter(User.client != None, User.id == client_id).first()
         if not user:
             return jsonify(success=False, message="Client not found"), 404
 
@@ -1712,7 +1712,7 @@ def deactivate_client(client_id):
 def activate_client(client_id):
     """Reactivate a client"""
     try:
-        user = User.query.filter(User.role == 'client', User.id == client_id).first()
+        user = User.query.filter(User.client != None, User.id == client_id).first()
         if not user:
             return jsonify(success=False, message="Client not found"), 404
         
@@ -1733,7 +1733,7 @@ def activate_client(client_id):
 @admin_required
 def update_client_pickup_details(client_id):
     """Save pickup_instructions and maps_url for a client (admin only)."""
-    user = User.query.filter(User.role == 'client', User.id == client_id).first()
+    user = User.query.filter(User.client != None, User.id == client_id).first()
     if not user:
         return jsonify(success=False, message="Client not found"), 404
 
@@ -1774,12 +1774,12 @@ def walkers():
 # Get all users with role='walker' and their walker records
     walkers = (
         User.query
-        .options(joinedload(User.walker))
+        .options(joinedload(User.walker), joinedload(User.client))
         .filter(User.role == 'walker')
         .order_by(User.lastname, User.firstname)
         .all()
     )
-    
+
     return render_template("admin_walkers.html", walkers=walkers)
 
 
@@ -1816,6 +1816,68 @@ def toggle_walker_drop_ins(walker_user_id):
     target.walker.does_drop_ins = not target.walker.does_drop_ins
     db.session.commit()
     return jsonify(success=True, does_drop_ins=target.walker.does_drop_ins)
+
+
+@admin_bp.route("/walkers/<int:walker_user_id>/toggle-client", methods=["POST"])
+@login_required
+@admin_required
+def toggle_walker_client(walker_user_id):
+    """Create or remove a Client record for a walker, making them dual-role."""
+    user = User.query.filter_by(id=walker_user_id, role='walker').first_or_404()
+
+    if user.client:
+        db.session.delete(user.client)
+        db.session.commit()
+        return jsonify(success=True, has_client=False)
+
+    client = Client(
+        user_id=user.id,
+        onboarding_completed=True,
+        onboarding_completed_at=datetime.now(timezone.utc),
+    )
+    db.session.add(client)
+    db.session.commit()
+    logging.info(f"Admin {current_user.id} added client record for walker {user.id}")
+    return jsonify(success=True, has_client=True)
+
+
+@admin_bp.route("/walkers/<int:walker_user_id>/remove-walker-role", methods=["POST"])
+@login_required
+@admin_required
+def remove_walker_role(walker_user_id):
+    """Transition a dual-role user from walker → client-only.
+
+    Deactivates their walker schedule and reassigns future confirmed bookings,
+    then changes their role to 'client' so they can still log in as a client.
+    Requires the user to already have a Client record.
+    """
+    user = User.query.filter_by(id=walker_user_id, role='walker').first_or_404()
+
+    if not user.client:
+        return jsonify(success=False, message="This walker has no client record. Add a client record first."), 400
+
+    if user.id == current_user.id:
+        return jsonify(success=False, message="You cannot remove your own walker role."), 400
+
+    from datetime import date as _date
+    today = _date.today()
+
+    # Reassign future confirmed bookings so they stay on the board
+    Booking.query.filter(
+        Booking.walker_id == user.walker.id,
+        Booking.date >= today,
+        Booking.status == 'confirmed',
+    ).update({'walker_id': None, 'status': 'requested'}, synchronize_session=False)
+
+    # Deactivate schedule so they no longer appear on future capacity
+    WalkerSchedule.query.filter_by(walker_id=user.walker.id).update(
+        {'active': False}, synchronize_session=False
+    )
+
+    user.role = 'client'
+    db.session.commit()
+    logging.info(f"Admin {current_user.id} removed walker role for user {user.id} (kept client record)")
+    return jsonify(success=True)
 
 
 @admin_bp.route("/walkers/new", methods=["GET", "POST"])
@@ -2736,7 +2798,7 @@ def invoicing_detail(client_id):
     from itertools import groupby
 
     client_user = User.query.filter(
-        User.role == 'client', User.id == client_id
+        User.client != None, User.id == client_id
     ).first_or_404()
 
     today = date.today()

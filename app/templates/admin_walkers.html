@@ -25,6 +25,7 @@
                             <th>Name</th>
                             <th>Admin Access</th>
                             <th>Drop-ins</th>
+                            <th>Also a Client</th>
                             <th>Created</th>
                             <th>Actions</th>
                         </tr>
@@ -76,6 +77,21 @@
                                 <span class="text-muted small">—</span>
                                 {% endif %}
                             </td>
+                            <td>
+                                <div class="form-check form-switch mb-0">
+                                    <input class="form-check-input client-toggle"
+                                           type="checkbox"
+                                           role="switch"
+                                           id="client-toggle-{{ walker.id }}"
+                                           data-walker-id="{{ walker.id }}"
+                                           style="margin-top:0;"
+                                           {% if walker.client %}checked{% endif %}>
+                                    <label class="form-check-label text-muted small mb-0"
+                                           for="client-toggle-{{ walker.id }}">
+                                        {% if walker.client %}Yes{% else %}No{% endif %}
+                                    </label>
+                                </div>
+                            </td>
                             <td>{{ walker.created_at.strftime('%Y-%m-%d') if walker.created_at }}</td>
                             <td>
                                 {% if walker.walker %}
@@ -86,6 +102,13 @@
                                 {% endif %}
                                 {% if walker.active %}
                                 {% if walker.id != current_user.id %}
+                                {% if walker.client %}
+                                <button class="btn btn-sm btn-outline-warning me-1"
+                                        onclick="removeWalkerRole({{ walker.id }}, '{{ walker.full_name | e }}')"
+                                        title="Remove walker role — keeps client access">
+                                    <i class="bi bi-person-dash"></i> Client Only
+                                </button>
+                                {% endif %}
                                 <button class="btn btn-sm btn-outline-danger"
                                         onclick="toggleWalkerStatus({{ walker.id }}, 'deactivate')">
                                     <i class="bi bi-x-circle"></i> Deactivate
@@ -156,6 +179,56 @@ document.querySelectorAll('.drop-in-toggle').forEach(function(toggle) {
         });
     });
 });
+
+document.querySelectorAll('.client-toggle').forEach(function(toggle) {
+    toggle.addEventListener('change', function() {
+        var walkerId = this.dataset.walkerId;
+        var label = this.closest('.form-check').querySelector('label');
+        var originalChecked = !this.checked;
+        this.disabled = true;
+
+        fetch('/admin/walkers/' + walkerId + '/toggle-client', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                label.textContent = data.has_client ? 'Yes' : 'No';
+                // Reload so the "Client Only" button appears/disappears correctly
+                location.reload();
+            } else {
+                toggle.checked = originalChecked;
+                alert(data.message || 'Could not update client access.');
+            }
+        })
+        .catch(function() {
+            toggle.checked = originalChecked;
+            alert('Request failed. Please try again.');
+        })
+        .finally(function() {
+            toggle.disabled = false;
+        });
+    });
+});
+
+function removeWalkerRole(walkerId, name) {
+    if (!confirm('Remove walker role for ' + name + '?\n\nThey will keep client access and can still log in and book walks. Their future assigned walks will be moved back to pending.')) return;
+    var csrf = document.querySelector('meta[name="csrf-token"]').content;
+    fetch('/admin/walkers/' + walkerId + '/remove-walker-role', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrf }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.message || 'Could not remove walker role.');
+        }
+    })
+    .catch(function() { alert('Request failed. Please try again.'); });
+}
 
 document.querySelectorAll('.admin-toggle').forEach(function(toggle) {
     toggle.addEventListener('change', function() {

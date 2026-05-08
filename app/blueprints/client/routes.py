@@ -5,7 +5,7 @@ This module defines routes for client functionality, including home page, profil
 management, onboarding, and booking management.
 """
 
-from flask import request, redirect, render_template, flash, url_for, jsonify
+from flask import request, redirect, render_template, flash, url_for, jsonify, session
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
@@ -22,6 +22,7 @@ from datetime import datetime, timezone, timedelta, date as date_type
 
 from app.blueprints.client import client_bp
 from app.utils.notifications import create_notification
+from app.utils.decorators import has_client_access
 
 
 @client_bp.route("/help")
@@ -32,6 +33,20 @@ def help_page():
 @client_bp.route("/get-started")
 def get_started():
     return render_template('get_started.html')
+
+
+@client_bp.route("/switch-view", methods=["POST"])
+@login_required
+def switch_view():
+    """Toggle between walker and client view for dual-role users."""
+    if current_user.role != 'walker' or current_user.client is None:
+        return redirect(url_for('client.index'))
+    view = request.form.get('view')
+    if view in ('walker', 'client'):
+        session['active_view'] = view
+    if session.get('active_view') == 'client':
+        return redirect(url_for('client.index'))
+    return redirect(url_for('walker.pickups'))
 
 
 @client_bp.route("/report-bug", methods=["POST"])
@@ -178,11 +193,12 @@ def _resolve_dog(user_dogs, requested_id):
 @login_required
 def index():
     """Render the home page for clients."""
-    # Check if user is a client
     if current_user.is_admin:
         return redirect(url_for('admin.index'))
-    elif current_user.role == 'walker':
-        return redirect(url_for('walker.schedule'))
+    if current_user.role == 'walker':
+        # Dual-role walker in client view: let through. Otherwise send to walker home.
+        if current_user.client is None or session.get('active_view') != 'client':
+            return redirect(url_for('walker.pickups'))
         
     user = User.query.options(
         joinedload(User.client)
@@ -730,7 +746,7 @@ def book_drop_in():
 @login_required
 def profile():
     """Display and manage client profile, address, notifications and dog info."""
-    if current_user.role != 'client':
+    if not has_client_access(current_user):
         return redirect(url_for('client.index'))
 
     client = Client.query.filter_by(user_id=current_user.id).first()
@@ -919,7 +935,7 @@ def monthly_summary():
     from collections import defaultdict
     from datetime import timedelta
 
-    if current_user.role != 'client':
+    if not has_client_access(current_user):
         return redirect(url_for('client.index'))
 
     today = date_type.today()
@@ -1305,7 +1321,7 @@ def onboard():
 @login_required
 def pause_walks_preview():
     """Return bookings that would be cancelled in a date range (no writes)."""
-    if current_user.role != 'client':
+    if not has_client_access(current_user):
         return jsonify(success=False, error="Forbidden"), 403
     try:
         start = date_type.fromisoformat(request.args.get('start', ''))
@@ -1344,7 +1360,7 @@ def pause_walks_preview():
 @login_required
 def pause_walks():
     """Cancel all active bookings for the client's dogs within a date range."""
-    if current_user.role != 'client':
+    if not has_client_access(current_user):
         return jsonify(success=False, error="Forbidden"), 403
     try:
         data  = request.get_json(silent=True) or {}
