@@ -360,11 +360,11 @@ def create_app(config_name=None):
         Also exposes the VAPID public key for Web Push registration.
         """
         from flask_login import current_user
-        from app.utils.notifications import get_unread_count, get_recent, get_meta
+        from app.utils.notifications import get_unread_count, get_recent, get_meta, NOTIF_BELL_CAP
         vapid_public_key = app.config.get('VAPID_PUBLIC_KEY', '')
         if current_user.is_authenticated:
             unread_count = get_unread_count(current_user.id)
-            recent_notifications = get_recent(current_user.id, limit=5)
+            recent_notifications = get_recent(current_user.id, limit=NOTIF_BELL_CAP)
             return dict(
                 unread_notification_count=unread_count,
                 recent_notifications=recent_notifications,
