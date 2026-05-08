@@ -19,20 +19,16 @@
         background: #f8f9fa;
         border-radius: 6px;
     }
-    #recurring-preview {
-        margin-top: 0.5rem;
+    .day-slot-row {
         display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
+        align-items: center;
+        gap: 0.6rem;
     }
-    .recurring-chip {
-        display: inline-block;
-        padding: 2px 8px;
-        background: #e8f4e8;
-        border: 1px solid #b8d8b8;
-        border-radius: 12px;
-        font-size: 0.75rem;
-        color: #2d6a2d;
+    .day-slot-row .day-label {
+        width: 90px;
+        flex-shrink: 0;
+        font-size: 0.875rem;
+        color: #555;
     }
 </style>
 {% endblock %}
@@ -146,8 +142,8 @@
                     This will appear as a pending booking, same as if they booked themselves.
                 </p>
 
-                <!-- Slot -->
-                <div class="mb-3">
+                <!-- Slot (single booking only) -->
+                <div class="mb-3" id="single-slot-group">
                     <label class="form-label fw-semibold">Slot</label>
                     <select class="form-select" id="modal-slot">
                         <option value="">Select a slot…</option>
@@ -172,7 +168,7 @@
 
                 <!-- Recurring panel -->
                 <div id="recurring-panel" style="display:none;">
-                    <div class="row g-2 mb-2">
+                    <div class="row g-2 mb-3">
                         <div class="col-6">
                             <label class="form-label small">Start date</label>
                             <input type="date" class="form-control form-control-sm" id="modal-start-date">
@@ -182,14 +178,22 @@
                             <input type="date" class="form-control form-control-sm" id="modal-end-date">
                         </div>
                     </div>
-                    <div class="mb-2">
-                        <label class="form-label small">Frequency</label>
-                        <select class="form-select form-select-sm" id="modal-frequency">
-                            <option value="weekly">Weekly</option>
-                            <option value="daily">Daily (weekdays)</option>
-                        </select>
+                    <label class="form-label small fw-semibold mb-2">Days</label>
+                    <div class="d-flex flex-column gap-2">
+                        {% for day_num, day_name in [(0,'Monday'),(1,'Tuesday'),(2,'Wednesday'),(3,'Thursday'),(4,'Friday')] %}
+                        <div class="day-slot-row">
+                            <span class="day-label">{{ day_name }}</span>
+                            <select class="form-select form-select-sm" data-day="{{ day_num }}">
+                                <option value="">—</option>
+                                <option value="Morning">Morning</option>
+                                <option value="Afternoon">Afternoon</option>
+                                <option value="Both">Both</option>
+                            </select>
+                        </div>
+                        {% endfor %}
                     </div>
-                    <div id="recurring-preview"></div>
+                    <!-- Booking count preview -->
+                    <div id="recurring-count" class="mt-3 text-muted small" style="display:none;"></div>
                 </div>
 
                 <!-- Result message -->
@@ -365,11 +369,11 @@ document.addEventListener('DOMContentLoaded', function () {
     const recurPanel    = document.getElementById('recurring-panel');
     const startInput    = document.getElementById('modal-start-date');
     const endInput      = document.getElementById('modal-end-date');
-    const freqSel       = document.getElementById('modal-frequency');
-    const recurPreview  = document.getElementById('recurring-preview');
-    const singleGroup   = document.getElementById('single-date-group');
-    const submitBtn     = document.getElementById('modal-submit-btn');
-    const resultDiv     = document.getElementById('modal-result');
+    const singleGroup     = document.getElementById('single-date-group');
+    const singleSlotGroup = document.getElementById('single-slot-group');
+    const submitBtn       = document.getElementById('modal-submit-btn');
+    const resultDiv       = document.getElementById('modal-result');
+    const recurCount      = document.getElementById('recurring-count');
 
     let activeDogId  = null;
     let activeUserId = null;
@@ -378,8 +382,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowStr = tomorrow.toISOString().slice(0, 10);
-    dateInput.min    = tomorrowStr;
-    startInput.min   = tomorrowStr;
+    dateInput.min  = tomorrowStr;
+    startInput.min = tomorrowStr;
 
     // ── Open modal ──────────────────────────────────────────────────────────
     document.querySelectorAll('.book-btn').forEach(btn => {
@@ -390,14 +394,16 @@ document.addEventListener('DOMContentLoaded', function () {
             modalOwner.textContent   = this.dataset.ownerName;
 
             // Reset form
-            slotSel.value      = '';
-            dateInput.value    = '';
-            startInput.value   = '';
-            endInput.value     = '';
+            slotSel.value       = '';
+            dateInput.value     = '';
+            startInput.value    = '';
+            endInput.value      = '';
             recurToggle.checked = false;
-            recurPanel.style.display = 'none';
-            singleGroup.style.display = 'block';
-            recurPreview.innerHTML = '';
+            recurPanel.style.display      = 'none';
+            singleGroup.style.display     = 'block';
+            singleSlotGroup.style.display = 'block';
+            recurPanel.querySelectorAll('select[data-day]').forEach(s => s.value = '');
+            recurCount.style.display = 'none';
             resultDiv.style.display = 'none';
             submitBtn.disabled = false;
             submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request walk';
@@ -409,67 +415,75 @@ document.addEventListener('DOMContentLoaded', function () {
     // ── Recurring toggle ────────────────────────────────────────────────────
     recurToggle.addEventListener('change', function () {
         if (this.checked) {
-            singleGroup.style.display = 'none';
-            recurPanel.style.display  = 'block';
+            singleGroup.style.display     = 'none';
+            singleSlotGroup.style.display = 'none';
+            recurPanel.style.display      = 'block';
             submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request recurring walks';
+            updateCount();
         } else {
-            singleGroup.style.display = 'block';
-            recurPanel.style.display  = 'none';
+            singleGroup.style.display     = 'block';
+            singleSlotGroup.style.display = 'block';
+            recurPanel.style.display      = 'none';
+            recurCount.style.display      = 'none';
             submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request walk';
         }
-        renderPreview();
     });
 
+    // ── Auto-fill end date to start + 1 year ───────────────────────────────
     startInput.addEventListener('change', function () {
-        endInput.min = this.value;
-        if (endInput.value && endInput.value < this.value) endInput.value = '';
-        renderPreview();
+        if (!this.value) return;
+        const start = new Date(this.value + 'T00:00:00');
+        start.setFullYear(start.getFullYear() + 1);
+        endInput.value = start.toISOString().slice(0, 10);
+        endInput.min   = this.value;
+        updateCount();
     });
-    endInput.addEventListener('change', renderPreview);
-    freqSel.addEventListener('change', renderPreview);
+    endInput.addEventListener('change', updateCount);
+    recurPanel.querySelectorAll('select[data-day]').forEach(s => s.addEventListener('change', updateCount));
 
-    // ── Date preview chips ──────────────────────────────────────────────────
-    function generateDates(startStr, endStr, freq) {
-        if (!startStr || !endStr) return [];
-        const start = new Date(startStr + 'T00:00:00');
-        const end   = new Date(endStr   + 'T00:00:00');
-        if (end < start) return [];
-        const dates = [];
-        const delta = freq === 'daily' ? 1 : 7;
-        let cur = new Date(start);
-        while (cur <= end) {
-            if (freq !== 'daily' || (cur.getDay() !== 0 && cur.getDay() !== 6)) {
-                dates.push(new Date(cur));
-            }
-            cur.setDate(cur.getDate() + delta);
-        }
-        return dates;
-    }
-
-    function renderPreview() {
-        if (!recurToggle.checked) { recurPreview.innerHTML = ''; return; }
-        const dates = generateDates(startInput.value, endInput.value, freqSel.value);
-        if (!dates.length) {
-            recurPreview.innerHTML = '<span class="text-muted small">No dates in range</span>';
+    // ── Booking count preview ───────────────────────────────────────────────
+    function updateCount() {
+        if (!recurToggle.checked || !startInput.value || !endInput.value) {
+            recurCount.style.display = 'none';
             return;
         }
-        recurPreview.innerHTML = dates.map(d =>
-            `<span class="recurring-chip">${d.toLocaleDateString('en-GB', {day:'numeric', month:'short'})}</span>`
-        ).join('');
+        const start = new Date(startInput.value + 'T00:00:00');
+        const end   = new Date(endInput.value   + 'T00:00:00');
+        if (end < start) { recurCount.style.display = 'none'; return; }
+
+        // Build selected (weekday → slot count) map — Both counts as 2
+        const slotsByDay = {};
+        recurPanel.querySelectorAll('select[data-day]').forEach(sel => {
+            if (!sel.value) return;
+            slotsByDay[parseInt(sel.dataset.day)] = sel.value === 'Both' ? 2 : 1;
+        });
+        if (!Object.keys(slotsByDay).length) { recurCount.style.display = 'none'; return; }
+
+        let total = 0;
+        let cur = new Date(start);
+        while (cur <= end) {
+            const wday = (cur.getDay() + 6) % 7; // JS Sunday=0 → Mon=0 mapping
+            if (slotsByDay[wday]) total += slotsByDay[wday];
+            cur.setDate(cur.getDate() + 1);
+        }
+
+        // Count whole weeks spanned for the summary line
+        const weeks = Math.round((end - start) / (7 * 86400000));
+        recurCount.textContent = `${total} booking${total !== 1 ? 's' : ''} across ${weeks} week${weeks !== 1 ? 's' : ''}`;
+        recurCount.style.display = '';
     }
 
     // ── Submit ──────────────────────────────────────────────────────────────
     submitBtn.addEventListener('click', function () {
         resultDiv.style.display = 'none';
 
-        const slot = slotSel.value;
-        if (!slot) { showResult('danger', 'Please select a slot.'); return; }
-
         const isRecurring = recurToggle.checked;
 
         if (!isRecurring) {
             // One-off
+            const slot = slotSel.value;
             const date = dateInput.value;
+            if (!slot) { showResult('danger', 'Please select a slot.'); return; }
             if (!date) { showResult('danger', 'Please select a date.'); return; }
 
             submitBtn.disabled = true;
@@ -477,28 +491,22 @@ document.addEventListener('DOMContentLoaded', function () {
 
             fetch('{{ url_for("admin.book_for_dog") }}', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': getCsrf(),
-                },
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
                 body: JSON.stringify({
                     dog_id:  parseInt(activeDogId),
                     user_id: parseInt(activeUserId),
-                    date:    date,
-                    slot:    slot,
+                    date, slot,
                 }),
             })
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
                     showResult('success', `✓ ${data.message}`);
-                    submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request walk';
-                    submitBtn.disabled = false;
                 } else {
                     showResult('danger', data.message || 'Something went wrong');
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request walk';
                 }
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request walk';
             })
             .catch(() => {
                 showResult('danger', 'Network error — please try again.');
@@ -510,27 +518,36 @@ document.addEventListener('DOMContentLoaded', function () {
             // Recurring
             const startDate = startInput.value;
             const endDate   = endInput.value;
-            const frequency = freqSel.value;
-
             if (!startDate) { showResult('danger', 'Please select a start date.'); return; }
             if (!endDate)   { showResult('danger', 'Please select an end date.');   return; }
 
+            // Build day_slots — expand "Both" into two entries
+            const daySlots = [];
+            recurPanel.querySelectorAll('select[data-day]').forEach(sel => {
+                if (!sel.value) return;
+                const day = parseInt(sel.dataset.day);
+                if (sel.value === 'Both') {
+                    daySlots.push({ day, slot: 'Morning' });
+                    daySlots.push({ day, slot: 'Afternoon' });
+                } else {
+                    daySlots.push({ day, slot: sel.value });
+                }
+            });
+            if (!daySlots.length) { showResult('danger', 'Please select at least one day.'); return; }
+
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Requesting…';
+            recurCount.style.display = 'none';
 
             fetch('{{ url_for("admin.recurring_for_dog") }}', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': getCsrf(),
-                },
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
                 body: JSON.stringify({
                     dog_id:     parseInt(activeDogId),
                     user_id:    parseInt(activeUserId),
                     start_date: startDate,
                     end_date:   endDate,
-                    slot:       slot,
-                    frequency:  frequency,
+                    day_slots:  daySlots,
                 }),
             })
             .then(r => r.json())
@@ -542,13 +559,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (data.waitlisted) parts.push(`${data.waitlisted} waitlisted`);
                     if (data.skipped)    parts.push(`${data.skipped} skipped`);
                     showResult('success', `✓ Done — ${parts.join(', ')}.`);
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request recurring walks';
                 } else {
                     showResult('danger', data.message || 'Something went wrong');
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request recurring walks';
                 }
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request recurring walks';
             })
             .catch(() => {
                 showResult('danger', 'Network error — please try again.');

@@ -11,7 +11,7 @@ from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError
-from app.models import User, Booking, Walker, Dog, Client, WalkerSchedule, DogOwner, WalkerUnavailability, WalkerAdHocAvailability, ServiceType, Notification
+from app.models import User, Booking, Walker, Dog, Client, WalkerSchedule, DogOwner, WalkerUnavailability, WalkerAdHocAvailability, ServiceType, Notification, Closure
 from app import db
 from app.capacity import get_max_per_walker, get_walker_slot_count, get_drop_in_capacity, auto_assign_walker
 from app.utils.db_error_handler import handle_db_errors
@@ -2364,21 +2364,28 @@ def book_for_dog():
 @login_required
 @admin_required
 def recurring_for_dog():
-    """Admin: create a recurring series of bookings on behalf of a dog's owner."""
+    """Admin: create recurring bookings for multiple day/slot combinations."""
     try:
         data = request.get_json()
         if not data:
             return jsonify(success=False, message="No data received"), 400
 
-        dog_id     = data.get('dog_id')
-        user_id    = data.get('user_id')
-        start_str  = data.get('start_date', '')
-        end_str    = data.get('end_date', '')
-        slot       = data.get('slot', '')
-        frequency  = data.get('frequency', '')
+        dog_id    = data.get('dog_id')
+        user_id   = data.get('user_id')
+        start_str = data.get('start_date', '')
+        end_str   = data.get('end_date', '')
+        day_slots = data.get('day_slots', [])
 
-        if not all([dog_id, user_id, start_str, end_str, slot, frequency]):
+        if not all([dog_id, user_id, start_str, end_str]):
             return jsonify(success=False, message="Missing required fields"), 400
+        if not day_slots:
+            return jsonify(success=False, message="Please select at least one day"), 400
+
+        for entry in day_slots:
+            if entry.get('day') not in range(5):
+                return jsonify(success=False, message="Invalid day"), 400
+            if entry.get('slot') not in ('Morning', 'Afternoon'):
+                return jsonify(success=False, message="Invalid slot"), 400
 
         from datetime import date as date_type
         try:
@@ -2392,10 +2399,6 @@ def recurring_for_dog():
             return jsonify(success=False, message="Start date must be in the future"), 400
         if end_date < start_date:
             return jsonify(success=False, message="End date must be after start date"), 400
-        if slot not in ('Morning', 'Afternoon'):
-            return jsonify(success=False, message="Invalid slot"), 400
-        if frequency not in ('daily', 'weekly'):
-            return jsonify(success=False, message="Invalid frequency"), 400
 
         dog = db.session.get(Dog, dog_id)
         if not dog:
@@ -2405,25 +2408,28 @@ def recurring_for_dog():
         if not default_service:
             return jsonify(success=False, message="No service type available"), 400
 
-        # Generate target dates
-        delta = timedelta(days=1) if frequency == 'daily' else timedelta(weeks=1)
-        target_dates = []
+        # Generate (date, slot) pairs — walk every calendar day, emit entries whose weekday matches
+        seen = set()
+        target_pairs = []
         current = start_date
         while current <= end_date:
-            if frequency == 'daily' and current.weekday() >= 5:
-                current += timedelta(days=1)
-                continue
-            target_dates.append(current)
-            current += delta
+            wday = current.weekday()
+            for entry in day_slots:
+                if entry['day'] == wday:
+                    key = (current, entry['slot'])
+                    if key not in seen:
+                        seen.add(key)
+                        target_pairs.append(key)
+            current += timedelta(days=1)
 
-        if not target_dates:
+        if not target_pairs:
             return jsonify(success=False, message="No valid dates in that range"), 400
 
         active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
         confirmed = requested = waitlisted = skipped = 0
-        notifications = []  # collect (recipient_id, type, title, body, link) tuples
+        notifications = []
 
-        for d in target_dates:
+        for d, slot in target_pairs:
             existing = Booking.query.filter(
                 Booking.dog_id == dog_id,
                 Booking.date == d,
@@ -2501,6 +2507,110 @@ def recurring_for_dog():
         db.session.rollback()
         logging.error(f"Error in admin recurring_for_dog: {e}")
         return jsonify(success=False, message="Server error"), 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Closures
+# ─────────────────────────────────────────────────────────────────────────────
+
+@admin_bp.route("/closures")
+@login_required
+@admin_required
+def closures():
+    from datetime import date as date_type
+    all_closures = Closure.query.order_by(Closure.date).all()
+    return render_template('admin_closures.html', closures=all_closures, today=date_type.today())
+
+
+@admin_bp.route("/closures/preview")
+@login_required
+@admin_required
+def closures_preview():
+    date_str = request.args.get('date', '')
+    try:
+        closure_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify(success=False, message="Invalid date"), 400
+
+    active_statuses = ('requested', 'confirmed', 'waitlisted')
+    bookings = (Booking.query
+                .filter(Booking.date == closure_date, Booking.status.in_(active_statuses))
+                .options(joinedload(Booking.dog), joinedload(Booking.user))
+                .all())
+
+    return jsonify(
+        success=True,
+        count=len(bookings),
+        bookings=[{
+            'dog':    b.dog.name if b.dog else '?',
+            'owner':  f"{b.user.firstname} {b.user.lastname}" if b.user else '?',
+            'slot':   b.slot,
+            'status': b.status,
+        } for b in bookings],
+    )
+
+
+@admin_bp.route("/closures", methods=["POST"])
+@login_required
+@admin_required
+def add_closure():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify(success=False, message="No data received"), 400
+
+        date_str = data.get('date', '')
+        reason   = (data.get('reason') or '').strip() or None
+
+        try:
+            closure_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify(success=False, message="Invalid date"), 400
+
+        if Closure.query.filter_by(date=closure_date).first():
+            return jsonify(success=False, message="A closure already exists for that date"), 400
+
+        closure = Closure(date=closure_date, reason=reason, created_by_id=current_user.id)
+        db.session.add(closure)
+
+        active_statuses = ('requested', 'confirmed', 'waitlisted')
+        bookings = Booking.query.filter(
+            Booking.date == closure_date,
+            Booking.status.in_(active_statuses)
+        ).all()
+
+        date_fmt  = closure_date.strftime('%-d %b %Y')
+        body_text = f"DogBoxx is closed on {date_fmt}" + (f" — {reason}" if reason else "")
+        for booking in bookings:
+            booking.status = 'cancelled'
+            create_notification(
+                recipient_id=booking.user_id,
+                notification_type='booking_cancelled',
+                title=f"Your booking on {date_fmt} has been cancelled",
+                body=body_text,
+                link='/',
+                sender_id=current_user.id,
+            )
+
+        db.session.commit()
+        return jsonify(success=True, cancelled_count=len(bookings))
+
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error in add_closure: {e}")
+        return jsonify(success=False, message="Server error"), 500
+
+
+@admin_bp.route("/closures/<int:closure_id>", methods=["DELETE"])
+@login_required
+@admin_required
+def delete_closure(closure_id):
+    closure = db.session.get(Closure, closure_id)
+    if not closure:
+        return jsonify(success=False, message="Closure not found"), 404
+    db.session.delete(closure)
+    db.session.commit()
+    return jsonify(success=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

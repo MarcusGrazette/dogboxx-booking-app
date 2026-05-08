@@ -54,6 +54,13 @@
   background: #E02FAC !important;
   color: #fff !important;
 }
+.cal-closed {
+  background: #f0f0f0 !important;
+  color: #bbb !important;
+  cursor: not-allowed !important;
+  text-decoration: line-through;
+}
+.cal-closed:hover { background: #f0f0f0 !important; }
 .calendar-loading { top: 0; left: 0; }
 .calendar-component .card-body { min-height: 220px; }
 /* Walker pickup days */

@@ -6,7 +6,7 @@ import struct
 from sqlalchemy import func, text
 from sqlalchemy.orm import joinedload
 
-from app.models import WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, Booking, ServiceType, Walker
+from app.models import WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, Booking, ServiceType, Walker, Closure
 from app import db
 
 
@@ -226,6 +226,17 @@ def auto_assign_walker(date, slot, service_slug=ServiceType.WALK):
     return best_walker
 
 
+def is_date_closed(date):
+    """Return (True, message) if date has a Closure record, else (False, '')."""
+    closure = Closure.query.filter_by(date=date).first()
+    if closure:
+        msg = f"DogBoxx is closed on {date.strftime('%-d %b %Y')}"
+        if closure.reason:
+            msg += f" ({closure.reason})"
+        return True, msg
+    return False, ''
+
+
 def check_availability(service_type, date, slot=None, admin_override=False):
     """Check if a booking can be made for the given service, date, and slot.
     Returns (available: bool, can_waitlist: bool, message: str).
@@ -235,6 +246,10 @@ def check_availability(service_type, date, slot=None, admin_override=False):
     on the board, so capacity is not a hard constraint. The slot must still have
     at least one walker scheduled (ignoring unavailability) to allow override.
     """
+    closed, close_msg = is_date_closed(date)
+    if closed:
+        return False, False, close_msg
+
     if service_type.slug == ServiceType.WALK:
         if not slot:
             return False, False, "Slot is required for walk bookings."
