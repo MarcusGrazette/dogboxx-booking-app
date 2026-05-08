@@ -1,0 +1,273 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}Admin — Closures{% endblock %}
+{% block page_title %}Closures{% endblock %}
+{% block page_subtitle %}Dates DogBoxx is closed — existing bookings are cancelled when a closure is added{% endblock %}
+
+{% block page_actions %}
+    <a href="{{ url_for('admin.index') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Admin
+    </a>
+{% endblock %}
+
+{% block main %}
+
+<div class="row g-4">
+
+    {# ── Add a closure ── #}
+    <div class="col-12 col-lg-5">
+        <div class="card">
+            <div class="card-header fw-semibold">
+                <i class="bi bi-calendar-x me-2 text-danger"></i>Add a closure
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small">Date <span class="text-danger">*</span></label>
+                    <input type="date" class="form-control" id="closure-date">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small">Reason <span class="text-muted fw-normal">(optional — shown to clients)</span></label>
+                    <input type="text" class="form-control" id="closure-reason"
+                           placeholder="e.g. Bank holiday, Christmas, Staff training…">
+                </div>
+                <button class="btn btn-danger" id="add-closure-btn">
+                    <i class="bi bi-calendar-x me-1"></i>Add closure
+                </button>
+                <div id="closure-result" class="mt-3" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+
+    {# ── Closures list ── #}
+    <div class="col-12 col-lg-7">
+        <div class="card">
+            <div class="card-header fw-semibold">
+                <i class="bi bi-list-ul me-2"></i>All closures
+            </div>
+            {% if closures %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="closures-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Date</th>
+                            <th>Reason</th>
+                            <th>Added by</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in closures %}
+                        <tr id="closure-row-{{ c.id }}" class="{% if c.date < today %}text-muted{% endif %}">
+                            <td class="fw-semibold">
+                                {{ c.date.strftime('%-d %b %Y') }}
+                                {% if c.date < today %}<span class="badge bg-secondary ms-1" style="font-size:0.65rem;">Past</span>{% endif %}
+                            </td>
+                            <td>{{ c.reason or '—' }}</td>
+                            <td class="small">{{ c.created_by.firstname if c.created_by else '—' }}</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-danger delete-closure-btn"
+                                        data-closure-id="{{ c.id }}"
+                                        data-closure-date="{{ c.date.strftime('%-d %b %Y') }}">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer text-muted small">
+                Removing a closure does not automatically restore cancelled bookings.
+            </div>
+            {% else %}
+            <div class="card-body text-muted">No closures added yet.</div>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+
+{# ── Confirm add modal ── #}
+<div class="modal fade" id="confirmAddModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>Confirm closure</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-modal-summary" class="mb-2"></p>
+                <div id="confirm-modal-list" style="display:none;">
+                    <p class="small fw-semibold mb-1">Bookings that will be cancelled:</p>
+                    <ul id="confirm-modal-bookings" class="small mb-0 ps-3"></ul>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirm-add-btn">
+                    <i class="bi bi-calendar-x me-1"></i>Add closure
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Confirm delete modal ── #}
+<div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Remove closure</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Remove the closure for <strong id="delete-modal-date"></strong>?</p>
+                <p class="text-muted small mb-0">This does not restore any bookings that were cancelled when the closure was created.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirm-delete-btn">Remove</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const addBtn        = document.getElementById('add-closure-btn');
+    const dateInput     = document.getElementById('closure-date');
+    const reasonInput   = document.getElementById('closure-reason');
+    const resultDiv     = document.getElementById('closure-result');
+    const confirmAddModal    = new bootstrap.Modal(document.getElementById('confirmAddModal'));
+    const confirmDeleteModal = new bootstrap.Modal(document.getElementById('confirmDeleteModal'));
+    const confirmAddBtn  = document.getElementById('confirm-add-btn');
+    const confirmDelBtn  = document.getElementById('confirm-delete-btn');
+
+    function csrf() {
+        return document.querySelector('meta[name=csrf-token]')?.content ||
+               document.querySelector('input[name=csrf_token]')?.value || '';
+    }
+
+    function showResult(type, msg) {
+        resultDiv.className = `alert alert-${type} py-2 mb-0`;
+        resultDiv.textContent = msg;
+        resultDiv.style.display = 'block';
+    }
+
+    // ── Add closure flow ──────────────────────────────────────────────────────
+    addBtn.addEventListener('click', function () {
+        resultDiv.style.display = 'none';
+        const date = dateInput.value;
+        if (!date) { showResult('danger', 'Please select a date.'); return; }
+
+        addBtn.disabled = true;
+        addBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Checking…';
+
+        fetch(`{{ url_for('admin.closures_preview') }}?date=${date}`)
+            .then(r => r.json())
+            .then(data => {
+                addBtn.disabled = false;
+                addBtn.innerHTML = '<i class="bi bi-calendar-x me-1"></i>Add closure';
+                if (!data.success) { showResult('danger', data.message || 'Error'); return; }
+
+                const d = new Date(date + 'T00:00:00');
+                const dateFmt = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+
+                const summary = document.getElementById('confirm-modal-summary');
+                const listWrap = document.getElementById('confirm-modal-list');
+                const bookingsList = document.getElementById('confirm-modal-bookings');
+
+                if (data.count === 0) {
+                    summary.textContent = `Add a closure for ${dateFmt}? There are no active bookings on this date.`;
+                    listWrap.style.display = 'none';
+                } else {
+                    summary.textContent = `This will cancel ${data.count} booking${data.count !== 1 ? 's' : ''} on ${dateFmt} and notify the clients.`;
+                    bookingsList.innerHTML = data.bookings.map(b =>
+                        `<li>${b.dog} (${b.owner}) — ${b.slot} <span class="text-muted">[${b.status}]</span></li>`
+                    ).join('');
+                    listWrap.style.display = 'block';
+                }
+
+                confirmAddModal.show();
+            })
+            .catch(() => {
+                addBtn.disabled = false;
+                addBtn.innerHTML = '<i class="bi bi-calendar-x me-1"></i>Add closure';
+                showResult('danger', 'Network error — please try again.');
+            });
+    });
+
+    confirmAddBtn.addEventListener('click', function () {
+        confirmAddBtn.disabled = true;
+        confirmAddBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Adding…';
+
+        fetch('{{ url_for("admin.add_closure") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+            body: JSON.stringify({ date: dateInput.value, reason: reasonInput.value }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            confirmAddModal.hide();
+            confirmAddBtn.disabled = false;
+            confirmAddBtn.innerHTML = '<i class="bi bi-calendar-x me-1"></i>Add closure';
+            if (data.success) {
+                window.location.reload();
+            } else {
+                showResult('danger', data.message || 'Something went wrong.');
+            }
+        })
+        .catch(() => {
+            confirmAddModal.hide();
+            confirmAddBtn.disabled = false;
+            confirmAddBtn.innerHTML = '<i class="bi bi-calendar-x me-1"></i>Add closure';
+            showResult('danger', 'Network error — please try again.');
+        });
+    });
+
+    // ── Delete closure flow ───────────────────────────────────────────────────
+    let pendingDeleteId = null;
+
+    document.querySelectorAll('.delete-closure-btn').forEach(btn => {
+        btn.addEventListener('click', function () {
+            pendingDeleteId = this.dataset.closureId;
+            document.getElementById('delete-modal-date').textContent = this.dataset.closureDate;
+            confirmDeleteModal.show();
+        });
+    });
+
+    confirmDelBtn.addEventListener('click', function () {
+        if (!pendingDeleteId) return;
+        confirmDelBtn.disabled = true;
+        confirmDelBtn.textContent = 'Removing…';
+
+        fetch(`{{ url_for('admin.closures') }}/${pendingDeleteId}`, {
+            method: 'DELETE',
+            headers: { 'X-CSRFToken': csrf() },
+        })
+        .then(r => r.json())
+        .then(data => {
+            confirmDeleteModal.hide();
+            confirmDelBtn.disabled = false;
+            confirmDelBtn.textContent = 'Remove';
+            if (data.success) {
+                const row = document.getElementById(`closure-row-${pendingDeleteId}`);
+                if (row) row.remove();
+            } else {
+                alert(data.message || 'Something went wrong.');
+            }
+            pendingDeleteId = null;
+        })
+        .catch(() => {
+            confirmDeleteModal.hide();
+            confirmDelBtn.disabled = false;
+            confirmDelBtn.textContent = 'Remove';
+            pendingDeleteId = null;
+        });
+    });
+}());
+</script>
+{% endblock %}

@@ -204,6 +204,13 @@
                                   style="background:#E02FAC; font-size:0.65rem; {% if pending_drop_ins == 0 %}display:none;{% endif %}">{{ pending_drop_ins }}</span>
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('admin.closures') }}"
+                           class="nav-link {% if request.endpoint in ['admin.closures', 'admin.add_closure', 'admin.delete_closure'] %}active{% endif %}">
+                            <i class="bi bi-calendar-x me-2"></i>
+                            <span>Closures</span>
+                        </a>
+                    </li>
 
                     <!-- Rosters -->
                     <li class="nav-header">Rosters</li>

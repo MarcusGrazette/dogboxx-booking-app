@@ -575,6 +575,8 @@
         // so it's safe to call during createCalendar's synchronous init (when cal
         // is still undefined) — getCalendar returns null and we bail early,
         // then the manual call below fires once cal is properly assigned.
+        let closedDatesSet = new Set();
+
         window.loadCalendarData = function loadCalendarData(year, month) {
             const instance = getCalendar('client-booking-cal');
             if (!instance) return;
@@ -582,12 +584,18 @@
                 .replace('/0/0', `/${year}/${month}`);
             fetch(url)
                 .then(r => r.json())
-                .then(data => instance.setHighlightedDates(data.success ? data.dates : {}))
+                .then(data => {
+                    closedDatesSet = new Set(data.closed_dates || []);
+                    const allDates = data.success ? { ...data.dates } : {};
+                    closedDatesSet.forEach(d => { allDates[d] = 'closed'; });
+                    instance.setHighlightedDates(allDates);
+                })
                 .catch(() => { });
         }
 
         const cal = createCalendar('client-booking-cal', {
             onDateClick(year, month, day, dateStr) {
+                if (closedDatesSet.has(dateStr)) return;
                 selectedDate = dateStr;
                 dateHidden.value = dateStr;
 

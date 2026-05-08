@@ -573,12 +573,17 @@ class TestAdminRecurringForDog:
             'user_id': user_id,
             'start_date': mon.isoformat(),
             'end_date': sun.isoformat(),
-            'slot': 'Morning',
-            'frequency': 'daily',
+            'day_slots': [
+                {'day': 0, 'slot': 'Morning'},
+                {'day': 1, 'slot': 'Morning'},
+                {'day': 2, 'slot': 'Morning'},
+                {'day': 3, 'slot': 'Morning'},
+                {'day': 4, 'slot': 'Morning'},
+            ],
         })
         data = resp.get_json()
         assert data['success'] is True
-        # Mon–Fri = 5 (Sat+Sun skipped); some may auto-confirm
+        # Mon–Fri = 5 (Sat+Sun not in day_slots); some may auto-confirm
         assert data.get('confirmed', 0) + data.get('requested', 0) + data['waitlisted'] == 5
 
     def test_admin_not_capped_at_4_weeks(self, app, client):
@@ -607,8 +612,7 @@ class TestAdminRecurringForDog:
             'user_id': user_id,
             'start_date': mon.isoformat(),
             'end_date': eight_weeks.isoformat(),
-            'slot': 'Morning',
-            'frequency': 'weekly',
+            'day_slots': [{'day': mon.weekday(), 'slot': 'Morning'}],
         })
         data = resp.get_json()
         # 9 Mondays over 8 weeks (inclusive); some may auto-confirm
@@ -644,8 +648,7 @@ class TestAdminRecurringForDog:
             'user_id': user_id,
             'start_date': mon.isoformat(),
             'end_date': mon.isoformat(),
-            'slot': 'Morning',
-            'frequency': 'weekly',
+            'day_slots': [{'day': mon.weekday(), 'slot': 'Morning'}],
         })
         data = resp.get_json()
         assert data['success'] is True

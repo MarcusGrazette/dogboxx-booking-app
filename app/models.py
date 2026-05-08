@@ -579,6 +579,20 @@ class WalkEvent(db.Model):
         }
 
 
+class Closure(db.Model):
+    """A date on which DogBoxx is closed. New bookings are rejected and existing
+    active bookings are cancelled (with notifications) when a closure is created."""
+    __tablename__ = 'closures'
+
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, nullable=False, unique=True, index=True)
+    reason = db.Column(db.String(200), nullable=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    created_by = db.relationship('User', foreign_keys=[created_by_id])
+
+
 class DailyMessage(db.Model):
     """A message from the business owner to the walker team, shown at the top
     of the pickup list for a given date. One message per day (UNIQUE on date).

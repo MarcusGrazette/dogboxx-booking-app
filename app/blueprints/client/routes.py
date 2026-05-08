@@ -9,7 +9,7 @@ from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
-from app.models import User, Client, Dog, Booking, DogOwner, ServiceType, Walker
+from app.models import User, Client, Dog, Booking, DogOwner, ServiceType, Walker, Closure
 from app import db, limiter
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
 from app.utils.uploads import process_dog_photo, process_cropped_photo
@@ -27,6 +27,11 @@ from app.utils.notifications import create_notification
 @client_bp.route("/help")
 def help_page():
     return render_template('help.html')
+
+
+@client_bp.route("/get-started")
+def get_started():
+    return render_template('get_started.html')
 
 
 @client_bp.route("/report-bug", methods=["POST"])
@@ -1523,7 +1528,13 @@ def calendar_data(year, month):
         elif ds not in dates:
             dates[ds] = 'pending'
 
-    return jsonify(success=True, dates=dates)
+    closures = Closure.query.filter(
+        Closure.date >= start_date,
+        Closure.date < end_date,
+    ).all()
+    closed_dates = [c.date.strftime('%Y-%m-%d') for c in closures]
+
+    return jsonify(success=True, dates=dates, closed_dates=closed_dates)
 
 
 @client_bp.route("/recurring_booking", methods=["POST"])

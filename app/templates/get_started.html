@@ -1,0 +1,264 @@
+{% extends "layout.html" %}
+
+{% block title %}Get Started — DogBoxx{% endblock %}
+
+{% block head_extra %}
+<style>
+    .gs-hero {
+        background: #1B1B1B;
+        color: #fff;
+        padding: 2rem 0 1.75rem;
+    }
+
+    .gs-hero h1 {
+        font-size: clamp(1.6rem, 4vw, 2.4rem);
+        font-weight: 800;
+        color: #fff;
+        margin-bottom: 0.5rem;
+    }
+
+    .gs-hero .lead {
+        color: #aaa;
+        font-size: 1rem;
+        margin-bottom: 0;
+    }
+
+    /* ── Platform toggle ─────────────────────────────── */
+    .platform-toggle .btn {
+        min-width: 110px;
+        font-weight: 600;
+        border-color: #E02FAC;
+    }
+
+    .platform-toggle .btn-primary {
+        background-color: #E02FAC;
+        border-color: #E02FAC;
+        color: #fff;
+    }
+
+    .platform-toggle .btn-outline-primary {
+        color: #E02FAC;
+        background: transparent;
+    }
+
+    .platform-toggle .btn-outline-primary:hover {
+        background-color: #E02FAC;
+        color: #fff;
+    }
+
+    /* ── Phone bezel ─────────────────────────────────── */
+    .phone-bezel {
+        border: 12px solid #222;
+        border-radius: 36px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+        max-width: 280px;
+        margin: 0 auto;
+    }
+
+    .phone-bezel video,
+    .phone-bezel img {
+        display: block;
+        width: 100%;
+        aspect-ratio: 9 / 19.5;
+        object-fit: cover;
+    }
+
+    /* ── Steps ───────────────────────────────────────── */
+    .gs-steps h2 {
+        font-size: 1.35rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+    }
+
+    .gs-steps ol li {
+        color: #444;
+        line-height: 1.7;
+        margin-bottom: 0.4rem;
+    }
+
+    .gs-tip {
+        background: #fff8fe;
+        border-left: 3px solid #E02FAC;
+        border-radius: 0 0.4rem 0.4rem 0;
+        padding: 0.6rem 0.9rem;
+        font-size: 0.875rem;
+        color: #555;
+        margin-top: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block main_class %}{% endblock %}
+
+{% block main %}
+
+{# ── Hero ── #}
+<div class="gs-hero">
+    <div class="container">
+        <h1 id="page-title">Getting Started on iOS</h1>
+        <p class="lead mb-0">Set up the DogBoxx app on your phone in a few easy steps.</p>
+    </div>
+</div>
+
+<div class="container py-4">
+
+    {# ── Platform toggle ── #}
+    <div class="d-flex justify-content-center mb-4">
+        <div class="btn-group platform-toggle" role="group" aria-label="Platform">
+            <button type="button" id="btn-ios" class="btn btn-primary" onclick="switchPlatform('ios')">
+                <i class="bi bi-apple me-1"></i>iOS
+            </button>
+            <button type="button" id="btn-android" class="btn btn-outline-primary" onclick="switchPlatform('android')">
+                <i class="bi bi-android2 me-1"></i>Android
+            </button>
+        </div>
+    </div>
+
+    {# ── Main row ── #}
+    <div class="row g-4 align-items-start">
+
+        {# ── Left: text steps ── #}
+        <div class="col-12 col-md-6 gs-steps">
+            <div id="steps-list">
+                {# populated by JS on load #}
+            </div>
+            <div id="steps-tip" class="gs-tip" style="display:none;">
+                <i class="bi bi-info-circle me-1"></i>
+                <span id="steps-tip-text"></span>
+            </div>
+        </div>
+
+        {# ── Right: phone bezel + video ── #}
+        <div class="col-12 col-md-6 d-flex justify-content-center">
+            <div class="phone-bezel">
+                <video id="demo-video"
+                    src="https://placehold.co/1080x2340?text=App+Recording+Placeholder"
+                    poster="https://placehold.co/1080x2340?text=App+Recording+Placeholder"
+                    playsinline controls muted>
+                </video>
+            </div>
+        </div>
+
+    </div>{# end main row #}
+
+    {# ── Footer link back to full guide ── #}
+    <div class="py-4 text-center text-muted small">
+        Looking for booking help? See the <a href="{{ url_for('client.help_page') }}" style="color:#E02FAC;">full user guide</a>.
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    var PLATFORMS = {
+        ios: {
+            title: 'Getting Started on iOS',
+            sections: [
+                {
+                    heading: 'Set your password',
+                    steps: [
+                        'Visit <a href="https://app.dogboxx.org" style="color:#E02FAC;">app.dogboxx.org</a> in <strong>Safari</strong>.',
+                        'Tap <strong>Forgot password?</strong> on the login page.',
+                        'Enter your email address — Lydia will have used this when setting up your account.',
+                        'Check your inbox for a reset link and choose a new password.'
+                    ]
+                },
+                {
+                    heading: 'Install the app',
+                    steps: [
+                        'In Safari, tap the <strong>Share</strong> button <i class="bi bi-box-arrow-up"></i> at the bottom of the screen.',
+                        'Scroll down and tap <strong>Add to Home Screen</strong>.',
+                        'Tap <strong>Add</strong> to confirm.',
+                        'Open the app from your home screen — you\'ll be prompted to allow push notifications. Tap <strong>Allow</strong>.'
+                    ]
+                },
+                {
+                    heading: 'Your bookings are ready',
+                    steps: [
+                        'Lydia has added your existing recurring bookings (e.g. every Monday afternoon) to your account.',
+                        'You\'ll see them on your home screen straight away — add, manage, or cancel from there.'
+                    ]
+                }
+            ],
+            tip: 'Push notifications on iOS only work when the app is installed to your home screen via Safari. If you skip the install, the app still works in the browser — you just won\'t get notifications.',
+            videoSrc: 'https://placehold.co/1080x2340?text=App+Recording+Placeholder'
+        },
+        android: {
+            title: 'Getting Started on Android',
+            sections: [
+                {
+                    heading: 'Set your password',
+                    steps: [
+                        'Visit <a href="https://app.dogboxx.org" style="color:#E02FAC;">app.dogboxx.org</a> in <strong>Chrome</strong>.',
+                        'Tap <strong>Forgot password?</strong> on the login page.',
+                        'Enter your email address — Lydia will have used this when setting up your account.',
+                        'Check your inbox for a reset link and choose a new password.'
+                    ]
+                },
+                {
+                    heading: 'Install the app',
+                    steps: [
+                        'Chrome will show an <strong>Add to Home Screen</strong> or <strong>Install</strong> banner at the bottom of the screen.',
+                        'Tap it, then tap <strong>Install</strong> to confirm.',
+                        'Open the app from your home screen — you\'ll be prompted to allow push notifications. Tap <strong>Allow</strong>.'
+                    ]
+                },
+                {
+                    heading: 'Your bookings are ready',
+                    steps: [
+                        'Lydia has added your existing recurring bookings (e.g. every Monday afternoon) to your account.',
+                        'You\'ll see them on your home screen straight away — add, manage, or cancel from there.'
+                    ]
+                }
+            ],
+            tip: 'If Chrome doesn\'t show the install banner straight away, tap the Chrome menu (⋮) and choose <strong>Add to Home Screen</strong>.',
+            videoSrc: 'https://placehold.co/1080x2340?text=App+Recording+Placeholder'
+        }
+    };
+
+    window.switchPlatform = function (platform) {
+        var data = PLATFORMS[platform];
+
+        // Update hero title
+        document.getElementById('page-title').textContent = data.title;
+
+        // Build step sections
+        var html = '';
+        data.sections.forEach(function (section) {
+            html += '<h2 class="mt-3 mt-md-0" style="font-size:1.15rem;font-weight:700;margin-bottom:0.5rem;">' + section.heading + '</h2>';
+            html += '<ol class="mb-3">';
+            section.steps.forEach(function (step) {
+                html += '<li>' + step + '</li>';
+            });
+            html += '</ol>';
+        });
+        document.getElementById('steps-list').outerHTML = '<div id="steps-list">' + html + '</div>';
+
+        // Tip
+        var tipEl = document.getElementById('steps-tip');
+        if (data.tip) {
+            document.getElementById('steps-tip-text').innerHTML = data.tip;
+            tipEl.style.display = '';
+        } else {
+            tipEl.style.display = 'none';
+        }
+
+        // Video
+        var video = document.getElementById('demo-video');
+        video.src = data.videoSrc;
+        video.poster = data.videoSrc;
+
+        // Toggle buttons
+        document.getElementById('btn-ios').className = 'btn ' + (platform === 'ios' ? 'btn-primary' : 'btn-outline-primary');
+        document.getElementById('btn-android').className = 'btn ' + (platform === 'android' ? 'btn-primary' : 'btn-outline-primary');
+    };
+
+    // Init
+    switchPlatform('ios');
+}());
+</script>
+{% endblock %}
