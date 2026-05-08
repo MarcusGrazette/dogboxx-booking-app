@@ -364,7 +364,7 @@ def create_app(config_name=None):
         vapid_public_key = app.config.get('VAPID_PUBLIC_KEY', '')
         if current_user.is_authenticated:
             unread_count = get_unread_count(current_user.id)
-            recent_notifications = get_recent(current_user.id, limit=8)
+            recent_notifications = get_recent(current_user.id, limit=5)
             return dict(
                 unread_notification_count=unread_count,
                 recent_notifications=recent_notifications,
