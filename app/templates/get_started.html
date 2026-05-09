@@ -57,11 +57,13 @@
     }
 
     .phone-bezel video,
+    .phone-bezel iframe,
     .phone-bezel img {
         display: block;
         width: 100%;
         aspect-ratio: 9 / 19.5;
         object-fit: cover;
+        border: none;
     }
 
     /* ── Steps ───────────────────────────────────────── */
@@ -130,13 +132,13 @@
         </div>
 
         {# ── Right: phone bezel + video ── #}
-        <div class="col-12 col-md-6 d-flex justify-content-center">
+        <div id="bezel-col" class="col-12 col-md-6 d-flex justify-content-center">
             <div class="phone-bezel">
-                <video id="demo-video"
-                    src="https://placehold.co/1080x2340?text=App+Recording+Placeholder"
-                    poster="https://placehold.co/1080x2340?text=App+Recording+Placeholder"
-                    playsinline controls muted>
-                </video>
+                <iframe id="demo-video"
+                    src=""
+                    allow="autoplay; fullscreen"
+                    allowfullscreen>
+                </iframe>
             </div>
         </div>
 
@@ -185,7 +187,7 @@
                 }
             ],
             tip: 'Push notifications on iOS only work when the app is installed to your home screen via Safari. If you skip the install, the app still works in the browser — you just won\'t get notifications.',
-            videoSrc: 'https://placehold.co/1080x2340?text=App+Recording+Placeholder'
+            videoSrc: 'https://iframe.mediadelivery.net/embed/655684/5a71f974-54c5-4043-9fb5-db3f11b5f41f'
         },
         android: {
             title: 'Getting Started on Android',
@@ -216,7 +218,7 @@
                 }
             ],
             tip: 'If Chrome doesn\'t show the install banner straight away, tap the Chrome menu (⋮) and choose <strong>Add to Home Screen</strong>.',
-            videoSrc: 'https://placehold.co/1080x2340?text=App+Recording+Placeholder'
+            videoSrc: null
         }
     };
 
@@ -247,10 +249,16 @@
             tipEl.style.display = 'none';
         }
 
-        // Video
-        var video = document.getElementById('demo-video');
-        video.src = data.videoSrc;
-        video.poster = data.videoSrc;
+        // Video / bezel
+        var bezelCol = document.getElementById('bezel-col');
+        var iframe = document.getElementById('demo-video');
+        if (data.videoSrc) {
+            iframe.src = data.videoSrc;
+            bezelCol.style.display = '';
+        } else {
+            iframe.src = '';
+            bezelCol.style.display = 'none';
+        }
 
         // Toggle buttons
         document.getElementById('btn-ios').className = 'btn ' + (platform === 'ios' ? 'btn-primary' : 'btn-outline-primary');
