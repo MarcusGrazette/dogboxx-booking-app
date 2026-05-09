@@ -43,7 +43,7 @@
                     {% endif %}
                     <div class="flex-grow-1 min-width-0">
                         <div class="fw-bold fs-5 text-truncate">{{ client.full_name }}</div>
-                        <div class="text-muted small text-truncate">{{ client.email }}</div>
+                        <div class="small text-truncate"><a href="mailto:{{ client.email }}" class="text-muted">{{ client.email }}</a></div>
                     </div>
                     {% if client.must_change_password %}
                     <div class="flex-shrink-0">
