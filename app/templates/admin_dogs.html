@@ -348,6 +348,27 @@
                 {% endif %}
             </div>
             <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary view-edit-btn me-auto"
+                        data-dog-id="{{ dog.id }}"
+                        data-dog-name="{{ dog.name }}"
+                        data-dog-breed="{{ dog.breed or '' }}"
+                        data-dog-gender="{{ dog.gender or '' }}"
+                        data-dog-dob="{{ dog.date_of_birth.isoformat() if dog.date_of_birth else '' }}"
+                        data-dog-allergies="{{ dog.allergies or '' }}"
+                        data-dog-pickup="{{ dog.pickup_instructions or '' }}"
+                        data-dog-whatsapp="{{ dog.whatsapp_group_url or '' }}"
+                        data-dog-hold-key="{{ 'true' if dog.hold_key else 'false' }}"
+                        data-view-modal="dog-view-{{ dog.id }}">
+                    <i class="bi bi-pencil me-1"></i>Edit
+                </button>
+                <button type="button" class="btn btn-primary view-book-btn"
+                        data-dog-id="{{ dog.id }}"
+                        data-dog-name="{{ dog.name }}"
+                        data-user-id="{{ row.owner_user_id }}"
+                        data-owner-name="{{ row.owner_name }}"
+                        data-view-modal="dog-view-{{ dog.id }}">
+                    <i class="bi bi-calendar-plus me-1"></i>Book
+                </button>
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
@@ -735,6 +756,72 @@ document.addEventListener('DOMContentLoaded', function () {
             searchInput.focus();
         });
     }
+
+    // ── View modal → Edit / Book transition ────────────────────────────────
+    // Clicking Edit or Book inside the dog-info modal: close it first, then open
+    // the target modal once the fade-out completes (hidden.bs.modal).
+    var pendingViewAction = null;
+
+    document.querySelectorAll('.view-edit-btn, .view-book-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var viewEl   = document.getElementById(this.dataset.viewModal);
+            var viewInst = bootstrap.Modal.getInstance(viewEl);
+            var d        = this.dataset;
+            var isEdit   = this.classList.contains('view-edit-btn');
+
+            pendingViewAction = function () {
+                if (isEdit) {
+                    editActiveDogId          = d.dogId;
+                    editActiveRow            = document.querySelector('button.edit-dog-btn[data-dog-id="' + d.dogId + '"]')?.closest('tr') || null;
+                    editDogName.textContent  = d.dogName;
+                    editNameInp.value        = d.dogName;
+                    editGenderSel.value      = d.dogGender;
+                    editBreedInp.value       = d.dogBreed;
+                    editDobInp.value         = d.dogDob;
+                    editAllergyInp.value     = d.dogAllergies;
+                    editPickupTA.value       = d.dogPickup;
+                    editWaInp.value          = d.dogWhatsapp;
+                    editHoldKey.checked      = d.dogHoldKey === 'true';
+                    editResult.style.display = 'none';
+                    editSubmitBtn.disabled   = false;
+                    editSubmitBtn.innerHTML  = '<i class="bi bi-check-lg me-1"></i>Save changes';
+                    editModal.show();
+                } else {
+                    activeDogId  = d.dogId;
+                    activeUserId = d.userId;
+                    modalDogName.textContent          = d.dogName;
+                    modalOwner.textContent            = d.ownerName;
+                    slotSel.value                     = '';
+                    dateInput.value                   = '';
+                    startInput.value                  = '';
+                    endInput.value                    = '';
+                    recurToggle.checked               = false;
+                    recurPanel.style.display          = 'none';
+                    singleGroup.style.display         = 'block';
+                    singleSlotGroup.style.display     = 'block';
+                    recurPanel.querySelectorAll('select[data-day]').forEach(s => s.value = '');
+                    recurCount.style.display          = 'none';
+                    resultDiv.style.display           = 'none';
+                    submitBtn.disabled                = false;
+                    submitBtn.innerHTML               = '<i class="bi bi-check-lg me-1"></i>Request walk';
+                    modal.show();
+                }
+            };
+
+            viewInst.hide();
+        });
+    });
+
+    // Fire the pending action once the view modal has fully faded out
+    document.querySelectorAll('[id^="dog-view-"]').forEach(function (el) {
+        el.addEventListener('hidden.bs.modal', function () {
+            if (pendingViewAction) {
+                var fn = pendingViewAction;
+                pendingViewAction = null;
+                fn();
+            }
+        });
+    });
 });
 </script>
 {% endblock %}

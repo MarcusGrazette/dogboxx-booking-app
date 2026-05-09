@@ -31,3 +31,12 @@ def walker_required(f):
             return redirect(url_for("client.index"))
         return f(*args, **kwargs)
     return decorated_function
+
+
+def has_client_access(user):
+    """Return True if the user can access client-facing routes.
+
+    A walker who also has a Client record (dual-role) can access the client
+    section of the app by switching view in the navbar.
+    """
+    return user.role == 'client' or user.client is not None

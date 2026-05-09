@@ -71,6 +71,9 @@
                                     </div>
                                     {% endif %}
                                     <span class="fw-semibold">{{ client.full_name }}</span>
+                                    {% if client.walker %}
+                                    <span class="badge bg-info text-dark fw-normal" style="font-size:0.65rem;">Walker</span>
+                                    {% endif %}
                                     {% if not client.active %}
                                     <span class="badge bg-secondary fw-normal" style="font-size:0.65rem;">Inactive</span>
                                     {% endif %}
