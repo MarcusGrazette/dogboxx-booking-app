@@ -56,6 +56,21 @@
   height: 1.25em;
 }
 
+/* Flexbox alignment fix: Bootstrap's default padding-left/negative-margin
+   scheme causes vertical misalignment with small labels. */
+.form-check.form-switch {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-left: 0;
+}
+
+.form-check.form-switch .form-check-input {
+  margin-left: 0;
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
 /* ---- Buttons ---- */
 .btn-primary {
   --bs-btn-bg:               #E02FAC;
