@@ -35,7 +35,7 @@
                         <tr>
                             <td>
                                 {{ walker.full_name }}
-                                <div class="text-muted small">{{ walker.email }}</div>
+                                <div class="small"><a href="mailto:{{ walker.email }}" class="text-muted">{{ walker.email }}</a></div>
                             </td>
                             <td>
                                 {% if walker.is_super_admin %}
@@ -92,7 +92,7 @@
                                     </label>
                                 </div>
                             </td>
-                            <td>{{ walker.created_at.strftime('%Y-%m-%d') if walker.created_at }}</td>
+                            <td>{{ walker.created_at.strftime('%d %b %Y') if walker.created_at }}</td>
                             <td>
                                 {% if walker.walker %}
                                 <button class="btn btn-sm btn-outline-primary me-1 schedule-btn"
@@ -104,7 +104,7 @@
                                 {% if walker.active %}
                                 {% if walker.id != current_user.id %}
                                 <button class="btn btn-sm btn-outline-danger me-1"
-                                        onclick="toggleWalkerStatus({{ walker.id }}, 'deactivate')">
+                                        onclick="confirmWalkerToggle({{ walker.id }}, 'deactivate', '{{ walker.full_name | e }}')">
                                     <i class="bi bi-x-circle"></i> Deactivate
                                 </button>
                                 {% if walker.client %}
@@ -163,7 +163,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% set days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] %}
+                        {% set days = ['Monday','Tuesday','Wednesday','Thursday','Friday'] %}
                         {% for day in days %}
                         <tr>
                             <td class="fw-semibold align-middle">{{ day }}</td>
@@ -192,6 +192,23 @@
                 <button type="button" class="btn btn-primary fw-semibold" id="schedule-save-btn">
                     <i class="bi bi-check-lg me-1"></i>Save schedule
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ─── Deactivate confirmation modal ────────────────────────────────────── -->
+<div class="modal fade" id="walkerToggleModal" tabindex="-1" aria-labelledby="walkerToggleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="walkerToggleModalLabel"></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-muted small" id="walker-toggle-modal-body"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn fw-semibold" id="walker-toggle-confirm-btn"></button>
             </div>
         </div>
     </div>
@@ -312,6 +329,34 @@ clientOnlyConfirmBtn.addEventListener('click', function () {
         }
     })
     .catch(function() { alert('Request failed. Please try again.'); });
+});
+
+// ── Deactivate confirmation modal ───────────────────────────────────────────
+var walkerToggleModal      = new bootstrap.Modal(document.getElementById('walkerToggleModal'));
+var walkerToggleTitle      = document.getElementById('walkerToggleModalLabel');
+var walkerToggleBody       = document.getElementById('walker-toggle-modal-body');
+var walkerToggleConfirmBtn = document.getElementById('walker-toggle-confirm-btn');
+var pendingToggleId        = null;
+var pendingToggleAction    = null;
+
+function confirmWalkerToggle(walkerId, action, name) {
+    pendingToggleId     = walkerId;
+    pendingToggleAction = action;
+    var isDeactivate    = action === 'deactivate';
+    walkerToggleTitle.textContent      = isDeactivate ? 'Deactivate walker' : 'Activate walker';
+    walkerToggleBody.textContent       = isDeactivate
+        ? name + ' will no longer be able to log in as a walker. Their future assigned walks will be moved back to pending.'
+        : 'Activate ' + name + '? They will be able to log in again.';
+    walkerToggleConfirmBtn.textContent = isDeactivate ? 'Deactivate' : 'Activate';
+    walkerToggleConfirmBtn.className   = isDeactivate
+        ? 'btn btn-danger fw-semibold'
+        : 'btn btn-success fw-semibold';
+    walkerToggleModal.show();
+}
+
+walkerToggleConfirmBtn.addEventListener('click', function () {
+    walkerToggleModal.hide();
+    toggleWalkerStatus(pendingToggleId, pendingToggleAction);
 });
 
 // ── Schedule modal ──────────────────────────────────────────────────────────
