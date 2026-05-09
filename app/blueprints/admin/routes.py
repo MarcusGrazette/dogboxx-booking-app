@@ -2071,6 +2071,43 @@ def walker_schedule(walker_id):
     return render_template("admin_walker_schedule.html", walker=walker, form=form)
 
 
+@admin_bp.route("/walkers/<int:walker_id>/schedule-json", methods=["GET", "POST"])
+@login_required
+@admin_required
+def walker_schedule_json(walker_id):
+    """JSON read/write endpoint for the schedule modal on /admin/walkers."""
+    walker = Walker.query.get_or_404(walker_id)
+
+    if request.method == 'GET':
+        schedules = WalkerSchedule.query.filter_by(walker_id=walker_id, active=True).all()
+        return jsonify(success=True, schedules=[
+            {'day': s.day_of_week, 'slot': s.slot} for s in schedules
+        ])
+
+    # POST — replace schedule
+    data = request.get_json()
+    if data is None:
+        return jsonify(success=False, message="No data received"), 400
+    entries = data.get('schedules', [])
+    valid_slots = ('Morning', 'Afternoon')
+    for e in entries:
+        if e.get('day') not in range(7) or e.get('slot') not in valid_slots:
+            return jsonify(success=False, message="Invalid schedule data"), 400
+    try:
+        WalkerSchedule.query.filter_by(walker_id=walker_id).delete()
+        for e in entries:
+            db.session.add(WalkerSchedule(
+                walker_id=walker_id, day_of_week=e['day'], slot=e['slot'], active=True
+            ))
+        db.session.commit()
+        logging.info(f"Admin {current_user.id} updated schedule for walker {walker_id} via modal")
+        return jsonify(success=True)
+    except Exception as exc:
+        db.session.rollback()
+        logging.error(f"Error updating walker schedule (modal): {exc}")
+        return jsonify(success=False, message="Error saving schedule"), 500
+
+
 # ─── Walker schedule overrides (ad hoc available + unavailability) ───────────
 
 @admin_bp.route("/walkers/overrides")
