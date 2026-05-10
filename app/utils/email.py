@@ -25,6 +25,7 @@ Required environment variables:
 
 import logging
 import os
+import re
 import requests
 
 RESEND_API_URL = "https://api.resend.com/emails"
@@ -124,6 +125,10 @@ def send_newsletter_batch(subject: str, html_template: str, recipients: list) ->
   </table>
 </body>
 </html>"""
+
+    # Strip empty paragraphs (<p><br></p>) that Quill inserts for blank lines —
+    # they render as large gaps in email clients.
+    html_template = re.sub(r'<p>\s*<br\s*/?>\s*</p>', '', html_template)
 
     batch = []
     for r in recipients:
