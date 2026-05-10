@@ -102,15 +102,15 @@
                 {% endif %}
 
                 {% if owner %}
-                <div class="d-flex align-items-start gap-2 mb-2">
-                    <i class="bi bi-person text-muted flex-shrink-0" style="margin-top:1px;"></i>
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <i class="bi bi-person text-muted flex-shrink-0"></i>
                     <span class="small fw-semibold">{{ dog.owners_display }}</span>
                 </div>
                 {% endif %}
 
                 {% if client and client.street_address %}
-                <div class="d-flex align-items-start gap-2 flex-wrap {% if dog.whatsapp_group_url or dog.allergies or dog.pickup_instructions %}mb-3{% endif %}">
-                    <i class="bi bi-house text-muted flex-shrink-0" style="margin-top:1px;"></i>
+                <div class="d-flex align-items-center gap-2 flex-wrap {% if dog.whatsapp_group_url or dog.allergies or dog.pickup_instructions %}mb-3{% endif %}">
+                    <i class="bi bi-house text-muted flex-shrink-0"></i>
                     <span class="small flex-grow-1">{{ client.street_address.replace('\n', ', ') }}{% if client.postal_code %}, {{ client.postal_code | upper }}{% endif %}</span>
                     {% if client.maps_url %}
                     <a href="{{ client.maps_url }}" target="_blank" rel="noopener"

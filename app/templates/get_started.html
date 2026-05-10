@@ -57,11 +57,13 @@
     }
 
     .phone-bezel video,
+    .phone-bezel iframe,
     .phone-bezel img {
         display: block;
         width: 100%;
         aspect-ratio: 9 / 19.5;
         object-fit: cover;
+        border: none;
     }
 
     /* ── Steps ───────────────────────────────────────── */
@@ -130,13 +132,12 @@
         </div>
 
         {# ── Right: phone bezel + video ── #}
-        <div class="col-12 col-md-6 d-flex justify-content-center">
+        <div id="bezel-col" class="col-12 col-md-6 d-flex justify-content-center">
             <div class="phone-bezel">
-                <video id="demo-video"
-                    src="https://placehold.co/1080x2340?text=App+Recording+Placeholder"
-                    poster="https://placehold.co/1080x2340?text=App+Recording+Placeholder"
-                    playsinline controls muted>
-                </video>
+                <iframe id="demo-video"
+                    src=""
+                    allow="autoplay; fullscreen">
+                </iframe>
             </div>
         </div>
 
@@ -173,7 +174,7 @@
                         'In Safari, tap the <strong>Share</strong> button <i class="bi bi-box-arrow-up"></i> at the bottom of the screen.',
                         'Scroll down and tap <strong>Add to Home Screen</strong>.',
                         'Tap <strong>Add</strong> to confirm.',
-                        'Open the app from your home screen — you\'ll be prompted to allow push notifications. Tap <strong>Allow</strong>.'
+                        'Open the app from your home screen, tap the <strong>notification bell</strong>, tap <strong>Enable notifications</strong>, then tap <strong>Allow</strong> when prompted.'
                     ]
                 },
                 {
@@ -185,7 +186,7 @@
                 }
             ],
             tip: 'Push notifications on iOS only work when the app is installed to your home screen via Safari. If you skip the install, the app still works in the browser — you just won\'t get notifications.',
-            videoSrc: 'https://placehold.co/1080x2340?text=App+Recording+Placeholder'
+            videoSrc: 'https://iframe.mediadelivery.net/embed/655684/523faf3c-580d-4fc3-ab1e-cf4e30c0c939'
         },
         android: {
             title: 'Getting Started on Android',
@@ -216,7 +217,7 @@
                 }
             ],
             tip: 'If Chrome doesn\'t show the install banner straight away, tap the Chrome menu (⋮) and choose <strong>Add to Home Screen</strong>.',
-            videoSrc: 'https://placehold.co/1080x2340?text=App+Recording+Placeholder'
+            videoSrc: null
         }
     };
 
@@ -247,10 +248,16 @@
             tipEl.style.display = 'none';
         }
 
-        // Video
-        var video = document.getElementById('demo-video');
-        video.src = data.videoSrc;
-        video.poster = data.videoSrc;
+        // Video / bezel
+        var bezelCol = document.getElementById('bezel-col');
+        var iframe = document.getElementById('demo-video');
+        if (data.videoSrc) {
+            iframe.src = data.videoSrc;
+            bezelCol.style.display = '';
+        } else {
+            iframe.src = '';
+            bezelCol.style.display = 'none';
+        }
 
         // Toggle buttons
         document.getElementById('btn-ios').className = 'btn ' + (platform === 'ios' ? 'btn-primary' : 'btn-outline-primary');
