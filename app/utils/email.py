@@ -77,7 +77,7 @@ def send_newsletter_batch(subject: str, html_template: str, recipients: list) ->
     Returns {'sent': int, 'failed': int}
     """
     api_key = os.environ.get("RESEND_API_KEY")
-    mail_from = os.environ.get("MAIL_FROM", "Dogboxx <noreply@dogboxx.org>")
+    mail_from = os.environ.get("NEWSLETTER_MAIL_FROM") or os.environ.get("MAIL_FROM", "Dogboxx <noreply@dogboxx.org>")
 
     if not api_key:
         logging.error("RESEND_API_KEY is not set — cannot send newsletter")
