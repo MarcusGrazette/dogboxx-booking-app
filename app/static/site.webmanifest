@@ -41,7 +41,7 @@
       "purpose": "any"
     },
     {
-      "src": "/static/android-chrome-512x512.png",
+      "src": "/static/maskable-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

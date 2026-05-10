@@ -25,6 +25,7 @@ Required environment variables:
 
 import logging
 import os
+import re
 import requests
 
 RESEND_API_URL = "https://api.resend.com/emails"
@@ -84,20 +85,57 @@ def send_newsletter_batch(subject: str, html_template: str, recipients: list) ->
         return {'sent': 0, 'failed': len(recipients)}
 
     RESEND_BATCH_URL = "https://api.resend.com/emails/batch"
-    UNSUBSCRIBE_FOOTER = """
-    <hr style="margin:32px 0;border:none;border-top:1px solid #eee;">
-    <p style="color:#999;font-size:0.8em;text-align:center;">
-      You're receiving this because you're a Dogboxx client.
-      <a href="{unsubscribe_url}" style="color:#999;">Unsubscribe</a>
-    </p>
-    """
+
+    SHELL_TOP = """<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title></title>
+</head>
+<body style="margin:0;padding:0;background-color:#f6f3f2;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+      <td align="center" style="background-color:#f6f3f2;padding:32px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="560" style="max-width:560px;width:100%;">
+          <tr>
+            <td style="background-color:#1B1B1B;border-bottom:3px solid #E02FAC;padding:18px 32px;border-radius:6px 6px 0 0;">
+              <span style="font-size:1.35rem;font-weight:800;color:#ffffff;letter-spacing:-0.01em;">DogBoxx</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#ffffff;border:1px solid #e2dfde;border-top:none;border-radius:0 0 6px 6px;padding:36px 32px 28px;">
+              <div style="font-size:1rem;color:#3d3d3d;line-height:1.6;">"""
+
+    SHELL_BOTTOM = """</div>
+              <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-top:24px;">
+                <tr>
+                  <td style="border-top:1px solid #e2dfde;padding-top:16px;font-size:0.8rem;color:#888888;line-height:1.6;text-align:center;">
+                    You're receiving this because you're a DogBoxx client.
+                    <a href="%%UNSUBSCRIBE_URL%%" style="color:#888888;">Unsubscribe</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+    # Strip empty paragraphs (<p><br></p>) that Quill inserts for blank lines —
+    # they render as large gaps in email clients.
+    html_template = re.sub(r'<p>\s*<br\s*/?>\s*</p>', '', html_template)
 
     batch = []
     for r in recipients:
-        html = html_template
+        html = SHELL_TOP + html_template + SHELL_BOTTOM
         html = html.replace("{{firstname}}", r.get("firstname", ""))
         html = html.replace("{{dog_name}}", r.get("dog_name", "your dog"))
-        html += UNSUBSCRIBE_FOOTER.format(unsubscribe_url=r["unsubscribe_url"])
+        html = html.replace("%%UNSUBSCRIBE_URL%%", r["unsubscribe_url"])
         batch.append({
             "from": mail_from,
             "to": [r["email"]],

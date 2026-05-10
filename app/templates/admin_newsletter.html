@@ -22,7 +22,6 @@
     border-radius: 0 0 0.375rem 0.375rem;
   }
   .merge-tag { cursor: pointer; }
-  .recipient-list { max-height: 480px; overflow-y: auto; }
 </style>
 {% endblock %}
 
@@ -31,10 +30,10 @@
 
   {# ── Compose ───────────────────────────────────────────────────────────── #}
   <div class="col-12 col-lg-8">
-    <div class="card">
+    <div class="card" id="compose-card">
       <div class="card-header d-flex align-items-center justify-content-between">
         <h5 class="card-title mb-0"><i class="bi bi-envelope me-2"></i>Compose</h5>
-        <span class="text-muted small">
+        <span class="text-muted small ms-auto">
           <i class="bi bi-people me-1"></i>
           Sending to <strong>{{ clients|length }}</strong> client{{ 's' if clients|length != 1 }}
         </span>
@@ -105,21 +104,21 @@
 
   {# ── Sidebar: recipient list ───────────────────────────────────────────── #}
   <div class="col-12 col-lg-4">
-    <div class="card h-100">
-      <div class="card-header">
+    <div class="card h-100" id="recipient-card">
+      <div class="card-header" id="recipient-header">
         <h6 class="card-title mb-0">
           <i class="bi bi-people me-2"></i>Recipients
           <span class="badge rounded-pill ms-1"
                 style="background:#E02FAC;font-size:0.75em;">{{ clients|length }}</span>
         </h6>
       </div>
-      <div class="card-body p-0">
+      <div class="card-body p-0" id="recipient-body" style="overflow-y:auto;">
         {% if clients %}
-        <ul class="list-group list-group-flush recipient-list">
+        <ul class="list-group list-group-flush">
           {% for c in clients %}
-          <li class="list-group-item px-3 py-2">
-            <div class="fw-semibold small">{{ c.firstname }} {{ c.lastname }}</div>
-            <div class="text-muted" style="font-size:0.75em;">{{ c.email }}</div>
+          <li class="list-group-item px-3 py-1 d-flex flex-wrap align-items-baseline gap-2">
+            <span class="fw-semibold small">{{ c.firstname }} {{ c.lastname }}</span>
+            <span class="text-muted" style="font-size:0.75em;">{{ c.email }}</span>
           </li>
           {% endfor %}
         </ul>
@@ -245,6 +244,16 @@
   }
 
   // Test send — validate then submit
+  function matchRecipientHeight() {
+    var composeCard = document.getElementById('compose-card');
+    var recipientHeader = document.getElementById('recipient-header');
+    var recipientBody = document.getElementById('recipient-body');
+    if (!composeCard || !recipientHeader || !recipientBody) return;
+    recipientBody.style.maxHeight = (composeCard.offsetHeight - recipientHeader.offsetHeight) + 'px';
+  }
+  matchRecipientHeight();
+  window.addEventListener('resize', matchRecipientHeight);
+
   function submitTest() {
     const subject = getSubject();
     if (!subject) {
