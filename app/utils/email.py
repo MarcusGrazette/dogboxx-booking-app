@@ -105,14 +105,9 @@ def send_newsletter_batch(subject: str, html_template: str, recipients: list) ->
           </tr>
           <tr>
             <td style="background-color:#ffffff;border:1px solid #e2dfde;border-top:none;border-radius:0 0 6px 6px;padding:36px 32px 28px;">
-              <p style="margin:0 0 20px;font-size:1rem;color:#1B1B1B;line-height:1.5;">Hi {{firstname}},</p>
               <div style="font-size:1rem;color:#3d3d3d;line-height:1.6;">"""
 
     SHELL_BOTTOM = """</div>
-              <p style="margin:24px 0 0;font-size:1rem;color:#1B1B1B;line-height:1.5;">
-                Kind regards,<br>
-                <strong>Lydia &amp; Team DogBoxx</strong>
-              </p>
               <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-top:24px;">
                 <tr>
                   <td style="border-top:1px solid #e2dfde;padding-top:16px;font-size:0.8rem;color:#888888;line-height:1.6;text-align:center;">
