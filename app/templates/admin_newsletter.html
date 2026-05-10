@@ -116,9 +116,9 @@
         {% if clients %}
         <ul class="list-group list-group-flush">
           {% for c in clients %}
-          <li class="list-group-item px-3 py-2">
-            <div class="fw-semibold small">{{ c.firstname }} {{ c.lastname }}</div>
-            <div class="text-muted" style="font-size:0.75em;">{{ c.email }}</div>
+          <li class="list-group-item px-3 py-1 d-flex flex-wrap align-items-baseline gap-2">
+            <span class="fw-semibold small">{{ c.firstname }} {{ c.lastname }}</span>
+            <span class="text-muted" style="font-size:0.75em;">{{ c.email }}</span>
           </li>
           {% endfor %}
         </ul>
