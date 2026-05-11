@@ -120,22 +120,52 @@
                             <div class="text-muted" style="font-size:0.72rem;">{{ current_user.email }}</div>
                         </div>
                     </li>
+                    {% set _is_dual = current_user.role == 'walker' and current_user.client is not none %}
+                    {% set _in_client_view = _is_dual and session.get('active_view') == 'client' %}
+                    {% set _in_walker_view = current_user.role == 'walker' and not _in_client_view %}
+                    {% set _show_views = current_user.is_admin
+                        or (_in_walker_view and current_user.client is not none)
+                        or _in_client_view %}
+
+                    {# ── Views (other than current) ── #}
+                    {% if _show_views %}
                     {% if current_user.is_admin %}
                     <li>
                         <a class="dropdown-item py-2" href="{{ url_for('admin.index') }}">
-                            <i class="bi bi-shield-check me-2 text-muted"></i>Admin
+                            <i class="bi bi-shield-check me-2 text-muted"></i>Admin view
                         </a>
                     </li>
+                    {% endif %}
+                    {% if _in_walker_view and current_user.client is not none %}
+                    <li>
+                        <form method="POST" action="{{ url_for('client.switch_view') }}" class="m-0">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="view" value="client">
+                            <button type="submit" class="dropdown-item py-2">
+                                <i class="bi bi-house me-2 text-muted"></i>Client view
+                            </button>
+                        </form>
+                    </li>
+                    {% endif %}
+                    {% if _in_client_view %}
+                    <li>
+                        <form method="POST" action="{{ url_for('client.switch_view') }}" class="m-0">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="view" value="walker">
+                            <button type="submit" class="dropdown-item py-2">
+                                <i class="bi bi-person-walking me-2 text-muted"></i>Walker view
+                            </button>
+                        </form>
+                    </li>
+                    {% endif %}
                     <li><hr class="dropdown-divider my-1"></li>
                     {% endif %}
 
-                    {% set _is_dual = current_user.role == 'walker' and current_user.client is not none %}
-                    {% set _in_client_view = _is_dual and session.get('active_view') == 'client' %}
-
-                    {% if current_user.role == 'walker' and not _in_client_view %}
+                    {# ── View-specific functions ── #}
+                    {% if _in_walker_view %}
                     <li>
                         <a class="dropdown-item py-2" href="{{ url_for('walker.profile') }}">
-                            <i class="bi bi-person-circle me-2 text-muted"></i>Profile
+                            <i class="bi bi-person-circle me-2 text-muted"></i>My Profile
                         </a>
                     </li>
                     <li>
@@ -153,23 +183,7 @@
                             <i class="bi bi-calendar3 me-2 text-muted"></i>My Month
                         </a>
                     </li>
-                    {% if _is_dual %}
-                    <li><hr class="dropdown-divider my-1"></li>
-                    <li>
-                        <form method="POST" action="{{ url_for('client.switch_view') }}" class="m-0">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <input type="hidden" name="view" value="client">
-                            <button type="submit" class="dropdown-item py-2">
-                                <i class="bi bi-arrow-left-right me-2 text-muted"></i>Switch to Client View
-                            </button>
-                        </form>
-                    </li>
                     {% endif %}
-                    <li>
-                        <hr class="dropdown-divider my-1">
-                    </li>
-                    {% endif %}
-
                     {% if current_user.role == 'client' or _in_client_view %}
                     <li>
                         <a class="dropdown-item py-2" href="{{ url_for('client.profile') }}">
@@ -181,26 +195,14 @@
                             <i class="bi bi-receipt me-2 text-muted"></i>Monthly Summary
                         </a>
                     </li>
-                    {% if _is_dual %}
+                    {% endif %}
+
+                    {# ── Bottom: account actions ── #}
                     <li><hr class="dropdown-divider my-1"></li>
-                    <li>
-                        <form method="POST" action="{{ url_for('client.switch_view') }}" class="m-0">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <input type="hidden" name="view" value="walker">
-                            <button type="submit" class="dropdown-item py-2">
-                                <i class="bi bi-arrow-left-right me-2 text-muted"></i>Switch to Walker View
-                            </button>
-                        </form>
-                    </li>
-                    {% endif %}
-                    {% endif %}
                     <li>
                         <a class="dropdown-item py-2" href="{{ url_for('auth.change_password') }}">
                             <i class="bi bi-key me-2 text-muted"></i>Change Password
                         </a>
-                    </li>
-                    <li>
-                        <hr class="dropdown-divider my-1">
                     </li>
                     <li>
                         <a class="dropdown-item py-2 text-danger" href="{{ url_for('auth.logout') }}">

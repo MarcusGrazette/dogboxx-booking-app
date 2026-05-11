@@ -118,24 +118,7 @@
                                 <div class="text-muted" style="font-size:0.72rem;">{{ current_user.email }}</div>
                             </div>
                         </li>
-                        <li>
-                            <a class="dropdown-item py-2" href="{{ url_for('auth.change_password') }}">
-                                <i class="bi bi-key me-2 text-muted"></i>Change Password
-                            </a>
-                        </li>
-                        {% if current_user.walker or current_user.client %}
-                        <li><hr class="dropdown-divider my-1"></li>
-                        {% if current_user.walker %}
-                        <li>
-                            <form method="POST" action="{{ url_for('client.switch_view') }}" class="m-0">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="view" value="walker">
-                                <button type="submit" class="dropdown-item py-2">
-                                    <i class="bi bi-list-check me-2 text-muted"></i>Walker view
-                                </button>
-                            </form>
-                        </li>
-                        {% endif %}
+                        {# ── Views (other than admin — current) ── #}
                         {% if current_user.client %}
                         <li>
                             <form method="POST" action="{{ url_for('client.switch_view') }}" class="m-0">
@@ -147,7 +130,33 @@
                             </form>
                         </li>
                         {% endif %}
+                        {% if current_user.walker %}
+                        <li>
+                            {% if current_user.client %}
+                            <form method="POST" action="{{ url_for('client.switch_view') }}" class="m-0">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="view" value="walker">
+                                <button type="submit" class="dropdown-item py-2">
+                                    <i class="bi bi-person-walking me-2 text-muted"></i>Walker view
+                                </button>
+                            </form>
+                            {% else %}
+                            <a class="dropdown-item py-2" href="{{ url_for('walker.pickups') }}">
+                                <i class="bi bi-person-walking me-2 text-muted"></i>Walker view
+                            </a>
+                            {% endif %}
+                        </li>
                         {% endif %}
+                        {% if current_user.walker or current_user.client %}
+                        <li><hr class="dropdown-divider my-1"></li>
+                        {% endif %}
+
+                        {# ── Bottom: account actions ── #}
+                        <li>
+                            <a class="dropdown-item py-2" href="{{ url_for('auth.change_password') }}">
+                                <i class="bi bi-key me-2 text-muted"></i>Change Password
+                            </a>
+                        </li>
                         <li><hr class="dropdown-divider my-1"></li>
                         <li>
                             <a class="dropdown-item py-2 text-danger" href="{{ url_for('auth.logout') }}">
