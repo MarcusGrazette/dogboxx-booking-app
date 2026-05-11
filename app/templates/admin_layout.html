@@ -123,6 +123,31 @@
                                 <i class="bi bi-key me-2 text-muted"></i>Change Password
                             </a>
                         </li>
+                        {% if current_user.walker or current_user.client %}
+                        <li><hr class="dropdown-divider my-1"></li>
+                        {% if current_user.walker %}
+                        <li>
+                            <form method="POST" action="{{ url_for('client.switch_view') }}" class="m-0">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="view" value="walker">
+                                <button type="submit" class="dropdown-item py-2">
+                                    <i class="bi bi-list-check me-2 text-muted"></i>Walker view
+                                </button>
+                            </form>
+                        </li>
+                        {% endif %}
+                        {% if current_user.client %}
+                        <li>
+                            <form method="POST" action="{{ url_for('client.switch_view') }}" class="m-0">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="view" value="client">
+                                <button type="submit" class="dropdown-item py-2">
+                                    <i class="bi bi-house me-2 text-muted"></i>Client view
+                                </button>
+                            </form>
+                        </li>
+                        {% endif %}
+                        {% endif %}
                         <li><hr class="dropdown-divider my-1"></li>
                         <li>
                             <a class="dropdown-item py-2 text-danger" href="{{ url_for('auth.logout') }}">
@@ -236,17 +261,6 @@
                         </a>
                     </li>
 
-                    {% if current_user.walker %}
-                    <!-- My Walker View -->
-                    <li class="nav-header">My Walker View</li>
-                    <li class="nav-item">
-                        <a href="{{ url_for('walker.pickups') }}"
-                           class="nav-link {% if request.endpoint == 'walker.pickups' %}active{% endif %}">
-                            <i class="bi bi-list-check me-2"></i>
-                            <span>My Pickup List</span>
-                        </a>
-                    </li>
-                    {% endif %}
 
                 </ul>
             </nav>

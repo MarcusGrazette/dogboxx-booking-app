@@ -2378,80 +2378,99 @@ def book_for_dog():
         if booking_date <= date_type.today():
             return jsonify(success=False, message="Date must be in the future"), 400
 
-        if slot not in ('Morning', 'Afternoon'):
+        if slot not in ('Morning', 'Afternoon', 'Both'):
             return jsonify(success=False, message="Invalid slot"), 400
 
         dog = db.session.get(Dog, dog_id)
         if not dog:
             return jsonify(success=False, message="Dog not found"), 404
 
-        # Duplicate check
+        slots_to_book = ['Morning', 'Afternoon'] if slot == 'Both' else [slot]
+
+        # Duplicate check for all slots before creating any
         active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
-        existing = Booking.query.filter(
-            Booking.dog_id == dog_id,
-            Booking.date == booking_date,
-            Booking.slot == slot,
-            Booking.status.in_(active_statuses)
-        ).first()
-        if existing:
-            return jsonify(success=False, message="This dog already has a booking for that slot on that date"), 400
+        for s in slots_to_book:
+            existing = Booking.query.filter(
+                Booking.dog_id == dog_id,
+                Booking.date == booking_date,
+                Booking.slot == s,
+                Booking.status.in_(active_statuses)
+            ).first()
+            if existing:
+                label = f"the {s.lower()} slot" if slot == 'Both' else "that slot"
+                return jsonify(success=False, message=f"This dog already has a booking for {label} on that date"), 400
 
         default_service = ServiceType.query.filter_by(slug=ServiceType.WALK, active=True).first()
         if not default_service:
             return jsonify(success=False, message="No service type available"), 400
 
-        acquire_booking_lock(default_service.slug, booking_date, slot)
-        available, can_waitlist, capacity_msg = check_availability(
-            default_service, booking_date, slot, admin_override=True
-        )
-        if not available and not can_waitlist:
-            return jsonify(success=False, message=capacity_msg), 400
+        bookings_created = []
+        for s in slots_to_book:
+            acquire_booking_lock(default_service.slug, booking_date, s)
+            available, can_waitlist, capacity_msg = check_availability(
+                default_service, booking_date, s, admin_override=True
+            )
+            if not available and not can_waitlist:
+                return jsonify(success=False, message=capacity_msg), 400
 
-        booking = Booking(
-            user_id=user_id,
-            dog_id=dog_id,
-            service_type_id=default_service.id,
-            date=booking_date,
-            slot=slot,
-            status='waitlisted',
-        )
-        db.session.add(booking)
+            booking = Booking(
+                user_id=user_id,
+                dog_id=dog_id,
+                service_type_id=default_service.id,
+                date=booking_date,
+                slot=s,
+                status='waitlisted',
+            )
+            db.session.add(booking)
 
-        if available:
-            walker = auto_assign_walker(booking_date, slot)
-            if walker:
-                booking.walker_id = walker.id
-                booking.status = 'confirmed'
-                booking.confirmed_at = datetime.now(timezone.utc)
-                booking.pickup_order = get_walker_slot_count(walker.id, booking_date, slot)
-            else:
-                booking.status = 'requested'
+            if available:
+                walker = auto_assign_walker(booking_date, s)
+                if walker:
+                    booking.walker_id = walker.id
+                    booking.status = 'confirmed'
+                    booking.confirmed_at = datetime.now(timezone.utc)
+                    booking.pickup_order = get_walker_slot_count(walker.id, booking_date, s)
+                else:
+                    booking.status = 'requested'
 
-        db.session.flush()  # populate booking.id before notifications
+            bookings_created.append(booking)
+
+        db.session.flush()  # populate booking.ids before notifications
 
         date_str_fmt = booking_date.strftime('%-d %b %Y')
-        if booking.status == 'confirmed':
-            create_notification(
-                recipient_id=user_id,
-                notification_type='booking_confirmed',
-                title=f"{dog.name}'s walk on {date_str_fmt} has been confirmed",
-                body=booking.slot,
-                link=f'/bookings/{booking.id}',
-                sender_id=current_user.id,
-            )
-            create_notification(
-                recipient_id=booking.walker.user_id,
-                notification_type='walker_assigned',
-                title=f'You have been assigned a walk on {date_str_fmt}',
-                body=f'{dog.name} — {booking.slot}',
-                link=f'/walker/pickups?date={booking_date.isoformat()}',
-                sender_id=current_user.id,
-            )
+        for b in bookings_created:
+            if b.status == 'confirmed':
+                create_notification(
+                    recipient_id=user_id,
+                    notification_type='booking_confirmed',
+                    title=f"{dog.name}'s walk on {date_str_fmt} has been confirmed",
+                    body=b.slot,
+                    link=f'/bookings/{b.id}',
+                    sender_id=current_user.id,
+                )
+                create_notification(
+                    recipient_id=b.walker.user_id,
+                    notification_type='walker_assigned',
+                    title=f'You have been assigned a walk on {date_str_fmt}',
+                    body=f'{dog.name} — {b.slot}',
+                    link=f'/walker/pickups?date={booking_date.isoformat()}',
+                    sender_id=current_user.id,
+                )
 
         db.session.commit()
 
-        return jsonify(success=True, status=booking.status,
-                       message=f"Booking {booking.status} for {dog.name} on {booking_date.strftime('%-d %b %Y')}")
+        if len(bookings_created) == 1:
+            b = bookings_created[0]
+            return jsonify(success=True, status=b.status,
+                           message=f"Booking {b.status} for {dog.name} on {date_str_fmt}")
+        else:
+            statuses = [b.status for b in bookings_created]
+            if len(set(statuses)) == 1:
+                msg = f"Both walks {statuses[0]} for {dog.name} on {date_str_fmt}"
+            else:
+                parts = [f"{b.slot}: {b.status}" for b in bookings_created]
+                msg = f"Walks booked for {dog.name} on {date_str_fmt} — {', '.join(parts)}"
+            return jsonify(success=True, status=statuses[0], message=msg)
 
     except Exception as e:
         db.session.rollback()
@@ -2606,6 +2625,178 @@ def recurring_for_dog():
         db.session.rollback()
         logging.error(f"Error in admin recurring_for_dog: {e}")
         return jsonify(success=False, message="Server error"), 500
+
+
+@admin_bp.route("/dogs/<int:dog_id>/upcoming-bookings")
+@login_required
+@admin_required
+def dog_upcoming_bookings(dog_id):
+    """AJAX: paginated upcoming (and future) bookings for a dog."""
+    from datetime import date as date_type
+    dog = db.session.get(Dog, dog_id)
+    if not dog:
+        return jsonify(success=False, message="Dog not found"), 404
+
+    from_str = request.args.get('from', '')
+    try:
+        from_date = date_type.fromisoformat(from_str) if from_str else date_type.today()
+    except ValueError:
+        from_date = date_type.today()
+
+    page = max(1, int(request.args.get('page', 1) or 1))
+    per_page = 10
+
+    query = (
+        Booking.query
+        .filter(
+            Booking.dog_id == dog_id,
+            Booking.date >= from_date,
+            Booking.status.notin_(['cancelled', 'rejected', 'completed']),
+        )
+        .order_by(Booking.date, Booking.slot)
+    )
+
+    total = query.count()
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = min(page, total_pages)
+    bookings = query.offset((page - 1) * per_page).limit(per_page).all()
+
+    rows = []
+    for b in bookings:
+        walker_name = ''
+        if b.walker and b.walker.user:
+            walker_name = b.walker.user.firstname
+        rows.append({
+            'date': b.date.strftime('%-d %b %Y'),
+            'slot': b.slot,
+            'status': b.status,
+            'walker': walker_name,
+            'service': b.service_type.name if b.service_type else '',
+        })
+
+    return jsonify(
+        success=True,
+        bookings=rows,
+        page=page,
+        total_pages=total_pages,
+        total=total,
+    )
+
+
+@admin_bp.route("/dogs/<int:dog_id>/cancel-preview")
+@login_required
+@admin_required
+def dog_cancel_preview(dog_id):
+    """AJAX: preview bookings that would be cancelled in a date range (no writes)."""
+    from datetime import date as date_type
+    dog = db.session.get(Dog, dog_id)
+    if not dog:
+        return jsonify(success=False, message="Dog not found"), 404
+
+    try:
+        start = date_type.fromisoformat(request.args.get('start', ''))
+        end   = date_type.fromisoformat(request.args.get('end', ''))
+    except (ValueError, TypeError):
+        return jsonify(success=False, message="Invalid dates"), 400
+
+    if end < start:
+        return jsonify(success=False, message="End date must be on or after start date"), 400
+    if (end - start).days > 365:
+        return jsonify(success=False, message="Range cannot exceed one year"), 400
+
+    bookings = (
+        Booking.query
+        .filter(
+            Booking.dog_id == dog_id,
+            Booking.date >= start,
+            Booking.date <= end,
+            Booking.status.notin_(['cancelled', 'rejected', 'completed']),
+        )
+        .order_by(Booking.date, Booking.slot)
+        .all()
+    )
+
+    return jsonify(
+        success=True,
+        count=len(bookings),
+        bookings=[{
+            'date': b.date.strftime('%-d %b %Y'),
+            'slot': b.slot,
+            'status': b.status,
+        } for b in bookings],
+    )
+
+
+@admin_bp.route("/dogs/<int:dog_id>/bulk-cancel", methods=["POST"])
+@login_required
+@admin_required
+def dog_bulk_cancel(dog_id):
+    """Admin: cancel all active bookings for a dog within a date range."""
+    from datetime import date as date_type
+    dog = db.session.get(Dog, dog_id)
+    if not dog:
+        return jsonify(success=False, message="Dog not found"), 404
+
+    data = request.get_json(silent=True) or {}
+    try:
+        start = date_type.fromisoformat(data.get('start', ''))
+        end   = date_type.fromisoformat(data.get('end', ''))
+    except (ValueError, TypeError):
+        return jsonify(success=False, message="Invalid dates"), 400
+
+    if end < start:
+        return jsonify(success=False, message="End date must be on or after start date"), 400
+    if (end - start).days > 365:
+        return jsonify(success=False, message="Range cannot exceed one year"), 400
+
+    bookings = (
+        Booking.query
+        .filter(
+            Booking.dog_id == dog_id,
+            Booking.date >= start,
+            Booking.date <= end,
+            Booking.status.notin_(['cancelled', 'rejected', 'completed']),
+        )
+        .order_by(Booking.date)
+        .all()
+    )
+
+    if not bookings:
+        return jsonify(success=True, cancelled_count=0)
+
+    now = datetime.now(timezone.utc)
+    n = len(bookings)
+    start_fmt = start.strftime('%-d %b')
+    end_fmt   = end.strftime('%-d %b')
+
+    for b in bookings:
+        b.status       = 'cancelled'
+        b.cancelled_at = now
+        b.cancelled_by = 'admin'
+        b.walker_id    = None
+
+    # Notify dog owners (excluding admins)
+    owners = DogOwner.query.filter_by(dog_id=dog_id).all()
+    for o in owners:
+        owner_user = db.session.get(User, o.user_id)
+        if owner_user and not owner_user.is_admin:
+            create_notification(
+                recipient_id      = owner_user.id,
+                notification_type = 'booking_cancelled',
+                title             = f"{dog.name}'s walks cancelled {start_fmt}–{end_fmt}",
+                body              = f"{n} booking{'s' if n != 1 else ''} cancelled by admin",
+                link              = '/',
+                sender_id         = current_user.id,
+            )
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Bulk cancel error for dog {dog_id}: {e}")
+        return jsonify(success=False, message="Failed to cancel bookings"), 500
+
+    return jsonify(success=True, cancelled_count=n)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
