@@ -120,6 +120,15 @@
                             <div class="text-muted" style="font-size:0.72rem;">{{ current_user.email }}</div>
                         </div>
                     </li>
+                    {% if current_user.is_admin %}
+                    <li>
+                        <a class="dropdown-item py-2" href="{{ url_for('admin.index') }}">
+                            <i class="bi bi-shield-check me-2 text-muted"></i>Admin
+                        </a>
+                    </li>
+                    <li><hr class="dropdown-divider my-1"></li>
+                    {% endif %}
+
                     {% set _is_dual = current_user.role == 'walker' and current_user.client is not none %}
                     {% set _in_client_view = _is_dual and session.get('active_view') == 'client' %}
 
