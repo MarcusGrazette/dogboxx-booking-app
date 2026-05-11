@@ -193,7 +193,8 @@ def _resolve_dog(user_dogs, requested_id):
 @login_required
 def index():
     """Render the home page for clients."""
-    if current_user.is_admin:
+    # Admins land on /admin unless they've explicitly switched to client view
+    if current_user.is_admin and session.get('active_view') != 'client':
         return redirect(url_for('admin.index'))
     if current_user.role == 'walker':
         # Dual-role walker in client view: let through. Otherwise send to walker home.
