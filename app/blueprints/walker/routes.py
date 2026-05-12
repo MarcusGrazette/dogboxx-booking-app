@@ -37,6 +37,66 @@ def _double_booked_dog_ids(selected_date):
     return {row.dog_id for row in rows}
 
 
+def _build_daily_overview(selected_date):
+    """Return the day's bookings grouped by slot → walker for the overview view.
+
+    Shape:
+        {
+          'Morning':   {'walker_groups': [...], 'dog_count': N},
+          'Afternoon': {'walker_groups': [...], 'dog_count': N},
+        }
+
+    Each walker group is {'walker': Walker, 'is_drop_in': bool, 'bookings': [Booking, ...]}.
+    Drop-in and group-walk assignments for the same walker appear as separate
+    groups so the DROP-IN badge is unambiguous. Walkers with no bookings in a
+    slot are omitted — only those actually working show up.
+    """
+    bookings = (
+        Booking.query
+        .options(
+            joinedload(Booking.dog),
+            joinedload(Booking.walker).joinedload(Walker.user),
+            joinedload(Booking.service_type),
+        )
+        .filter(
+            Booking.date == selected_date,
+            Booking.status.in_(Booking.WALKER_STATUSES),
+            Booking.walker_id.isnot(None),
+        )
+        .order_by(Booking.slot, Booking.pickup_order)
+        .all()
+    )
+
+    def _is_drop_in(b):
+        return b.service_type and b.service_type.slug == ServiceType.DROP_IN
+
+    overview = {}
+    for slot in ('Morning', 'Afternoon'):
+        slot_bookings = [b for b in bookings if b.slot == slot]
+
+        # Group by (walker_id, is_drop_in) so a walker doing both shows two cards
+        groups = {}
+        for b in slot_bookings:
+            key = (b.walker_id, _is_drop_in(b))
+            groups.setdefault(key, {
+                'walker': b.walker,
+                'is_drop_in': _is_drop_in(b),
+                'bookings': [],
+            })['bookings'].append(b)
+
+        # Sort: group walks first, drop-ins after; within each, walker first name
+        walker_groups = sorted(
+            groups.values(),
+            key=lambda g: (g['is_drop_in'], (g['walker'].user.firstname or '').lower()),
+        )
+
+        overview[slot] = {
+            'walker_groups': walker_groups,
+            'dog_count': sum(len(g['bookings']) for g in walker_groups),
+        }
+    return overview
+
+
 @walker_bp.route("/")
 @login_required
 @walker_required
@@ -291,7 +351,12 @@ def delete_adhoc(id):
 @login_required
 @walker_required
 def pickups(date_str=None):
-    """Show today's pickup list (or a specific date)."""
+    """Show pickup list (default) or daily overview for a given date.
+
+    Query param view=overview switches to the team-wide overview; default
+    is the walker's own pickup list. Date can be passed as a path segment
+    /pickups/<date_str> or via ?date=YYYY-MM-DD.
+    """
     walker = Walker.query.filter_by(user_id=current_user.id).first()
     if not walker:
         flash("Walker profile not found. Please contact support.", "danger")
@@ -299,16 +364,38 @@ def pickups(date_str=None):
 
     today = datetime.now(timezone.utc).date()
 
-    if date_str:
+    # Date resolution: path param wins, then ?date=, then today
+    raw_date = date_str or request.args.get('date')
+    if raw_date:
         try:
-            selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            selected_date = datetime.strptime(raw_date, '%Y-%m-%d').date()
         except ValueError:
             flash("Invalid date format.", "danger")
             return redirect(url_for('walker.pickups'))
     else:
         selected_date = today
 
-    # Query confirmed bookings for this walker on this date
+    view = request.args.get('view', 'pickups')
+    if view not in ('pickups', 'overview'):
+        view = 'pickups'
+
+    daily_message = DailyMessage.query.filter_by(date=selected_date).first()
+
+    # Shared template context — view-specific data added below
+    ctx = dict(
+        walker=walker,
+        selected_date=selected_date,
+        today=today,
+        view=view,
+        daily_message=daily_message,
+    )
+
+    if view == 'overview':
+        ctx['overview'] = _build_daily_overview(selected_date)
+        ctx['has_pickups'] = any(s['dog_count'] for s in ctx['overview'].values())
+        return render_template("walker_pickups.html", **ctx)
+
+    # Default: walker's own pickup list
     bookings = (
         Booking.query
         .options(
@@ -333,26 +420,14 @@ def pickups(date_str=None):
         return b.service_type and b.service_type.slug == ServiceType.DROP_IN
 
     # Order: AM drop-ins → AM walks → PM walks → PM drop-ins
-    morning_drop_ins   = [b for b in bookings if b.slot == 'Morning'   and     _is_drop_in(b)]
-    morning_pickups    = [b for b in bookings if b.slot == 'Morning'   and not _is_drop_in(b)]
-    afternoon_pickups  = [b for b in bookings if b.slot == 'Afternoon' and not _is_drop_in(b)]
-    afternoon_drop_ins = [b for b in bookings if b.slot == 'Afternoon' and     _is_drop_in(b)]
+    ctx['morning_drop_ins']   = [b for b in bookings if b.slot == 'Morning'   and     _is_drop_in(b)]
+    ctx['morning_pickups']    = [b for b in bookings if b.slot == 'Morning'   and not _is_drop_in(b)]
+    ctx['afternoon_pickups']  = [b for b in bookings if b.slot == 'Afternoon' and not _is_drop_in(b)]
+    ctx['afternoon_drop_ins'] = [b for b in bookings if b.slot == 'Afternoon' and     _is_drop_in(b)]
+    ctx['has_pickups'] = len(bookings) > 0
+    ctx['double_booked_dog_ids'] = _double_booked_dog_ids(selected_date)
 
-    double_booked_dog_ids = _double_booked_dog_ids(selected_date)
-
-    daily_message = DailyMessage.query.filter_by(date=selected_date).first()
-
-    return render_template("walker_pickups.html",
-                           walker=walker,
-                           selected_date=selected_date,
-                           today=today,
-                           morning_drop_ins=morning_drop_ins,
-                           morning_pickups=morning_pickups,
-                           afternoon_pickups=afternoon_pickups,
-                           afternoon_drop_ins=afternoon_drop_ins,
-                           has_pickups=len(bookings) > 0,
-                           daily_message=daily_message,
-                           double_booked_dog_ids=double_booked_dog_ids)
+    return render_template("walker_pickups.html", **ctx)
 
 
 @walker_bp.route("/monthly-summary")
@@ -540,6 +615,30 @@ def api_pickup_list(date_str):
                            double_booked_dog_ids=double_booked_dog_ids)
 
 
+@walker_bp.route("/api/daily-overview/<date_str>")
+@login_required
+@walker_required
+def api_daily_overview(date_str):
+    """Return the daily-overview HTML partial for a given date."""
+    walker = Walker.query.filter_by(user_id=current_user.id).first()
+    if not walker:
+        return "Walker not found", 404
+
+    try:
+        selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return "Invalid date", 400
+
+    overview = _build_daily_overview(selected_date)
+    has_pickups = any(s['dog_count'] for s in overview.values())
+    daily_message = DailyMessage.query.filter_by(date=selected_date).first()
+
+    return render_template("partials/daily_overview.html",
+                           walker=walker,
+                           selected_date=selected_date,
+                           overview=overview,
+                           has_pickups=has_pickups,
+                           daily_message=daily_message)
 
 
 
