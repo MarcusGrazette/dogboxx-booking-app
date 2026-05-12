@@ -454,10 +454,19 @@ class ForgotPasswordForm(FlaskForm):
 
 
 class ResetPasswordForm(FlaskForm):
-    """Form for setting a new password via reset token."""
+    """Form for setting a new password via reset token.
+
+    Validators are kept in sync with PasswordChangeForm.new_password so the
+    same strength policy is enforced regardless of which flow the user takes
+    to set their password.
+    """
     password = PasswordField(
         'New password',
-        validators=[DataRequired(), Length(min=8, max=128)],
+        validators=[
+            DataRequired(message="New password is required"),
+            Length(min=8, message="Password must be at least 8 characters long"),
+            wtforms_password_validator,
+        ],
         render_kw={"placeholder": "New password", "autocomplete": "new-password"}
     )
     confirm_password = PasswordField(
