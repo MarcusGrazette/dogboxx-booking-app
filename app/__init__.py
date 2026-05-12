@@ -1,10 +1,11 @@
-from flask import Flask, request, redirect, render_template
+from flask import Flask, request, redirect, render_template, g
 from flask_session import Session
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from flask_migrate import Migrate
 from dotenv import load_dotenv
 import os
+import secrets
 import logging
 from flask_wtf import CSRFProtect
 from flask_limiter import Limiter
@@ -132,6 +133,13 @@ def create_app(config_name=None):
         from app.models import User
         return db.session.get(User, int(user_id))
 
+    @app.before_request
+    def set_csp_nonce():
+        """Generate a fresh CSP nonce per request. Inline <script> tags carry
+        nonce="{{ csp_nonce }}"; add_security_headers appends 'nonce-{value}'
+        to script-src so only nonced scripts run."""
+        g.csp_nonce = secrets.token_urlsafe(16)
+
     # HTTPS redirection middleware
     @app.before_request
     def enforce_https():
@@ -214,10 +222,13 @@ def create_app(config_name=None):
         
         # Add Content Security Policy header
         if app.config.get('CSP'):
+            nonce = getattr(g, 'csp_nonce', None)
             csp_parts = []
             for directive, sources in app.config['CSP'].items():
+                if directive == 'script-src' and nonce:
+                    sources = f"{sources} 'nonce-{nonce}'"
                 csp_parts.append(f"{directive} {sources}")
-            
+
             csp_header = '; '.join(csp_parts)
             
             # Determine whether to use report-only or enforcement mode
@@ -281,6 +292,10 @@ def create_app(config_name=None):
     def inject_csrf_token():
         from flask_wtf.csrf import generate_csrf
         return dict(csrf_token=generate_csrf)
+
+    @app.context_processor
+    def inject_csp_nonce():
+        return dict(csp_nonce=getattr(g, 'csp_nonce', ''))
 
     @app.context_processor
     def inject_home_url():

@@ -159,9 +159,12 @@
                         </li>
                         <li><hr class="dropdown-divider my-1"></li>
                         <li>
-                            <a class="dropdown-item py-2 text-danger" href="{{ url_for('auth.logout') }}">
-                                <i class="bi bi-box-arrow-left me-2"></i>Log Out
-                            </a>
+                            <form method="POST" action="{{ url_for('auth.logout') }}" class="m-0">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="dropdown-item py-2 text-danger">
+                                    <i class="bi bi-box-arrow-left me-2"></i>Log Out
+                                </button>
+                            </form>
                         </li>
                     </ul>
                 </li>
@@ -307,7 +310,7 @@
 <!-- AdminLTE 4 JS -->
 <script src="https://cdn.jsdelivr.net/npm/admin-lte@4.0.0-rc6/dist/js/adminlte.min.js"></script>
 
-<script>
+<script nonce="{{ csp_nonce }}">
 // Register Service Worker for PWA (offline caching & installability)
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
@@ -317,10 +320,18 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-
+// Bootstrap modal a11y: blur any descendant focus before Bootstrap applies
+// aria-hidden during close, otherwise the browser warns about hiding a
+// focused element from assistive tech. hide.bs.modal bubbles to document.
+document.addEventListener('hide.bs.modal', function (event) {
+  var modal = event.target;
+  if (modal && modal.contains(document.activeElement)) {
+    document.activeElement.blur();
+  }
+});
 </script>
 
-<script>
+<script nonce="{{ csp_nonce }}">
 // Refresh sidebar pending-booking badge counts after board actions.
 // Called by the group-walks and drop-in board templates.
 function refreshPendingBadges() {

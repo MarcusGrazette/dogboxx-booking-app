@@ -85,7 +85,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 (function () {
     const CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
 

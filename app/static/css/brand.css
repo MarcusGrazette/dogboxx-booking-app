@@ -475,6 +475,121 @@ footer {
 .card-accent-green  { border-left: 4px solid #22c55e !important; }
 .card-accent-amber  { border-left: 4px solid #f59e0b !important; }
 
+/* ── Walker: tab switcher between My pickups and Daily overview ── */
+.walker-view-switcher {
+  display: flex;
+  background: #f1f1f0;
+  border-radius: 999px;
+  padding: 4px;
+  gap: 2px;
+}
+.walker-view-tab {
+  flex: 1;
+  text-align: center;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #555;
+  text-decoration: none;
+  border-radius: 999px;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.walker-view-tab:hover { color: #1B1B1B; }
+.walker-view-tab.active {
+  background: #1B1B1B;
+  color: #fff;
+}
+
+/* ── Walker: daily overview ──────────────────────────────────── */
+.overview-section {
+  /* No card wrapper — the slot header + walker cards stack directly */
+}
+
+.overview-slot-header {
+  display: flex;
+  align-items: center;
+  padding: 0.55rem 0.9rem;
+  background: #1B1B1B;
+  color: #fff;
+  border-radius: 8px;
+  margin-bottom: 0.6rem;
+  font-size: 0.95rem;
+}
+.overview-slot-count {
+  color: #E02FAC;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+.overview-walker-card {
+  margin-bottom: 0.5rem;
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  box-shadow: none;
+}
+.overview-walker-mine {
+  border-left: 3px solid #E02FAC;
+  background: #fef5fa;
+}
+
+.overview-you-pill {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #E02FAC;
+  background: rgba(224,47,172,0.1);
+  padding: 0.1em 0.5em;
+  border-radius: 999px;
+}
+.overview-dropin-pill {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #fff;
+  background: #f59e0b;
+  padding: 0.1em 0.5em;
+  border-radius: 999px;
+}
+
+.overview-dog-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.overview-dog-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #f5f5f4;
+  border: 1px solid #e5e5e5;
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem 0.15rem 0.15rem;
+  font-size: 0.82rem;
+  color: #1B1B1B;
+  max-width: 100%;
+}
+.overview-dog-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.overview-dog-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 8rem;
+}
+.overview-dog-key {
+  color: #f59e0b;
+  font-size: 0.95rem;
+  flex-shrink: 0;
+}
+
 /* ── Android Native UX Touch & Gesture Optimizations ──────── */
 body {
   /* Remove the grey/blue tap highlight box on iOS and Android Chrome */

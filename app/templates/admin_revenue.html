@@ -188,7 +188,7 @@
 
 {% block scripts %}
 {{ super() }}
-<script>
+<script nonce="{{ csp_nonce }}">
 (function () {
   const PINK = '#E02FAC';
   const TODAY_ISO  = '{{ today_iso }}';

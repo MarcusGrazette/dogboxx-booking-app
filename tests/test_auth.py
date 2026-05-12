@@ -220,8 +220,90 @@ class TestLoginLogout:
             db.session.commit()
 
         login(client, 'logout_test@test.com')
-        client.get('/auth/logout', follow_redirects=True)
+        client.post('/auth/logout', follow_redirects=True)
 
         # After logout, protected route should redirect
         resp = client.get('/profile')
         assert resp.status_code in (302, 301)
+
+    def test_logout_rejects_get(self, app, client):
+        """Regression: /auth/logout must reject GET so a cross-origin <img>
+        or link can't force-logout a logged-in user (CSRF)."""
+        with app.app_context():
+            user = make_user('logout_get@test.com', role='client')
+            make_client_profile(user.id)
+            db.session.commit()
+
+        login(client, 'logout_get@test.com')
+        resp = client.get('/auth/logout')
+        assert resp.status_code == 405  # Method Not Allowed
+
+        # Session is still active — protected route renders, doesn't redirect to login
+        resp = client.get('/profile', follow_redirects=False)
+        assert resp.status_code == 200
+
+    def test_login_rotates_session_id(self, app, client):
+        """Regression: SID must change at the login boundary to defeat
+        session-fixation. An attacker who planted SID=X pre-login must not
+        find an authenticated session at SID=X afterwards."""
+        with app.app_context():
+            user = make_user('fixation@test.com', role='client')
+            make_client_profile(user.id)
+            db.session.commit()
+
+        # Touch the app so an anonymous session SID is issued
+        client.get('/auth/login')
+        sid_before = client.get_cookie('session').value
+        assert sid_before  # baseline: anonymous SID exists
+
+        client.post('/auth/login', data={
+            'email': 'fixation@test.com', 'password': 'Testpass1!',
+        }, follow_redirects=True)
+        sid_after = client.get_cookie('session').value
+        assert sid_after
+        assert sid_after != sid_before, "SID must rotate on successful login"
+
+    def test_change_password_rotates_session_id(self, app, client):
+        """Regression: SID must change when the user changes their password,
+        invalidating any session cookies tied to the old credential."""
+        with app.app_context():
+            user = make_user('chgpw_rot@test.com', role='client')
+            make_client_profile(user.id)
+            db.session.commit()
+
+        login(client, 'chgpw_rot@test.com')
+        sid_before = client.get_cookie('session').value
+
+        client.post('/auth/change-password', data={
+            'current_password': 'Testpass1!',
+            'new_password': 'NewPass456!',
+            'confirm_password': 'NewPass456!',
+        }, follow_redirects=False)
+        sid_after = client.get_cookie('session').value
+        assert sid_after != sid_before, "SID must rotate on password change"
+
+        # User stays logged in across the rotation
+        resp = client.get('/profile', follow_redirects=False)
+        assert resp.status_code == 200
+
+    def test_reset_password_rotates_session_id(self, app, client):
+        """Regression: SID rotates when a password reset completes, so any
+        session cookie picked up during the anonymous reset flow is dead."""
+        from app.blueprints.auth.routes import _make_reset_token
+
+        with app.app_context():
+            user = make_user('reset_rot@test.com', role='client')
+            make_client_profile(user.id)
+            db.session.commit()
+            token = _make_reset_token(user)
+
+        # Anonymous visit creates a session
+        client.get(f'/auth/reset-password/{token}')
+        sid_before = client.get_cookie('session').value
+
+        client.post(f'/auth/reset-password/{token}', data={
+            'password': 'BrandNew789!',
+            'confirm_password': 'BrandNew789!',
+        }, follow_redirects=False)
+        sid_after = client.get_cookie('session').value
+        assert sid_after != sid_before, "SID must rotate on password reset"

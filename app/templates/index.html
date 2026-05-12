@@ -539,7 +539,7 @@
 
 
 <script src="{{ url_for('static', filename='js/reusable-calendar.js') }}"></script>
-<script>
+<script nonce="{{ csp_nonce }}">
     // ─── Greeting ────────────────────────────────────────────────
     (function () {
         const h = new Date().getHours();

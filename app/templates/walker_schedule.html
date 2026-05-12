@@ -155,7 +155,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 
 async function addAdhoc() {

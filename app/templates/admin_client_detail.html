@@ -453,7 +453,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 {% if add_dog_modal_open %}
 document.addEventListener('DOMContentLoaded', function () {
     new bootstrap.Modal(document.getElementById('addDogModal')).show();

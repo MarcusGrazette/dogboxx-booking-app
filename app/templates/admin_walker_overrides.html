@@ -165,7 +165,7 @@
 {% block scripts %}
 {{ super() }}
 {% if selected_walker %}
-<script>
+<script nonce="{{ csp_nonce }}">
 const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 const walkerId = {{ selected_walker.id }};
 

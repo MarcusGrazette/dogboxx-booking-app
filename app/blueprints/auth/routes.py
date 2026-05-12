@@ -5,7 +5,7 @@ This module defines routes for user authentication, including login, registratio
 and logout functionality.
 """
 
-from flask import request, redirect, render_template, flash, url_for
+from flask import request, redirect, render_template, flash, url_for, current_app, session
 from flask_login import login_required, current_user, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
@@ -53,6 +53,10 @@ def login():
             flash("Your account has been deactivated. Please contact support.", "error")
             return render_template("login.html", form=form)
 
+        # Rotate the session ID before associating the session with this user.
+        # Defeats session-fixation: any pre-planted SID cookie is now a dead row.
+        current_app.session_interface.regenerate(session)
+
         # Log user in
         login_user(user, remember=remember_me)
 
@@ -69,10 +73,11 @@ def register():
     abort(404)
 
 
-@auth_bp.route("/logout")
+@auth_bp.route("/logout", methods=["POST"])
 @login_required
 def logout():
-    """Log user out"""
+    """Log user out. POST-only so a GET <img>/link from another origin can't
+    force-logout a logged-in user (CSRF). Flask-WTF protects the POST."""
     logout_user()
     # Clear any stale flash messages left in the session before adding ours.
     # With SESSION_PERMANENT=True sessions persist for 14 days, so unconsumed
@@ -99,11 +104,16 @@ def change_password():
             # Update password
             current_user.hashed_password = generate_password_hash(form.new_password.data)
             current_user.must_change_password = False
-            
+
             db.session.commit()
-            
+
+            # Rotate the SID now that a privilege-relevant credential changed.
+            # The user stays logged in (session data, including _user_id, is
+            # preserved across the rotation); only the SID changes.
+            current_app.session_interface.regenerate(session)
+
             flash("Your password has been changed successfully.", "success")
-            
+
             # Redirect based on role
             return _redirect_by_role(current_user)
             
@@ -242,6 +252,10 @@ def reset_password(token):
             user.hashed_password = generate_password_hash(form.password.data)
             user.must_change_password = False
             db.session.commit()
+            # Rotate the anonymous SID on this privilege boundary — invalidates
+            # any session cookie picked up during the reset flow before the user
+            # heads to /auth/login to authenticate fresh.
+            current_app.session_interface.regenerate(session)
             flash("Password updated! You can now log in.", "success")
             logging.info(f"Password reset completed for user {user.id}")
             return redirect(url_for('auth.login'))

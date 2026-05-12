@@ -142,6 +142,37 @@ class TestResetPassword:
             assert check_password_hash(refreshed.hashed_password, 'BrandNew456!')
             assert not check_password_hash(refreshed.hashed_password, 'OldPass123!')
 
+    def test_weak_password_is_rejected(self, app, client):
+        """Regression for finding #4: ResetPasswordForm used to only enforce
+        Length(min=8), letting users reset to passwords like '12345678' that
+        the regular change-password flow would reject. Now both flows share
+        wtforms_password_validator (upper + lower + digit + 8 chars)."""
+        with app.app_context():
+            user = make_user(email='weakreset@test.com', password='OldPass123!')
+            user_id = user.id
+            token = _make_reset_token(user)
+
+        weak_passwords = [
+            ('short', 'must be at least 8'),                # too short
+            ('alllowercase1', 'at least one uppercase'),    # missing uppercase
+            ('ALLUPPERCASE1', 'at least one lowercase'),    # missing lowercase
+            ('NoDigitsHere', 'at least one number'),        # missing digit
+        ]
+        for pw, expected_fragment in weak_passwords:
+            resp = client.post(f'/auth/reset-password/{token}', data={
+                'password': pw, 'confirm_password': pw,
+            }, follow_redirects=False)
+            # Form re-rendered, not redirected to login
+            assert resp.status_code == 200, f"weak pw {pw!r} should re-render the form"
+            assert expected_fragment.encode() in resp.data.lower(), (
+                f"weak pw {pw!r} should show error mentioning {expected_fragment!r}"
+            )
+
+        # Password unchanged after every weak attempt
+        with app.app_context():
+            refreshed = db.session.get(User, user_id)
+            assert check_password_hash(refreshed.hashed_password, 'OldPass123!')
+
     def test_can_log_in_with_new_password_after_reset(self, app, client):
         with app.app_context():
             make_user(email='eve@test.com', password='OldPass123!')

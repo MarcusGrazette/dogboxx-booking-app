@@ -205,9 +205,12 @@
                         </a>
                     </li>
                     <li>
-                        <a class="dropdown-item py-2 text-danger" href="{{ url_for('auth.logout') }}">
-                            <i class="bi bi-box-arrow-left me-2"></i>Log Out
-                        </a>
+                        <form method="POST" action="{{ url_for('auth.logout') }}" class="m-0">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="dropdown-item py-2 text-danger">
+                                <i class="bi bi-box-arrow-left me-2"></i>Log Out
+                            </button>
+                        </form>
                     </li>
                 </ul>
             </div>
@@ -270,7 +273,7 @@
             </div>
         </div>
     </div>
-    <script>
+    <script nonce="{{ csp_nonce }}">
         (function () {
             var submitBtn = document.getElementById('bugReportSubmit');
             var textarea = document.getElementById('bugReportText');
@@ -323,7 +326,7 @@
 
     {% block scripts %}{% endblock %}
 
-    <script>
+    <script nonce="{{ csp_nonce }}">
         /**
          * showToast(message, type)
          * Programmatic toast for AJAX responses — uses the same #db-toast-container
@@ -404,7 +407,15 @@
             });
         }
 
-
+        // Bootstrap modal a11y: blur any descendant focus before Bootstrap applies
+        // aria-hidden during close, otherwise the browser warns about hiding a
+        // focused element from assistive tech. hide.bs.modal bubbles to document.
+        document.addEventListener('hide.bs.modal', function (event) {
+            var modal = event.target;
+            if (modal && modal.contains(document.activeElement)) {
+                document.activeElement.blur();
+            }
+        });
     </script>
 </body>
 
