@@ -317,7 +317,15 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-
+// Bootstrap modal a11y: blur any descendant focus before Bootstrap applies
+// aria-hidden during close, otherwise the browser warns about hiding a
+// focused element from assistive tech. hide.bs.modal bubbles to document.
+document.addEventListener('hide.bs.modal', function (event) {
+  var modal = event.target;
+  if (modal && modal.contains(document.activeElement)) {
+    document.activeElement.blur();
+  }
+});
 </script>
 
 <script nonce="{{ csp_nonce }}">
