@@ -220,8 +220,24 @@ class TestLoginLogout:
             db.session.commit()
 
         login(client, 'logout_test@test.com')
-        client.get('/auth/logout', follow_redirects=True)
+        client.post('/auth/logout', follow_redirects=True)
 
         # After logout, protected route should redirect
         resp = client.get('/profile')
         assert resp.status_code in (302, 301)
+
+    def test_logout_rejects_get(self, app, client):
+        """Regression: /auth/logout must reject GET so a cross-origin <img>
+        or link can't force-logout a logged-in user (CSRF)."""
+        with app.app_context():
+            user = make_user('logout_get@test.com', role='client')
+            make_client_profile(user.id)
+            db.session.commit()
+
+        login(client, 'logout_get@test.com')
+        resp = client.get('/auth/logout')
+        assert resp.status_code == 405  # Method Not Allowed
+
+        # Session is still active — protected route renders, doesn't redirect to login
+        resp = client.get('/profile', follow_redirects=False)
+        assert resp.status_code == 200

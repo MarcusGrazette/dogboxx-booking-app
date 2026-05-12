@@ -69,10 +69,11 @@ def register():
     abort(404)
 
 
-@auth_bp.route("/logout")
+@auth_bp.route("/logout", methods=["POST"])
 @login_required
 def logout():
-    """Log user out"""
+    """Log user out. POST-only so a GET <img>/link from another origin can't
+    force-logout a logged-in user (CSRF). Flask-WTF protects the POST."""
     logout_user()
     # Clear any stale flash messages left in the session before adding ours.
     # With SESSION_PERMANENT=True sessions persist for 14 days, so unconsumed
