@@ -5,7 +5,7 @@
 {% block page_subtitle %}Post a message to the walker team for a specific day{% endblock %}
 
 {% block head_extra %}
-<link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+<link href="https://unpkg.com/quill@1.3.7/dist/quill.snow.css" rel="stylesheet">
 <style>
   #quill-editor {
     height: 200px;
@@ -124,7 +124,7 @@
 
 </div>
 
-<script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+<script src="https://unpkg.com/quill@1.3.7/dist/quill.min.js"></script>
 <script nonce="{{ csp_nonce }}">
   const quill = new Quill('#quill-editor', {
     theme: 'snow',
