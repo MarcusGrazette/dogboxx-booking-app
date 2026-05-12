@@ -31,9 +31,14 @@ class Config:
     PERMANENT_SESSION_LIFETIME = timedelta(days=14)  # For remember me cookies
     
     # Content Security Policy
+    # script-src omits 'unsafe-inline' — a per-request nonce is appended in
+    # add_security_headers and inline <script> tags carry nonce="{{ csp_nonce }}".
+    # script-src-attr keeps 'unsafe-inline' transitionally so onclick/onerror/onsubmit
+    # handlers in templates keep working until they're migrated to event delegation.
     CSP = {
         'default-src': "'self'",
-        'script-src': "'self' https://cdn.jsdelivr.net https://unpkg.com 'unsafe-inline'",
+        'script-src': "'self' https://cdn.jsdelivr.net https://unpkg.com",
+        'script-src-attr': "'unsafe-inline'",
         'style-src': "'self' https://cdn.jsdelivr.net https://unpkg.com https://fonts.googleapis.com 'unsafe-inline'",
         'img-src': "'self' data:",
         'font-src': "'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com",

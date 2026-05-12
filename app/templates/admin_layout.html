@@ -307,7 +307,7 @@
 <!-- AdminLTE 4 JS -->
 <script src="https://cdn.jsdelivr.net/npm/admin-lte@4.0.0-rc6/dist/js/adminlte.min.js"></script>
 
-<script>
+<script nonce="{{ csp_nonce }}">
 // Register Service Worker for PWA (offline caching & installability)
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
@@ -320,7 +320,7 @@ if ('serviceWorker' in navigator) {
 
 </script>
 
-<script>
+<script nonce="{{ csp_nonce }}">
 // Refresh sidebar pending-booking badge counts after board actions.
 // Called by the group-walks and drop-in board templates.
 function refreshPendingBadges() {

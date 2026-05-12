@@ -57,7 +57,7 @@
         </div>
         
         <!-- Hidden config data -->
-        <script type="application/json" class="calendar-config">{{ merged_config | tojson }}</script>
+        <script nonce="{{ csp_nonce }}" type="application/json" class="calendar-config">{{ merged_config | tojson }}</script>
     </div>
     
     {% if footer_text %}

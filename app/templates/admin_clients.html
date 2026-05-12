@@ -148,7 +148,7 @@
 {% block scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/admin-toggle-status.js') }}"></script>
-<script>
+<script nonce="{{ csp_nonce }}">
 // ── Activate / deactivate confirmation modal ────────────────────────────────
 const toggleModal    = new bootstrap.Modal(document.getElementById('toggleModal'));
 const toggleTitle    = document.getElementById('toggleModalLabel');

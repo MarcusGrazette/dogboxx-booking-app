@@ -270,7 +270,7 @@
             </div>
         </div>
     </div>
-    <script>
+    <script nonce="{{ csp_nonce }}">
         (function () {
             var submitBtn = document.getElementById('bugReportSubmit');
             var textarea = document.getElementById('bugReportText');
@@ -323,7 +323,7 @@
 
     {% block scripts %}{% endblock %}
 
-    <script>
+    <script nonce="{{ csp_nonce }}">
         /**
          * showToast(message, type)
          * Programmatic toast for AJAX responses — uses the same #db-toast-container

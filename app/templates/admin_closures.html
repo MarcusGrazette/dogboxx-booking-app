@@ -135,7 +135,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 (function () {
     const addBtn        = document.getElementById('add-closure-btn');
     const dateInput     = document.getElementById('closure-date');

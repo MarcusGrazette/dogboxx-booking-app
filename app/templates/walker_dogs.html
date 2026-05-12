@@ -157,7 +157,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 (function () {
     const search = document.getElementById('dog-search');
     const clear  = document.getElementById('dog-search-clear');

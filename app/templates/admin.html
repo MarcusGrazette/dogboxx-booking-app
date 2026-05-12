@@ -147,7 +147,7 @@
 
 {% block scripts %}
 {{ super() }}
-<script>
+<script nonce="{{ csp_nonce }}">
 // Bookings chart with date navigation
 (function() {
   const PINK  = '#E02FAC';

@@ -35,7 +35,7 @@
 </div>
 
 <script src="{{ url_for('static', filename='js/reusable-calendar.js') }}"></script>
-<script>
+<script nonce="{{ csp_nonce }}">
 (function () {
     const todayStr = '{{ today.strftime("%Y-%m-%d") }}';
     const initialDate = '{{ selected_date.strftime("%Y-%m-%d") }}';
