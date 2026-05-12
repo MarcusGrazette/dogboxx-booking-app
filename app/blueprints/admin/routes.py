@@ -1095,7 +1095,7 @@ def calendar_data(year, month):
 
         if booking.walker_id:
             booking_counts[date_str]['assigned'] += 1
-        elif booking.status == 'requested':
+        elif booking.status in Booking.PENDING_STATUSES:
             pending_dates.add(date_day)
 
     return jsonify(success=True, data=booking_counts, pending_dates=list(pending_dates))

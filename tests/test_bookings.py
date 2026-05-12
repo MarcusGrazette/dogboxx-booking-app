@@ -654,3 +654,55 @@ class TestAdminRecurringForDog:
         assert data['success'] is True
         assert data['skipped'] == 1
         assert data.get('confirmed', 0) + data.get('requested', 0) == 0
+
+
+# ---------------------------------------------------------------------------
+# T3e — Admin calendar_data: pending_dates includes waitlisted bookings
+# ---------------------------------------------------------------------------
+
+class TestAdminCalendarPendingDates:
+    """Both 'requested' and 'waitlisted' bookings should highlight the date
+    on the admin board calendar — they share PENDING_STATUSES semantics."""
+
+    def _seed(self, status, slot='Morning'):
+        tom = tomorrow()
+        make_walker_with_schedule(
+            f'walker_cal_{status}_{id(self)}@test.com',
+            tom.weekday(), slot,
+        )
+        st = make_service(capacity=6)
+        user = make_user(f'client_cal_{status}_{id(self)}@test.com')
+        make_client_profile(user.id)
+        d = make_dog(f'Dog-{status}')
+        attach_dog(d.id, user.id)
+        b = Booking(
+            user_id=user.id, dog_id=d.id,
+            service_type_id=st.id, date=tom, slot=slot,
+            status=status,
+            walker_id=None,  # unassigned — admin needs to triage
+        )
+        db.session.add(b)
+        admin = make_user(f'admin_cal_{status}_{id(self)}@test.com',
+                          role='walker', is_admin=True)
+        db.session.commit()
+        return tom, admin.email
+
+    def test_requested_booking_appears_in_pending_dates(self, app, client):
+        with app.app_context():
+            tom, admin_email = self._seed(status='requested')
+        login(client, admin_email)
+        resp = client.get(f'/admin/calendar_data/{tom.year}/{tom.month}')
+        data = resp.get_json()
+        assert data['success'] is True
+        assert tom.day in data['pending_dates']
+
+    def test_waitlisted_booking_appears_in_pending_dates(self, app, client):
+        """Regression: waitlisted bookings used to be ignored by /admin/calendar_data
+        so the calendar wouldn't highlight dates where someone was waitlisted."""
+        with app.app_context():
+            tom, admin_email = self._seed(status='waitlisted')
+        login(client, admin_email)
+        resp = client.get(f'/admin/calendar_data/{tom.year}/{tom.month}')
+        data = resp.get_json()
+        assert data['success'] is True
+        assert tom.day in data['pending_dates']
