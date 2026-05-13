@@ -434,6 +434,7 @@ class WalkerAdHocAvailability(db.Model):
     walker_id = db.Column(db.Integer, db.ForeignKey('walkers.id'), nullable=False, index=True)
     date = db.Column(db.Date, nullable=False)
     slot = db.Column(db.Enum('Morning', 'Afternoon', name='schedule_slot', create_type=False), nullable=False)
+    reason = db.Column(db.String(200), nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     walker = db.relationship('Walker', backref='adhoc_availabilities')
@@ -444,6 +445,7 @@ class WalkerAdHocAvailability(db.Model):
             'walker_id': self.walker_id,
             'date': self.date.isoformat() if self.date else None,
             'slot': self.slot,
+            'reason': self.reason,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 

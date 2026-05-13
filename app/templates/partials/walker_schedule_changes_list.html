@@ -1,0 +1,60 @@
+{# Merged + grouped schedule-changes list.
+
+   Each group represents one or more DB rows collapsed for display:
+     • Same date, Morning + Afternoon         → slot_label='Both', 2 row IDs
+     • Calendar-contiguous (date+1) days
+       with matching (type, reason, slot)     → date range, N row IDs
+
+   Required context:
+     schedule_groups — list of dicts from _build_schedule_change_groups()
+#}
+
+{% if not schedule_groups %}
+<p class="text-muted mb-0 small">
+    <i class="bi bi-calendar2 me-1"></i>No schedule changes set.
+</p>
+{% else %}
+<div class="schedule-changes-list">
+    {% set fold = 8 %}
+    {% for g in schedule_groups %}
+    <div class="sched-change-row{% if loop.index > fold %} sched-change-extra d-none{% endif %}"
+         data-adhoc-ids="{{ g.adhoc_ids | join(',') }}"
+         data-unavail-ids="{{ g.unavail_ids | join(',') }}"
+         data-summary="{% if g.is_range %}{{ g.start_date.strftime('%a %-d %b') }}–{{ g.end_date.strftime('%a %-d %b') }}{% else %}{{ g.start_date.strftime('%a %-d %b') }}{% endif %}">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            {% if g.type == 'available' %}
+            <span class="badge sched-type-available" aria-label="Available" title="Available">
+                <i class="bi bi-check-circle-fill"></i>
+            </span>
+            {% else %}
+            <span class="badge sched-type-unavailable" aria-label="Unavailable" title="Unavailable">
+                <i class="bi bi-x-circle-fill"></i>
+            </span>
+            {% endif %}
+            <span class="fw-semibold">
+                {% if g.is_range %}
+                {{ g.start_date.strftime('%a %-d %b') }} – {{ g.end_date.strftime('%a %-d %b') }}
+                {% else %}
+                {{ g.start_date.strftime('%a %-d %b') }}
+                {% endif %}
+            </span>
+            <span class="badge sched-slot-{{ g.slot_label|lower }}">{{ g.slot_label }}</span>
+            {% if g.reason %}
+            <span class="text-muted small">— {{ g.reason }}</span>
+            {% endif %}
+        </div>
+        <button class="btn btn-sm btn-outline-danger sched-delete-btn"
+                aria-label="Delete this schedule change">
+            <i class="bi bi-trash"></i>
+        </button>
+    </div>
+    {% endfor %}
+    {% if schedule_groups|length > fold %}
+    <div class="mt-2" id="sched-show-more">
+        <button class="btn btn-sm btn-link px-0 text-muted" id="sched-show-more-btn">
+            Show {{ schedule_groups|length - fold }} more
+        </button>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
