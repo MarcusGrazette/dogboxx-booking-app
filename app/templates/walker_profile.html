@@ -218,7 +218,7 @@
                placeholder="e.g. Annual leave, doctor's appointment, covering Sam…">
       </div>
 
-      <div class="d-flex align-items-center gap-2 mb-3">
+      <div class="d-flex align-items-center justify-content-center gap-2 mb-3">
         <button class="btn btn-primary fw-semibold" id="sched-add-btn">
           <i class="bi bi-plus-lg me-1"></i>Add
         </button>
@@ -441,7 +441,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 toggle.textContent = '+ or a date range';
                 if (endEl) endEl.value = '';
             } else {
-                toggle.textContent = '– cancel range';
+                toggle.textContent = '– single date';
                 if (endEl && !endEl.value && startEl.value) endEl.value = startEl.value;
             }
         });
