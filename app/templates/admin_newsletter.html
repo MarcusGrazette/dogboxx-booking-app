@@ -82,9 +82,13 @@
           </span>
           {% endif %}
 
-          <div class="d-flex gap-2">
-            {# Test send button — submits to /newsletter/test #}
-            <button type="button" class="btn btn-outline-secondary fw-semibold"
+          <div class="d-flex gap-2 align-items-center">
+            {# Inline status for the test-send AJAX response — keeps the draft. #}
+            <span id="test-status" class="small text-muted" aria-live="polite"></span>
+
+            {# Test send button — AJAX-submits to /newsletter/test #}
+            <button type="button" id="test-send-btn"
+                    class="btn btn-outline-secondary fw-semibold"
                     onclick="submitTest()">
               <i class="bi bi-send-check me-2"></i>Send test
             </button>
@@ -135,18 +139,11 @@
 
 {# ── Hidden forms (submitted by JS) ───────────────────────────────────────── #}
 
-{# Full send form #}
+{# Full send form — the test send is now AJAX so no #test-form is needed. #}
 <form method="POST" action="{{ url_for('admin.newsletter') }}" id="send-form" class="d-none">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="subject" id="send-subject">
   <input type="hidden" name="html_body" id="send-html-body">
-</form>
-
-{# Test send form #}
-<form method="POST" action="{{ url_for('admin.newsletter_test') }}" id="test-form" class="d-none">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <input type="hidden" name="subject" id="test-subject">
-  <input type="hidden" name="html_body" id="test-html-body">
 </form>
 
 {% endblock %}
@@ -254,6 +251,19 @@
   matchRecipientHeight();
   window.addEventListener('resize', matchRecipientHeight);
 
+  function setTestStatus(message, kind) {
+    // kind: 'pending' | 'success' | 'error' | ''
+    const el = document.getElementById('test-status');
+    if (!el) return;
+    const colours = {
+      pending: 'small text-muted',
+      success: 'small text-success fw-semibold',
+      error:   'small text-danger fw-semibold',
+    };
+    el.className = colours[kind] || 'small text-muted';
+    el.textContent = message || '';
+  }
+
   function submitTest() {
     const subject = getSubject();
     if (!subject) {
@@ -261,12 +271,45 @@
       return;
     }
     if (quill.getText().trim().length === 0) {
-      alert('Please write a message body before sending a test.');
+      setTestStatus('Write a message body first.', 'error');
       return;
     }
-    document.getElementById('test-subject').value = subject;
-    document.getElementById('test-html-body').value = getHtmlBody();
-    document.getElementById('test-form').submit();
+
+    // AJAX so the page never reloads — the draft (subject + Quill body) stays
+    // intact while the test is in flight and after it completes.
+    const btn = document.getElementById('test-send-btn');
+    btn.disabled = true;
+    setTestStatus('Sending…', 'pending');
+
+    const csrf = document.querySelector('meta[name="csrf-token"]').content;
+    fetch('{{ url_for("admin.newsletter_test") }}', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-CSRFToken': csrf,
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: new URLSearchParams({
+        subject: subject,
+        html_body: getHtmlBody(),
+      }),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        btn.disabled = false;
+        if (res.ok && res.data.success) {
+          setTestStatus('✓ ' + res.data.message, 'success');
+        } else {
+          setTestStatus('✗ ' + (res.data.message || 'Test send failed.'), 'error');
+        }
+        // Auto-clear after a few seconds so it doesn't linger forever
+        setTimeout(function () { setTestStatus('', ''); }, 5000);
+      })
+      .catch(function () {
+        btn.disabled = false;
+        setTestStatus('✗ Network error — please try again.', 'error');
+        setTimeout(function () { setTestStatus('', ''); }, 5000);
+      });
   }
 </script>
 {% endblock %}

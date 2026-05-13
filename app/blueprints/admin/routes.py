@@ -3193,17 +3193,30 @@ def newsletter():
         if not subject or not html_body:
             flash("Subject and body are required.", "error")
         else:
+            # Batch-resolve each client's primary dog name in one query — there
+            # is no Client.dogs shortcut, dogs are owned via the DogOwner join
+            # table. Falls back to "your dog" for clients with no primary.
+            client_ids = [u.id for u in clients]
+            primary_ownerships = (
+                DogOwner.query
+                .filter(DogOwner.user_id.in_(client_ids),
+                        DogOwner.role == 'primary')
+                .options(joinedload(DogOwner.dog))
+                .all()
+            )
+            dog_name_by_user = {}
+            for o in primary_ownerships:
+                if o.user_id not in dog_name_by_user and o.dog:
+                    dog_name_by_user[o.user_id] = o.dog.name
+
             base_url = current_app.config.get("APP_BASE_URL", "").rstrip("/")
             recipients = []
             for u in clients:
                 token = u.make_unsubscribe_token()
-                dog_name = "your dog"
-                if u.client and u.client.dogs:
-                    dog_name = u.client.dogs[0].name
                 recipients.append({
                     "email": u.email,
                     "firstname": u.firstname,
-                    "dog_name": dog_name,
+                    "dog_name": dog_name_by_user.get(u.id, "your dog"),
                     "unsubscribe_url": f"{base_url}/auth/unsubscribe/{token}",
                 })
 
@@ -3228,7 +3241,11 @@ def newsletter():
 @login_required
 @admin_required
 def newsletter_test():
-    """Send a test newsletter to lydia@dogboxx.org."""
+    """Send a test newsletter to lydia@dogboxx.org.
+
+    Returns JSON so the compose page never reloads — keeps the user's
+    draft (subject + Quill body) intact while they iterate on the test.
+    """
     from app.utils.email import send_newsletter_batch
     from flask import current_app
 
@@ -3236,8 +3253,10 @@ def newsletter_test():
     html_body = request.form.get("html_body", "").strip()
 
     if not subject or not html_body:
-        flash("Write a subject and body before sending a test.", "error")
-        return redirect(url_for('admin.newsletter'))
+        return jsonify(
+            success=False,
+            message="Write a subject and body before sending a test.",
+        ), 400
 
     base_url = current_app.config.get("APP_BASE_URL", "").rstrip("/")
     result = send_newsletter_batch(
@@ -3250,12 +3269,11 @@ def newsletter_test():
             "unsubscribe_url": f"{base_url}/auth/unsubscribe/test",
         }],
     )
-    if result["sent"]:
-        flash("Test email sent to lydia@dogboxx.org.", "success")
-    else:
-        flash("Test email failed — check logs.", "error")
-
-    return redirect(url_for('admin.newsletter'))
+    if result.get("sent"):
+        return jsonify(success=True,
+                       message="Test email sent to lydia@dogboxx.org.")
+    return jsonify(success=False,
+                   message="Test email failed — check logs."), 500
 
 
 # ── CSV Client Import ─────────────────────────────────────────────────────────
