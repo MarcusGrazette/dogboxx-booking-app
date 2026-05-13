@@ -1189,7 +1189,10 @@ def upload_profile_photo():
 @login_required
 def update_pickup():
     """AJAX: save pickup instructions (per dog) and newsletter preference."""
-    if current_user.role != 'client':
+    # has_client_access also lets dual-role walkers (role='walker' with a
+    # Client record) through. A bare role == 'client' check rejects them
+    # even though they own dogs and use the client view.
+    if not has_client_access(current_user):
         return jsonify(success=False, error="Forbidden"), 403
 
     client = Client.query.filter_by(user_id=current_user.id).first()
@@ -1522,10 +1525,12 @@ def pause_walks():
 @client_bp.route("/cancel_booking", methods=["POST"])
 @login_required
 def cancel_booking():
-    """Cancel a booking"""
-    if current_user.role != 'client' and not current_user.is_admin:
-        return jsonify(success=False, message="Unauthorized"), 403
-        
+    """Cancel a booking.
+
+    Authorization is handled below by user_can_access_booking() — which
+    correctly allows the booking creator, any dog co-owner, or admins.
+    No early role gate (used to reject dual-role walkers incorrectly).
+    """
     try:
         booking_id = request.form.get("booking_id") or request.json.get("booking_id")
         if not booking_id:
@@ -1827,10 +1832,12 @@ def recurring_booking():
 @client_bp.route("/booking/<int:booking_id>/note", methods=["POST"])
 @login_required
 def update_booking_note(booking_id):
-    """Save or clear the client note on a booking."""
-    if current_user.role != 'client' and not current_user.is_admin:
-        return jsonify(success=False, message="Unauthorized"), 403
+    """Save or clear the client note on a booking.
 
+    Authorization is enforced via user_can_access_booking() below — admin,
+    booking creator, or any dog co-owner. No early role gate (used to
+    reject dual-role walkers incorrectly).
+    """
     booking = db.session.get(Booking, booking_id)
     if not booking:
         return jsonify(success=False, message="Booking not found"), 404
