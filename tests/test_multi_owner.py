@@ -351,3 +351,108 @@ class TestSecondaryOwnerCancelBooking:
             data = resp.get_json()
             assert data['success'] is False
             assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Dual-role users (role='walker' with a Client record) — regression
+#
+# Three routes used to hard-string current_user.role == 'client', which
+# rejected dual-role walkers in the client view even though they own dogs:
+#   - /profile/update-pickup
+#   - /cancel_booking
+#   - /booking/<id>/note
+# Health notes (/profile/dog/<id>/update-details) was never affected
+# because it gates on DogOwner ownership rather than role.
+# ---------------------------------------------------------------------------
+
+def _make_dual_role_user(email='dual@test.org'):
+    """Create a walker who also has a Client record — the dual-role case."""
+    user = make_user(firstname='Dual', lastname='Role', email=email,
+                     role='walker', is_admin=False)
+    db.session.add(Walker(user_id=user.id))
+    db.session.add(Client(user_id=user.id, onboarding_completed=True))
+    db.session.flush()
+    return user
+
+
+class TestDualRoleProfileEdits:
+
+    def test_dual_role_user_can_update_pickup_notes(self, app, db, client):
+        """Regression: /profile/update-pickup used to reject role != 'client'
+        outright, so dual-role walkers got 403 even on dogs they own."""
+        with app.app_context():
+            user = _make_dual_role_user(email='dualpickup@test.org')
+            dog = make_dog('Bramble')
+            make_primary_ownership(dog, user)
+            db.session.commit()
+            user_email = user.email
+            dog_id = dog.id
+
+        login(client, user_email)
+        resp = client.post('/profile/update-pickup', data={
+            f'pickup_instructions_{dog_id}': 'Key in the porch',
+            'notify_email': 'true',
+        })
+        assert resp.status_code == 200
+        assert resp.get_json()['success'] is True
+
+        with app.app_context():
+            refreshed = db.session.get(Dog, dog_id)
+            assert refreshed.pickup_instructions == 'Key in the porch'
+
+    def test_pure_walker_without_client_record_still_blocked(self, app, db, client):
+        """A walker with NO Client record is not in the client view — the
+        endpoint should still return 403 to avoid API abuse."""
+        with app.app_context():
+            user = make_user(firstname='Plain', lastname='Walker',
+                             email='plainwalker@test.org', role='walker',
+                             is_admin=False)
+            db.session.add(Walker(user_id=user.id))
+            db.session.commit()
+            user_email = user.email
+
+        login(client, user_email)
+        resp = client.post('/profile/update-pickup', data={
+            'notify_email': 'true',
+        })
+        assert resp.status_code == 403
+
+    def test_dual_role_user_can_cancel_their_booking(self, app, db, client):
+        """Regression: /cancel_booking dropped the redundant role gate;
+        authorization is enforced by user_can_access_booking() downstream."""
+        with app.app_context():
+            user = _make_dual_role_user(email='dualcancel@test.org')
+            dog = make_dog('Hazel')
+            make_primary_ownership(dog, user)
+            st = make_service_type()
+            booking = make_booking(user, dog, st)
+            db.session.commit()
+            user_email = user.email
+            booking_id = booking.id
+
+        login(client, user_email)
+        resp = client.post('/cancel_booking', data={'booking_id': booking_id})
+        assert resp.status_code == 200
+        assert resp.get_json()['success'] is True
+        with app.app_context():
+            assert db.session.get(Booking, booking_id).status == 'cancelled'
+
+    def test_dual_role_user_can_update_booking_note(self, app, db, client):
+        """Regression: /booking/<id>/note dropped the redundant role gate."""
+        with app.app_context():
+            user = _make_dual_role_user(email='dualnote@test.org')
+            dog = make_dog('Pip')
+            make_primary_ownership(dog, user)
+            st = make_service_type()
+            booking = make_booking(user, dog, st)
+            db.session.commit()
+            user_email = user.email
+            booking_id = booking.id
+
+        login(client, user_email)
+        resp = client.post(f'/booking/{booking_id}/note',
+                           json={'note': 'Bring the long lead today'})
+        assert resp.status_code == 200
+        assert resp.get_json()['success'] is True
+        with app.app_context():
+            assert db.session.get(Booking, booking_id).client_notes == 'Bring the long lead today'
