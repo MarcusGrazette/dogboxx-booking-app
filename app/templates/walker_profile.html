@@ -152,115 +152,84 @@
     </div>
   </div>
 
-  {# ── Extra available days ──────────────────────────────────────────────── #}
-  <div class="card mb-4 card-accent-green">
+  {# ── Schedule changes ──────────────────────────────────────────────────── #}
+  <div class="card mb-4 card-accent-pink">
     <div class="card-header">
-      <i class="bi bi-calendar-plus me-2" style="color:#22c55e;"></i>Extra Available Days
+      <i class="bi bi-calendar-event me-2" style="color:#E02FAC;"></i>Schedule Changes
     </div>
     <div class="card-body">
-      <p class="text-muted small mb-3">Add one-off days where you're available outside your normal schedule.</p>
-      <div class="row g-2 mb-3 align-items-end">
-        <div class="col-auto">
-          <label for="adhoc-date" class="form-label small">Date</label>
-          <input type="date" id="adhoc-date" class="form-control" min="{{ today.isoformat() }}">
-        </div>
-        <div class="col-auto">
-          <label for="adhoc-slot" class="form-label small">Slot</label>
-          <select id="adhoc-slot" class="form-select">
-            <option value="Morning">Morning</option>
-            <option value="Afternoon">Afternoon</option>
-          </select>
-        </div>
-        <div class="col-auto">
-          <button class="btn btn-success" onclick="addAdhoc()">
-            <i class="bi bi-plus-lg"></i> Add
-          </button>
-        </div>
-      </div>
-      <div id="adhoc-list">
-        {% if adhoc_availabilities %}
-          {% set fold = 8 %}
-          {% for a in adhoc_availabilities %}
-          <div class="avail-row{% if loop.index > fold %} avail-extra d-none{% endif %}" id="adhoc-{{ a.id }}">
-            <div class="d-flex align-items-center gap-2">
-              <span class="badge avail-slot-badge {% if a.slot == 'Morning' %}bg-dark{% else %}text-bg-pink{% endif %}">{{ a.slot }}</span>
-              <span class="fw-semibold">{{ a.date.strftime('%A, %-d %B') }}</span>
-            </div>
-            <button class="btn btn-sm btn-outline-danger" onclick="deleteAdhoc({{ a.id }})">
-              <i class="bi bi-trash"></i>
-            </button>
-          </div>
-          {% endfor %}
-          {% if adhoc_availabilities|length > fold %}
-          <div class="mt-2" id="adhoc-show-more">
-            <button class="btn btn-sm btn-link px-0 text-muted" onclick="showMoreAvail('adhoc')">
-              Show {{ adhoc_availabilities|length - fold }} more
-            </button>
-          </div>
-          {% endif %}
-        {% else %}
-        <p class="text-muted mb-0 small" id="no-adhoc-msg"><i class="bi bi-calendar2 me-1"></i>No extra days added.</p>
-        {% endif %}
-      </div>
-    </div>
-  </div>
+      <p class="text-muted small mb-3">
+        Add extra days you're available, or block out days you can't work. Weekends are skipped automatically.
+      </p>
 
-  {# ── Unavailability ────────────────────────────────────────────────────── #}
-  <div class="card mb-4 card-accent-amber">
-    <div class="card-header">
-      <i class="bi bi-calendar-x me-2" style="color:#f59e0b;"></i>Upcoming Unavailability
-    </div>
-    <div class="card-body">
-      <div class="row g-2 mb-3 align-items-end">
-        <div class="col-auto">
-          <label for="unavail-date" class="form-label small">Date</label>
-          <input type="date" id="unavail-date" class="form-control"
+      {# ── Form ────────────────────────────────────────────────────────── #}
+      <div class="mb-3">
+        <label for="sched-start-date" class="form-label small mb-1">Date</label>
+        <input type="date" id="sched-start-date" class="form-control"
+               min="{{ today.isoformat() }}"
+               max="{{ (today.replace(year=today.year+1)).isoformat() }}">
+        <a href="#" class="small text-decoration-none" id="sched-range-toggle"
+           style="color:#E02FAC; font-weight:500;">
+          + or a date range
+        </a>
+        <div id="sched-end-date-wrap" class="mt-2 d-none">
+          <label for="sched-end-date" class="form-label small mb-1">Until</label>
+          <input type="date" id="sched-end-date" class="form-control"
                  min="{{ today.isoformat() }}"
                  max="{{ (today.replace(year=today.year+1)).isoformat() }}">
         </div>
-        <div class="col-auto">
-          <label for="unavail-slot" class="form-label small">Slot</label>
-          <select id="unavail-slot" class="form-select">
-            <option value="Morning">Morning</option>
-            <option value="Afternoon">Afternoon</option>
-          </select>
-        </div>
-        <div class="col">
-          <label for="unavail-reason" class="form-label small">Reason (optional)</label>
-          <input type="text" id="unavail-reason" class="form-control" maxlength="200"
-                 placeholder="e.g. Doctor appointment">
-        </div>
-        <div class="col-auto">
-          <button class="btn btn-warning" onclick="addUnavailability()">
-            <i class="bi bi-plus-lg"></i> Add
-          </button>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label small mb-1 d-block">Slot</label>
+        <div class="btn-group sched-segmented" role="group" aria-label="Slot">
+          <input type="radio" class="btn-check" name="sched-slot" id="sched-slot-morning" value="Morning" autocomplete="off">
+          <label class="btn btn-outline-secondary" for="sched-slot-morning">
+            <i class="bi bi-sunrise me-1"></i>Morning
+          </label>
+          <input type="radio" class="btn-check" name="sched-slot" id="sched-slot-afternoon" value="Afternoon" autocomplete="off">
+          <label class="btn btn-outline-secondary" for="sched-slot-afternoon">
+            <i class="bi bi-sunset me-1"></i>Afternoon
+          </label>
+          <input type="radio" class="btn-check" name="sched-slot" id="sched-slot-both" value="Both" autocomplete="off">
+          <label class="btn btn-outline-secondary" for="sched-slot-both">
+            <i class="bi bi-layers-fill me-1"></i>Both
+          </label>
         </div>
       </div>
-      <div id="unavail-list">
-        {% if unavailabilities %}
-          {% set fold = 8 %}
-          {% for u in unavailabilities %}
-          <div class="avail-row{% if loop.index > fold %} avail-extra d-none{% endif %}" id="unavail-{{ u.id }}">
-            <div class="d-flex align-items-center gap-2 flex-wrap">
-              <span class="badge avail-slot-badge {% if u.slot == 'Morning' %}bg-dark{% else %}text-bg-pink{% endif %}">{{ u.slot }}</span>
-              <span class="fw-semibold">{{ u.date.strftime('%A, %-d %B') }}</span>
-              {% if u.reason %}<span class="text-muted small">— {{ u.reason }}</span>{% endif %}
-            </div>
-            <button class="btn btn-sm btn-outline-danger" onclick="deleteUnavailability({{ u.id }})">
-              <i class="bi bi-trash"></i>
-            </button>
-          </div>
-          {% endfor %}
-          {% if unavailabilities|length > fold %}
-          <div class="mt-2" id="unavail-show-more">
-            <button class="btn btn-sm btn-link px-0 text-muted" onclick="showMoreAvail('unavail')">
-              Show {{ unavailabilities|length - fold }} more
-            </button>
-          </div>
-          {% endif %}
-        {% else %}
-        <p class="text-muted mb-0 small" id="no-unavail-msg"><i class="bi bi-check-circle me-1"></i>No upcoming unavailability set.</p>
-        {% endif %}
+
+      <div class="mb-3">
+        <label class="form-label small mb-1 d-block">Type</label>
+        <div class="btn-group sched-segmented" role="group" aria-label="Type">
+          <input type="radio" class="btn-check" name="sched-type" id="sched-type-available" value="available" autocomplete="off">
+          <label class="btn btn-outline-success" for="sched-type-available">
+            <i class="bi bi-check-circle me-1"></i>Available
+          </label>
+          <input type="radio" class="btn-check" name="sched-type" id="sched-type-unavailable" value="unavailable" autocomplete="off">
+          <label class="btn btn-outline-warning" for="sched-type-unavailable">
+            <i class="bi bi-x-circle me-1"></i>Unavailable
+          </label>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label for="sched-reason" class="form-label small mb-1">Reason <span class="text-muted">(optional)</span></label>
+        <input type="text" id="sched-reason" class="form-control" maxlength="200"
+               placeholder="e.g. Annual leave, doctor's appointment, covering Sam…">
+      </div>
+
+      <div class="d-flex align-items-center gap-2 mb-3">
+        <button class="btn btn-primary fw-semibold" id="sched-add-btn">
+          <i class="bi bi-plus-lg me-1"></i>Add
+        </button>
+        <span id="sched-status" class="small" aria-live="polite"></span>
+      </div>
+
+      {# ── Merged list ────────────────────────────────────────────────── #}
+      <hr class="my-3">
+      <h6 class="mb-2 text-muted small text-uppercase fw-semibold">Upcoming</h6>
+      <div id="sched-list-container">
+        {% include "partials/walker_schedule_changes_list.html" %}
       </div>
     </div>
   </div>
@@ -388,121 +357,160 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 });
 
-// ── Show more toggle ───────────────────────────────────────────────────────
-function showMoreAvail(prefix) {
-    document.querySelectorAll(`#${prefix}-list .avail-extra`).forEach(el => el.classList.remove('d-none'));
-    const btn = document.getElementById(`${prefix}-show-more`);
-    if (btn) btn.remove();
+// ── Unified Schedule Changes form ──────────────────────────────────────────
+
+function setSchedStatus(message, kind) {
+    const el = document.getElementById('sched-status');
+    if (!el) return;
+    const colours = {
+        pending: 'small text-muted',
+        success: 'small text-success fw-semibold',
+        error:   'small text-danger fw-semibold',
+    };
+    el.className = colours[kind] || 'small text-muted';
+    el.textContent = message || '';
 }
 
-// ── Availability / unavailability AJAX (unchanged logic) ───────────────────
-async function addAdhoc() {
-    const dateVal = document.getElementById('adhoc-date').value;
-    const slot = document.getElementById('adhoc-slot').value;
-    if (!dateVal) { alert('Please select a date.'); return; }
+// "Show more" toggle inside the merged list. Bound after every refresh because
+// the partial replaces the DOM.
+function bindShowMore() {
+    const btn = document.getElementById('sched-show-more-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+        document.querySelectorAll('.sched-change-extra').forEach(el => el.classList.remove('d-none'));
+        document.getElementById('sched-show-more')?.remove();
+    });
+}
+
+function bindDeleteButtons() {
+    document.querySelectorAll('.sched-delete-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const row = btn.closest('.sched-change-row');
+            if (!row) return;
+            const summary = row.dataset.summary;
+            const adhocIds   = (row.dataset.adhocIds   || '').split(',').filter(Boolean).map(Number);
+            const unavailIds = (row.dataset.unavailIds || '').split(',').filter(Boolean).map(Number);
+            const total = adhocIds.length + unavailIds.length;
+            const confirmMsg = total > 1
+                ? `Delete ${total} entries (${summary})?`
+                : `Delete this entry (${summary})?`;
+            if (!confirm(confirmMsg)) return;
+
+            fetch('{{ url_for("walker.schedule_changes_batch_delete") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                body: JSON.stringify({ adhoc_ids: adhocIds, unavail_ids: unavailIds }),
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        refreshList();
+                    } else {
+                        setSchedStatus('Failed to delete — please try again.', 'error');
+                    }
+                })
+                .catch(() => setSchedStatus('Network error.', 'error'));
+        });
+    });
+}
+
+// Fetch the latest merged list and replace the container's contents. Called
+// after every add/delete so we don't have to mirror the server-side grouping
+// in JS.
+function refreshList() {
+    fetch('{{ url_for("walker.api_schedule_changes") }}')
+        .then(r => r.text())
+        .then(html => {
+            document.getElementById('sched-list-container').innerHTML = html;
+            bindShowMore();
+            bindDeleteButtons();
+        });
+}
+
+// Range toggle — progressive disclosure for the end-date input
+document.addEventListener('DOMContentLoaded', function () {
+    const toggle  = document.getElementById('sched-range-toggle');
+    const endWrap = document.getElementById('sched-end-date-wrap');
+    const startEl = document.getElementById('sched-start-date');
+    const endEl   = document.getElementById('sched-end-date');
+    if (toggle && endWrap) {
+        toggle.addEventListener('click', function (e) {
+            e.preventDefault();
+            endWrap.classList.toggle('d-none');
+            if (endWrap.classList.contains('d-none')) {
+                toggle.textContent = '+ or a date range';
+                if (endEl) endEl.value = '';
+            } else {
+                toggle.textContent = '– cancel range';
+                if (endEl && !endEl.value && startEl.value) endEl.value = startEl.value;
+            }
+        });
+    }
+    // Keep end ≥ start as start changes
+    if (startEl && endEl) {
+        startEl.addEventListener('change', function () {
+            if (endEl.value && endEl.value < startEl.value) endEl.value = startEl.value;
+            endEl.min = startEl.value || endEl.min;
+        });
+    }
+    bindShowMore();
+    bindDeleteButtons();
+
+    const addBtn = document.getElementById('sched-add-btn');
+    if (addBtn) addBtn.addEventListener('click', submitScheduleChange);
+});
+
+async function submitScheduleChange() {
+    const startDate = document.getElementById('sched-start-date').value;
+    const endDateRaw = document.getElementById('sched-end-date').value;
+    const endDate   = endDateRaw || startDate;
+    const slotEl    = document.querySelector('input[name="sched-slot"]:checked');
+    const typeEl    = document.querySelector('input[name="sched-type"]:checked');
+    const reason    = document.getElementById('sched-reason').value;
+
+    if (!startDate)        { setSchedStatus('Pick a date.', 'error'); return; }
+    if (!slotEl)           { setSchedStatus('Pick a slot.', 'error'); return; }
+    if (!typeEl)           { setSchedStatus('Pick Available or Unavailable.', 'error'); return; }
+
+    const slotChoice = slotEl.value;
+    const slots = slotChoice === 'Both' ? ['Morning', 'Afternoon'] : [slotChoice];
+    const type  = typeEl.value;
+
+    const btn = document.getElementById('sched-add-btn');
+    btn.disabled = true;
+    setSchedStatus('Saving…', 'pending');
+
     try {
-        const resp = await fetch('{{ url_for("walker.add_adhoc") }}', {
+        const resp = await fetch('{{ url_for("walker.schedule_changes_batch") }}', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-            body: JSON.stringify({ date: dateVal, slot })
+            body: JSON.stringify({
+                start_date: startDate, end_date: endDate,
+                slots: slots, type: type, reason: reason,
+            }),
         });
         const data = await resp.json();
-        if (data.success) {
-            const noMsg = document.getElementById('no-adhoc-msg');
-            if (noMsg) noMsg.remove();
-            const a = data.adhoc;
-            const dateObj = new Date(a.date + 'T00:00:00');
-            const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-            const badgeClass = a.slot === 'Morning' ? 'bg-dark' : 'text-bg-pink';
-            const div = document.createElement('div');
-            div.className = 'avail-row';
-            div.id = `adhoc-${a.id}`;
-            div.innerHTML = `
-                <div class="d-flex align-items-center gap-2">
-                    <span class="badge avail-slot-badge ${badgeClass}">${a.slot}</span>
-                    <span class="fw-semibold">${dateStr}</span>
-                </div>
-                <button class="btn btn-sm btn-outline-danger" onclick="deleteAdhoc(${a.id})">
-                    <i class="bi bi-trash"></i>
-                </button>`;
-            document.getElementById('adhoc-list').appendChild(div);
-            document.getElementById('adhoc-date').value = '';
+        btn.disabled = false;
+        if (data.success && data.created > 0) {
+            setSchedStatus(data.message, 'success');
+            // Reset only the date + reason; keep slot/type selection so the
+            // walker can quickly add another similar entry.
+            document.getElementById('sched-start-date').value = '';
+            document.getElementById('sched-end-date').value = '';
+            document.getElementById('sched-reason').value = '';
+            refreshList();
+            setTimeout(() => setSchedStatus('', ''), 6000);
+        } else if (data.success && data.created === 0) {
+            // Whole range was skipped — show the most informative reason
+            const first = (data.skipped_reasons && data.skipped_reasons[0]) || 'Nothing to add.';
+            setSchedStatus('Nothing added — ' + first, 'error');
         } else {
-            alert(data.message || 'Error adding availability');
+            setSchedStatus(data.message || 'Failed to save.', 'error');
         }
-    } catch (err) { alert('Request failed: ' + err.message); }
-}
-
-async function deleteAdhoc(id) {
-    if (!confirm('Remove this extra available day?')) return;
-    try {
-        const resp = await fetch(`/walker/adhoc/${id}`, {
-            method: 'DELETE', headers: { 'X-CSRFToken': csrfToken }
-        });
-        const data = await resp.json();
-        if (data.success) {
-            document.getElementById(`adhoc-${id}`)?.remove();
-            if (!document.querySelector('#adhoc-list [id^="adhoc-"]')) {
-                document.getElementById('adhoc-list').innerHTML =
-                    '<p class="text-muted mb-0 small" id="no-adhoc-msg"><i class="bi bi-calendar2 me-1"></i>No extra days added.</p>';
-            }
-        } else { alert(data.message || 'Error removing availability'); }
-    } catch (err) { alert('Request failed: ' + err.message); }
-}
-
-async function addUnavailability() {
-    const dateVal = document.getElementById('unavail-date').value;
-    const slot    = document.getElementById('unavail-slot').value;
-    const reason  = document.getElementById('unavail-reason').value;
-    if (!dateVal) { alert('Please select a date.'); return; }
-    try {
-        const resp = await fetch('{{ url_for("walker.add_unavailability") }}', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-            body: JSON.stringify({ date: dateVal, slot, reason })
-        });
-        const data = await resp.json();
-        if (data.success) {
-            const noMsg = document.getElementById('no-unavail-msg');
-            if (noMsg) noMsg.remove();
-            const u = data.unavailability;
-            const dateObj = new Date(u.date + 'T00:00:00');
-            const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-            const badgeClass = u.slot === 'Morning' ? 'bg-dark' : 'text-bg-pink';
-            const div = document.createElement('div');
-            div.className = 'avail-row';
-            div.id = `unavail-${u.id}`;
-            div.innerHTML = `
-                <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <span class="badge avail-slot-badge ${badgeClass}">${u.slot}</span>
-                    <span class="fw-semibold">${dateStr}</span>
-                    ${u.reason ? `<span class="text-muted small">— ${u.reason}</span>` : ''}
-                </div>
-                <button class="btn btn-sm btn-outline-danger" onclick="deleteUnavailability(${u.id})">
-                    <i class="bi bi-trash"></i>
-                </button>`;
-            document.getElementById('unavail-list').appendChild(div);
-            document.getElementById('unavail-date').value = '';
-            document.getElementById('unavail-reason').value = '';
-        } else { alert(data.message || 'Error adding unavailability'); }
-    } catch (err) { alert('Network error'); }
-}
-
-async function deleteUnavailability(id) {
-    if (!confirm('Remove this unavailability?')) return;
-    try {
-        const resp = await fetch(`/walker/unavailability/${id}`, {
-            method: 'DELETE', headers: { 'X-CSRFToken': csrfToken }
-        });
-        const data = await resp.json();
-        if (data.success) {
-            document.getElementById(`unavail-${id}`)?.remove();
-            if (!document.querySelector('#unavail-list [id^="unavail-"]')) {
-                document.getElementById('unavail-list').innerHTML =
-                    '<p class="text-muted mb-0 small" id="no-unavail-msg"><i class="bi bi-check-circle me-1"></i>No upcoming unavailability set.</p>';
-            }
-        } else { alert(data.message || 'Error removing unavailability'); }
-    } catch (err) { alert('Network error'); }
+    } catch (err) {
+        btn.disabled = false;
+        setSchedStatus('Network error — please try again.', 'error');
+    }
 }
 </script>
 {% endblock %}
