@@ -47,28 +47,29 @@
                         </div>
                     </div>
 
-                    {% if is_edit %}
-                    {# Email is immutable — show read-only #}
-                    <div class="mb-1">
-                        <label class="form-label fw-semibold small">Email</label>
-                        <div class="input-group">
-                            <span class="input-group-text"><i class="bi bi-envelope text-secondary"></i></span>
-                            <input type="email" class="form-control bg-light" value="{{ client_user.email }}" disabled>
-                        </div>
-                        <div class="form-text">Email cannot be changed here.</div>
-                    </div>
-                    {% else %}
                     <div class="mb-1">
                         <label class="form-label fw-semibold small">Email <span class="text-danger">*</span></label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="bi bi-envelope text-secondary"></i></span>
-                            {{ form.email(class="form-control", placeholder="client@example.com", autocomplete="email") }}
+                            {% if is_edit %}
+                            {{ form.email(class="form-control", placeholder="client@example.com",
+                                          autocomplete="email", id="email",
+                                          **{"data-original-email": client_user.email}) }}
+                            {% else %}
+                            {{ form.email(class="form-control", placeholder="client@example.com",
+                                          autocomplete="email") }}
+                            {% endif %}
                         </div>
+                        {% if is_edit %}
+                        <div class="form-text text-muted">
+                            <i class="bi bi-info-circle me-1"></i>This is the email the client signs in with.
+                            Changing it means they'll need to know the new address to log in.
+                        </div>
+                        {% endif %}
                         {% for error in form.email.errors %}
                         <div class="text-danger small mt-1">{{ error }}</div>
                         {% endfor %}
                     </div>
-                    {% endif %}
 
                 </div>
             </div>
@@ -351,4 +352,34 @@
         </form>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{% if is_edit %}
+<script nonce="{{ csp_nonce }}">
+(function () {
+    // Confirm before submitting if the admin changed the email address — it
+    // changes the client's login and they need to know the new value.
+    var form = document.querySelector('form[method="post"]');
+    var emailInput = document.getElementById('email');
+    if (!form || !emailInput) return;
+    var original = (emailInput.dataset.originalEmail || '').trim().toLowerCase();
+    form.addEventListener('submit', function (e) {
+        var current = (emailInput.value || '').trim().toLowerCase();
+        if (current && current !== original) {
+            var ok = window.confirm(
+                'Change this client\'s login email from\n  ' + original +
+                '\nto\n  ' + current + '?\n\n' +
+                'They\'ll need to use the new address to sign in.'
+            );
+            if (!ok) {
+                e.preventDefault();
+                emailInput.focus();
+            }
+        }
+    });
+}());
+</script>
+{% endif %}
 {% endblock %}

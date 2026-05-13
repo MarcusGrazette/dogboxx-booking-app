@@ -1453,13 +1453,21 @@ def edit_client(client_id):
 
     form = ClientCreateForm()
 
-    # In edit mode the email field is rendered as a disabled (non-submitted) input,
-    # so inject the existing email before validation to satisfy DataRequired.
-    if request.method == 'POST':
-        form.email.data = user.email
-
     if form.validate_on_submit():
         try:
+            # Normalise and apply an email change if any. Lowercased to match
+            # the login flow (auth/routes.py:35); a unique constraint on
+            # User.email guards against collisions — the IntegrityError handler
+            # below converts that to a friendly form error.
+            submitted_email = form.email.data.strip().lower() if form.email.data else ''
+            old_email = user.email
+            if submitted_email and submitted_email != old_email:
+                user.email = submitted_email
+                logging.info(
+                    f"Admin {current_user.id} changed email for user {user.id}: "
+                    f"{old_email} → {submitted_email}"
+                )
+
             user.firstname = form.firstname.data.strip().title()
             user.lastname = form.lastname.data.strip().title()
 
@@ -1548,6 +1556,14 @@ def edit_client(client_id):
             flash("Client details updated successfully.", "success")
             return redirect(url_for('admin.client_detail', client_id=user.id))
 
+        except IntegrityError as e:
+            db.session.rollback()
+            # Almost always the unique constraint on User.email — surface it as
+            # a field-level error rather than a generic "something went wrong".
+            logging.warning(f"IntegrityError editing client {client_id}: {e}")
+            form.email.errors.append(
+                "Another account already uses this email."
+            )
         except Exception as e:
             db.session.rollback()
             logging.error(f"Error editing client {client_id}: {e}")
@@ -1556,6 +1572,7 @@ def edit_client(client_id):
     elif request.method == 'GET':
         form.firstname.data = user.firstname
         form.lastname.data = user.lastname
+        form.email.data = user.email
         form.phone.data = user.phone
         form.notify_email.data = user.email_marketing
 
