@@ -706,3 +706,155 @@ class TestAdminCalendarPendingDates:
         data = resp.get_json()
         assert data['success'] is True
         assert tom.day in data['pending_dates']
+
+
+# ---------------------------------------------------------------------------
+# T3f — Client notifications on waitlist + book_both consolidation
+#
+# Regression coverage for two related bugs:
+# 1. A single-slot waitlist used to write zero client (actor) notifications —
+#    only admins got pinged, so the bell stayed empty after the user's flash
+#    disappeared.
+# 2. /book_both wrote one client notification per confirmed slot and zero
+#    for waitlisted ones, so a mixed outcome (one confirmed + one waitlisted)
+#    surfaced only the confirmed slot in the bell.
+# ---------------------------------------------------------------------------
+
+class TestBookingClientNotifications:
+
+    def _setup_user_dog(self, email):
+        user = make_user(email)
+        make_client_profile(user.id)
+        d = make_dog()
+        attach_dog(d.id, user.id)
+        return user, d
+
+    def test_single_slot_waitlist_writes_client_notification(self, app, client):
+        """Regression: /index POST waitlist used to ping admins only — client's
+        bell stayed silent. Now the actor receives a 'your walk is on the
+        waitlist' notification too."""
+        from app.models import Notification
+        with app.app_context():
+            tom = tomorrow()
+            make_walker_with_schedule(
+                f'walker_wl_{id(self)}@test.com', tom.weekday(), 'Morning'
+            )
+            st = make_service(capacity=1)
+            # Fill the only slot
+            filler = make_user(f'filler_wl_{id(self)}@test.com')
+            filler_dog = make_dog('Filler')
+            attach_dog(filler_dog.id, filler.id)
+            db.session.add(Booking(
+                user_id=filler.id, dog_id=filler_dog.id,
+                service_type_id=st.id, date=tom, slot='Morning',
+                status='confirmed',
+            ))
+            email = f'client_wl_{id(self)}@test.com'
+            user, dog = self._setup_user_dog(email)
+            db.session.commit()
+            user_id = user.id
+
+        login(client, email)
+        client.post('/', data={
+            'date': tom.isoformat(), 'slot': 'Morning',
+        }, follow_redirects=True)
+
+        with app.app_context():
+            client_notifs = Notification.query.filter_by(recipient_id=user_id).all()
+            assert len(client_notifs) == 1, \
+                f"expected 1 client notification, got {len(client_notifs)}"
+            n = client_notifs[0]
+            assert 'waitlist' in n.title.lower()
+            assert 'morning' in (n.body or '').lower()
+
+    def test_book_both_mixed_outcome_writes_one_consolidated_notification(self, app, client):
+        """Regression: /book_both with one confirmed + one waitlisted slot used
+        to write a single 'walk confirmed' notification and silently drop the
+        waitlisted slot. Now the client gets exactly one consolidated
+        notification mentioning both outcomes."""
+        from app.models import Notification
+        with app.app_context():
+            tom = tomorrow()
+            # Walker scheduled for BOTH slots, capacity=1 so PM fills first then waitlist
+            w_user = make_user(f'walker_bb_{id(self)}@test.com', role='walker')
+            from app.models import Walker, WalkerSchedule
+            w = Walker(user_id=w_user.id)
+            db.session.add(w); db.session.flush()
+            db.session.add(WalkerSchedule(walker_id=w.id, day_of_week=tom.weekday(),
+                                           slot='Morning', active=True))
+            db.session.add(WalkerSchedule(walker_id=w.id, day_of_week=tom.weekday(),
+                                           slot='Afternoon', active=True))
+            st = make_service(capacity=1)
+            # Pre-fill the afternoon slot so the PM half waitlists
+            filler = make_user(f'filler_bb_{id(self)}@test.com')
+            filler_dog = make_dog('FillerPM')
+            attach_dog(filler_dog.id, filler.id)
+            db.session.add(Booking(
+                user_id=filler.id, dog_id=filler_dog.id,
+                service_type_id=st.id, date=tom, slot='Afternoon',
+                status='confirmed', walker_id=w.id,
+            ))
+            email = f'client_bb_{id(self)}@test.com'
+            user, dog = self._setup_user_dog(email)
+            db.session.commit()
+            user_id = user.id
+
+        login(client, email)
+        resp = client.post('/book_both', json={'date': tom.isoformat()})
+        data = resp.get_json()
+        assert data['success'] is True
+
+        # Response payload must contain BOTH slot entries — previously the
+        # waitlisted one was dropped when its sibling confirmed.
+        slot_statuses = {b['slot']: b['status'] for b in data['bookings']}
+        assert set(slot_statuses) == {'Morning', 'Afternoon'}
+        assert slot_statuses['Morning'] == 'confirmed'
+        assert slot_statuses['Afternoon'] == 'waitlisted'
+
+        # Exactly one client notification covering both outcomes
+        with app.app_context():
+            client_notifs = Notification.query.filter_by(recipient_id=user_id).all()
+            assert len(client_notifs) == 1, \
+                f"expected 1 consolidated notification, got {len(client_notifs)}"
+            n = client_notifs[0]
+            body_lower = (n.body or '').lower()
+            assert 'morning' in body_lower
+            assert 'afternoon' in body_lower
+            assert 'confirmed' in body_lower
+            assert 'waitlist' in body_lower
+
+    def test_book_both_both_confirmed_writes_one_notification(self, app, client):
+        """When both slots auto-confirm, the client should still get just ONE
+        notification ('walks on X are confirmed'), not two separate ones."""
+        from app.models import Notification
+        with app.app_context():
+            tom = tomorrow()
+            from app.models import Walker, WalkerSchedule
+            w_user = make_user(f'walker_bbc_{id(self)}@test.com', role='walker')
+            w = Walker(user_id=w_user.id)
+            db.session.add(w); db.session.flush()
+            db.session.add(WalkerSchedule(walker_id=w.id, day_of_week=tom.weekday(),
+                                           slot='Morning', active=True))
+            db.session.add(WalkerSchedule(walker_id=w.id, day_of_week=tom.weekday(),
+                                           slot='Afternoon', active=True))
+            make_service(capacity=6)
+            email = f'client_bbc_{id(self)}@test.com'
+            user, dog = self._setup_user_dog(email)
+            db.session.commit()
+            user_id = user.id
+
+        login(client, email)
+        resp = client.post('/book_both', json={'date': tom.isoformat()})
+        data = resp.get_json()
+        assert data['success'] is True
+        assert all(b['status'] == 'confirmed' for b in data['bookings'])
+
+        with app.app_context():
+            client_notifs = Notification.query.filter_by(recipient_id=user_id).all()
+            assert len(client_notifs) == 1, \
+                f"expected 1 consolidated notification, got {len(client_notifs)}"
+            n = client_notifs[0]
+            assert 'confirmed' in n.title.lower()
+            body_lower = (n.body or '').lower()
+            assert 'morning' in body_lower
+            assert 'afternoon' in body_lower

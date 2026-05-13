@@ -100,13 +100,19 @@ def report_bug():
     return jsonify(success=False, message="Failed to send — please try again."), 500
 
 
-def _maybe_auto_confirm(booking, dog, service_slug=ServiceType.WALK):
+def _maybe_auto_confirm(booking, dog, service_slug=ServiceType.WALK, notify=True):
     """Try to auto-assign a walker to a newly-created 'requested' booking.
 
     If a walker with capacity is available, sets the booking to confirmed,
-    assigns the walker, and notifies the client. Otherwise notifies admins
-    of the pending request. Must be called before db.session.commit().
-    Returns True if auto-confirmed, False if left as requested.
+    assigns the walker, and (if notify=True) notifies the client. Otherwise
+    (if notify=True) notifies admins of the pending request. Must be called
+    before db.session.commit(). Returns True if auto-confirmed, False if
+    left as requested.
+
+    notify=False skips both the client (actor) notification on confirm and
+    the admin notification on no-walker — used by /book_both, which composes
+    a single consolidated notification covering every slot in the request.
+    Co-owner notifications are always written per-slot regardless.
     """
     walker = auto_assign_walker(booking.date, booking.slot, service_slug=service_slug)
     if walker:
@@ -116,31 +122,66 @@ def _maybe_auto_confirm(booking, dog, service_slug=ServiceType.WALK):
         # Set pickup_order to next available position in this walker's slot
         from app.capacity import get_walker_slot_count
         booking.pickup_order = get_walker_slot_count(walker.id, booking.date, booking.slot, service_slug=service_slug)
-        date_str = booking.date.strftime('%a %-d %b')
-        create_notification(
-            recipient_id=booking.user_id,
-            notification_type='booking_confirmed',
-            title=f'Your walk on {date_str} is confirmed',
-            body=f'{dog.name} is booked for the {booking.slot} slot.',
-            link='/profile',
-        )
+        if notify:
+            date_str = booking.date.strftime('%a %-d %b')
+            create_notification(
+                recipient_id=booking.user_id,
+                notification_type='booking_confirmed',
+                title=f'Your walk on {date_str} is confirmed',
+                body=f'{dog.name} is booked for the {booking.slot} slot.',
+                link='/profile',
+            )
         _notify_co_owners_of_booking(booking, dog.name, confirmed=True)
         return True
     else:
-        # Notify admins — needs manual assignment
-        admins = User.query.filter_by(is_admin=True).all()
-        date_str = booking.date.strftime('%a %-d %b')
-        for admin in admins:
-            create_notification(
-                recipient_id=admin.id,
-                notification_type='booking_requested',
-                title=f'New booking request for {date_str}',
-                body=f'{booking.user.firstname} requested {booking.slot} for {dog.name}',
-                link='/admin',
-                sender_id=booking.user_id,
-            )
+        if notify:
+            # Notify admins — needs manual assignment
+            admins = User.query.filter_by(is_admin=True).all()
+            date_str = booking.date.strftime('%a %-d %b')
+            for admin in admins:
+                create_notification(
+                    recipient_id=admin.id,
+                    notification_type='booking_requested',
+                    title=f'New booking request for {date_str}',
+                    body=f'{booking.user.firstname} requested {booking.slot} for {dog.name}',
+                    link='/admin',
+                    sender_id=booking.user_id,
+                )
         _notify_co_owners_of_booking(booking, dog.name, confirmed=False)
         return False
+
+
+def _summarise_book_both_for_client(slot_entries, dog_name, date_str):
+    """Build (title, body, notification_type) for the single consolidated client
+    notification written by /book_both — covers every slot created in one
+    bell entry instead of one-per-slot.
+
+    slot_entries: list of (slot_name, status, booking) tuples.
+    """
+    ordered = sorted(slot_entries, key=lambda x: 0 if x[0] == 'Morning' else 1)
+
+    def _status_label(status):
+        if status == 'confirmed':  return 'confirmed'
+        if status == 'waitlisted': return 'on waitlist'
+        return 'pending'   # 'requested' — admin needs to assign
+
+    parts = [f'{slot} {_status_label(status)}' for slot, status, _ in ordered]
+    all_confirmed = all(status == 'confirmed' for _, status, _ in ordered)
+    ntype = 'booking_confirmed' if all_confirmed else 'booking_requested'
+
+    if len(ordered) == 2:
+        title = (f'Your walks on {date_str} are confirmed'
+                 if all_confirmed
+                 else f'Your walks on {date_str}')
+    else:
+        slot, status, _ = ordered[0]
+        if status == 'confirmed':
+            title = f'Your walk on {date_str} is confirmed'
+        else:
+            title = f'Your walk request for {date_str}'
+
+    body = f'{dog_name}: ' + ', '.join(parts) + '.'
+    return title, body, ntype
 
 
 def _notify_co_owners_of_booking(booking, dog_name, confirmed):
@@ -334,6 +375,16 @@ def index():
                             link='/admin',
                             sender_id=current_user.id,
                         )
+                    # Client (actor) notification — without this the bell shows
+                    # nothing after a waitlist and the client sees only the
+                    # ephemeral flash.
+                    create_notification(
+                        recipient_id=current_user.id,
+                        notification_type='booking_requested',
+                        title='Your walk request is on the waitlist',
+                        body=f"{dog_name}'s {booking_slot.lower()} walk on {date_str_fmt} — we'll let you know when a spot opens up.",
+                        link='/profile',
+                    )
                     _notify_co_owners_of_booking(new_booking, dog_name, confirmed=False)
                     db.session.commit()
                     flash(f"All slots are currently full for {booking_slot} on {booking_date.strftime('%d %b')}. "
@@ -453,6 +504,15 @@ def book():
                     link              = '/admin',
                     sender_id         = current_user.id,
                 )
+            # Client (actor) notification — without this the bell shows nothing
+            # after a waitlist and the client sees only the ephemeral toast.
+            create_notification(
+                recipient_id      = current_user.id,
+                notification_type = 'booking_requested',
+                title             = 'Your walk request is on the waitlist',
+                body              = f"{dog.name}'s {booking_slot.lower()} walk on {date_str_fmt} — we'll let you know when a spot opens up.",
+                link              = '/profile',
+            )
             _notify_co_owners_of_booking(new_booking, dog.name, confirmed=False)
             db.session.commit()
             message = (f"All slots are full — you've been added to the waitlist "
@@ -572,7 +632,11 @@ def book_both():
 
     db.session.flush()  # get IDs before notifications
 
-    # Auto-assign or notify admins for each booking independently
+    # Auto-assign or notify admins for each booking independently. We pass
+    # notify=False to _maybe_auto_confirm and compose one consolidated
+    # client + admin notification below, so the bell shows a single entry
+    # describing the whole booking action rather than one per slot (and so
+    # the waitlisted slot isn't silently dropped when its sibling confirms).
     date_str_fmt = booking_date.strftime('%a %-d %b')
     final_created = []
     pending_slots = []
@@ -580,8 +644,11 @@ def book_both():
         if status == 'waitlisted':
             pending_slots.append((slot, status, b))
             _notify_co_owners_of_booking(b, dog.name, confirmed=False)
+            # Keep waitlisted slots in final_created so the response payload
+            # and the consolidated client notification cover them too.
+            final_created.append((slot, b.status, b))
         else:
-            auto_confirmed = _maybe_auto_confirm(b, dog)
+            auto_confirmed = _maybe_auto_confirm(b, dog, notify=False)
             final_created.append((slot, b.status, b))
             if not auto_confirmed:
                 pending_slots.append((slot, status, b))
@@ -600,8 +667,23 @@ def book_both():
                 sender_id         = current_user.id,
             )
 
+    # Single consolidated client notification covering every created slot.
+    # Closes the bug where mixed outcomes (one confirmed + one waitlisted)
+    # only surfaced the confirmed slot in the bell.
+    if final_created:
+        title, body, ntype = _summarise_book_both_for_client(
+            final_created, dog.name, date_str_fmt
+        )
+        create_notification(
+            recipient_id      = current_user.id,
+            notification_type = ntype,
+            title             = title,
+            body              = body,
+            link              = '/profile',
+        )
+
     db.session.commit()
-    created = final_created if final_created else created
+    created = final_created
 
     has_pickup_notes = bool(dog and dog.pickup_instructions)
 
