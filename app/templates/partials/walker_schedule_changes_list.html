@@ -20,20 +20,22 @@
     <div class="sched-change-row{% if loop.index > fold %} sched-change-extra d-none{% endif %}"
          data-adhoc-ids="{{ g.adhoc_ids | join(',') }}"
          data-unavail-ids="{{ g.unavail_ids | join(',') }}"
-         data-summary="{% if g.is_range %}{{ g.start_date.strftime('%a %-d %b') }}–{{ g.end_date.strftime('%a %-d %b') }}{% else %}{{ g.start_date.strftime('%A, %-d %B') }}{% endif %}">
+         data-summary="{% if g.is_range %}{{ g.start_date.strftime('%a %-d %b') }}–{{ g.end_date.strftime('%a %-d %b') }}{% else %}{{ g.start_date.strftime('%a %-d %b') }}{% endif %}">
         <div class="d-flex align-items-center gap-2 flex-wrap">
-            <span class="badge sched-type-{{ g.type }}">
-                {% if g.type == 'available' %}
-                <i class="bi bi-check-circle-fill me-1"></i>Available
-                {% else %}
-                <i class="bi bi-x-circle-fill me-1"></i>Unavailable
-                {% endif %}
+            {% if g.type == 'available' %}
+            <span class="badge sched-type-available" aria-label="Available" title="Available">
+                <i class="bi bi-check-circle-fill"></i>
             </span>
+            {% else %}
+            <span class="badge sched-type-unavailable" aria-label="Unavailable" title="Unavailable">
+                <i class="bi bi-x-circle-fill"></i>
+            </span>
+            {% endif %}
             <span class="fw-semibold">
                 {% if g.is_range %}
                 {{ g.start_date.strftime('%a %-d %b') }} – {{ g.end_date.strftime('%a %-d %b') }}
                 {% else %}
-                {{ g.start_date.strftime('%A, %-d %B') }}
+                {{ g.start_date.strftime('%a %-d %b') }}
                 {% endif %}
             </span>
             <span class="badge sched-slot-{{ g.slot_label|lower }}">{{ g.slot_label }}</span>

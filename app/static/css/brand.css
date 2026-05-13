@@ -512,19 +512,22 @@ footer {
 }
 .sched-change-row:last-child { border-bottom: none; }
 
+.badge.sched-type-available,
+.badge.sched-type-unavailable {
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0.25em 0.45em;
+  line-height: 1;
+}
 .badge.sched-type-available {
   background: #ecfdf5;
   color: #047857;
   border: 1px solid #a7f3d0;
-  font-weight: 600;
-  font-size: 0.72rem;
 }
 .badge.sched-type-unavailable {
   background: #fffbeb;
   color: #92400e;
   border: 1px solid #fde68a;
-  font-weight: 600;
-  font-size: 0.72rem;
 }
 .badge.sched-slot-morning,
 .badge.sched-slot-afternoon,
