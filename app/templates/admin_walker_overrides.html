@@ -49,8 +49,8 @@
 
     {% elif selected_walker %}
 
-    {# ── Unified schedule changes card ── #}
-    <div class="col-12 col-lg-8 col-xl-6">
+    {# ── Schedule Changes form ── #}
+    <div class="col-12 col-lg-5">
         <div class="card card-accent-pink">
             <div class="card-header">
                 <i class="bi bi-calendar-event me-2" style="color:#E02FAC;"></i>
@@ -118,18 +118,29 @@
                            placeholder="e.g. Annual leave, doctor's appointment…">
                 </div>
 
-                <div class="d-flex align-items-center gap-2 mb-3">
+                <div class="d-flex align-items-center gap-2">
                     <button class="btn btn-primary fw-semibold" id="sched-add-btn">
                         <i class="bi bi-plus-lg me-1"></i>Add
                     </button>
                     <span id="sched-status" class="small" aria-live="polite"></span>
                 </div>
+            </div>
+        </div>
+    </div>
 
-                {# Merged list #}
-                <hr class="my-3">
-                <h6 class="mb-2 text-muted small text-uppercase fw-semibold">Upcoming</h6>
+    {# ── Upcoming Changes list ── #}
+    <div class="col-12 col-lg-7">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-list-ul me-2"></i>
+                Upcoming Changes — {{ selected_walker.user.firstname }}
+            </div>
+            <div class="card-body">
                 <div id="sched-list-container">
-                    {% include "partials/walker_schedule_changes_list.html" %}
+                    <p class="text-muted small mb-0">
+                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                        Loading…
+                    </p>
                 </div>
             </div>
         </div>
@@ -226,8 +237,7 @@ document.addEventListener('DOMContentLoaded', function () {
             endEl.min = startEl.value || endEl.min;
         });
     }
-    bindShowMore();
-    bindDeleteButtons();
+    refreshList();
 
     document.getElementById('sched-add-btn').addEventListener('click', submitScheduleChange);
 });
