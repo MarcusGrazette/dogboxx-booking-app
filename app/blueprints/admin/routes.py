@@ -2458,14 +2458,42 @@ def walker_schedule_json(walker_id):
         if e.get('day') not in range(7) or e.get('slot') not in valid_slots:
             return jsonify(success=False, message="Invalid schedule data"), 400
     try:
+        old_set = {
+            (s.day_of_week, s.slot)
+            for s in WalkerSchedule.query.filter_by(walker_id=walker_id, active=True).all()
+        }
+        new_set = {(e['day'], e['slot']) for e in entries}
+        removed = old_set - new_set
+
         WalkerSchedule.query.filter_by(walker_id=walker_id).delete()
         for e in entries:
             db.session.add(WalkerSchedule(
                 walker_id=walker_id, day_of_week=e['day'], slot=e['slot'], active=True
             ))
         db.session.commit()
+
+        # Count confirmed future bookings that fall on removed day/slot combos.
+        # These bookings remain valid but the admin should know to review them.
+        affected_count = 0
+        if removed:
+            from datetime import date as _date
+            today = _date.today()
+            future_confirmed = (
+                Booking.query
+                .filter(
+                    Booking.walker_id == walker_id,
+                    Booking.status == 'confirmed',
+                    Booking.date >= today,
+                )
+                .all()
+            )
+            affected_count = sum(
+                1 for b in future_confirmed
+                if (b.date.weekday(), b.slot) in removed
+            )
+
         logging.info(f"Admin {current_user.id} updated schedule for walker {walker_id} via modal")
-        return jsonify(success=True)
+        return jsonify(success=True, affected_count=affected_count)
     except Exception as exc:
         db.session.rollback()
         logging.error(f"Error updating walker schedule (modal): {exc}")

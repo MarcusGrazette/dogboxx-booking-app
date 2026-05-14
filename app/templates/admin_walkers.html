@@ -186,9 +186,10 @@
                     </tbody>
                 </table>
                 <div id="schedule-error" class="alert alert-danger mt-2" style="display:none;"></div>
+                <div id="schedule-warning" class="alert alert-warning mt-2" style="display:none;"></div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" id="schedule-cancel-btn">Cancel</button>
                 <button type="button" class="btn btn-primary fw-semibold" id="schedule-save-btn">
                     <i class="bi bi-check-lg me-1"></i>Save schedule
                 </button>
@@ -365,8 +366,19 @@ var scheduleTitle   = document.getElementById('scheduleModalLabel');
 var scheduleLoading = document.getElementById('schedule-loading');
 var scheduleTable   = document.getElementById('schedule-table');
 var scheduleError   = document.getElementById('schedule-error');
+var scheduleWarning = document.getElementById('schedule-warning');
 var scheduleSaveBtn = document.getElementById('schedule-save-btn');
 var activeWalkerId  = null;
+var scheduleJustSaved = false;
+
+document.getElementById('scheduleModal').addEventListener('hidden.bs.modal', function () {
+    scheduleJustSaved = false;
+    scheduleWarning.style.display = 'none';
+    scheduleSaveBtn.style.display = '';
+    scheduleSaveBtn.disabled      = false;
+    scheduleSaveBtn.innerHTML     = '<i class="bi bi-check-lg me-1"></i>Save schedule';
+    document.getElementById('schedule-cancel-btn').textContent = 'Cancel';
+});
 
 document.querySelectorAll('.schedule-btn').forEach(function (btn) {
     btn.addEventListener('click', function () {
@@ -408,6 +420,11 @@ function showScheduleError(msg) {
 }
 
 scheduleSaveBtn.addEventListener('click', function () {
+    if (scheduleJustSaved) {
+        scheduleModal.hide();
+        return;
+    }
+
     var schedules = [];
     document.querySelectorAll('.sched-check:checked').forEach(function (c) {
         schedules.push({ day: parseInt(c.dataset.day), slot: c.dataset.slot });
@@ -415,7 +432,8 @@ scheduleSaveBtn.addEventListener('click', function () {
 
     scheduleSaveBtn.disabled    = true;
     scheduleSaveBtn.innerHTML   = '<span class="spinner-border spinner-border-sm me-2"></span>Saving…';
-    scheduleError.style.display = 'none';
+    scheduleError.style.display   = 'none';
+    scheduleWarning.style.display = 'none';
 
     fetch('/admin/walkers/' + activeWalkerId + '/schedule-json', {
         method: 'POST',
@@ -428,7 +446,20 @@ scheduleSaveBtn.addEventListener('click', function () {
     .then(function (r) { return r.json(); })
     .then(function (data) {
         if (data.success) {
-            scheduleModal.hide();
+            if (data.affected_count > 0) {
+                var noun = data.affected_count === 1 ? 'booking' : 'bookings';
+                scheduleWarning.textContent = 'Schedule saved. ' + data.affected_count + ' confirmed ' +
+                    noun + ' assigned to this walker fall on days no longer in their schedule — ' +
+                    'check the bookings board and reassign as needed.';
+                scheduleWarning.style.display = '';
+                scheduleTable.style.display   = 'none';
+                scheduleJustSaved = true;
+                scheduleSaveBtn.disabled  = false;
+                scheduleSaveBtn.innerHTML = 'Close';
+                document.getElementById('schedule-cancel-btn').textContent = 'Close';
+            } else {
+                scheduleModal.hide();
+            }
         } else {
             scheduleSaveBtn.disabled  = false;
             scheduleSaveBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save schedule';
