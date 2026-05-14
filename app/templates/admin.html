@@ -3,320 +3,588 @@
 {% block title %}Admin Dashboard{% endblock %}
 
 {% block head_extra %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+/* ── Calendar layout ──────────────────────────────────────────────────── */
+.dash-wrap {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  min-height: 0;
+}
+.cal-card {
+  flex: 1 1 0;
+  min-width: 0;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.03);
+  border: 1px solid #ececec;
+  overflow: hidden;
+}
+.detail-card {
+  width: 340px;
+  min-width: 340px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.03);
+  border: 1px solid #ececec;
+  overflow: hidden;
+}
+.cal-card-header {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.cal-nav-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #ececec;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: #555;
+  line-height: 1;
+  padding: 0;
+  transition: background .15s;
+}
+.cal-nav-btn:hover { background: #f5f5f5; }
+.cal-month-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #1B1B1B;
+  margin: 0 8px;
+}
+.cal-legend {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 11px;
+  color: #666;
+}
+.cal-legend-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 6px;
+  border-radius: 3px;
+  margin-right: 3px;
+  vertical-align: middle;
+}
+
+/* ── Grid ────────────────────────────────────────────────────────────── */
+.cal-grid-wrap { padding: 12px 14px 14px; }
+.cal-dow-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.cal-dow-label {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: #aaa;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 2px 0;
+}
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+/* ── Day cells ───────────────────────────────────────────────────────── */
+.cal-cell {
+  border-radius: 10px;
+  min-height: 108px;
+  padding: 8px 9px 6px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #ececec;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  overflow: visible;
+  position: relative;
+}
+.cal-cell:hover { border-color: #E02FAC88; }
+.cal-cell--today { border: 2px solid #1B1B1B !important; }
+.cal-cell--selected { border: 2px solid #E02FAC !important; background: #fdf4fb !important; }
+.cal-cell--closed {
+  background: #fafafa !important;
+  border-color: #f0f0f0 !important;
+  cursor: default;
+}
+.cal-cell--empty {
+  background: #fafafa;
+  border-color: #f7f7f7;
+  min-height: 108px;
+  border-radius: 10px;
+  cursor: default;
+}
+.cal-cell--today .cal-day-num { color: #E02FAC !important; font-weight: 900; }
+
+.cal-day-num {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1B1B1B;
+  line-height: 1;
+}
+.cal-unavail-badge {
+  font-size: 9px;
+  font-weight: 800;
+  color: #fff;
+  background: #ef4444;
+  padding: 1px 5px;
+  border-radius: 999px;
+  line-height: 1.5;
+}
+.cal-cap-bars { display: flex; flex-direction: column; gap: 3px; flex: 1; }
+.cal-cap-row { display: flex; align-items: center; gap: 4px; }
+.cal-cap-label {
+  width: 14px;
+  font-size: 9px;
+  font-weight: 800;
+  color: #888;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.cal-cap-track {
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: #f0f0f0;
+  overflow: hidden;
+}
+.cal-cap-fill { height: 100%; border-radius: 3px; }
+.cal-cap-count { font-size: 10px; font-weight: 700; white-space: nowrap; }
+.cal-di-badge {
+  font-size: 8px;
+  font-weight: 800;
+  color: #0369a1;
+  background: #e0f2fe;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* ── Span bars ───────────────────────────────────────────────────────── */
+.cal-spans { margin-top: auto; padding-top: 3px; }
+.span-bar {
+  height: 18px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+.span-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 7px;
+  font-weight: 800;
+  flex-shrink: 0;
+  margin-right: 3px;
+}
+.span-label { font-size: 10px; font-weight: 700; }
+
+/* ── Detail panel ────────────────────────────────────────────────────── */
+.detail-header { padding: 16px 16px 0; }
+.detail-today-pill {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 800;
+  color: #E02FAC;
+  background: #fdf4fb;
+  border: 1px solid #E02FAC33;
+  border-radius: 999px;
+  padding: 2px 8px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.detail-date-title {
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: -0.4px;
+  color: #1B1B1B;
+  line-height: 1.2;
+}
+.detail-summary { font-size: 12px; color: #888; margin-top: 2px; }
+.detail-body { padding: 12px 16px 16px; overflow-y: auto; max-height: 600px; }
+.detail-section-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+.detail-slot-cards { display: flex; gap: 8px; margin-bottom: 14px; }
+.detail-slot-card {
+  flex: 1;
+  background: #fafafa;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.detail-slot-card-label {
+  font-size: 9px;
+  font-weight: 800;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.detail-slot-big {
+  font-size: 22px;
+  font-weight: 900;
+  color: #1B1B1B;
+  margin: 4px 0 3px;
+  line-height: 1;
+}
+.detail-slot-dots { font-size: 10px; line-height: 1.5; }
+.detail-walker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f5f5f5;
+}
+.detail-walker-row:last-child { border-bottom: none; }
+.detail-walker-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.detail-walker-name { font-size: 13px; font-weight: 700; color: #1B1B1B; }
+.detail-walker-status { font-size: 10px; color: #888; }
+.detail-walker-pills { display: flex; gap: 4px; }
+.slot-pill {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+</style>
 {% endblock %}
 
 {% block page_title %}Hello, {{ current_user.firstname }}{% endblock %}
-{% block page_subtitle %}Here's what's happening today{% endblock %}
+{% block page_subtitle %}Overview for this month{% endblock %}
 
 {% block main %}
+<div class="dash-wrap">
 
-  {# ── Dashboard section ── #}
-
-  {# Row 1: Stat cards #}
-  <div class="row mb-2">
-
-    <div class="col-md-3 mb-3">
-      <div class="card h-100">
-        <div class="card-body d-flex align-items-center gap-3 py-3">
-          <div style="font-size:2rem; color:#C0258F;"><i class="bi bi-hourglass-split"></i></div>
-          <div>
-            <div style="font-size:1.75rem; font-weight:700; line-height:1; color:#1B1B1B;">{{ pending_count }}</div>
-            <div class="text-muted small">Pending bookings</div>
-          </div>
-        </div>
+  <!-- ── Month calendar card ── -->
+  <div class="cal-card">
+    <div class="cal-card-header">
+      <div class="d-flex align-items-center">
+        <button class="cal-nav-btn" id="calPrev" title="Previous month">&#8249;</button>
+        <span class="cal-month-title" id="calMonthTitle">Loading…</span>
+        <button class="cal-nav-btn" id="calNext" title="Next month">&#8250;</button>
+      </div>
+      <div class="cal-legend">
+        <span><span class="cal-legend-swatch" style="background:#22c55e;"></span>Capacity remaining</span>
+        <span><span class="cal-legend-swatch" style="background:#f59e0b;"></span>Full</span>
+        <span><span class="cal-legend-swatch" style="background:#ef4444;"></span>Waitlisted</span>
       </div>
     </div>
-
-    <div class="col-md-3 mb-3">
-      <div class="card h-100">
-        <div class="card-body d-flex align-items-center gap-3 py-3">
-          <div style="font-size:2rem; color:#E02FAC;"><i class="bi bi-people-fill"></i></div>
-          <div>
-            <div style="font-size:1.75rem; font-weight:700; line-height:1; color:#1B1B1B;">{{ active_clients }}</div>
-            <div class="text-muted small">Active clients</div>
-          </div>
-        </div>
-      </div>
+    <div class="cal-grid-wrap" id="calGridWrap">
+      <!-- rendered by JS -->
     </div>
+  </div>
 
-    <div class="col-md-3 mb-3">
-      <div class="card h-100">
-        <div class="card-body d-flex align-items-center gap-3 py-3">
-          <div style="font-size:2rem; color:#E02FAC;"><i class="bi bi-house-heart-fill"></i></div>
-          <div>
-            <div style="font-size:1.75rem; font-weight:700; line-height:1; color:#1B1B1B;">{{ active_dogs }}</div>
-            <div class="text-muted small">Dogs on roster</div>
-          </div>
-        </div>
-      </div>
+  <!-- ── Day detail card ── -->
+  <div class="detail-card">
+    <div id="dayDetail">
+      <!-- rendered by JS -->
     </div>
+  </div>
 
-    <div class="col-md-3 mb-3">
-      <div class="card h-100">
-        <div class="card-body d-flex align-items-center gap-3 py-3">
-          <div style="font-size:2rem; color:#5E5E5E;"><i class="bi bi-person-walking"></i></div>
-          <div>
-            <div style="font-size:1.75rem; font-weight:700; line-height:1; color:#1B1B1B;">{{ active_walkers }}</div>
-            <div class="text-muted small">Active walkers</div>
-          </div>
-        </div>
-      </div>
-    </div>
+</div>
 
-  </div>{# /Row 1 #}
-
-  {# Row 2: Bookings chart (full width) #}
-  <div class="row mb-2">
-    <div class="col-12 mb-3">
-      <div class="card">
-        <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-          <div class="d-flex align-items-center gap-2">
-            <button id="chartPrev" class="btn btn-sm btn-outline-secondary py-0 px-2" disabled title="Previous 4 weeks">
-              <i class="bi bi-chevron-left"></i>
-            </button>
-            <button id="chartNext" class="btn btn-sm btn-outline-secondary py-0 px-2" title="Next 4 weeks">
-              <i class="bi bi-chevron-right"></i>
-            </button>
-            <strong id="chartTitle">Bookings — next 4 weeks</strong>
-          </div>
-          <div class="d-flex gap-3 small">
-            <span><span class="d-inline-block rounded-1 me-1" style="width:12px;height:12px;background:#E02FAC;"></span>Confirmed</span>
-            <span><span class="d-inline-block rounded-1 me-1" style="width:12px;height:12px;background:#1B1B1B;"></span>Pending</span>
-            <span><span class="d-inline-block rounded-1 me-1" style="width:12px;height:12px;background:#fff;border:1.5px solid #1B1B1B;"></span>Waitlisted</span>
-            <span><span class="d-inline-block me-1" style="width:18px;border-top:2px dashed #aaa;vertical-align:middle;"></span>Walker capacity</span>
-          </div>
-        </div>
-        <div class="card-body" style="position:relative; height:280px;">
-          <canvas id="bookingsChart"></canvas>
-        </div>
-      </div>
-    </div>
-  </div>{# /Row 2 #}
-
-  {# Row 3: Walker availability grid #}
-  <div class="row mb-2">
-    <div class="col-12 mb-3">
-      <div class="card">
-        <div class="card-header"><strong>Walker availability — next 4 weeks</strong></div>
-        <div class="card-body p-0">
-          <div class="table-responsive">
-            <table class="table table-sm table-bordered mb-0" style="font-size:0.78rem;">
-              <thead style="background:#1B1B1B; color:#fff;">
-                <tr>
-                  <th style="min-width:100px;">Walker</th>
-                  {% for d in weekdays %}
-                  <th class="text-center {% if loop.index0 % 5 == 0 and loop.index0 > 0 %}week-sep{% endif %}"
-                      style="white-space:nowrap; font-weight:400; {% if loop.index0 % 5 == 0 and loop.index0 > 0 %}border-left: 2px solid #555 !important;{% endif %}">
-                    <div style="font-weight:600;">{{ d.strftime('%a') }}</div>
-                    <div>{{ d.strftime('%-d') }}</div>
-                  </th>
-                  {% endfor %}
-                </tr>
-              </thead>
-              <tbody>
-                {% for row in walker_grid %}
-                <tr>
-                  <td class="fw-bold" style="white-space:nowrap;">{{ row.walker.user.firstname }}</td>
-                  {% for day in row.days %}
-                  {% set sep_style = 'border-left: 2px solid #dee2e6 !important;' if loop.index0 % 5 == 0 and loop.index0 > 0 else '' %}
-                  {% if day.slots | length == 2 %}
-                    <td class="text-center" style="background:rgba(224,47,172,0.14); color:#C0258F; font-weight:600; {{ sep_style }}">M · A</td>
-                  {% elif day.slots | length == 1 %}
-                    <td class="text-center" style="background:rgba(224,47,172,0.07); color:#C0258F; {{ sep_style }}">{{ day.slots[0][0] }}</td>
-                  {% else %}
-                    <td class="text-center text-muted" style="background:#f8f9fa; color:#ccc !important; {{ sep_style }}">—</td>
-                  {% endif %}
-                  {% endfor %}
-                </tr>
-                {% endfor %}
-                {% if walker_grid | length == 0 %}
-                <tr>
-                  <td colspan="{{ weekdays | length + 1 }}" class="text-center text-muted py-3">No active walkers found.</td>
-                </tr>
-                {% endif %}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>{# /Row 3 #}
-
+<script nonce="{{ csp_nonce }}">
+window._DASH = {
+  today:    {{ today_iso | tojson }},
+  selected: {{ selected_date_iso | tojson }},
+  month:    {{ month_data | tojson }},
+  detail:   {{ day_detail | tojson }},
+};
+</script>
 {% endblock %}
 
 {% block scripts %}
 {{ super() }}
 <script nonce="{{ csp_nonce }}">
-// Bookings chart with date navigation
-(function() {
-  const PINK  = '#E02FAC';
-  const DARK  = '#1B1B1B';
-  const WHITE = '#ffffff';
+(function () {
+  'use strict';
 
-  const TODAY_ISO = '{{ today_iso }}';
-
-  // Parse YYYY-MM-DD → Date (local, no timezone shift)
-  function parseIso(s) {
-    const [y, m, d] = s.split('-').map(Number);
-    return new Date(y, m - 1, d);
+  /* ── Utilities ─────────────────────────────────────────────────────── */
+  function esc(s) {
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  // Format Date → YYYY-MM-DD
-  function toIso(dt) {
-    return dt.toISOString().slice(0, 10);
+  /* ── Capacity bar helpers ───────────────────────────────────────────── */
+  function capColor(slot) {
+    if (slot.waitlist > 0) return '#ef4444';
+    if (slot.capacity > 0 && (slot.confirmed + slot.pending) >= slot.capacity) return '#f59e0b';
+    return '#22c55e';
+  }
+  function capPct(slot) {
+    if (slot.capacity <= 0) return 0;
+    return Math.min(100, ((slot.confirmed + slot.pending) / slot.capacity) * 100);
   }
 
-  // Add/subtract days from a YYYY-MM-DD string
-  function shiftDate(iso, days) {
-    const dt = parseIso(iso);
-    dt.setDate(dt.getDate() + days);
-    return toIso(dt);
-  }
+  /* ── Span bar renderer ──────────────────────────────────────────────── */
+  function renderSpanBar(span) {
+    const c = span.walker_color;
+    const isStart = span.is_start, isEnd = span.is_end;
 
-  let currentStart = TODAY_ISO;   // tracks the displayed window start
+    let br;
+    if (isStart && isEnd)  br = '4px';
+    else if (isStart)      br = '4px 0 0 4px';
+    else if (isEnd)        br = '0 4px 4px 0';
+    else                   br = '0';
 
-  const ctx = document.getElementById('bookingsChart');
-  if (!ctx) return;
+    const ml = isStart ? '0'     : '-10px';
+    const mr = isEnd   ? '0'     : '-10px';
+    const bl = isStart ? `3px solid ${c}` : 'none';
+    const pl = isStart ? '4px'   : '0';
 
-  const capacityPlugin = {
-    id: 'capacityLines',
-    afterDraw(chart) {
-      const { ctx: c, chartArea: { left, right }, scales: { y } } = chart;
-      [6, 12, 18].forEach(val => {
-        const yPos = y.getPixelForValue(val);
-        c.save();
-        c.beginPath();
-        c.setLineDash([4, 4]);
-        c.strokeStyle = 'rgba(100,100,100,0.6)';
-        c.lineWidth = 1.5;
-        c.moveTo(left, yPos);
-        c.lineTo(right, yPos);
-        c.stroke();
-        c.restore();
-      });
+    let label = '';
+    if (span.show_label) {
+      label = `<span class="span-avatar" style="background:${c};">${esc(span.walker_initials)}</span>` +
+              `<span class="span-label" style="color:${c};">${esc(span.walker_firstname)} &middot; ${esc(span.reason)}</span>`;
     }
+
+    return `<div class="span-bar" style="background:${c}22;border-left:${bl};border-radius:${br};` +
+           `margin-left:${ml};margin-right:${mr};padding-left:${pl};">${label}</div>`;
+  }
+
+  /* ── Capacity bar row ───────────────────────────────────────────────── */
+  function renderCapRow(slot, label) {
+    const color  = capColor(slot);
+    const pct    = capPct(slot);
+    const booked = slot.confirmed + slot.pending;
+    const countStyle = slot.waitlist > 0 ? `color:#ef4444;` : '';
+    const countStr   = slot.waitlist > 0
+      ? `${booked}<span style="font-size:8px;">+${slot.waitlist}</span>`
+      : `${booked}`;
+    const diTag = slot.drop_ins > 0
+      ? `<span class="cal-di-badge">DI:${slot.drop_ins}</span>`
+      : '';
+    return `<div class="cal-cap-row">` +
+      `<span class="cal-cap-label">${label}</span>` +
+      `<div class="cal-cap-track"><div class="cal-cap-fill" style="width:${pct}%;background:${color};"></div></div>` +
+      `<span class="cal-cap-count" style="${countStyle}">${countStr}</span>${diTag}` +
+      `</div>`;
+  }
+
+  /* ── Day cell renderer ──────────────────────────────────────────────── */
+  function renderCell(cell, selectedDate) {
+    if (!cell) return `<div class="cal-cell cal-cell--empty"></div>`;
+
+    const { date_str, day_num, is_today, is_weekend, is_closed, am, pm,
+            unavailable_count, spans } = cell;
+
+    let cls = 'cal-cell';
+    if (is_today)                     cls += ' cal-cell--today';
+    if (date_str === selectedDate)    cls += ' cal-cell--selected';
+    if (is_closed)                    cls += ' cal-cell--closed';
+
+    const dayNumColor = is_closed && is_weekend ? '#ccc' : '';
+    const dayNumStyle = dayNumColor ? `style="color:${dayNumColor};"` : '';
+
+    if (is_closed) {
+      return `<div class="${cls}" data-date="${date_str}">` +
+        `<span class="cal-day-num" ${dayNumStyle}>${day_num}</span>` +
+        `<div style="font-size:11px;color:#ccc;margin-top:6px;font-weight:600;">Closed</div>` +
+        `</div>`;
+    }
+
+    const badge = unavailable_count > 0
+      ? `<span class="cal-unavail-badge" title="${unavailable_count} walker(s) unavailable">-${unavailable_count}</span>`
+      : '';
+
+    const spanHtml = spans.length
+      ? `<div class="cal-spans">${spans.map(renderSpanBar).join('')}</div>`
+      : '';
+
+    return `<div class="${cls}" data-date="${date_str}" onclick="window._selectDay('${date_str}')">` +
+      `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">` +
+        `<span class="cal-day-num">${day_num}</span>${badge}` +
+      `</div>` +
+      `<div class="cal-cap-bars">${renderCapRow(am, 'AM')}${renderCapRow(pm, 'PM')}</div>` +
+      spanHtml +
+      `</div>`;
+  }
+
+  /* ── Full grid renderer ─────────────────────────────────────────────── */
+  function renderGrid(monthData, selectedDate) {
+    const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    let html = `<div class="cal-dow-row">${DOW.map(d => `<div class="cal-dow-label">${d}</div>`).join('')}</div>`;
+    html += `<div class="cal-grid">`;
+    for (const week of monthData.calendar_weeks) {
+      for (const cell of week) {
+        html += renderCell(cell, selectedDate);
+      }
+    }
+    html += `</div>`;
+    return html;
+  }
+
+  /* ── Pill helper ────────────────────────────────────────────────────── */
+  const PILL_STYLE = {
+    available:   'background:#dcfce7;color:#15803d;',
+    unavailable: 'background:#fee2e2;color:#b91c1c;',
+    adhoc:       'background:#fef3c7;color:#a16207;',
+    off:         'background:#f4f4f5;color:#a1a1aa;',
   };
-
-  function makeDatasets(d) {
-    return [
-      { label: 'Confirmed',  stack: 'morning',   data: d.morning_confirmed,   backgroundColor: PINK,  borderRadius: 2 },
-      { label: 'Pending',    stack: 'morning',   data: d.morning_pending,     backgroundColor: DARK,  borderRadius: 2 },
-      { label: 'Waitlisted', stack: 'morning',   data: d.morning_waitlisted,  backgroundColor: WHITE, borderColor: DARK, borderWidth: 1, borderRadius: 2 },
-      { label: 'Confirmed',  stack: 'afternoon', data: d.afternoon_confirmed, backgroundColor: PINK,  borderRadius: 2 },
-      { label: 'Pending',    stack: 'afternoon', data: d.afternoon_pending,   backgroundColor: DARK,  borderRadius: 2 },
-      { label: 'Waitlisted', stack: 'afternoon', data: d.afternoon_waitlisted,backgroundColor: WHITE, borderColor: DARK, borderWidth: 1, borderRadius: 2 },
-    ];
+  function pill(state, label) {
+    const s = PILL_STYLE[state] || PILL_STYLE.off;
+    return `<span class="slot-pill" style="${s}">${label}</span>`;
   }
 
-  // Initial data from server-rendered template (no fetch on first load)
-  const initialData = {
-    labels:              {{ chart_labels | tojson }},
-    is_weekend:          {{ chart_is_weekend | tojson }},
-    morning_confirmed:   {{ chart_morning_confirmed | tojson }},
-    morning_pending:     {{ chart_morning_pending | tojson }},
-    morning_waitlisted:  {{ chart_morning_waitlisted | tojson }},
-    afternoon_confirmed: {{ chart_afternoon_confirmed | tojson }},
-    afternoon_pending:   {{ chart_afternoon_pending | tojson }},
-    afternoon_waitlisted:{{ chart_afternoon_waitlisted | tojson }},
-  };
-
-  let isWeekend = initialData.is_weekend;
-
-  const chart = new Chart(ctx, {
-    type: 'bar',
-    data: { labels: initialData.labels, datasets: makeDatasets(initialData) },
-    plugins: [capacityPlugin],
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { duration: 300 },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          mode: 'index',
-          intersect: false,
-          filter: (item) => item.datasetIndex < 6,
-          callbacks: {
-            title: (items) => {
-              const idx = items[0]?.dataIndex;
-              return isWeekend[idx] ? items[0].label + ' (weekend)' : items[0].label;
-            },
-            label: (item) => {
-              const slot = item.datasetIndex < 3 ? 'Morning' : 'Afternoon';
-              return ` ${slot} ${item.dataset.label}: ${item.raw}`;
-            },
-          },
-        },
-      },
-      scales: {
-        x: {
-          stacked: true,
-          grid: { display: false },
-          ticks: {
-            font: (c) => ({ size: isWeekend[c.index] ? 8 : 10 }),
-            color: (c) => isWeekend[c.index] ? '#ccc' : '#555',
-            maxRotation: 45,
-          },
-        },
-        y: {
-          stacked: true,
-          beginAtZero: true,
-          max: 20,
-          ticks: { stepSize: 2 },
-          grid: { color: 'rgba(0,0,0,0.05)' },
-        },
-      },
-    },
-  });
-
-  // ── Navigation ──────────────────────────────────────────────────────────
-  const prevBtn   = document.getElementById('chartPrev');
-  const nextBtn   = document.getElementById('chartNext');
-  const titleEl   = document.getElementById('chartTitle');
-
-  function updateTitle(start) {
-    // "Bookings — 10 Mar → 6 Apr"
-    const s = parseIso(start);
-    const e = parseIso(shiftDate(start, 27));
-    const fmt = (dt) => dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-    titleEl.textContent = `Bookings — ${fmt(s)} → ${fmt(e)}`;
+  function walkerStatusText(amSt, pmSt) {
+    if (amSt === 'unavailable' || pmSt === 'unavailable') return 'Marked unavailable';
+    if (amSt === 'adhoc'       || pmSt === 'adhoc')       return 'Ad-hoc';
+    const onAM = amSt === 'available', onPM = pmSt === 'available';
+    if (onAM && onPM) return 'AM + PM';
+    if (onAM)         return 'Morning only';
+    if (onPM)         return 'Afternoon only';
+    return 'Not scheduled';
   }
 
-  function updateButtons() {
-    prevBtn.disabled = currentStart <= TODAY_ISO;
+  /* ── Detail slot card ───────────────────────────────────────────────── */
+  function renderSlotCard(slot, label, icon) {
+    const booked   = slot.confirmed + slot.pending;
+    const isWL     = slot.waitlist > 0;
+    const bigColor = isWL ? '#ef4444' : '#1B1B1B';
+
+    let dots = `<span style="color:#22c55e;">&#9679; ${slot.confirmed} conf</span>`;
+    if (slot.pending  > 0) dots += ` <span style="color:#f59e0b;">&#9679; ${slot.pending} pend</span>`;
+    if (slot.waitlist > 0) dots += ` <span style="color:#ef4444;">&#9679; ${slot.waitlist} WL</span>`;
+    if (slot.drop_ins > 0) dots += ` <span style="color:#0369a1;">&#9679; ${slot.drop_ins} DI</span>`;
+
+    return `<div class="detail-slot-card">` +
+      `<div class="detail-slot-card-label">${icon} ${label}</div>` +
+      `<div class="detail-slot-big" style="color:${bigColor};">${booked} / ${slot.capacity}</div>` +
+      `<div class="detail-slot-dots">${dots}</div>` +
+      `</div>`;
   }
 
-  async function loadWindow(startIso) {
-    prevBtn.disabled = true;
-    nextBtn.disabled = true;
+  /* ── Day detail renderer ────────────────────────────────────────────── */
+  function renderDetail(detail) {
+    const todayPill = detail.is_today
+      ? `<span class="detail-today-pill">Today</span><br>`
+      : '';
+
+    const walkerRows = detail.walkers.map(w => {
+      const isOff  = w.am_state === 'off' && w.pm_state === 'off';
+      const opacity = isOff ? '0.45' : '1';
+      const status  = walkerStatusText(w.am_state, w.pm_state);
+      return `<div class="detail-walker-row" style="opacity:${opacity};">` +
+        `<div class="detail-walker-avatar" style="background:${w.color};">${esc(w.initials)}</div>` +
+        `<div style="flex:1;min-width:0;">` +
+          `<div class="detail-walker-name">${esc(w.name)}</div>` +
+          `<div class="detail-walker-status">${status}</div>` +
+        `</div>` +
+        `<div class="detail-walker-pills">${pill(w.am_state,'AM')}${pill(w.pm_state,'PM')}</div>` +
+        `</div>`;
+    }).join('');
+
+    return `<div class="detail-header">` +
+        `${todayPill}` +
+        `<div class="detail-date-title">${esc(detail.date_display)}</div>` +
+        `<div class="detail-summary">${detail.on_shift} walkers on shift &middot; ${detail.unavailable} unavailable</div>` +
+      `</div>` +
+      `<hr style="margin:10px 16px;">` +
+      `<div class="detail-body">` +
+        `<div class="detail-section-title">Today's Bookings</div>` +
+        `<div class="detail-slot-cards">` +
+          renderSlotCard(detail.am, 'Morning',   '&#9728;') +
+          renderSlotCard(detail.pm, 'Afternoon', '&#9790;') +
+        `</div>` +
+        `<div class="detail-section-title">Walkers</div>` +
+        `<div>${walkerRows}</div>` +
+      `</div>`;
+  }
+
+  /* ── State ──────────────────────────────────────────────────────────── */
+  const D = window._DASH;
+  let currentMonthData  = D.month;
+  let currentDetailData = D.detail;
+  let selectedDate      = D.selected;
+
+  /* ── Initial render ─────────────────────────────────────────────────── */
+  function paint() {
+    document.getElementById('calMonthTitle').textContent = currentMonthData.month_name;
+    document.getElementById('calGridWrap').innerHTML    = renderGrid(currentMonthData, selectedDate);
+    document.getElementById('dayDetail').innerHTML      = renderDetail(currentDetailData);
+  }
+  paint();
+
+  /* ── Month navigation ───────────────────────────────────────────────── */
+  async function loadMonth(year, month) {
     try {
-      const resp = await fetch(`/admin/api/chart-data?start=${startIso}`);
-      const d = await resp.json();
-      currentStart = d.start;     // server may have clamped it
-      isWeekend = d.is_weekend;
-
-      chart.data.labels   = d.labels;
-      chart.data.datasets = makeDatasets(d);
-      chart.update();
-
-      updateTitle(currentStart);
-    } finally {
-      updateButtons();
-      nextBtn.disabled = false;
+      const res = await fetch(`/admin/api/month-data?year=${year}&month=${month}`);
+      if (!res.ok) throw new Error(res.status);
+      currentMonthData = await res.json();
+      document.getElementById('calMonthTitle').textContent = currentMonthData.month_name;
+      document.getElementById('calGridWrap').innerHTML    = renderGrid(currentMonthData, selectedDate);
+    } catch (e) {
+      console.error('month-data fetch failed', e);
     }
   }
 
-  prevBtn.addEventListener('click', () => {
-    loadWindow(shiftDate(currentStart, -28));
+  document.getElementById('calPrev').addEventListener('click', () => {
+    let { year, month } = currentMonthData;
+    month -= 1;
+    if (month < 1) { month = 12; year -= 1; }
+    loadMonth(year, month);
   });
 
-  nextBtn.addEventListener('click', () => {
-    loadWindow(shiftDate(currentStart, 28));
+  document.getElementById('calNext').addEventListener('click', () => {
+    let { year, month } = currentMonthData;
+    month += 1;
+    if (month > 12) { month = 1; year += 1; }
+    loadMonth(year, month);
   });
 
-  // Set initial title (first window = "next 4 weeks" default wording)
-  // Leave as-is on first load; title updates on navigation
+  /* ── Day selection ──────────────────────────────────────────────────── */
+  window._selectDay = async function (dateStr) {
+    selectedDate = dateStr;
+    // Move selection border immediately
+    document.getElementById('calGridWrap').innerHTML = renderGrid(currentMonthData, selectedDate);
+    // Fetch detail
+    try {
+      const res = await fetch(`/admin/api/day-detail?date=${dateStr}`);
+      if (!res.ok) throw new Error(res.status);
+      currentDetailData = await res.json();
+      document.getElementById('dayDetail').innerHTML = renderDetail(currentDetailData);
+    } catch (e) {
+      console.error('day-detail fetch failed', e);
+    }
+  };
+
 })();
 </script>
 {% endblock %}
