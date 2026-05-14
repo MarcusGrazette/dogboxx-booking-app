@@ -81,7 +81,7 @@
 .cal-grid-wrap { padding: 12px 14px 14px; }
 .cal-dow-row {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 6px;
   margin-bottom: 4px;
 }
@@ -96,7 +96,7 @@
 }
 .cal-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 6px;
 }
 
@@ -410,7 +410,7 @@ window._DASH = {
     if (date_str === selectedDate)    cls += ' cal-cell--selected';
     if (is_closed)                    cls += ' cal-cell--closed';
 
-    const dayNumColor = is_closed && is_weekend ? '#ccc' : '';
+    const dayNumColor = is_closed ? '#ccc' : '';
     const dayNumStyle = dayNumColor ? `style="color:${dayNumColor};"` : '';
 
     if (is_closed) {
@@ -439,7 +439,7 @@ window._DASH = {
 
   /* ── Full grid renderer ─────────────────────────────────────────────── */
   function renderGrid(monthData, selectedDate) {
-    const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
     let html = `<div class="cal-dow-row">${DOW.map(d => `<div class="cal-dow-label">${d}</div>`).join('')}</div>`;
     html += `<div class="cal-grid">`;
     for (const week of monthData.calendar_weeks) {
@@ -501,11 +501,17 @@ window._DASH = {
       const isOff  = w.am_state === 'off' && w.pm_state === 'off';
       const opacity = isOff ? '0.45' : '1';
       const status  = walkerStatusText(w.am_state, w.pm_state);
+      const countParts = [];
+      if (w.am_bookings > 0) countParts.push(`${w.am_bookings} AM`);
+      if (w.pm_bookings > 0) countParts.push(`${w.pm_bookings} PM`);
+      const countHtml = countParts.length
+        ? ` <span style="color:#E02FAC;font-weight:700;">${countParts.join(' · ')}</span>`
+        : '';
       return `<div class="detail-walker-row" style="opacity:${opacity};">` +
         `<div class="detail-walker-avatar" style="background:${w.color};">${esc(w.initials)}</div>` +
         `<div style="flex:1;min-width:0;">` +
           `<div class="detail-walker-name">${esc(w.name)}</div>` +
-          `<div class="detail-walker-status">${status}</div>` +
+          `<div class="detail-walker-status">${esc(status)}${countHtml}</div>` +
         `</div>` +
         `<div class="detail-walker-pills">${pill(w.am_state,'AM')}${pill(w.pm_state,'PM')}</div>` +
         `</div>`;

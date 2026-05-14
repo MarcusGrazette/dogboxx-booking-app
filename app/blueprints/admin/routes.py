@@ -235,22 +235,23 @@ def _compute_month_data(year, month, today):
         })
 
     # ── Build day cells ──────────────────────────────────────────────────────
-    flat_cells = [None] * month_start.weekday()  # Monday-align
+    start_dow = month_start.weekday()
+    flat_cells = [None] * (start_dow if start_dow <= 4 else 0)  # Mon–Fri align
     for i in range(days_in_month):
         d = month_start + timedelta(days=i)
+        if d.weekday() >= 5:
+            continue  # exclude Sat/Sun from Mon–Fri grid
         d_iso      = d.isoformat()
-        is_weekend = d.weekday() >= 5
         is_closure = d in closures
 
         am = slot_stats(d, 'Morning')
         pm = slot_stats(d, 'Afternoon')
-        is_closed = is_weekend or is_closure or (am['capacity'] == 0 and pm['capacity'] == 0)
+        is_closed = is_closure or (am['capacity'] == 0 and pm['capacity'] == 0)
 
         unavail_count = 0
-        if not is_weekend:
-            for wid in active_walker_ids:
-                if d in unavail_by_walker.get(wid, {}):
-                    unavail_count += 1
+        for wid in active_walker_ids:
+            if d in unavail_by_walker.get(wid, {}):
+                unavail_count += 1
 
         is_monday = (d.weekday() == 0)
         cell_spans = []
@@ -269,7 +270,7 @@ def _compute_month_data(year, month, today):
             'date_str':          d_iso,
             'day_num':           d.day,
             'is_today':          d == today,
-            'is_weekend':        is_weekend,
+            'is_weekend':        False,
             'is_closed':         is_closed,
             'am':                am,
             'pm':                pm,
@@ -277,10 +278,10 @@ def _compute_month_data(year, month, today):
             'spans':             cell_spans,
         })
 
-    while len(flat_cells) % 7:
+    while len(flat_cells) % 5:
         flat_cells.append(None)
 
-    calendar_weeks = [flat_cells[i:i+7] for i in range(0, len(flat_cells), 7)]
+    calendar_weeks = [flat_cells[i:i+5] for i in range(0, len(flat_cells), 5)]
 
     return {
         'year':           year,
@@ -333,6 +334,25 @@ def _compute_day_detail(selected_date, today):
     for row in raw_bookings:
         booking_map.setdefault(row.slot, {}).setdefault(row.status, {})[row.slug] = row.cnt
 
+    walker_booking_rows = (
+        db.session.query(
+            Booking.walker_id, Booking.slot,
+            func.count(Booking.id).label('cnt'),
+        )
+        .join(ServiceType)
+        .filter(
+            Booking.date == selected_date,
+            Booking.status.in_(Booking.ACTIVE_STATUSES),
+            Booking.slot.in_(['Morning', 'Afternoon']),
+            ServiceType.slug == ServiceType.WALK,
+        )
+        .group_by(Booking.walker_id, Booking.slot)
+        .all()
+    )
+    walker_booking_map = {}  # {walker_id: {slot: count}}
+    for row in walker_booking_rows:
+        walker_booking_map.setdefault(row.walker_id, {})[row.slot] = row.cnt
+
     walk_max = get_max_per_walker(ServiceType.WALK)
     dow = selected_date.weekday()
 
@@ -377,12 +397,14 @@ def _compute_day_detail(selected_date, today):
             on_shift += 1
 
         walker_rows.append({
-            'walker_id': w.id,
-            'name':      w.user.firstname,
-            'initials':  _walker_initials(w),
-            'color':     _walker_color(w.id),
-            'am_state':  am_st,
-            'pm_state':  pm_st,
+            'walker_id':   w.id,
+            'name':        w.user.firstname,
+            'initials':    _walker_initials(w),
+            'color':       _walker_color(w.id),
+            'am_state':    am_st,
+            'pm_state':    pm_st,
+            'am_bookings': walker_booking_map.get(w.id, {}).get('Morning', 0),
+            'pm_bookings': walker_booking_map.get(w.id, {}).get('Afternoon', 0),
         })
 
     return {
