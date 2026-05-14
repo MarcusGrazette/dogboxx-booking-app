@@ -277,6 +277,16 @@ def add_unavailability():
         reason=reason
     )
     db.session.add(unavail)
+
+    # Any confirmed bookings this walker held for this date/slot are no longer
+    # guaranteed — reset them to requested so they surface as pending on the board.
+    affected = Booking.query.filter_by(
+        walker_id=walker.id, date=unavail_date, slot=slot, status='confirmed',
+    ).all()
+    for b in affected:
+        b.walker_id = None
+        b.status = 'requested'
+
     db.session.commit()
 
     return jsonify(success=True, message="Unavailability added", unavailability=unavail.to_dict()), 201
@@ -553,6 +563,13 @@ def schedule_changes_batch():
                 db.session.add(row)
                 db.session.flush()
                 created_unavail_ids.append(row.id)
+
+                # Reset any confirmed bookings for this slot back to requested.
+                for b in Booking.query.filter_by(
+                    walker_id=walker.id, date=current, slot=slot, status='confirmed',
+                ).all():
+                    b.walker_id = None
+                    b.status = 'requested'
             else:  # available
                 if slot in scheduled_slots:
                     skipped += 1
