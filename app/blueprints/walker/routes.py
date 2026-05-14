@@ -477,26 +477,31 @@ def schedule_changes_batch():
           "end_date":   "YYYY-MM-DD",   # optional, defaults to start_date
           "slots":      ["Morning"] | ["Afternoon"] | ["Morning","Afternoon"],
           "type":       "available" | "unavailable",
-          "reason":     "Annual leave" # optional
+          "reason":     "Annual leave", # optional
+          "walker_id":  123             # optional, admin only
         }
 
     Iterates (date in range, slot in slots) and either:
       • type=available    → creates WalkerAdHocAvailability if the walker is
         NOT in the default schedule for that day/slot (and not already adhoc)
-      • type=unavailable  → creates WalkerUnavailability if the walker IS
-        scheduled for that day/slot (and not already marked)
+      • type=unavailable  → creates WalkerUnavailability for every weekday in
+        the range, regardless of whether the walker is scheduled that day
 
     Weekends (Saturday + Sunday) are always skipped — DogBoxx is Mon–Fri.
     All slots either-applied or all-skipped are reported in the response so
     the walker sees what actually happened.
     """
-    walker = Walker.query.filter_by(user_id=current_user.id).first()
-    if not walker:
-        return jsonify(success=False, message="Walker profile not found"), 404
-
     data = request.get_json(silent=True)
     if not data:
         return jsonify(success=False, message="Invalid JSON"), 400
+
+    # Admins may pass walker_id to act on behalf of any walker.
+    if current_user.is_admin and data.get('walker_id'):
+        walker = Walker.query.get_or_404(int(data['walker_id']))
+    else:
+        walker = Walker.query.filter_by(user_id=current_user.id).first()
+        if not walker:
+            return jsonify(success=False, message="Walker profile not found"), 404
 
     start_str = data.get('start_date') or data.get('date')
     end_str = data.get('end_date') or start_str
@@ -545,12 +550,6 @@ def schedule_changes_batch():
 
         for slot in slots:
             if change_type == 'unavailable':
-                if slot not in scheduled_slots:
-                    skipped += 1
-                    skipped_reasons.append(
-                        f"{date_label} {slot} — you're not normally scheduled."
-                    )
-                    continue
                 exists = WalkerUnavailability.query.filter_by(
                     walker_id=walker.id, date=current, slot=slot
                 ).first()
@@ -618,16 +617,21 @@ def schedule_changes_batch_delete():
     JSON body:
         {
           "adhoc_ids":   [1, 2, 3],   # optional
-          "unavail_ids": [4, 5]        # optional
+          "unavail_ids": [4, 5],       # optional
+          "walker_id":   123           # optional, admin only
         }
-    Only rows owned by the current walker are deleted; others are silently
+    Only rows owned by the resolved walker are deleted; others are silently
     ignored. Returns the count actually deleted.
     """
-    walker = Walker.query.filter_by(user_id=current_user.id).first()
-    if not walker:
-        return jsonify(success=False, message="Walker profile not found"), 404
-
     data = request.get_json(silent=True) or {}
+
+    # Admins may pass walker_id to act on behalf of any walker.
+    if current_user.is_admin and data.get('walker_id'):
+        walker = Walker.query.get_or_404(int(data['walker_id']))
+    else:
+        walker = Walker.query.filter_by(user_id=current_user.id).first()
+        if not walker:
+            return jsonify(success=False, message="Walker profile not found"), 404
     adhoc_ids = data.get('adhoc_ids') or []
     unavail_ids = data.get('unavail_ids') or []
 
