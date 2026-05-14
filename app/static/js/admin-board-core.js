@@ -491,7 +491,7 @@
             declineModal.hide();
             try {
                 const res  = await fetch(DECLINE_URL(id), {
-                    method: 'POST', headers: { 'X-CSRFToken': CSRF }
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF }
                 });
                 const data = await res.json();
                 if (!data.success) throw new Error(data.message || 'Could not decline');

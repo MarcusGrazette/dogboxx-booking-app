@@ -79,6 +79,10 @@ def send_web_push(user_id, title, body='', link='/', icon=None, unread_count=1, 
 
         except WebPushException as e:
             status = getattr(e.response, 'status_code', None) if e.response else None
+            # pywebpush sometimes returns no response object even when the push
+            # service replied with 410 — fall back to parsing the message.
+            if status is None and ('410' in str(e) or '404' in str(e)):
+                status = 410 if '410' in str(e) else 404
             if status in (404, 410):
                 log.info('Web Push: stale subscription %s for user %s (HTTP %s) — removing',
                          sub['id'], user_id, status)

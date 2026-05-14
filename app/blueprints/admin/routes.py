@@ -699,104 +699,108 @@ def board_data(date_str):
     except ValueError:
         return jsonify(success=False, message="Invalid date"), 400
 
-    group_walk_service = ServiceType.query.filter_by(slug=ServiceType.WALK).first()
-    all_bookings = (
-        Booking.query
-        .options(
-            joinedload(Booking.dog),
-            joinedload(Booking.walker).joinedload(Walker.user),
-            joinedload(Booking.user),
+    try:
+        group_walk_service = ServiceType.query.filter_by(slug=ServiceType.WALK).first()
+        all_bookings = (
+            Booking.query
+            .options(
+                joinedload(Booking.dog),
+                joinedload(Booking.walker).joinedload(Walker.user),
+                joinedload(Booking.user),
+            )
+            .filter(
+                Booking.date == selected_date,
+                Booking.status != 'cancelled',
+                Booking.service_type_id == group_walk_service.id if group_walk_service else True,
+            )
+            .all()
         )
-        .filter(
-            Booking.date == selected_date,
-            Booking.status != 'cancelled',
-            Booking.service_type_id == group_walk_service.id if group_walk_service else True,
+
+        day_of_week = selected_date.weekday()
+        schedules = WalkerSchedule.query.filter_by(day_of_week=day_of_week, active=True).all()
+        walker_sched_slots = {}   # default-schedule slots regardless of unavailability
+        for s in schedules:
+            walker_sched_slots.setdefault(s.walker_id, set()).add(s.slot)
+
+        # Ad hoc availability for this specific date
+        adhoc_entries = WalkerAdHocAvailability.query.filter_by(date=selected_date).all()
+        walker_adhoc_slots = {}
+        for a in adhoc_entries:
+            walker_adhoc_slots.setdefault(a.walker_id, set()).add(a.slot)
+
+        # Track which slots each walker has marked unavailable
+        unavailabilities = WalkerUnavailability.query.filter_by(date=selected_date).all()
+        walker_unavail_slots = {}
+        for u in unavailabilities:
+            walker_unavail_slots.setdefault(u.walker_id, set()).add(u.slot)
+
+        # Union of scheduled + ad hoc walker IDs — all appear on the board
+        all_board_walker_ids = set(walker_sched_slots.keys()) | set(walker_adhoc_slots.keys())
+        walkers = (
+            Walker.query.options(joinedload(Walker.user))
+            .join(User, Walker.user_id == User.id)
+            .filter(Walker.id.in_(all_board_walker_ids), User.active == True)
+            .all()
+        ) if all_board_walker_ids else []
+
+        # Dogs that have active bookings in BOTH Morning and Afternoon today — used for the
+        # double-walk icon on board cards (whether booked via "both walks" or manually).
+        from collections import defaultdict
+        _dog_slots = defaultdict(set)
+        for b in all_bookings:
+            if b.status not in ('cancelled', 'rejected'):
+                _dog_slots[b.dog_id].add(b.slot)
+        both_slots_dog_ids = {
+            dog_id for dog_id, slots in _dog_slots.items()
+            if 'Morning' in slots and 'Afternoon' in slots
+        }
+
+        def booking_dict(b):
+            d = {
+                'id': b.id,
+                'dog_name': b.dog.name if b.dog else 'Unknown',
+                'dog_pic': b.dog.pic if b.dog and b.dog.pic else None,
+                'owner_name': b.dog.owners_display if b.dog else (b.user.full_name if b.user else ''),
+                'slot': b.slot,
+                'status': b.status,
+                'pickup_order': b.pickup_order,
+                'walker_id': b.walker_id,
+                'has_both_slots': b.dog_id in both_slots_dog_ids,
+                'has_notes': bool(b.dog and b.dog.pickup_instructions),
+            }
+            return d
+
+        pending   = [booking_dict(b) for b in all_bookings if b.status in ('requested', 'waitlisted')]
+        assigned  = [booking_dict(b) for b in all_bookings if b.walker_id and b.status == 'confirmed']
+
+        slot_order = lambda s: 0 if s == 'Morning' else 1
+        walkers_data = [
+            {
+                'id': w.id,
+                'name': w.user.firstname if w.user else 'Walker',
+                'available_slots': sorted(
+                    (walker_sched_slots.get(w.id, set()) | walker_adhoc_slots.get(w.id, set()))
+                    - walker_unavail_slots.get(w.id, set()),
+                    key=slot_order
+                ),
+                'unavailable_slots': sorted(walker_unavail_slots.get(w.id, []), key=slot_order),
+            }
+            for w in walkers
+        ]
+
+        max_capacity = get_max_per_walker(ServiceType.WALK)
+
+        return jsonify(
+            success=True,
+            date=date_str,
+            pending=pending,
+            assigned=assigned,
+            walkers=walkers_data,
+            max_capacity=max_capacity,
         )
-        .all()
-    )
-
-    day_of_week = selected_date.weekday()
-    schedules = WalkerSchedule.query.filter_by(day_of_week=day_of_week, active=True).all()
-    walker_sched_slots = {}   # default-schedule slots regardless of unavailability
-    for s in schedules:
-        walker_sched_slots.setdefault(s.walker_id, set()).add(s.slot)
-
-    # Ad hoc availability for this specific date
-    adhoc_entries = WalkerAdHocAvailability.query.filter_by(date=selected_date).all()
-    walker_adhoc_slots = {}
-    for a in adhoc_entries:
-        walker_adhoc_slots.setdefault(a.walker_id, set()).add(a.slot)
-
-    # Track which slots each walker has marked unavailable
-    unavailabilities = WalkerUnavailability.query.filter_by(date=selected_date).all()
-    walker_unavail_slots = {}
-    for u in unavailabilities:
-        walker_unavail_slots.setdefault(u.walker_id, set()).add(u.slot)
-
-    # Union of scheduled + ad hoc walker IDs — all appear on the board
-    all_board_walker_ids = set(walker_sched_slots.keys()) | set(walker_adhoc_slots.keys())
-    walkers = (
-        Walker.query.options(joinedload(Walker.user))
-        .join(User, Walker.user_id == User.id)
-        .filter(Walker.id.in_(all_board_walker_ids), User.active == True)
-        .all()
-    ) if all_board_walker_ids else []
-
-    # Dogs that have active bookings in BOTH Morning and Afternoon today — used for the
-    # double-walk icon on board cards (whether booked via "both walks" or manually).
-    from collections import defaultdict
-    _dog_slots = defaultdict(set)
-    for b in all_bookings:
-        if b.status not in ('cancelled', 'rejected'):
-            _dog_slots[b.dog_id].add(b.slot)
-    both_slots_dog_ids = {
-        dog_id for dog_id, slots in _dog_slots.items()
-        if 'Morning' in slots and 'Afternoon' in slots
-    }
-
-    def booking_dict(b):
-        d = {
-            'id': b.id,
-            'dog_name': b.dog.name if b.dog else 'Unknown',
-            'dog_pic': b.dog.pic if b.dog and b.dog.pic else None,
-            'owner_name': b.dog.owners_display if b.dog else (b.user.full_name if b.user else ''),
-            'slot': b.slot,
-            'status': b.status,
-            'pickup_order': b.pickup_order,
-            'walker_id': b.walker_id,
-            'has_both_slots': b.dog_id in both_slots_dog_ids,
-            'has_notes': bool(b.dog and b.dog.pickup_instructions),
-        }
-        return d
-
-    pending   = [booking_dict(b) for b in all_bookings if b.status in ('requested', 'waitlisted')]
-    assigned  = [booking_dict(b) for b in all_bookings if b.walker_id and b.status == 'confirmed']
-
-    slot_order = lambda s: 0 if s == 'Morning' else 1
-    walkers_data = [
-        {
-            'id': w.id,
-            'name': w.user.firstname if w.user else 'Walker',
-            'available_slots': sorted(
-                (walker_sched_slots.get(w.id, set()) | walker_adhoc_slots.get(w.id, set()))
-                - walker_unavail_slots.get(w.id, set()),
-                key=slot_order
-            ),
-            'unavailable_slots': sorted(walker_unavail_slots.get(w.id, []), key=slot_order),
-        }
-        for w in walkers
-    ]
-
-    max_capacity = get_max_per_walker(ServiceType.WALK)
-
-    return jsonify(
-        success=True,
-        date=date_str,
-        pending=pending,
-        assigned=assigned,
-        walkers=walkers_data,
-        max_capacity=max_capacity,
-    )
+    except Exception as e:
+        logging.error('Error loading board data for %s: %s', date_str, e)
+        return jsonify(success=False, message="Could not load board data"), 500
 
 
 @admin_bp.route("/assign_walker", methods=["POST"])
@@ -1000,31 +1004,36 @@ def assign_walker():
 @admin_required
 def decline_booking(booking_id):
     """Decline a pending or waitlisted booking. Sets status to 'rejected' and notifies the client."""
-    booking = db.session.get(Booking, booking_id)
-    if not booking:
-        return jsonify(success=False, message="Booking not found"), 404
-    if booking.status not in Booking.PENDING_STATUSES:
-        return jsonify(success=False, message="Only pending or waitlisted bookings can be declined"), 400
+    try:
+        booking = db.session.get(Booking, booking_id)
+        if not booking:
+            return jsonify(success=False, message="Booking not found"), 404
+        if booking.status not in Booking.PENDING_STATUSES:
+            return jsonify(success=False, message="Only pending or waitlisted bookings can be declined"), 400
 
-    booking.status = 'rejected'
-    booking.cancelled_at = datetime.now(timezone.utc)
-    booking.cancelled_by = 'admin'
-    db.session.commit()
+        booking.status = 'rejected'
+        booking.cancelled_at = datetime.now(timezone.utc)
+        booking.cancelled_by = 'admin'
+        db.session.commit()
 
-    service_label = 'drop-in' if (booking.service_type and booking.service_type.slug == ServiceType.DROP_IN) else 'walk'
-    dog_name = booking.dog.name if booking.dog else 'your dog'
-    date_str = booking.date.strftime('%a %-d %b')
+        service_label = 'drop-in' if (booking.service_type and booking.service_type.slug == ServiceType.DROP_IN) else 'walk'
+        dog_name = booking.dog.name if booking.dog else 'your dog'
+        date_str = booking.date.strftime('%a %-d %b')
 
-    create_notification(
-        recipient_id=booking.user_id,
-        notification_type='booking_cancelled',
-        title=f"{dog_name}'s {booking.slot.lower()} {service_label} on {date_str} has been declined",
-        body="Please contact us if you have any questions.",
-        link='/',
-        sender_id=current_user.id,
-    )
+        create_notification(
+            recipient_id=booking.user_id,
+            notification_type='booking_cancelled',
+            title=f"{dog_name}'s {booking.slot.lower()} {service_label} on {date_str} has been declined",
+            body="Please contact us if you have any questions.",
+            link='/',
+            sender_id=current_user.id,
+        )
 
-    return jsonify(success=True)
+        return jsonify(success=True)
+    except Exception as e:
+        db.session.rollback()
+        logging.error('Error declining booking %s: %s', booking_id, e)
+        return jsonify(success=False, message="Server error"), 500
 
 
 @admin_bp.route("/reorder_pickups", methods=["POST"])
