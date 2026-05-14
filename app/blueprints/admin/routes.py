@@ -2452,6 +2452,43 @@ def walker_schedule_json(walker_id):
 
 # ─── Walker schedule overrides (ad hoc available + unavailability) ───────────
 
+@admin_bp.route("/api/schedule-changes")
+@login_required
+@admin_required
+def admin_api_schedule_changes():
+    """Return the merged schedule-changes list HTML partial for a given walker.
+
+    Used by the admin overrides page to refresh the list after add/delete.
+    ?walker_id=N required.
+    """
+    from datetime import date
+    from app.blueprints.walker.routes import _build_schedule_change_groups
+
+    try:
+        wid = int(request.args.get('walker_id', ''))
+    except (ValueError, TypeError):
+        return "walker_id required", 400
+
+    walker = Walker.query.get_or_404(wid)
+    today = date.today()
+
+    unavailabilities = WalkerUnavailability.query.filter(
+        WalkerUnavailability.walker_id == walker.id,
+        WalkerUnavailability.date >= today,
+    ).order_by(WalkerUnavailability.date, WalkerUnavailability.slot).all()
+
+    adhoc_availabilities = WalkerAdHocAvailability.query.filter(
+        WalkerAdHocAvailability.walker_id == walker.id,
+        WalkerAdHocAvailability.date >= today,
+    ).order_by(WalkerAdHocAvailability.date, WalkerAdHocAvailability.slot).all()
+
+    schedule_groups = _build_schedule_change_groups(adhoc_availabilities, unavailabilities)
+    return render_template(
+        "partials/walker_schedule_changes_list.html",
+        schedule_groups=schedule_groups,
+    )
+
+
 @admin_bp.route("/walkers/overrides")
 @login_required
 @admin_required
