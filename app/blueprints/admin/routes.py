@@ -13,7 +13,7 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError
 from app.models import User, Booking, Walker, Dog, Client, WalkerSchedule, DogOwner, WalkerUnavailability, WalkerAdHocAvailability, ServiceType, Notification, Closure
 from app import db
-from app.capacity import get_max_per_walker, get_walker_slot_count, get_drop_in_capacity, auto_assign_walker
+from app.capacity import get_max_per_walker, get_walker_slot_count, get_drop_in_capacity, auto_assign_walker, get_available_walkers
 from app.utils.db_error_handler import handle_db_errors
 from app.forms import ClientCreateForm, WalkerCreateForm, WalkerScheduleForm
 from app.utils.uploads import process_dog_photo
@@ -862,17 +862,28 @@ def assign_walker():
         if not walker:
             return jsonify(success=False, message="Walker not found"), 404
 
-        # Check walker is scheduled for this date+slot (skip if admin explicitly overriding slot)
+        # Check walker is available for this date+slot (skip if admin explicitly overriding slot).
+        # Delegating to get_available_walkers() keeps this in lock-step with the rest of the
+        # app — it accounts for default schedule + ad-hoc availability minus unavailability.
+        # The previous inline check only consulted WalkerSchedule, so an admin who'd added an
+        # ad-hoc override for the walker would still be blocked, and a walker marked
+        # unavailable for a slot could still be assigned to it without a clear warning.
         assign_slot = slot or booking.slot
-        day_of_week = booking.date.weekday()
         if not slot_override:
-            schedule_exists = WalkerSchedule.query.filter_by(
-                walker_id=walker.id,
-                day_of_week=day_of_week,
-                slot=assign_slot,
-                active=True
-            ).first()
-            if not schedule_exists:
+            service_slug = booking.service_type.slug if booking.service_type else ServiceType.WALK
+            is_drop_in = (service_slug == ServiceType.DROP_IN)
+            available_walkers = get_available_walkers(
+                booking.date, assign_slot, drop_in=is_drop_in
+            )
+            available_ids = {w.id for w in available_walkers}
+            if walker.id not in available_ids:
+                # Distinguish "not scheduled" from "scheduled but marked unavailable"
+                # so the admin sees a useful message.
+                marked_off = WalkerUnavailability.query.filter_by(
+                    walker_id=walker.id, date=booking.date, slot=assign_slot,
+                ).first()
+                if marked_off:
+                    return jsonify(success=False, message=f"{walker.user.firstname} is marked unavailable for {assign_slot} on this day"), 400
                 return jsonify(success=False, message=f"{walker.user.firstname} is not scheduled for {assign_slot} on this day"), 400
 
         # Check walker capacity for the given slot and date (scoped to same service type).
@@ -2269,9 +2280,19 @@ def admin_add_unavailability(walker_id):
 
     unavail = WalkerUnavailability(walker_id=walker.id, date=unavail_date, slot=slot, reason=reason)
     db.session.add(unavail)
+
+    # Any confirmed bookings this walker held for this date/slot are no longer
+    # guaranteed — reset them to requested so they surface as pending on the board.
+    affected = Booking.query.filter_by(
+        walker_id=walker.id, date=unavail_date, slot=slot, status='confirmed',
+    ).all()
+    for b in affected:
+        b.walker_id = None
+        b.status = 'requested'
+
     db.session.commit()
 
-    return jsonify(success=True, unavailability=unavail.to_dict()), 201
+    return jsonify(success=True, unavailability=unavail.to_dict(), unassigned=len(affected)), 201
 
 
 @admin_bp.route("/walkers/<int:walker_id>/unavailability/<int:unavail_id>", methods=["DELETE"])
