@@ -123,9 +123,11 @@ class TestScheduleChangesBatch:
             assert WalkerUnavailability.query.filter_by(date=sat).count() == 0
             assert WalkerUnavailability.query.filter_by(date=sun).count() == 0
 
-    def test_unavailable_skips_slots_walker_doesnt_work(self, app, client):
-        """Walker scheduled Mon AM only. Marks Mon Both unavailable → only AM
-        row created. PM reported in skipped_reasons."""
+    def test_unavailable_creates_rows_for_unscheduled_slots(self, app, client):
+        """Walker scheduled Mon AM only. Marks Mon Both unavailable → rows
+        created for BOTH AM and PM, even though PM is unscheduled. This
+        ensures the admin calendar can draw a continuous unavailability bar
+        across the full declared range."""
         with app.app_context():
             u, _ = _make_walker(schedule_days=[(0, 'Morning')])
             email = u.email
@@ -138,10 +140,8 @@ class TestScheduleChangesBatch:
             'type':       'unavailable',
         })
         data = resp.get_json()
-        assert data['created'] == 1
-        assert data['skipped'] == 1
-        assert any('Afternoon' in r and 'not normally scheduled' in r
-                   for r in data['skipped_reasons'])
+        assert data['created'] == 2
+        assert data['skipped'] == 0
 
     def test_available_skips_slots_walker_already_works(self, app, client):
         """Walker scheduled Mon AM. Tries to add Mon AM as available → skipped

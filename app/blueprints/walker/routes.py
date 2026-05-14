@@ -545,12 +545,6 @@ def schedule_changes_batch():
 
         for slot in slots:
             if change_type == 'unavailable':
-                if slot not in scheduled_slots:
-                    skipped += 1
-                    skipped_reasons.append(
-                        f"{date_label} {slot} — you're not normally scheduled."
-                    )
-                    continue
                 exists = WalkerUnavailability.query.filter_by(
                     walker_id=walker.id, date=current, slot=slot
                 ).first()
