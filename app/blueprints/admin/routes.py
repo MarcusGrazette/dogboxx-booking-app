@@ -195,19 +195,35 @@ def _compute_month_data(year, month, today):
         sorted_dates = sorted(date_set)
         span_start = span_end = sorted_dates[0]
         for d in sorted_dates[1:]:
-            if (d - span_end).days == 1:
+            gap = (d - span_end).days  # 1 = consecutive, 2+ = gap days exist
+            if gap == 1:
                 span_end = d
             else:
-                raw_spans.append({
-                    'walker_id':        wid,
-                    'walker_firstname': w.user.firstname,
-                    'walker_initials':  _walker_initials(w),
-                    'walker_color':     _walker_color(wid),
-                    'start':            span_start.isoformat(),
-                    'end':              span_end.isoformat(),
-                    'reason':           reason_map.get((wid, span_start), 'Unavailable'),
-                })
-                span_start = span_end = d
+                # Bridge the gap only if every intervening day is unscheduled
+                # for this walker (i.e. they never work those days).  A range
+                # submission like "Mon 8 – Fri 12" only creates rows for the
+                # days the walker is actually scheduled, leaving gaps on the
+                # days they don't normally work. We should still draw one
+                # continuous bar across the whole declared period.
+                gap_all_unscheduled = all(
+                    not schedule_map.get(wid, {}).get(
+                        (span_end + timedelta(days=offset)).weekday(), set()
+                    )
+                    for offset in range(1, gap)
+                )
+                if gap_all_unscheduled:
+                    span_end = d  # extend span across unscheduled gap
+                else:
+                    raw_spans.append({
+                        'walker_id':        wid,
+                        'walker_firstname': w.user.firstname,
+                        'walker_initials':  _walker_initials(w),
+                        'walker_color':     _walker_color(wid),
+                        'start':            span_start.isoformat(),
+                        'end':              span_end.isoformat(),
+                        'reason':           reason_map.get((wid, span_start), 'Unavailable'),
+                    })
+                    span_start = span_end = d
         raw_spans.append({
             'walker_id':        wid,
             'walker_firstname': w.user.firstname,
