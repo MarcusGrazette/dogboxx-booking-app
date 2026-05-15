@@ -131,6 +131,15 @@ def _maybe_auto_confirm(booking, dog, service_slug=ServiceType.WALK, notify=True
                 body=f'{dog.name} is booked for the {booking.slot} slot.',
                 link='/profile',
             )
+            admins = User.query.filter_by(is_admin=True).all()
+            for admin in admins:
+                create_notification(
+                    recipient_id=admin.id,
+                    notification_type='booking_confirmed',
+                    title=f"{booking.user.firstname} booked {dog.name}'s {booking.slot.lower()} walk on {date_str}",
+                    link=f'/admin/clients/{booking.user_id}',
+                    sender_id=booking.user_id,
+                )
         _notify_co_owners_of_booking(booking, dog.name, confirmed=True)
         return True
     else:
@@ -142,8 +151,7 @@ def _maybe_auto_confirm(booking, dog, service_slug=ServiceType.WALK, notify=True
                 create_notification(
                     recipient_id=admin.id,
                     notification_type='booking_requested',
-                    title=f'New booking request for {date_str}',
-                    body=f'{booking.user.firstname} requested {booking.slot} for {dog.name}',
+                    title=f"{booking.user.firstname} requested {dog.name}'s {booking.slot.lower()} walk on {date_str}",
                     link='/admin',
                     sender_id=booking.user_id,
                 )
@@ -653,16 +661,30 @@ def book_both():
             if not auto_confirmed:
                 pending_slots.append((slot, status, b))
 
-    # Single combined admin notification for any unconfirmed slots
+    # Admin notification for auto-confirmed slots
+    confirmed_slot_names = [slot for slot, _, b in final_created if b.status == 'confirmed']
+    if confirmed_slot_names:
+        slots_str = ' & '.join(s.lower() for s in confirmed_slot_names)
+        suffix = 'walks' if len(confirmed_slot_names) > 1 else 'walk'
+        for admin in User.query.filter_by(is_admin=True).all():
+            create_notification(
+                recipient_id      = admin.id,
+                notification_type = 'booking_confirmed',
+                title             = f"{current_user.firstname} booked {dog.name}'s {slots_str} {suffix} on {date_str_fmt}",
+                link              = f'/admin/clients/{current_user.id}',
+                sender_id         = current_user.id,
+            )
+
+    # Admin notification for any unconfirmed (pending/waitlisted) slots
     if pending_slots:
         pending_slot_names = [s for s, _, _ in pending_slots]
-        slot_desc = 'both walks' if len(pending_slot_names) == 2 else pending_slot_names[0]
+        slots_str = ' & '.join(s.lower() for s in pending_slot_names)
+        suffix = 'walks' if len(pending_slot_names) > 1 else 'walk'
         for admin in User.query.filter_by(is_admin=True).all():
             create_notification(
                 recipient_id      = admin.id,
                 notification_type = 'booking_requested',
-                title             = f'New booking request for {date_str_fmt}',
-                body              = f'{current_user.firstname} requested {slot_desc} for {dog.name}',
+                title             = f"{current_user.firstname} requested {dog.name}'s {slots_str} {suffix} on {date_str_fmt}",
                 link              = '/admin',
                 sender_id         = current_user.id,
             )
@@ -1574,8 +1596,7 @@ def cancel_booking():
                 create_notification(
                     recipient_id=admin.id,
                     notification_type='booking_cancelled',
-                    title=f"{client_name} cancelled {dog_name}'s walk",
-                    body=f"{date_str_fmt} · {booking.slot}",
+                    title=f"{client_name} cancelled {dog_name}'s {booking.slot.lower()} walk on {date_str_fmt}",
                     link=f'/admin/clients/{booking.user_id}',
                     sender_id=current_user.id,
                 )

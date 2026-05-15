@@ -117,7 +117,6 @@
             const extraContent = cfg.makeAssignedCardBadges ? cfg.makeAssignedCardBadges(b) : '';
             el.innerHTML = `
                 <span class="drag-handle bi bi-grip-vertical"></span>
-                <span class="pickup-num">${b.pickup_order || '?'}</span>
                 <img src="${imgSrc(b.dog_pic)}" class="board-dog-img"
                      onerror="this.src='/static/uploads/dogs/default-dog.png'">
                 <div class="board-card-info">
@@ -424,10 +423,6 @@
                 const b = state.assigned.find(b => b.id === id);
                 if (b) b.pickup_order = idx + 1;
             });
-            document.querySelectorAll(
-                `.sortable-lane[data-walker-id="${walkerId}"][data-slot="${slot}"] .pickup-num`
-            ).forEach((el, idx) => { el.textContent = idx + 1; });
-
             try {
                 await fetch(cfg.reorderUrl, {
                     method:  'POST',

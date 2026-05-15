@@ -15,6 +15,7 @@ from datetime import datetime, timezone, timedelta, date
 
 from app.blueprints.walker import walker_bp
 from app.utils.decorators import walker_required
+from app.utils.notifications import create_notification
 
 
 def _double_booked_dog_ids(selected_date):
@@ -287,6 +288,20 @@ def add_unavailability():
         b.walker_id = None
         b.status = 'requested'
 
+    walker_name = walker.user.firstname
+    date_label = unavail_date.strftime('%a %-d %b')
+    n = len(affected)
+    admins = User.query.filter(User.is_admin == True, User.id != current_user.id).all()
+    for admin in admins:
+        create_notification(
+            recipient_id=admin.id,
+            notification_type='walker_availability',
+            title=f'{walker_name} is unavailable — {slot} on {date_label}',
+            body=f'{n} booking{"s" if n != 1 else ""} need reassigning' if n else None,
+            link='/admin',
+            sender_id=current_user.id,
+        )
+
     db.session.commit()
 
     return jsonify(success=True, message="Unavailability added", unavailability=unavail.to_dict()), 201
@@ -367,6 +382,19 @@ def add_adhoc():
         reason=reason,
     )
     db.session.add(adhoc)
+
+    walker_name = walker.user.firstname
+    date_label = adhoc_date.strftime('%a %-d %b')
+    admins = User.query.filter(User.is_admin == True, User.id != current_user.id).all()
+    for admin in admins:
+        create_notification(
+            recipient_id=admin.id,
+            notification_type='walker_availability',
+            title=f'{walker_name} added {slot} availability on {date_label}',
+            link='/admin',
+            sender_id=current_user.id,
+        )
+
     db.session.commit()
 
     return jsonify(success=True, message="Ad hoc availability added", adhoc=adhoc.to_dict()), 201
@@ -537,6 +565,7 @@ def schedule_changes_batch():
     created_unavail_ids = []
     skipped_reasons = []
     skipped = 0
+    affected_count = 0
 
     current = start_date
     while current <= end_date:
@@ -569,6 +598,7 @@ def schedule_changes_batch():
                 ).all():
                     b.walker_id = None
                     b.status = 'requested'
+                    affected_count += 1
             else:  # available
                 if slot in scheduled_slots:
                     skipped += 1
@@ -591,9 +621,45 @@ def schedule_changes_batch():
 
         current += timedelta(days=1)
 
+    created = len(created_adhoc_ids) + len(created_unavail_ids)
+
+    # Notify admins of walker-initiated schedule changes (not when admin acts on behalf of walker).
+    if not current_user.is_admin and created > 0:
+        walker_name = walker.user.firstname
+        admins = User.query.filter_by(is_admin=True).all()
+        if start_date == end_date:
+            slots_str = ' & '.join(slots) if len(slots) > 1 else slots[0]
+            date_label = start_date.strftime('%a %-d %b')
+            if change_type == 'unavailable':
+                title = f'{walker_name} is unavailable — {slots_str} on {date_label}'
+                body = (f'{affected_count} booking{"s" if affected_count != 1 else ""} need reassigning'
+                        if affected_count else None)
+            else:
+                title = f'{walker_name} added {slots_str} availability on {date_label}'
+                body = None
+        else:
+            date_from = start_date.strftime('%-d %b')
+            date_to = end_date.strftime('%-d %b')
+            if change_type == 'unavailable':
+                title = f'{walker_name} is unavailable {date_from}–{date_to}'
+                body = (f'{created} slot{"s" if created != 1 else ""}' +
+                        (f', {affected_count} booking{"s" if affected_count != 1 else ""} need reassigning'
+                         if affected_count else ''))
+            else:
+                title = f'{walker_name} added availability {date_from}–{date_to}'
+                body = f'{created} slot{"s" if created != 1 else ""}'
+        for admin in admins:
+            create_notification(
+                recipient_id=admin.id,
+                notification_type='walker_availability',
+                title=title,
+                body=body,
+                link='/admin',
+                sender_id=current_user.id,
+            )
+
     db.session.commit()
 
-    created = len(created_adhoc_ids) + len(created_unavail_ids)
     return jsonify(
         success=True,
         created=created,

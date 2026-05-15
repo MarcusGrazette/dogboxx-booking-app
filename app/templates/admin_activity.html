@@ -1,0 +1,220 @@
+{% extends "admin_layout.html" %}
+
+{% block page_title %}Activity Feed{% endblock %}
+{% block page_subtitle %}Client bookings and walker availability changes{% endblock %}
+
+{% block main %}
+<div class="row">
+  <div class="col-12">
+
+    {# ── Filter bar ───────────────────────────────────────────────────────── #}
+    <div class="card mb-3 border-0 shadow-sm">
+      <div class="card-body py-2 px-3">
+        <div class="row g-2 align-items-center">
+
+          {# Month selector (server-side reload) #}
+          <div class="col-auto">
+            <form method="get" id="month-form" class="d-flex align-items-center gap-2">
+              <label class="text-muted small mb-0 text-nowrap" for="month-select">Month</label>
+              <select id="month-select" name="month" class="form-select form-select-sm"
+                      style="min-width:140px;" onchange="document.getElementById('month-form').submit()">
+                {% for mo in month_options %}
+                <option value="{{ mo.strftime('%Y-%m') }}"
+                        {% if mo.strftime('%Y-%m') == month_start.strftime('%Y-%m') %}selected{% endif %}>
+                  {{ mo.strftime('%B %Y') }}
+                </option>
+                {% endfor %}
+              </select>
+            </form>
+          </div>
+
+          {# Actor filter (client-side) #}
+          <div class="col-auto">
+            <div class="d-flex align-items-center gap-2">
+              <label class="text-muted small mb-0 text-nowrap" for="actor-filter">Show</label>
+              <select id="actor-filter" class="form-select form-select-sm" style="min-width:120px;">
+                <option value="all">All activity</option>
+                <option value="client">Clients only</option>
+                <option value="walker">Walkers only</option>
+              </select>
+            </div>
+          </div>
+
+          {# Activity type filter (client-side) #}
+          <div class="col-auto">
+            <div class="d-flex align-items-center gap-2">
+              <label class="text-muted small mb-0 text-nowrap" for="type-filter">Type</label>
+              <select id="type-filter" class="form-select form-select-sm" style="min-width:165px;">
+                <option value="all">All types</option>
+                <option value="booking">Bookings</option>
+                <option value="cancellation">Cancellations</option>
+                <option value="availability">Availability changes</option>
+              </select>
+            </div>
+          </div>
+
+          {# Event count #}
+          <div class="col-auto ms-auto">
+            <span class="text-muted small">
+              <span id="visible-count">{{ events | length }}</span>
+              of {{ events | length }} event{{ 's' if events | length != 1 else '' }}
+            </span>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    {# ── Activity table ───────────────────────────────────────────────────── #}
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-0">
+        {% if events %}
+        <div class="table-responsive">
+          <table class="table table-hover mb-0" id="activity-table">
+            <thead class="table-light">
+              <tr>
+                <th class="ps-3 text-muted fw-semibold small" style="width:14%;">When</th>
+                <th class="text-muted fw-semibold small" style="width:22%;">Who</th>
+                <th class="text-muted fw-semibold small" style="width:52%;">Activity</th>
+                <th class="text-muted fw-semibold small pe-3 text-end" style="width:12%;">Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for event in events %}
+              <tr class="activity-row align-middle"
+                  data-actor="{{ event.actor_type }}"
+                  data-activity="{{ event.activity_type }}">
+
+                {# When #}
+                <td class="ps-3 align-middle">
+                  <div class="fw-semibold small text-body">
+                    {{ event.ts.strftime('%a %-d %b') }}
+                  </div>
+                  <div class="text-muted" style="font-size:0.78rem;">
+                    {{ event.ts.strftime('%H:%M') }}
+                  </div>
+                </td>
+
+                {# Who #}
+                <td class="align-middle">
+                  <div class="d-flex align-items-center gap-2">
+                    {# Avatar circle #}
+                    {% if event.actor_type == 'walker' %}
+                    <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 fw-bold"
+                         style="width:32px;height:32px;font-size:0.68rem;
+                                background:rgba(107,33,168,0.1);color:#6b21a8;">
+                      {{ event.initials }}
+                    </div>
+                    {% else %}
+                    <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 fw-bold"
+                         style="width:32px;height:32px;font-size:0.68rem;
+                                background:rgba(13,110,253,0.1);color:#0a58ca;">
+                      {{ event.initials }}
+                    </div>
+                    {% endif %}
+
+                    <div>
+                      <a href="{{ event.link }}"
+                         class="fw-semibold small text-body text-decoration-none hover-link">
+                        {{ event.actor_name }}
+                      </a>
+                      <div>
+                        {% if event.actor_type == 'walker' %}
+                        <span class="badge fw-normal"
+                              style="font-size:0.62rem;background:rgba(107,33,168,0.1);color:#6b21a8;padding:2px 6px;">
+                          Walker
+                        </span>
+                        {% else %}
+                        <span class="badge fw-normal"
+                              style="font-size:0.62rem;background:rgba(13,110,253,0.1);color:#0a58ca;padding:2px 6px;">
+                          Client
+                        </span>
+                        {% endif %}
+                      </div>
+                    </div>
+                  </div>
+                </td>
+
+                {# Activity description #}
+                <td class="align-middle">
+                  <div class="d-flex align-items-center gap-2">
+                    <i class="{{ event.icon }} flex-shrink-0"
+                       style="color:{{ event.icon_color }};font-size:0.95rem;"></i>
+                    <span class="small text-body">{{ event.description }}</span>
+                  </div>
+                </td>
+
+                {# Type badge #}
+                <td class="align-middle pe-3 text-end">
+                  <span class="badge rounded-pill fw-normal"
+                        style="font-size:0.72rem;padding:4px 10px;
+                               background:{{ event.badge_bg }};color:{{ event.icon_color }};">
+                    {{ event.badge_label }}
+                  </span>
+                </td>
+
+              </tr>
+              {% endfor %}
+
+              {# No-results row (shown by JS when filters eliminate all rows) #}
+              <tr id="no-results-row" style="display:none;">
+                <td colspan="4" class="text-center py-5">
+                  <i class="bi bi-funnel text-muted" style="font-size:1.5rem;"></i>
+                  <div class="text-muted small mt-2">No events match your filters.</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        {# Empty state — no events in this month #}
+        <div class="text-center py-5 px-4">
+          <i class="bi bi-clock-history text-muted" style="font-size:2.5rem;opacity:0.35;"></i>
+          <div class="mt-3 fw-semibold text-muted">No activity in {{ month_start.strftime('%B %Y') }}</div>
+          <div class="text-muted small mt-1">
+            Try a different month, or activity will appear here as clients book and walkers update their schedules.
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  .hover-link:hover { color: #E02FAC !important; }
+  .activity-row { transition: background 0.1s; }
+</style>
+<script>
+(function () {
+  const actorSel  = document.getElementById('actor-filter');
+  const typeSel   = document.getElementById('type-filter');
+  const rows      = document.querySelectorAll('tr.activity-row');
+  const countEl   = document.getElementById('visible-count');
+  const noResults = document.getElementById('no-results-row');
+
+  function applyFilters() {
+    const actor = actorSel.value;
+    const type  = typeSel.value;
+    let visible = 0;
+
+    rows.forEach(function (row) {
+      const matchActor = actor === 'all' || row.dataset.actor === actor;
+      const matchType  = type  === 'all' || row.dataset.activity === type;
+      const show = matchActor && matchType;
+      row.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+
+    if (countEl) countEl.textContent = visible;
+    if (noResults) noResults.style.display = visible === 0 && rows.length > 0 ? '' : 'none';
+  }
+
+  if (actorSel) actorSel.addEventListener('change', applyFilters);
+  if (typeSel)  typeSel.addEventListener('change', applyFilters);
+})();
+</script>
+{% endblock %}
