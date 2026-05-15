@@ -1,0 +1,100 @@
+{# Schedule override form + upcoming-changes list.
+   Caller must instantiate createOverrideForm() with walker_id, today,
+   and endpoint URLs. No walker selector — caller pre-picks the walker. #}
+
+<div class="row g-3">
+
+    {# Form #}
+    <div class="col-12 col-lg-5">
+        <div class="card card-accent-pink">
+            <div class="card-header">
+                <i class="bi bi-calendar-event me-2" style="color:#E02FAC;"></i>
+                Schedule Change
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">
+                    Add an extra day available, or block out a day unavailable. Weekends are skipped automatically.
+                </p>
+
+                {# Date / range #}
+                <div class="mb-3">
+                    <label for="sched-start-date" class="form-label small mb-1">Date</label>
+                    <input type="date" id="sched-start-date" class="form-control">
+                    <a href="#" class="small text-decoration-none" id="sched-range-toggle"
+                       style="color:#E02FAC; font-weight:500;">+ or a date range</a>
+                    <div id="sched-end-date-wrap" class="mt-2 d-none">
+                        <label for="sched-end-date" class="form-label small mb-1">Until</label>
+                        <input type="date" id="sched-end-date" class="form-control">
+                    </div>
+                </div>
+
+                {# Slot #}
+                <div class="mb-3">
+                    <label class="form-label small mb-1 d-block">Slot</label>
+                    <div class="btn-group sched-segmented" role="group" aria-label="Slot">
+                        <input type="radio" class="btn-check" name="sched-slot" id="sched-slot-morning" value="Morning" autocomplete="off">
+                        <label class="btn btn-outline-secondary" for="sched-slot-morning">
+                            <i class="bi bi-sunrise me-1"></i>Morning
+                        </label>
+                        <input type="radio" class="btn-check" name="sched-slot" id="sched-slot-afternoon" value="Afternoon" autocomplete="off">
+                        <label class="btn btn-outline-secondary" for="sched-slot-afternoon">
+                            <i class="bi bi-sunset me-1"></i>Afternoon
+                        </label>
+                        <input type="radio" class="btn-check" name="sched-slot" id="sched-slot-both" value="Both" autocomplete="off">
+                        <label class="btn btn-outline-secondary" for="sched-slot-both">
+                            <i class="bi bi-layers-fill me-1"></i>Both
+                        </label>
+                    </div>
+                </div>
+
+                {# Type #}
+                <div class="mb-3">
+                    <label class="form-label small mb-1 d-block">Type</label>
+                    <div class="btn-group sched-segmented" role="group" aria-label="Type">
+                        <input type="radio" class="btn-check" name="sched-type" id="sched-type-available" value="available" autocomplete="off">
+                        <label class="btn btn-outline-success" for="sched-type-available">
+                            <i class="bi bi-check-circle me-1"></i>Available
+                        </label>
+                        <input type="radio" class="btn-check" name="sched-type" id="sched-type-unavailable" value="unavailable" autocomplete="off">
+                        <label class="btn btn-outline-warning" for="sched-type-unavailable">
+                            <i class="bi bi-x-circle me-1"></i>Unavailable
+                        </label>
+                    </div>
+                </div>
+
+                {# Reason #}
+                <div class="mb-3">
+                    <label for="sched-reason" class="form-label small mb-1">Reason <span class="text-muted">(optional)</span></label>
+                    <input type="text" id="sched-reason" class="form-control" maxlength="200"
+                           placeholder="e.g. Annual leave, doctor's appointment…">
+                </div>
+
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-primary fw-semibold" id="sched-add-btn">
+                        <i class="bi bi-plus-lg me-1"></i>Add
+                    </button>
+                    <span id="sched-status" class="small" aria-live="polite"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Upcoming list #}
+    <div class="col-12 col-lg-7">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-list-ul me-2"></i>
+                Upcoming Changes
+            </div>
+            <div class="card-body">
+                <div id="sched-list-container">
+                    <p class="text-muted small mb-0">
+                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                        Loading…
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>

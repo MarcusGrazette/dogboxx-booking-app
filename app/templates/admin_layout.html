@@ -15,9 +15,6 @@
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
 
-    <!-- AdminLTE 4 -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@4.0.0-rc6/dist/css/adminlte.min.css">
-
     <!-- Web font -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -44,32 +41,8 @@
     <title>{% block title %}DogBoxx Admin{% endblock %}</title>
 
     <style>
-        /* Sidebar nav links */
-        .sidebar-menu .nav-link {
-            color: rgba(255,255,255,0.75);
-            border-radius: 6px;
-            margin: 1px 8px;
-            transition: background 0.15s;
-            font-weight: 400; /* prevent Bootstrap .nav-link.active { font-weight:700 } causing text jitter */
-        }
-        .sidebar-menu .nav-link:hover {
-            background-color: rgba(255,255,255,0.1) !important;
-            color: #fff !important;
-        }
-        .sidebar-menu .nav-link.active {
-            background-color: #E02FAC !important;
-            color: #fff !important;
-        }
-        .sidebar-menu .nav-link.active:hover {
-            background-color: #E02FAC !important;
-        }
-        .nav-header {
-            color: rgba(255,255,255,0.4) !important;
-            font-size: 0.7rem;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            padding: 1rem 1rem 0.25rem;
-        }
+        /* Disabled state for sidebar nav items — kept inline because it's
+           the only rule not shared with the standalone layout in brand.css */
         .sidebar-menu .nav-item.disabled .nav-link {
             opacity: 0.4;
             pointer-events: none;
@@ -77,7 +50,7 @@
     </style>
 </head>
 
-<body class="layout-fixed sidebar-expand-lg" data-bs-theme="light">
+<body data-bs-theme="light">
 <div class="app-wrapper">
 
     <!-- Top Navbar -->
@@ -86,7 +59,7 @@
             <!-- Sidebar toggle -->
             <ul class="navbar-nav">
                 <li class="nav-item">
-                    <a class="nav-link" data-lte-toggle="sidebar" href="#" role="button">
+                    <a class="nav-link" data-db-toggle="sidebar" href="#" role="button" aria-label="Toggle sidebar">
                         <i class="bi bi-list fs-5"></i>
                     </a>
                 </li>
@@ -184,7 +157,7 @@
         </div>
         <div class="sidebar-wrapper">
             <nav class="mt-2">
-                <ul class="nav sidebar-menu flex-column" data-lte-toggle="treeview" role="menu" data-accordion="false">
+                <ul class="nav sidebar-menu flex-column" role="menu">
 
                     <!-- Dashboard -->
                     <li class="nav-item">
@@ -288,12 +261,16 @@
 
     <!-- Main content -->
     <main class="app-main">
-        <!-- Page header bar -->
+        <!-- Page header bar. Subtitle line is omitted when the page leaves
+             the page_subtitle block empty (no wasted vertical space). -->
+        {% set _page_subtitle %}{% block page_subtitle %}{% endblock %}{% endset %}
         <div class="app-content-header py-3 px-4">
             <div class="d-flex align-items-center justify-content-between">
                 <div>
                     <h3 class="mb-0 fw-bold" style="color:#1B1B1B;">{% block page_title %}{% endblock %}</h3>
-                    <small class="text-muted">{% block page_subtitle %}{% endblock %}</small>
+                    {% if _page_subtitle.strip() %}
+                    <small class="text-muted">{{ _page_subtitle|safe }}</small>
+                    {% endif %}
                 </div>
                 <div>{% block page_actions %}{% endblock %}</div>
             </div>
@@ -312,12 +289,48 @@
     </main>
     {% block modals %}{% endblock %}
 
+    <!-- Backdrop shown when sidebar is open on mobile (CSS controls visibility) -->
+    <div class="sidebar-backdrop" data-db-sidebar-backdrop></div>
+
 </div>
 
-<!-- AdminLTE 4 JS -->
-<script src="https://cdn.jsdelivr.net/npm/admin-lte@4.0.0-rc6/dist/js/adminlte.min.js"></script>
-
 <script nonce="{{ csp_nonce }}">
+// Sidebar toggle: open/close the off-canvas sidebar on mobile.
+// Class toggled on body so the backdrop selector can react.
+(function () {
+    var sidebar = document.querySelector('.app-sidebar');
+    if (!sidebar) return;
+
+    function setOpen(open) {
+        sidebar.classList.toggle('is-open', open);
+        document.body.classList.toggle('sidebar-open', open);
+    }
+
+    document.addEventListener('click', function (e) {
+        if (e.target.closest('[data-db-toggle="sidebar"]')) {
+            e.preventDefault();
+            setOpen(!sidebar.classList.contains('is-open'));
+            return;
+        }
+        if (e.target.closest('[data-db-sidebar-backdrop]')) {
+            setOpen(false);
+            return;
+        }
+        // Auto-close after tapping a nav link on mobile
+        if (window.matchMedia('(max-width: 991.98px)').matches &&
+            e.target.closest('.sidebar-menu .nav-link')) {
+            setOpen(false);
+        }
+    });
+
+    // Reset state when returning to desktop width
+    window.addEventListener('resize', function () {
+        if (window.matchMedia('(min-width: 992px)').matches) {
+            setOpen(false);
+        }
+    });
+})();
+
 // Register Service Worker for PWA (offline caching & installability)
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {

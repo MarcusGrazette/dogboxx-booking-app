@@ -20,7 +20,7 @@
 
 // ── Cache config ──────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'v15';
+const CACHE_VERSION = 'v19';
 const CACHE_NAME    = `dogboxx-${CACHE_VERSION}`;
 
 /**
@@ -134,7 +134,34 @@ self.addEventListener('fetch', function (event) {
 
   var isLocalStatic = url.pathname.startsWith('/static/');
   var isCDN         = url.hostname === 'cdn.jsdelivr.net';
+  var isLocalJS     = url.pathname.startsWith('/static/js/');
 
+  // ── Strategy 1a: Network-first for local JS ──────────────────────────────
+  //
+  // JS files at stable URLs (no content hash in the path) change content as
+  // we ship updates. Cache-first traps users on stale code — and our auto
+  // CACHE_VERSION bump hook only fires for CSS, missing JS edits entirely.
+  // Network-first means a refactored file is picked up immediately; the
+  // cache is only consulted when offline.
+  if (isLocalJS) {
+    event.respondWith(
+      fetch(req)
+        .then(function (response) {
+          if (response.ok) {
+            var clone = response.clone();
+            caches.open(CACHE_NAME).then(function (cache) { cache.put(req, clone); });
+          }
+          return response;
+        })
+        .catch(function () { return caches.match(req); })
+    );
+    return;
+  }
+
+  // ── Strategy 1b: Cache-first for other static assets (CSS, images, CDN) ──
+  //
+  // These either change rarely or are content-addressed at the CDN. Serving
+  // them from cache keeps page loads snappy.
   if (isLocalStatic || isCDN) {
     event.respondWith(
       caches.open(CACHE_NAME).then(function (cache) {

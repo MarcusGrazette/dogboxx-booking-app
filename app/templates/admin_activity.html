@@ -56,8 +56,9 @@
           {# Event count #}
           <div class="col-auto ms-auto">
             <span class="text-muted small">
-              <span id="visible-count">{{ events | length }}</span>
-              of {{ events | length }} event{{ 's' if events | length != 1 else '' }}
+              Showing <span id="visible-range">{{ events | length }}</span>
+              of <span id="visible-total">{{ events | length }}</span>
+              event{{ 's' if events | length != 1 else '' }}
             </span>
           </div>
 
@@ -67,7 +68,7 @@
 
     {# ── Activity table ───────────────────────────────────────────────────── #}
     <div class="card border-0 shadow-sm">
-      <div class="card-body p-0">
+      <div class="card-body p-0" id="activity-table-body">
         {% if events %}
         <div class="table-responsive">
           <table class="table table-hover mb-0" id="activity-table">
@@ -177,6 +178,20 @@
         </div>
         {% endif %}
       </div>
+
+      {# ── Pagination controls (hidden by JS when only one page) ─────────── #}
+      {% if events %}
+      <div class="d-flex align-items-center justify-content-between px-3 py-2 border-top"
+           id="activity-pager" style="display:none;">
+        <button type="button" class="btn btn-link btn-sm text-muted px-0" id="activity-prev-btn" disabled>
+          <i class="bi bi-chevron-left me-1"></i>Previous
+        </button>
+        <span class="text-muted small" id="activity-page-label"></span>
+        <button type="button" class="btn btn-link btn-sm text-muted px-0" id="activity-next-btn">
+          Next<i class="bi bi-chevron-right ms-1"></i>
+        </button>
+      </div>
+      {% endif %}
     </div>
 
   </div>
@@ -188,33 +203,101 @@
   .hover-link:hover { color: #E02FAC !important; }
   .activity-row { transition: background 0.1s; }
 </style>
-<script>
+<script nonce="{{ csp_nonce }}">
 (function () {
-  const actorSel  = document.getElementById('actor-filter');
-  const typeSel   = document.getElementById('type-filter');
-  const rows      = document.querySelectorAll('tr.activity-row');
-  const countEl   = document.getElementById('visible-count');
-  const noResults = document.getElementById('no-results-row');
+  const PAGE_SIZE = 20;
 
-  function applyFilters() {
-    const actor = actorSel.value;
-    const type  = typeSel.value;
-    let visible = 0;
+  const actorSel   = document.getElementById('actor-filter');
+  const typeSel    = document.getElementById('type-filter');
+  const rows       = Array.from(document.querySelectorAll('tr.activity-row'));
+  const rangeEl    = document.getElementById('visible-range');
+  const totalEl    = document.getElementById('visible-total');
+  const noResults  = document.getElementById('no-results-row');
+  const pager      = document.getElementById('activity-pager');
+  const prevBtn    = document.getElementById('activity-prev-btn');
+  const nextBtn    = document.getElementById('activity-next-btn');
+  const pageLabel  = document.getElementById('activity-page-label');
 
-    rows.forEach(function (row) {
-      const matchActor = actor === 'all' || row.dataset.actor === actor;
-      const matchType  = type  === 'all' || row.dataset.activity === type;
-      const show = matchActor && matchType;
-      row.style.display = show ? '' : 'none';
-      if (show) visible++;
+  let currentPage = 1;
+
+  function filteredRows() {
+    const actor = actorSel ? actorSel.value : 'all';
+    const type  = typeSel  ? typeSel.value  : 'all';
+    return rows.filter(function (r) {
+      return (actor === 'all' || r.dataset.actor === actor)
+          && (type  === 'all' || r.dataset.activity === type);
     });
-
-    if (countEl) countEl.textContent = visible;
-    if (noResults) noResults.style.display = visible === 0 && rows.length > 0 ? '' : 'none';
   }
 
-  if (actorSel) actorSel.addEventListener('change', applyFilters);
-  if (typeSel)  typeSel.addEventListener('change', applyFilters);
+  function render() {
+    const filtered = filteredRows();
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+
+    // Hide everything first, then reveal this page's slice
+    rows.forEach(function (r) { r.style.display = 'none'; });
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const end   = start + PAGE_SIZE;
+    filtered.slice(start, end).forEach(function (r) { r.style.display = ''; });
+
+    // Update "Showing X–Y of Z events" indicator
+    if (totalEl) totalEl.textContent = filtered.length;
+    if (rangeEl) {
+      if (filtered.length === 0) {
+        rangeEl.textContent = '0';
+      } else {
+        const first = start + 1;
+        const last  = Math.min(end, filtered.length);
+        rangeEl.textContent = first === last ? String(first) : (first + '–' + last);
+      }
+    }
+
+    // No-results row (only when filters eliminate everything but rows exist)
+    if (noResults) {
+      noResults.style.display = (filtered.length === 0 && rows.length > 0) ? '' : 'none';
+    }
+
+    renderPager(totalPages, filtered.length);
+  }
+
+  function renderPager(totalPages, filteredCount) {
+    if (!pager) return;
+    if (totalPages <= 1) {
+      pager.style.display = 'none';
+      return;
+    }
+    pager.style.display = '';
+
+    const start = (currentPage - 1) * PAGE_SIZE + 1;
+    const end   = Math.min(currentPage * PAGE_SIZE, filteredCount);
+    if (pageLabel) pageLabel.textContent = start + ' – ' + end + ' of ' + filteredCount;
+    if (prevBtn) prevBtn.disabled = (currentPage === 1);
+    if (nextBtn) nextBtn.disabled = (currentPage === totalPages);
+  }
+
+  function onFilterChange() {
+    currentPage = 1;
+    render();
+  }
+
+  if (actorSel) actorSel.addEventListener('change', onFilterChange);
+  if (typeSel)  typeSel.addEventListener('change',  onFilterChange);
+
+  function go(delta) {
+    currentPage += delta;
+    render();
+    // Scroll to the top of the page so the new page appears from the top.
+    // Using window.scrollTo (not scrollIntoView) — the activity table sits
+    // below the fixed header, and we want the whole page back at zero, not
+    // just the table flush to the top of the viewport.
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  if (prevBtn) prevBtn.addEventListener('click', function () { if (!prevBtn.disabled) go(-1); });
+  if (nextBtn) nextBtn.addEventListener('click', function () { if (!nextBtn.disabled) go(+1); });
+
+  render();
 })();
 </script>
 {% endblock %}

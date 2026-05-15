@@ -52,55 +52,7 @@
     </div>{% endif %}
 </div>
 
-<!-- Selection hint bar — always visible; grey idle state, pink active state -->
-<div id="selection-hint" class="alert d-flex align-items-center gap-2 py-2 mb-3"
-     style="font-size:0.88rem; background:#f8f9fa; border-color:#dee2e6; color:#6c757d;">
-    <i class="bi bi-cursor" id="hint-icon"></i>
-    <span id="hint-text">Select a dog to assign</span>
-    <button class="btn btn-sm ms-auto py-0 d-none" id="hint-deselect"
-            style="border-color:#C0258F; color:#C0258F;">Cancel</button>
-</div>
-
-<!-- Board -->
-<div class="text-muted text-center py-5" id="board-placeholder">
-    <i class="bi bi-calendar3 fs-3 d-block mb-2 text-muted"></i>
-    Select a date from the calendar
-</div>
-<div id="board-columns" style="display:none;"></div>
-
-<!-- Slot override confirmation modal -->
-<div class="modal fade" id="slotOverrideModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-body pt-4 pb-2 text-center">
-                <i class="bi bi-arrow-left-right text-warning mb-2" style="font-size:1.75rem;"></i>
-                <p class="mb-0 fw-semibold">Change booking slot?</p>
-                <p class="text-muted small mt-1" id="slot-override-body"></p>
-            </div>
-            <div class="modal-footer border-0 justify-content-center gap-2 pt-0 pb-3">
-                <button type="button" class="btn btn-outline-secondary btn-sm px-4" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-warning btn-sm px-4" id="slot-override-confirm-btn">Change slot</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Decline confirmation modal -->
-<div class="modal fade" id="declineModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-body pt-4 pb-2 text-center">
-                <i class="bi bi-x-circle text-danger mb-2" style="font-size:1.75rem;"></i>
-                <p class="mb-0 fw-semibold" id="decline-modal-body">Decline this booking?</p>
-                <p class="text-muted small mt-1">The client will be notified.</p>
-            </div>
-            <div class="modal-footer border-0 justify-content-center gap-2 pt-0 pb-3">
-                <button type="button" class="btn btn-outline-secondary btn-sm px-4" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-danger btn-sm px-4" id="decline-confirm-btn">Decline</button>
-            </div>
-        </div>
-    </div>
-</div>
+{% include 'partials/admin_board_row2.html' %}
 
 {% endblock %}
 
@@ -250,13 +202,10 @@
     function loadWeekChart() {}
     {% endif %}
 
-    initBoard({
+    const board = createBoard({
         assignUrl:      '{{ url_for("admin.assign_walker") }}',
         reorderUrl:     '{{ url_for("admin.reorder_pickups") }}',
         boardDataUrl:   '{{ url_for("admin.drop_in_board_data", date_str="DATE") }}',
-        calendarId:     'dropin-cal',
-        calendarService: 'drop-in',
-        calendarDataUrl: '{{ url_for("admin.calendar_data", year=0, month=0) }}',
         emptyIcon:      'bi-house-door',
         emptyText:      'No drop-in bookings for this date',
         declineLabel:   'drop-in',
@@ -265,6 +214,31 @@
         onAfterAssign:   loadWeekChart,
         onAfterUnassign: loadWeekChart,
         onDateSelect:    loadWeekChart,
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const calDataUrl = '{{ url_for("admin.calendar_data", year=0, month=0) }}';
+
+        const cal = createCalendar('dropin-cal', {
+            onMonthChange(year, month) {
+                const url = calDataUrl.replace('/0/0', `/${year}/${month}`) + '?service=drop-in';
+                fetch(url)
+                    .then(r => r.json())
+                    .then(data => {
+                        if (!data.success) return;
+                        const highlighted = {};
+                        data.pending_dates.forEach(d => {
+                            const ds = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                            highlighted[ds] = { type: 'pending' };
+                        });
+                        cal.setHighlightedDates(highlighted);
+                    });
+            },
+            onDateClick(year, month, day, dateStr) { board.setDate(dateStr); },
+        });
+        cal.selectDate(todayStr);
+        board.setDate(todayStr);
     });
 
 }());

@@ -3,6 +3,8 @@
 {% block title %}Admin Dashboard{% endblock %}
 
 {% block head_extra %}
+<!-- Board CSS — needed for the Assign modal's embedded board fragment -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin-board.css') }}">
 <style>
 /* ── Calendar layout ──────────────────────────────────────────────────── */
 .dash-wrap {
@@ -71,8 +73,8 @@
 .cal-legend-swatch {
   display: inline-block;
   width: 18px;
-  height: 6px;
-  border-radius: 3px;
+  height: 7px;
+  border-radius: 4px;
   margin-right: 3px;
   vertical-align: middle;
 }
@@ -137,43 +139,106 @@
   color: #1B1B1B;
   line-height: 1;
 }
-.cal-unavail-badge {
+
+/* Day-number row: number left, status badges + Assign button right */
+.cal-cell-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.cal-cell-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Pending-bookings badge — amber/yellow, mirrors the DI badge pattern */
+.cal-pending-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   font-size: 9px;
   font-weight: 800;
-  color: #fff;
-  background: #ef4444;
-  padding: 1px 5px;
-  border-radius: 999px;
-  line-height: 1.5;
+  color: #a16207;
+  background: #fef3c7;
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 1;
 }
+.cal-pending-badge i { font-size: 9px; line-height: 1; }
+
+/* Assign button — label + arrow icon. Subtle by default, brand-pink
+   on hover. Large enough to be a comfortable click target. */
+.cal-assign-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 3px 7px;
+  border-radius: 5px;
+  line-height: 1;
+  color: #888;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color .12s, background-color .12s, border-color .12s;
+}
+.cal-assign-btn i { font-size: 11px; }
+.cal-assign-btn:hover,
+.cal-assign-btn:focus {
+  color: #E02FAC;
+  background: #fdf4fb;
+  border-color: #E02FAC44;
+  outline: none;
+}
+.cal-cell:hover .cal-assign-btn { color: #555; }
+.cal-cell:hover .cal-assign-btn:hover { color: #E02FAC; }
 .cal-cap-bars { display: flex; flex-direction: column; gap: 3px; flex: 1; }
-.cal-cap-row { display: flex; align-items: center; gap: 4px; }
+/* Fixed-column grid so the track is the same width across every cell —
+   the DI column is always reserved, even when the badge is absent. */
+.cal-cap-row {
+  display: grid;
+  grid-template-columns: 14px 1fr 18px 30px;
+  align-items: center;
+  column-gap: 4px;
+}
 .cal-cap-label {
-  width: 14px;
   font-size: 9px;
   font-weight: 800;
   color: #888;
   letter-spacing: 0.4px;
   text-transform: uppercase;
-  flex-shrink: 0;
 }
 .cal-cap-track {
-  flex: 1;
-  height: 5px;
-  border-radius: 3px;
+  height: 7px;
+  border-radius: 4px;
   background: #f0f0f0;
   overflow: hidden;
 }
-.cal-cap-fill { height: 100%; border-radius: 3px; }
-.cal-cap-count { font-size: 10px; font-weight: 700; white-space: nowrap; }
+.cal-cap-fill { height: 100%; border-radius: 4px; }
+.cal-cap-count {
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-align: right;
+}
 .cal-di-badge {
-  font-size: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 9px;
   font-weight: 800;
-  color: #0369a1;
-  background: #e0f2fe;
+  color: #52525b;
+  background: #f4f4f5;
   padding: 1px 4px;
   border-radius: 3px;
+  justify-self: start;
 }
+.cal-di-badge i { font-size: 8px; line-height: 1; }
 
 /* ── Span bars ───────────────────────────────────────────────────────── */
 .cal-spans { margin-top: auto; padding-top: 3px; }
@@ -222,6 +287,9 @@
   line-height: 1.2;
 }
 .detail-summary { font-size: 12px; color: #888; margin-top: 2px; }
+.detail-summary .ds-scheduled   { color: #15803d; font-weight: 700; }
+.detail-summary .ds-extra       { color: #a16207; font-weight: 700; }
+.detail-summary .ds-unavailable { color: #b91c1c; font-weight: 700; }
 .detail-body { padding: 12px 16px 16px; overflow-y: auto; max-height: 600px; }
 .detail-section-title {
   font-size: 11px;
@@ -249,10 +317,47 @@
   font-size: 22px;
   font-weight: 900;
   color: #1B1B1B;
-  margin: 4px 0 3px;
+  margin: 4px 0 6px;
   line-height: 1;
 }
-.detail-slot-dots { font-size: 10px; line-height: 1.5; }
+.detail-slot-fraction-denom { font-size: 14px; font-weight: 800; color: #999; }
+.detail-slot-wl {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  color: #ef4444;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* Mini progress bar — mirrors the month-grid bar visually */
+.detail-slot-bar {
+  height: 7px;
+  border-radius: 4px;
+  background: #ececec;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.detail-slot-bar-fill { height: 100%; border-radius: 4px; }
+
+/* Icon row: hourglass + DI badges, side-by-side */
+.detail-slot-icons {
+  display: flex;
+  gap: 6px;
+  min-height: 16px;          /* reserve space so AM/PM cards stay same height */
+  align-items: center;
+}
+.detail-slot-icons-empty { opacity: 0; }
+.detail-slot-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 800;
+  color: #1B1B1B;
+  line-height: 1;
+}
+.detail-slot-icon i { font-size: 11px; line-height: 1; }
 .detail-walker-row {
   display: flex;
   align-items: center;
@@ -274,8 +379,35 @@
   flex-shrink: 0;
 }
 .detail-walker-name { font-size: 13px; font-weight: 700; color: #1B1B1B; }
-.detail-walker-status { font-size: 10px; color: #888; }
+.detail-walker-bookings {
+  font-size: 10px;
+  font-weight: 700;
+  color: #E02FAC;
+  margin-top: 1px;
+  line-height: 1.4;
+}
 .detail-walker-pills { display: flex; gap: 4px; }
+
+/* Gear button — open override modal for this walker on the selected date */
+.detail-walker-gear {
+  border: none;
+  background: transparent;
+  padding: 4px 6px;
+  margin-left: 2px;
+  color: #999;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color .12s, background-color .12s;
+}
+.detail-walker-gear:hover,
+.detail-walker-gear:focus {
+  color: #E02FAC;
+  background: #fdf4fb;
+  outline: none;
+}
+
 .slot-pill {
   font-size: 10px;
   font-weight: 800;
@@ -286,7 +418,6 @@
 {% endblock %}
 
 {% block page_title %}Hello, {{ current_user.firstname }}{% endblock %}
-{% block page_subtitle %}Overview for this month{% endblock %}
 
 {% block main %}
 <div class="dash-wrap">
@@ -300,7 +431,7 @@
         <button class="cal-nav-btn" id="calNext" title="Next month">&#8250;</button>
       </div>
       <div class="cal-legend">
-        <span><span class="cal-legend-swatch" style="background:#22c55e;"></span>Capacity remaining</span>
+        <span><span class="cal-legend-swatch" style="background:#22c55e;"></span>Available</span>
         <span><span class="cal-legend-swatch" style="background:#f59e0b;"></span>Full</span>
         <span><span class="cal-legend-swatch" style="background:#ef4444;"></span>Waitlisted</span>
       </div>
@@ -319,6 +450,42 @@
 
 </div>
 
+<!-- Assign modal — board fragment is injected into #assign-modal-body on open -->
+<div class="modal fade" id="assignModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header py-2">
+        <h6 class="modal-title fw-bold mb-0" id="assign-modal-title">Assign walks</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="assign-modal-body">
+        <div class="text-center py-5 text-muted">
+          <div class="spinner-border spinner-border-sm text-primary"></div>
+          <div class="mt-2 small">Loading…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Override modal — schedule-override fragment injected into #override-modal-body on open -->
+<div class="modal fade" id="overrideModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header py-2">
+        <h6 class="modal-title fw-bold mb-0" id="override-modal-title">Schedule override</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="override-modal-body">
+        <div class="text-center py-5 text-muted">
+          <div class="spinner-border spinner-border-sm text-primary"></div>
+          <div class="mt-2 small">Loading…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script nonce="{{ csp_nonce }}">
 window._DASH = {
   today:    {{ today_iso | tojson }},
@@ -331,6 +498,11 @@ window._DASH = {
 
 {% block scripts %}
 {{ super() }}
+<!-- Board JS — used by the Assign modal embedded on the dashboard -->
+<script src="{{ url_for('static', filename='js/admin-board-core.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+<!-- Override form JS — used by the Schedule Override modal -->
+<script src="{{ url_for('static', filename='js/admin-override-form.js') }}"></script>
 <script nonce="{{ csp_nonce }}">
 (function () {
   'use strict';
@@ -389,7 +561,9 @@ window._DASH = {
       ? `${booked}<span style="font-size:8px;">+${slot.waitlist}</span>`
       : `${booked}`;
     const diTag = slot.drop_ins > 0
-      ? `<span class="cal-di-badge">DI:${slot.drop_ins}</span>`
+      ? `<span class="cal-di-badge" title="${slot.drop_ins} drop-in${slot.drop_ins !== 1 ? 's' : ''}">` +
+          `<i class="bi bi-house-door"></i>${slot.drop_ins}` +
+        `</span>`
       : '';
     return `<div class="cal-cap-row">` +
       `<span class="cal-cap-label">${label}</span>` +
@@ -402,8 +576,7 @@ window._DASH = {
   function renderCell(cell, selectedDate) {
     if (!cell) return `<div class="cal-cell cal-cell--empty"></div>`;
 
-    const { date_str, day_num, is_today, is_weekend, is_closed, am, pm,
-            unavailable_count, spans } = cell;
+    const { date_str, day_num, is_today, is_weekend, is_closed, am, pm, spans } = cell;
 
     let cls = 'cal-cell';
     if (is_today)                     cls += ' cal-cell--today';
@@ -420,17 +593,28 @@ window._DASH = {
         `</div>`;
     }
 
-    const badge = unavailable_count > 0
-      ? `<span class="cal-unavail-badge" title="${unavailable_count} walker(s) unavailable">-${unavailable_count}</span>`
-      : '';
-
     const spanHtml = spans.length
       ? `<div class="cal-spans">${spans.map(renderSpanBar).join('')}</div>`
       : '';
 
+    const pendingTotal = (am.pending || 0) + (pm.pending || 0);
+    const pendingBadge = pendingTotal > 0
+      ? `<span class="cal-pending-badge" title="${pendingTotal} pending booking${pendingTotal !== 1 ? 's' : ''}">` +
+          `<i class="bi bi-hourglass"></i>${pendingTotal}` +
+        `</span>`
+      : '';
+
     return `<div class="${cls}" data-date="${date_str}" onclick="window._selectDay('${date_str}')">` +
-      `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">` +
-        `<span class="cal-day-num">${day_num}</span>${badge}` +
+      `<div class="cal-cell-top">` +
+        `<span class="cal-day-num">${day_num}</span>` +
+        `<div class="cal-cell-actions">` +
+          pendingBadge +
+          `<button type="button" class="cal-assign-btn" data-date="${date_str}" ` +
+                  `onclick="event.stopPropagation(); window._openAssignModal('${date_str}')" ` +
+                  `title="Assign walks for this day">` +
+            `Assign<i class="bi bi-arrow-right-circle-fill"></i>` +
+          `</button>` +
+        `</div>` +
       `</div>` +
       `<div class="cal-cap-bars">${renderCapRow(am, 'AM')}${renderCapRow(pm, 'PM')}</div>` +
       spanHtml +
@@ -463,31 +647,44 @@ window._DASH = {
     return `<span class="slot-pill" style="${s}">${label}</span>`;
   }
 
-  function walkerStatusText(amSt, pmSt) {
-    if (amSt === 'unavailable' || pmSt === 'unavailable') return 'Marked unavailable';
-    if (amSt === 'adhoc'       || pmSt === 'adhoc')       return 'Ad-hoc';
-    const onAM = amSt === 'available', onPM = pmSt === 'available';
-    if (onAM && onPM) return 'AM + PM';
-    if (onAM)         return 'Morning only';
-    if (onPM)         return 'Afternoon only';
-    return 'Not scheduled';
-  }
-
   /* ── Detail slot card ───────────────────────────────────────────────── */
   function renderSlotCard(slot, label, icon) {
     const booked   = slot.confirmed + slot.pending;
     const isWL     = slot.waitlist > 0;
-    const bigColor = isWL ? '#ef4444' : '#1B1B1B';
+    const isFull   = slot.capacity > 0 && booked >= slot.capacity;
+    const bigColor = isWL ? '#ef4444' : (isFull ? '#a16207' : '#1B1B1B');
+    const barColor = isWL ? '#ef4444' : (isFull ? '#f59e0b' : '#22c55e');
+    const barPct   = slot.capacity > 0
+      ? Math.min(100, (slot.confirmed / slot.capacity) * 100)
+      : 0;
 
-    let dots = `<span style="color:#22c55e;">&#9679; ${slot.confirmed} conf</span>`;
-    if (slot.pending  > 0) dots += ` <span style="color:#f59e0b;">&#9679; ${slot.pending} pend</span>`;
-    if (slot.waitlist > 0) dots += ` <span style="color:#ef4444;">&#9679; ${slot.waitlist} WL</span>`;
-    if (slot.drop_ins > 0) dots += ` <span style="color:#0369a1;">&#9679; ${slot.drop_ins} DI</span>`;
+    const fraction = `${slot.confirmed}<span class="detail-slot-fraction-denom"> / ${slot.capacity}</span>`;
+    const wlSuffix = isWL ? ` <span class="detail-slot-wl">+${slot.waitlist} WL</span>` : '';
+
+    const badges = [];
+    if (slot.pending > 0) {
+      badges.push(
+        `<span class="detail-slot-icon" title="${slot.pending} pending">`
+        + `<i class="bi bi-hourglass" style="color:#a16207;"></i>${slot.pending}`
+        + `</span>`
+      );
+    }
+    if (slot.drop_ins > 0) {
+      badges.push(
+        `<span class="detail-slot-icon" title="${slot.drop_ins} drop-in${slot.drop_ins !== 1 ? 's' : ''}">`
+        + `<i class="bi bi-house-door" style="color:#52525b;"></i>${slot.drop_ins}`
+        + `</span>`
+      );
+    }
+    const badgesHtml = badges.length
+      ? `<div class="detail-slot-icons">${badges.join('')}</div>`
+      : `<div class="detail-slot-icons detail-slot-icons-empty">&nbsp;</div>`;
 
     return `<div class="detail-slot-card">` +
       `<div class="detail-slot-card-label">${icon} ${label}</div>` +
-      `<div class="detail-slot-big" style="color:${bigColor};">${booked} / ${slot.capacity}</div>` +
-      `<div class="detail-slot-dots">${dots}</div>` +
+      `<div class="detail-slot-big" style="color:${bigColor};">${fraction}${wlSuffix}</div>` +
+      `<div class="detail-slot-bar"><div class="detail-slot-bar-fill" style="width:${barPct}%;background:${barColor};"></div></div>` +
+      badgesHtml +
       `</div>`;
   }
 
@@ -497,30 +694,49 @@ window._DASH = {
       ? `<span class="detail-today-pill">Today</span><br>`
       : '';
 
+    const overrideAllowed = !detail.is_past;  // hide gear button on past dates
     const walkerRows = detail.walkers.map(w => {
-      const isOff  = w.am_state === 'off' && w.pm_state === 'off';
+      const isOff = w.category === 'off';
       const opacity = isOff ? '0.45' : '1';
-      const status  = walkerStatusText(w.am_state, w.pm_state);
       const countParts = [];
       if (w.am_bookings > 0) countParts.push(`${w.am_bookings} AM`);
       if (w.pm_bookings > 0) countParts.push(`${w.pm_bookings} PM`);
       const countHtml = countParts.length
-        ? ` <span style="color:#E02FAC;font-weight:700;">${countParts.join(' · ')}</span>`
+        ? `<div class="detail-walker-bookings">${countParts.join(' · ')}</div>`
+        : '';
+      const gearBtn = overrideAllowed
+        ? `<button type="button" class="detail-walker-gear" ` +
+                  `onclick="window._openOverrideModal(${w.walker_id}, '${esc(w.name)}')" ` +
+                  `title="Add schedule override for ${esc(w.name)}">` +
+            `<i class="bi bi-gear"></i>` +
+          `</button>`
         : '';
       return `<div class="detail-walker-row" style="opacity:${opacity};">` +
         `<div class="detail-walker-avatar" style="background:${w.color};">${esc(w.initials)}</div>` +
         `<div style="flex:1;min-width:0;">` +
           `<div class="detail-walker-name">${esc(w.name)}</div>` +
-          `<div class="detail-walker-status">${esc(status)}${countHtml}</div>` +
+          countHtml +
         `</div>` +
         `<div class="detail-walker-pills">${pill(w.am_state,'AM')}${pill(w.pm_state,'PM')}</div>` +
+        gearBtn +
         `</div>`;
     }).join('');
+
+    const summaryParts = [];
+    if (detail.scheduled_count > 0)
+      summaryParts.push(`<span class="ds-scheduled">${detail.scheduled_count} scheduled</span>`);
+    if (detail.extra_count > 0)
+      summaryParts.push(`<span class="ds-extra">${detail.extra_count} extra</span>`);
+    if (detail.unavailable_count > 0)
+      summaryParts.push(`<span class="ds-unavailable">${detail.unavailable_count} unavailable</span>`);
+    const summaryText = summaryParts.length
+      ? summaryParts.join(' &middot; ')
+      : '<span class="text-muted">No walkers active</span>';
 
     return `<div class="detail-header">` +
         `${todayPill}` +
         `<div class="detail-date-title">${esc(detail.date_display)}</div>` +
-        `<div class="detail-summary">${detail.on_shift} walkers on shift &middot; ${detail.unavailable} unavailable</div>` +
+        `<div class="detail-summary">${summaryText}</div>` +
       `</div>` +
       `<hr style="margin:10px 16px;">` +
       `<div class="detail-body">` +
@@ -590,6 +806,141 @@ window._DASH = {
       console.error('day-detail fetch failed', e);
     }
   };
+
+  /* ── Assign modal — embeds the assignment board for a chosen date ─── */
+  const assignModalEl = document.getElementById('assignModal');
+  const assignModal   = new bootstrap.Modal(assignModalEl);
+  let   modalDirty    = false;   // becomes true if an assign/unassign happened
+
+  function fmtDateLabel(dateStr) {
+    return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-GB', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+    });
+  }
+
+  async function refreshDashboard() {
+    const { year, month } = currentMonthData;
+    try {
+      const [mRes, dRes] = await Promise.all([
+        fetch(`/admin/api/month-data?year=${year}&month=${month}`),
+        fetch(`/admin/api/day-detail?date=${selectedDate}`),
+      ]);
+      currentMonthData  = await mRes.json();
+      currentDetailData = await dRes.json();
+      paint();
+    } catch (e) {
+      console.error('Dashboard refresh failed:', e);
+    }
+  }
+
+  window._openAssignModal = async function (dateStr) {
+    document.getElementById('assign-modal-title').textContent =
+      `Assign walks — ${fmtDateLabel(dateStr)}`;
+    document.getElementById('assign-modal-body').innerHTML =
+      '<div class="text-center py-5 text-muted">'
+      + '<div class="spinner-border spinner-border-sm text-primary"></div>'
+      + '<div class="mt-2 small">Loading…</div></div>';
+    modalDirty = false;
+    assignModal.show();
+
+    // Phase 1: fetch the fragment HTML
+    let html;
+    try {
+      const res = await fetch('{{ url_for("admin.board_fragment") }}');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      html = await res.text();
+    } catch (e) {
+      console.error('[assign-modal] fragment fetch failed:', e);
+      document.getElementById('assign-modal-body').innerHTML =
+        '<div class="alert alert-danger m-3">Could not load the board (network or server error). Please close and try again.</div>';
+      return;
+    }
+    document.getElementById('assign-modal-body').innerHTML = html;
+
+    // Phase 2: instantiate the board against the freshly-injected fragment
+    if (typeof window.createBoard !== 'function') {
+      console.error('[assign-modal] createBoard is not defined — admin-board-core.js failed to load?');
+      document.getElementById('assign-modal-body').innerHTML =
+        '<div class="alert alert-danger m-3">Board script failed to load. Please refresh the page.</div>';
+      return;
+    }
+    try {
+      window.createBoard({
+        assignUrl:    '{{ url_for("admin.assign_walker") }}',
+        reorderUrl:   '{{ url_for("admin.reorder_pickups") }}',
+        boardDataUrl: '{{ url_for("admin.board_data", date_str="DATE") }}',
+        emptyIcon:    'bi-emoji-smile',
+        emptyText:    'No bookings for this date',
+        declineLabel: 'walk',
+        makePendingCardBadges: b => b.has_both_slots
+          ? '<span class="modifier-pill modifier-both" title="Both walks requested"><i class="bi bi-layers-fill"></i></span>'
+          : '',
+        makeAssignedCardBadges: b => b.has_both_slots
+          ? '<div class="d-flex gap-1 align-items-center flex-shrink-0"><span class="modifier-pill modifier-both" title="Both walks requested"><i class="bi bi-layers-fill"></i></span></div>'
+          : '',
+        initialDate:     dateStr,
+        onAfterAssign:   () => { modalDirty = true; },
+        onAfterUnassign: () => { modalDirty = true; },
+      });
+    } catch (e) {
+      console.error('[assign-modal] createBoard threw:', e);
+      document.getElementById('assign-modal-body').innerHTML =
+        '<div class="alert alert-danger m-3">Could not initialise the board: ' + (e.message || e) + '</div>';
+    }
+  };
+
+  assignModalEl.addEventListener('hidden.bs.modal', () => {
+    // Empty the body so a stale board instance can't accumulate listeners
+    document.getElementById('assign-modal-body').innerHTML = '';
+    if (modalDirty) {
+      modalDirty = false;
+      refreshDashboard();
+    }
+  });
+
+  /* ── Override modal — opens the schedule-override form for a walker ── */
+  const overrideModalEl = document.getElementById('overrideModal');
+  const overrideModal   = new bootstrap.Modal(overrideModalEl);
+  let   overrideDirty   = false;
+
+  window._openOverrideModal = async function (walkerId, walkerName) {
+    document.getElementById('override-modal-title').textContent =
+      `Schedule override — ${walkerName}`;
+    document.getElementById('override-modal-body').innerHTML =
+      '<div class="text-center py-5 text-muted">'
+      + '<div class="spinner-border spinner-border-sm text-primary"></div>'
+      + '<div class="mt-2 small">Loading…</div></div>';
+    overrideDirty = false;
+    overrideModal.show();
+
+    try {
+      const res = await fetch('{{ url_for("admin.walker_overrides_fragment") }}');
+      if (!res.ok) throw new Error(res.status);
+      document.getElementById('override-modal-body').innerHTML = await res.text();
+
+      window.createOverrideForm({
+        batchUrl:       '{{ url_for("walker.schedule_changes_batch") }}',
+        batchDeleteUrl: '{{ url_for("walker.schedule_changes_batch_delete") }}',
+        listUrl:        '/admin/api/schedule-changes',
+        walkerId:       walkerId,
+        todayIso:       window._DASH.today,
+        initialDate:    selectedDate,
+        onChange:       () => { overrideDirty = true; },
+      });
+    } catch (e) {
+      console.error('walker-overrides-fragment fetch failed', e);
+      document.getElementById('override-modal-body').innerHTML =
+        '<div class="alert alert-danger m-3">Could not load the form. Please close and try again.</div>';
+    }
+  };
+
+  overrideModalEl.addEventListener('hidden.bs.modal', () => {
+    document.getElementById('override-modal-body').innerHTML = '';
+    if (overrideDirty) {
+      overrideDirty = false;
+      refreshDashboard();
+    }
+  });
 
 })();
 </script>

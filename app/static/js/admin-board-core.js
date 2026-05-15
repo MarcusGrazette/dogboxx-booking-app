@@ -1,28 +1,31 @@
 /**
- * admin-board-core.js — shared logic for admin assignment boards.
+ * admin-board-core.js — calendar-agnostic assignment board component.
  *
- * Usage: call window.initBoard(config) from the page script.
+ * Usage:
+ *   const board = createBoard(config);
+ *   board.setDate('2026-05-19');   // load a date
+ *
+ * The caller is responsible for picking a date (via its own calendar UI,
+ * a URL param, or anything else). The Board does not own date-selection.
  *
  * config shape:
  *   assignUrl              {string}   URL for admin.assign_walker POST
  *   reorderUrl             {string}   URL for admin.reorder_pickups POST
  *   boardDataUrl           {string}   URL with 'DATE' placeholder
- *   calendarId             {string}   ID of the calendar widget element
- *   calendarService        {string}   'group-walk' | 'drop-in' (calendar_data filter)
- *   calendarDataUrl        {string}   URL template with /0/0 placeholder
  *   emptyIcon              {string}   bi-* class for empty-board icon
  *   emptyText              {string}   Text for empty-board state
  *   declineLabel           {string}   'walk' | 'drop-in' in decline modal copy
  *   makePendingCardBadges  {fn(b)}    Returns extra badge HTML for pending cards
  *   makeAssignedCardBadges {fn(b)}    Returns extra content HTML for assigned cards
- *   onDateSelect           {fn(date)} Called after loadBoard on date click / init
+ *   initialDate            {string?}  ISO date to load immediately, optional
+ *   onDateSelect           {fn(date)} Called after every successful setDate()
  *   onAfterAssign          {fn(date)} Called after a successful assign
  *   onAfterUnassign        {fn(date)} Called after a successful unassign
  */
 (function (global) {
     'use strict';
 
-    function initBoard(cfg) {
+    function createBoard(cfg) {
         const CSRF        = document.querySelector('meta[name="csrf-token"]')?.content;
         const DECLINE_URL = id => `/admin/booking/${id}/decline`;
 
@@ -500,38 +503,17 @@
             }
         });
 
-        // ── Calendar ───────────────────────────────────────────────────────────
-        document.addEventListener('DOMContentLoaded', () => {
-            const todayStr = new Date().toISOString().slice(0, 10);
+        // ── Public API ─────────────────────────────────────────────────────────
+        function setDate(dateStr) {
+            loadBoard(dateStr);
+            if (cfg.onDateSelect) cfg.onDateSelect(dateStr);
+        }
 
-            const cal = createCalendar(cfg.calendarId, {
-                onMonthChange(year, month) {
-                    const url = cfg.calendarDataUrl.replace('/0/0', `/${year}/${month}`)
-                        + `?service=${cfg.calendarService}`;
-                    fetch(url)
-                        .then(r => r.json())
-                        .then(data => {
-                            if (!data.success) return;
-                            const highlighted = {};
-                            data.pending_dates.forEach(d => {
-                                const ds = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                                highlighted[ds] = { type: 'pending' };
-                            });
-                            cal.setHighlightedDates(highlighted);
-                        });
-                },
-                onDateClick(year, month, day, dateStr) {
-                    loadBoard(dateStr);
-                    if (cfg.onDateSelect) cfg.onDateSelect(dateStr);
-                }
-            });
+        if (cfg.initialDate) setDate(cfg.initialDate);
 
-            cal.selectDate(todayStr);
-            loadBoard(todayStr);
-            if (cfg.onDateSelect) cfg.onDateSelect(todayStr);
-        });
+        return { setDate };
     }
 
-    global.initBoard = initBoard;
+    global.createBoard = createBoard;
 
 }(window));
