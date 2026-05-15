@@ -149,19 +149,6 @@
     text-overflow: ellipsis;
 }
 
-.pickup-num {
-    flex-shrink: 0;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: #212529;
-    color: #fff;
-    font-size: 0.68rem;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
 
 /* ── Column headers ────────────────────────────────────────────────────────── */
 .board-col-header {

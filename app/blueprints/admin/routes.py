@@ -1287,14 +1287,15 @@ def assign_walker():
                 sender_id=current_user.id,
             )
 
-        create_notification(
-            recipient_id=walker.user_id,
-            notification_type='walker_assigned',
-            title=f'You have been assigned a {service_label} on {date_str_fmt}',
-            body=f'{dog_name} — {booking.slot}',
-            link=f'/walker/pickups?date={booking.date.isoformat()}',
-            sender_id=current_user.id,
-        )
+        if walker.user_id != current_user.id:
+            create_notification(
+                recipient_id=walker.user_id,
+                notification_type='walker_assigned',
+                title=f'You have been assigned a {service_label} on {date_str_fmt}',
+                body=f'{dog_name} — {booking.slot}',
+                link=f'/walker/pickups?date={booking.date.isoformat()}',
+                sender_id=current_user.id,
+            )
 
         # Update pickup order for all bookings in this walker's slot
         pickup_order = data.get("pickup_order")  # list of booking IDs in order
@@ -1461,6 +1462,172 @@ def _get_slot_color(slot):
 
 
 # === CLIENT MANAGEMENT ROUTES ===
+
+@admin_bp.route("/activity")
+@login_required
+@admin_required
+def activity_feed():
+    """Admin activity feed — all client booking and walker availability events, filtered by month."""
+    from datetime import date as date_type
+
+    # ── Month selection ────────────────────────────────────────────────────────
+    month_str = request.args.get('month', '')
+    try:
+        if len(month_str) == 7 and month_str[4] == '-':
+            month_start = date_type(int(month_str[:4]), int(month_str[5:7]), 1)
+        else:
+            raise ValueError
+    except (ValueError, IndexError):
+        today = date_type.today()
+        month_start = date_type(today.year, today.month, 1)
+
+    if month_start.month == 12:
+        month_end = date_type(month_start.year + 1, 1, 1)
+    else:
+        month_end = date_type(month_start.year, month_start.month + 1, 1)
+
+    dt_start = datetime(month_start.year, month_start.month, 1)
+    dt_end   = datetime(month_end.year,   month_end.month,   1)
+
+    # Badge / icon metadata keyed by badge slug
+    BADGE_META = {
+        'confirmed':   ('Booked',      'bi-check-circle-fill',   '#198754', 'rgba(25,135,84,0.11)'),
+        'requested':   ('Requested',   'bi-calendar-plus-fill',  '#b02280', 'rgba(224,47,172,0.11)'),
+        'waitlisted':  ('Waitlisted',  'bi-hourglass-split',     '#8a6500', 'rgba(255,193,7,0.18)'),
+        'cancelled':   ('Cancelled',   'bi-x-circle-fill',       '#bb2d3b', 'rgba(220,53,69,0.11)'),
+        'unavailable': ('Unavailable', 'bi-calendar-x-fill',     '#c45c00', 'rgba(253,126,20,0.11)'),
+        'available':   ('Available',   'bi-calendar-check-fill', '#13877c', 'rgba(20,184,166,0.11)'),
+    }
+
+    def _make_event(ts, actor_type, actor_name, actor_id, description, badge, activity_type, link):
+        parts = actor_name.split()
+        initials = (parts[0][0] + (parts[-1][0] if len(parts) > 1 else '')).upper() if parts else '?'
+        label, icon, icon_color, badge_bg = BADGE_META.get(badge, ('', 'bi-circle', '#666', 'rgba(0,0,0,0.06)'))
+        return dict(ts=ts, actor_type=actor_type, actor_name=actor_name, actor_id=actor_id,
+                    description=description, badge=badge, activity_type=activity_type, link=link,
+                    initials=initials, badge_label=label, icon=icon, icon_color=icon_color, badge_bg=badge_bg)
+
+    events = []
+
+    # ── New bookings created this month (non-cancelled) ───────────────────────
+    for b in (Booking.query
+              .options(joinedload(Booking.user), joinedload(Booking.dog), joinedload(Booking.service_type))
+              .filter(Booking.created_at >= dt_start, Booking.created_at < dt_end,
+                      ~Booking.status.in_(['cancelled', 'rejected']))
+              .all()):
+        if not b.user or not b.dog or not b.created_at:
+            continue
+        walk_date = b.date.strftime('%a %-d %b') if b.date else '?'
+        svc_label = 'drop-in' if (b.service_type and b.service_type.slug == ServiceType.DROP_IN) else 'walk'
+        if b.status == 'confirmed':
+            badge, verb = 'confirmed', 'Booked'
+        elif b.status == 'waitlisted':
+            badge, verb = 'waitlisted', 'Waitlisted for'
+        else:
+            badge, verb = 'requested', 'Requested'
+        events.append(_make_event(
+            ts=b.created_at, actor_type='client', actor_name=b.user.full_name,
+            actor_id=b.user_id,
+            description=f"{verb} {b.dog.name}'s {b.slot.lower()} {svc_label} on {walk_date}",
+            badge=badge, activity_type='booking',
+            link=url_for('admin.client_detail', client_id=b.user_id),
+        ))
+
+    # ── Cancellations this month ───────────────────────────────────────────────
+    for b in (Booking.query
+              .options(joinedload(Booking.user), joinedload(Booking.dog), joinedload(Booking.service_type))
+              .filter(Booking.status.in_(['cancelled', 'rejected']),
+                      Booking.cancelled_at >= dt_start, Booking.cancelled_at < dt_end)
+              .all()):
+        if not b.user or not b.dog or not b.cancelled_at:
+            continue
+        walk_date = b.date.strftime('%a %-d %b') if b.date else '?'
+        svc_label = 'drop-in' if (b.service_type and b.service_type.slug == ServiceType.DROP_IN) else 'walk'
+        desc = f"Cancelled {b.dog.name}'s {b.slot.lower()} {svc_label} on {walk_date}"
+        if b.cancelled_by == 'admin':
+            desc += ' (by admin)'
+        events.append(_make_event(
+            ts=b.cancelled_at, actor_type='client', actor_name=b.user.full_name,
+            actor_id=b.user_id, description=desc, badge='cancelled', activity_type='cancellation',
+            link=url_for('admin.client_detail', client_id=b.user_id),
+        ))
+
+    # ── Walker unavailabilities created this month ─────────────────────────────
+    for u in (WalkerUnavailability.query
+              .filter(WalkerUnavailability.created_at >= dt_start,
+                      WalkerUnavailability.created_at < dt_end)
+              .all()):
+        if not u.walker or not u.walker.user or not u.created_at:
+            continue
+        avail_date = u.date.strftime('%a %-d %b') if u.date else '?'
+        n_unassigned = Booking.query.filter_by(date=u.date, slot=u.slot,
+                                              walker_id=None, status='requested').count()
+        desc = f"Marked unavailable — {u.slot} on {avail_date}"
+        if n_unassigned:
+            desc += f' · {n_unassigned} booking{"s" if n_unassigned != 1 else ""} need reassigning'
+        else:
+            n_active = Booking.query.filter(
+                Booking.date == u.date, Booking.slot == u.slot,
+                Booking.status.in_(['confirmed', 'requested', 'waitlisted']),
+            ).count()
+            if n_active:
+                desc += ' · all bookings reassigned'
+        events.append(_make_event(
+            ts=u.created_at, actor_type='walker', actor_name=u.walker.user.full_name,
+            actor_id=u.walker.user_id,
+            description=desc,
+            badge='unavailable', activity_type='availability',
+            link=url_for('admin.walkers'),
+        ))
+
+    # ── Walker adhoc availabilities created this month ─────────────────────────
+    for a in (WalkerAdHocAvailability.query
+              .filter(WalkerAdHocAvailability.created_at >= dt_start,
+                      WalkerAdHocAvailability.created_at < dt_end)
+              .all()):
+        if not a.walker or not a.walker.user or not a.created_at:
+            continue
+        avail_date = a.date.strftime('%a %-d %b') if a.date else '?'
+        events.append(_make_event(
+            ts=a.created_at, actor_type='walker', actor_name=a.walker.user.full_name,
+            actor_id=a.walker.user_id,
+            description=f"Added {a.slot.lower()} availability on {avail_date}",
+            badge='available', activity_type='availability',
+            link=url_for('admin.walkers'),
+        ))
+
+    events.sort(key=lambda e: e['ts'] if e['ts'] else datetime.min, reverse=True)
+
+    # Month dropdown — from current month back to the earliest activity in the DB.
+    from sqlalchemy import func
+    earliest = db.session.query(func.min(Booking.created_at)).scalar()
+    for ts in (
+        db.session.query(func.min(Booking.cancelled_at)).scalar(),
+        db.session.query(func.min(WalkerUnavailability.created_at)).scalar(),
+        db.session.query(func.min(WalkerAdHocAvailability.created_at)).scalar(),
+    ):
+        if ts and (earliest is None or ts < earliest):
+            earliest = ts
+
+    today = date_type.today()
+    if earliest:
+        oldest = date_type(earliest.year, earliest.month, 1)
+    else:
+        oldest = date_type(today.year, today.month, 1)
+
+    month_options = []
+    y, m = today.year, today.month
+    while date_type(y, m, 1) >= oldest:
+        month_options.append(date_type(y, m, 1))
+        m -= 1
+        if m == 0:
+            m, y = 12, y - 1
+
+    return render_template('admin_activity.html',
+                           events=events,
+                           month_start=month_start,
+                           month_options=month_options)
+
 
 @admin_bp.route("/clients")
 @login_required
@@ -2887,14 +3054,15 @@ def book_for_dog():
                     link=f'/bookings/{b.id}',
                     sender_id=current_user.id,
                 )
-                create_notification(
-                    recipient_id=b.walker.user_id,
-                    notification_type='walker_assigned',
-                    title=f'You have been assigned a walk on {date_str_fmt}',
-                    body=f'{dog.name} — {b.slot}',
-                    link=f'/walker/pickups?date={booking_date.isoformat()}',
-                    sender_id=current_user.id,
-                )
+                if b.walker.user_id != current_user.id:
+                    create_notification(
+                        recipient_id=b.walker.user_id,
+                        notification_type='walker_assigned',
+                        title=f'You have been assigned a walk on {date_str_fmt}',
+                        body=f'{dog.name} — {b.slot}',
+                        link=f'/walker/pickups?date={booking_date.isoformat()}',
+                        sender_id=current_user.id,
+                    )
 
         db.session.commit()
 
@@ -3038,9 +3206,10 @@ def recurring_for_dog():
                 notifications.append((user_id, 'booking_confirmed',
                                        f"{dog.name}'s walk on {date_str_fmt} has been confirmed",
                                        slot, booking))
-                notifications.append((walker.user_id, 'walker_assigned',
-                                       f'You have been assigned a walk on {date_str_fmt}',
-                                       f'{dog.name} — {slot}', booking))
+                if walker.user_id != current_user.id:
+                    notifications.append((walker.user_id, 'walker_assigned',
+                                           f'You have been assigned a walk on {date_str_fmt}',
+                                           f'{dog.name} — {slot}', booking))
             elif booking.status == 'waitlisted':
                 waitlisted += 1
             else:

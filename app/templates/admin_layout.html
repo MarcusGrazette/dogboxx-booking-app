@@ -272,6 +272,13 @@
                             <span>Walkers</span>
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('admin.activity_feed') }}"
+                           class="nav-link {% if request.endpoint == 'admin.activity_feed' %}active{% endif %}">
+                            <i class="bi bi-activity me-2"></i>
+                            <span>Activity</span>
+                        </a>
+                    </li>
 
 
                 </ul>

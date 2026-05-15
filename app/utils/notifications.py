@@ -29,13 +29,14 @@ NOTIF_BELL_CAP = 5    # max shown in the navbar bell dropdown
 # Used in templates for icon + colour rendering.
 
 NOTIFICATION_META = {
-    'booking_confirmed':  ('bi-check-circle-fill',  '#198754'),   # green
-    'booking_cancelled':  ('bi-x-circle-fill',       '#dc3545'),   # red
-    'booking_requested':  ('bi-calendar-plus-fill',  '#E02FAC'),   # pink
-    'walker_assigned':    ('bi-person-check-fill',   '#0d6efd'),   # blue
-    'dental_confirmed':   ('bi-check-circle-fill',   '#198754'),   # green
-    'dental_available':   ('bi-calendar-event-fill', '#E02FAC'),   # pink
-    'system':             ('bi-info-circle-fill',    '#6c757d'),   # grey
+    'booking_confirmed':    ('bi-check-circle-fill',  '#198754'),   # green
+    'booking_cancelled':    ('bi-x-circle-fill',       '#dc3545'),   # red
+    'booking_requested':    ('bi-calendar-plus-fill',  '#E02FAC'),   # pink
+    'walker_assigned':      ('bi-person-check-fill',   '#0d6efd'),   # blue
+    'walker_availability':  ('bi-calendar-x-fill',     '#fd7e14'),   # orange
+    'dental_confirmed':     ('bi-check-circle-fill',   '#198754'),   # green
+    'dental_available':     ('bi-calendar-event-fill', '#E02FAC'),   # pink
+    'system':               ('bi-info-circle-fill',    '#6c757d'),   # grey
 }
 
 DEFAULT_META = ('bi-bell-fill', '#6c757d')
