@@ -1560,10 +1560,22 @@ def activity_feed():
         if not u.walker or not u.walker.user or not u.created_at:
             continue
         avail_date = u.date.strftime('%a %-d %b') if u.date else '?'
+        n_unassigned = Booking.query.filter_by(date=u.date, slot=u.slot,
+                                              walker_id=None, status='requested').count()
+        desc = f"Marked unavailable — {u.slot} on {avail_date}"
+        if n_unassigned:
+            desc += f' · {n_unassigned} booking{"s" if n_unassigned != 1 else ""} need reassigning'
+        else:
+            n_active = Booking.query.filter(
+                Booking.date == u.date, Booking.slot == u.slot,
+                Booking.status.in_(['confirmed', 'requested', 'waitlisted']),
+            ).count()
+            if n_active:
+                desc += ' · all bookings reassigned'
         events.append(_make_event(
             ts=u.created_at, actor_type='walker', actor_name=u.walker.user.full_name,
             actor_id=u.walker.user_id,
-            description=f"Marked unavailable — {u.slot} on {avail_date}",
+            description=desc,
             badge='unavailable', activity_type='availability',
             link=url_for('admin.walkers'),
         ))
