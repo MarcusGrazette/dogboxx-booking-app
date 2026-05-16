@@ -1503,6 +1503,13 @@ def pause_walks():
     end_fmt   = end.strftime('%-d %b')
     n         = len(bookings)
 
+    # Capture per-walker walk counts before clearing walker_id — used for the
+    # grouped walker notifications below (one per walker, not one per walk).
+    walker_walk_counts = {}
+    for b in bookings:
+        if b.walker and b.walker.user_id != current_user.id:
+            walker_walk_counts[b.walker.user_id] = walker_walk_counts.get(b.walker.user_id, 0) + 1
+
     for b in bookings:
         b.status       = 'cancelled'
         b.cancelled_at = now
@@ -1540,6 +1547,17 @@ def pause_walks():
                 )
                 notified.add(ownership.user_id)
 
+    # One notification per walker covering all of their cancelled walks.
+    for walker_user_id, wn in walker_walk_counts.items():
+        create_notification(
+            recipient_id      = walker_user_id,
+            notification_type = 'booking_cancelled',
+            title             = f"{current_user.firstname} paused walks {start_fmt}–{end_fmt}",
+            body              = f"{wn} of your assigned walk{'s' if wn != 1 else ''} cancelled",
+            link              = '/walker/schedule',
+            sender_id         = current_user.id,
+        )
+
     db.session.commit()
     return jsonify(success=True, cancelled_count=n)
 
@@ -1567,6 +1585,9 @@ def cancel_booking():
             return jsonify(success=False, message="You are not authorized to cancel this booking"), 403
 
         is_admin_cancel = current_user.is_admin and booking.user_id != current_user.id
+        # Capture the assigned walker's user_id before clearing the FK below —
+        # we notify them at the end so they know the walk is off their schedule.
+        prior_walker_user_id = booking.walker.user_id if booking.walker else None
         booking.status = "cancelled"
         booking.cancelled_at = datetime.now(timezone.utc)
         booking.cancelled_by = 'admin' if is_admin_cancel else 'client'
@@ -1616,6 +1637,20 @@ def cancel_booking():
                             link='/bookings',
                             sender_id=current_user.id,
                         )
+
+        # Notify the walker who had this booking assigned (skip if they cancelled it themselves).
+        if prior_walker_user_id and prior_walker_user_id != current_user.id:
+            if is_admin_cancel:
+                walker_title = f"{dog_name}'s {booking.slot.lower()} walk on {date_str_fmt} was cancelled"
+            else:
+                walker_title = f"{current_user.firstname} cancelled {dog_name}'s {booking.slot.lower()} walk on {date_str_fmt}"
+            create_notification(
+                recipient_id=prior_walker_user_id,
+                notification_type='booking_cancelled',
+                title=walker_title,
+                link='/walker/schedule',
+                sender_id=current_user.id,
+            )
 
         db.session.commit()
         return jsonify(success=True, message="Booking successfully cancelled")
