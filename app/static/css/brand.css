@@ -253,51 +253,128 @@ footer {
   flex-shrink: 0;
 }
 
-/* ---- AdminLTE overrides ---- */
-.app-sidebar {
-  background-color: #1B1B1B !important;
+/* ---- Admin layout shell ----
+   Standalone replacement for AdminLTE: fixed top header, fixed
+   left sidebar on desktop, off-canvas slide-in on mobile.
+   --------------------------------------------------------------- */
+:root {
+  --db-header-height: 57px;
+  --db-sidebar-width: 250px;
+}
+
+.app-wrapper {
+  min-height: 100vh;
 }
 
 .app-header {
-  background-color: #1B1B1B !important;
-  border-bottom: 3px solid #E02FAC !important;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--db-header-height);
+  z-index: 1030;
+  background: #1B1B1B;
+  border-bottom: 3px solid #E02FAC;
+  display: flex;
+  align-items: center;
 }
 
-/* Sidebar nav links */
+.app-sidebar {
+  position: fixed;
+  top: var(--db-header-height);
+  bottom: 0;
+  left: 0;
+  width: var(--db-sidebar-width);
+  background: #1B1B1B;
+  overflow-y: auto;
+  z-index: 1020;
+  transition: transform 0.2s ease;
+}
+
+.app-main {
+  margin-top: var(--db-header-height);
+  margin-left: var(--db-sidebar-width);
+  min-height: calc(100vh - var(--db-header-height));
+  display: flex;
+  flex-direction: column;
+}
+
+.app-content-header {
+  background: #fff;
+  border-bottom: 1px solid #e8e0e6;
+}
+
+.app-content {
+  background-color: #F6F6F6;
+  flex: 1;
+}
+
+.sidebar-brand {
+  background: #1B1B1B;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.sidebar-menu {
+  list-style: none;
+  padding: 0.5rem 0;
+  margin: 0;
+}
+
 .sidebar-menu .nav-link {
-  color: rgba(255,255,255,0.75) !important;
+  color: rgba(255,255,255,0.75);
   border-radius: 6px;
   margin: 1px 8px;
-  transition: background 0.15s;
+  padding: 0.5rem 0.75rem;
+  font-weight: 400;
+  transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
 }
 
 .sidebar-menu .nav-link:hover {
-  background-color: rgba(255,255,255,0.08) !important;
-  color: #fff !important;
+  background-color: rgba(255,255,255,0.1);
+  color: #fff;
 }
 
-.sidebar-menu .nav-link.active {
-  background-color: #E02FAC !important;
-  color: #fff !important;
+.sidebar-menu .nav-link.active,
+.sidebar-menu .nav-link.active:hover {
+  background-color: #E02FAC;
+  color: #fff;
 }
 
-.nav-header {
-  color: rgba(255,255,255,0.4) !important;
+.sidebar-menu .nav-header {
+  color: rgba(255,255,255,0.4);
   font-size: 0.7rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 1rem 1rem 0.25rem;
 }
 
-/* Content area background */
-.app-content {
-  background-color: #F6F6F6;
+/* Backdrop shown behind the sidebar on mobile when it's open */
+.sidebar-backdrop {
+  position: fixed;
+  inset: var(--db-header-height) 0 0 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 1015;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
 }
 
-/* Content header */
-.app-content-header {
-  background: #fff;
-  border-bottom: 1px solid #e8e0e6;
+/* Mobile: sidebar slides off-screen, content takes full width */
+@media (max-width: 991.98px) {
+  .app-sidebar {
+    transform: translateX(-100%);
+  }
+  .app-sidebar.is-open {
+    transform: translateX(0);
+    box-shadow: 0 0 30px rgba(0,0,0,0.3);
+  }
+  .app-main {
+    margin-left: 0;
+  }
+  body.sidebar-open .sidebar-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 /* ── Flash toasts (shared between client layout and admin layout) ──────── */
@@ -671,7 +748,11 @@ body {
   transition: transform 0.1s cubic-bezier(0.2, 0, 0.2, 1), background-color 0.15s ease-in-out, border-color 0.15s ease-in-out;
 }
 
-.btn:active, .nav-link:active {
+/* Scale-down press feedback. Scoped to real action buttons and topbar
+   nav-links (hamburger, avatar). Excluded from sidebar nav-links because
+   they navigate away — the press-then-snap-back reads as visual jitter. */
+.btn:active,
+.navbar .nav-link:active {
   transform: scale(0.96);
 }
 

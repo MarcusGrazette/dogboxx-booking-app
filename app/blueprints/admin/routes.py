@@ -381,8 +381,11 @@ def _compute_day_detail(selected_date, today):
     am = slot_stats('Morning')
     pm = slot_stats('Afternoon')
 
-    on_shift    = 0
-    unavailable = 0
+    # Mutually-exclusive walker category, priority: unavailable > extra > scheduled > off.
+    # Used both for per-row tinting and for the summary count line.
+    scheduled_count   = 0
+    extra_count       = 0
+    unavailable_count = 0
     walker_rows = []
     for w in all_walkers:
         adhoc_s   = adhoc_by_walker.get(w.id, set())
@@ -392,9 +395,16 @@ def _compute_day_detail(selected_date, today):
         pm_st = _slot_state(w.id, 'Afternoon', dow, schedule_map, adhoc_s, unavail_s)
 
         if am_st == 'unavailable' or pm_st == 'unavailable':
-            unavailable += 1
-        elif am_st != 'off' or pm_st != 'off':
-            on_shift += 1
+            category = 'unavailable'
+            unavailable_count += 1
+        elif am_st == 'adhoc' or pm_st == 'adhoc':
+            category = 'extra'
+            extra_count += 1
+        elif am_st == 'available' or pm_st == 'available':
+            category = 'scheduled'
+            scheduled_count += 1
+        else:
+            category = 'off'
 
         walker_rows.append({
             'walker_id':   w.id,
@@ -405,17 +415,20 @@ def _compute_day_detail(selected_date, today):
             'pm_state':    pm_st,
             'am_bookings': walker_booking_map.get(w.id, {}).get('Morning', 0),
             'pm_bookings': walker_booking_map.get(w.id, {}).get('Afternoon', 0),
+            'category':    category,
         })
 
     return {
-        'date_str':     selected_date.isoformat(),
-        'date_display': selected_date.strftime('%A %-d %B'),
-        'is_today':     selected_date == today,
-        'on_shift':     on_shift,
-        'unavailable':  unavailable,
-        'am':           am,
-        'pm':           pm,
-        'walkers':      walker_rows,
+        'date_str':          selected_date.isoformat(),
+        'date_display':      selected_date.strftime('%A %-d %B'),
+        'is_today':          selected_date == today,
+        'is_past':           selected_date < today,
+        'scheduled_count':   scheduled_count,
+        'extra_count':       extra_count,
+        'unavailable_count': unavailable_count,
+        'am':                am,
+        'pm':                pm,
+        'walkers':           walker_rows,
     }
 
 
@@ -868,6 +881,16 @@ def update_pricing():
 def board():
     """Group walk assignment board — click-to-assign + drag-to-reorder."""
     return render_template("admin_board.html")
+
+
+@admin_bp.route("/board-fragment")
+@login_required
+@admin_required
+def board_fragment():
+    """Row 2 of the assignment board, served as a bare HTML fragment.
+    Used by the dashboard Assign modal — caller wires up createBoard() with
+    the date it wants. No admin layout, no calendar widget, no chart."""
+    return render_template("partials/admin_board_row2.html")
 
 
 @admin_bp.route("/drop-in-board")
@@ -2766,6 +2789,16 @@ def walker_overrides():
         unavail_list=unavail_list,
         today=today,
     )
+
+
+@admin_bp.route("/walker-overrides-fragment")
+@login_required
+@admin_required
+def walker_overrides_fragment():
+    """Bare HTML fragment of the override form + list, served for the
+    dashboard modal. Caller wires up createOverrideForm() with the chosen
+    walker_id (no walker selector in the fragment)."""
+    return render_template('partials/admin_walker_overrides_form.html')
 
 
 @admin_bp.route("/walkers/<int:walker_id>/adhoc", methods=["POST"])
