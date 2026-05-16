@@ -538,6 +538,32 @@
 </div>
 
 
+<!-- Same-day booking warning modal -->
+<div class="modal fade" id="sameDayModal" tabindex="-1" aria-labelledby="sameDayModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content" style="border-radius: 1rem;">
+            <div class="modal-header border-0 pb-0">
+                <h6 class="modal-title fw-bold" id="sameDayModalLabel">
+                    <i class="bi bi-lightning-fill me-2 text-warning"></i>Same-day booking
+                </h6>
+            </div>
+            <div class="modal-body pt-1">
+                <p class="mb-0" style="font-size: 0.92rem;">
+                    We may not be able to take a same-day booking. It'll be marked as
+                    <strong>pending</strong> and flagged to Lydia. You'll get a notification if
+                    she confirms it. Thanks for bearing with us!
+                </p>
+            </div>
+            <div class="modal-footer border-0 pt-1 gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm flex-fill"
+                        id="sameday-cancel-btn" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning btn-sm flex-fill fw-semibold"
+                        id="sameday-confirm-btn">Request anyway</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="{{ url_for('static', filename='js/reusable-calendar.js') }}"></script>
 <script nonce="{{ csp_nonce }}">
     // ─── Greeting ────────────────────────────────────────────────
@@ -769,9 +795,48 @@
             recurPreview.innerHTML = chips + `<div class="text-muted small mt-1">${total} ${unit}${total !== 1 ? 's' : ''} total</div>`;
         }
 
+        // ─── Same-day confirmation ───────────────────────────────
+        // Today in UTC (matches server) — used to decide whether the
+        // warning modal fires before submitting a booking.
+        function todayUTC() {
+            return new Date().toISOString().slice(0, 10);
+        }
+        function isSameDay(dateStr) {
+            return dateStr === todayUTC();
+        }
+        // Returns a promise resolving to true if the client confirms,
+        // false if they cancel/dismiss the modal.
+        function confirmSameDay() {
+            return new Promise((resolve) => {
+                const el = document.getElementById('sameDayModal');
+                const modal = bootstrap.Modal.getOrCreateInstance(el);
+                const confirmBtn = document.getElementById('sameday-confirm-btn');
+                let settled = false;
+                function cleanup() {
+                    confirmBtn.removeEventListener('click', onConfirm);
+                    el.removeEventListener('hidden.bs.modal', onHidden);
+                }
+                function onConfirm() {
+                    settled = true;
+                    cleanup();
+                    modal.hide();
+                    resolve(true);
+                }
+                function onHidden() {
+                    if (!settled) {
+                        cleanup();
+                        resolve(false);
+                    }
+                }
+                confirmBtn.addEventListener('click', onConfirm);
+                el.addEventListener('hidden.bs.modal', onHidden);
+                modal.show();
+            });
+        }
+
         // ─── Form submit — all booking types ─────────────────────
         const bookingForm = document.getElementById('BookingForm');
-        bookingForm.addEventListener('submit', function (e) {
+        bookingForm.addEventListener('submit', async function (e) {
             e.preventDefault(); // Always intercept — both paths are AJAX now
 
             const csrfToken = document.querySelector('input[name=csrf_token]')?.value;
@@ -829,6 +894,8 @@
                 if (!selectedDate) { showToast('Please select a date.', 'warning'); return; }
                 if (!slotSelect.value) { showToast('Please choose a time slot.', 'warning'); return; }
 
+                if (isSameDay(selectedDate) && !(await confirmSameDay())) return;
+
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Requesting…';
                 fetch('{{ url_for("client.book_drop_in") }}', {
@@ -867,6 +934,8 @@
                 // ── Book both walks: AM + PM in one request ────────
                 if (!selectedDate) { showToast('Please select a date.', 'warning'); return; }
 
+                if (isSameDay(selectedDate) && !(await confirmSameDay())) return;
+
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Requesting…';
                 fetch('{{ url_for("client.book_both") }}', {
@@ -904,6 +973,8 @@
                 // ── Single booking: AJAX, no page reload ──────────
                 if (!selectedDate) { showToast('Please select a date.', 'warning'); return; }
                 if (!slotSelect.value) { showToast('Please choose a slot.', 'warning'); return; }
+
+                if (isSameDay(selectedDate) && !(await confirmSameDay())) return;
 
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Requesting…';
