@@ -68,6 +68,16 @@
             });
         }
 
+        // Bootstrap modal used to replace the system confirm() prompt.
+        // Created once per createOverrideForm() call; same instance reused
+        // across every delete-button click within this form lifetime.
+        const $deleteModalEl    = document.getElementById('schedDeleteModal');
+        const $deleteModalTitle = document.getElementById('sched-delete-modal-title');
+        const $deleteModalBody  = document.getElementById('sched-delete-modal-body');
+        const $deleteConfirmBtn = document.getElementById('sched-delete-confirm-btn');
+        const deleteModal = $deleteModalEl ? new bootstrap.Modal($deleteModalEl) : null;
+        let _pendingDelete = null;   // { adhocIds, unavailIds } populated when user clicks a delete button
+
         function bindDeleteButtons() {
             document.querySelectorAll('.sched-delete-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -77,26 +87,41 @@
                     const adhocIds   = (row.dataset.adhocIds   || '').split(',').filter(Boolean).map(Number);
                     const unavailIds = (row.dataset.unavailIds || '').split(',').filter(Boolean).map(Number);
                     const total = adhocIds.length + unavailIds.length;
-                    if (!confirm(total > 1 ? `Delete ${total} entries (${summary})?` : `Delete this entry (${summary})?`)) return;
 
-                    fetch(cfg.batchDeleteUrl, {
-                        method:  'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
-                        body:    JSON.stringify({ adhoc_ids: adhocIds, unavail_ids: unavailIds, walker_id: cfg.walkerId }),
-                    })
-                        .then(r => r.json())
-                        .then(data => {
-                            if (data.success) {
-                                refreshList();
-                                if (cfg.onChange) cfg.onChange();
-                            } else {
-                                setStatus('Failed to delete — please try again.', 'error');
-                            }
-                        })
-                        .catch(() => setStatus('Network error.', 'error'));
+                    _pendingDelete = { adhocIds, unavailIds };
+                    if ($deleteModalTitle) {
+                        $deleteModalTitle.textContent = total > 1 ? `Delete ${total} entries?` : 'Delete this entry?';
+                    }
+                    if ($deleteModalBody) $deleteModalBody.textContent = summary;
+                    if (deleteModal) deleteModal.show();
                 });
             });
         }
+
+        function performDelete() {
+            if (!_pendingDelete) return;
+            const { adhocIds, unavailIds } = _pendingDelete;
+            _pendingDelete = null;
+            if (deleteModal) deleteModal.hide();
+
+            fetch(cfg.batchDeleteUrl, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                body:    JSON.stringify({ adhoc_ids: adhocIds, unavail_ids: unavailIds, walker_id: cfg.walkerId }),
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        refreshList();
+                        if (cfg.onChange) cfg.onChange();
+                    } else {
+                        setStatus('Failed to delete — please try again.', 'error');
+                    }
+                })
+                .catch(() => setStatus('Network error.', 'error'));
+        }
+
+        if ($deleteConfirmBtn) $deleteConfirmBtn.addEventListener('click', performDelete);
 
         function refreshList() {
             fetch(listUrlFor())
