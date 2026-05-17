@@ -90,6 +90,7 @@ def logout():
 
 @auth_bp.route("/change-password", methods=["GET", "POST"])
 @login_required
+@limiter.limit("5 per minute", methods=["POST"])
 def change_password():
     """Allow users to change their password"""
     form = PasswordChangeForm()
@@ -233,6 +234,7 @@ def forgot_password():
 # ── Reset password ────────────────────────────────────────────────────────────
 
 @auth_bp.route("/reset-password/<token>", methods=["GET", "POST"])
+@limiter.limit("10 per hour", methods=["POST"])
 def reset_password(token):
     """Step 2 — user clicks the link in the email and sets a new password."""
     from app.forms import ResetPasswordForm

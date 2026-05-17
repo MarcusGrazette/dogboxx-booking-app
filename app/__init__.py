@@ -58,10 +58,19 @@ def create_app(config_name=None):
     log_file = app.config.get('LOG_FILE')
     configure_logging(app_name=app.name, log_level=log_level, log_file=log_file)
     
-    # Validate critical environment variables
-    if not app.config.get('SECRET_KEY') and not app.debug:
+    # Validate critical environment variables.
+    # SECRET_KEY is required in every environment — itsdangerous signs sessions,
+    # password reset tokens, and unsubscribe tokens with it. A missing key would
+    # either yield ephemeral per-process keys (breaking reset links across
+    # restarts) or sign with None.
+    if not app.config.get('SECRET_KEY'):
         raise RuntimeError("SECRET_KEY environment variable is not set. "
                           "This is required for application security.")
+
+    # Defence in depth: if FLASK_ENV explicitly says production, refuse to
+    # boot in debug mode. Catches FLASK_DEBUG=1 set by accident on Railway.
+    if os.environ.get('FLASK_ENV') == 'production' and app.config.get('DEBUG'):
+        raise RuntimeError("DEBUG must be False when FLASK_ENV=production.")
 
     # Configure upload folder
     upload_folder = os.path.join(app.static_folder, 'uploads', 'dogs')
