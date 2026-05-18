@@ -20,7 +20,7 @@
 
 // ── Cache config ──────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'v19';
+const CACHE_VERSION = 'v20';
 const CACHE_NAME    = `dogboxx-${CACHE_VERSION}`;
 
 /**
