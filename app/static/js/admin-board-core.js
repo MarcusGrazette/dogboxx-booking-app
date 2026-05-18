@@ -230,15 +230,46 @@
                 + unavailBadge;
             col.appendChild(header);
 
-            walker.available_slots.forEach(slot => {
-                const isUnavail = unavailSlots.includes(slot);
-                const lane = makeLane(walker.id, slot, true, isUnavail);
-                getAssignedForLane(walker.id, slot).forEach(b =>
-                    lane.querySelector('.sortable-lane').appendChild(makeAssignedCard(b)));
-                col.appendChild(lane);
+            // Iterate the canonical slot order rather than available_slots so
+            // every walker column has both Morning and Afternoon rows in the
+            // same vertical position. Walkers not scheduled for a slot get a
+            // non-interactive placeholder so their PM card can't visually
+            // align with another walker's AM card (or vice versa).
+            ['Morning', 'Afternoon'].forEach(slot => {
+                if (availSlots.includes(slot)) {
+                    const isUnavail = unavailSlots.includes(slot);
+                    const lane = makeLane(walker.id, slot, true, isUnavail);
+                    getAssignedForLane(walker.id, slot).forEach(b =>
+                        lane.querySelector('.sortable-lane').appendChild(makeAssignedCard(b)));
+                    col.appendChild(lane);
+                } else {
+                    col.appendChild(makeNotScheduledLane(slot));
+                }
             });
 
             return col;
+        }
+
+        function makeNotScheduledLane(slot) {
+            // Placeholder for a slot the walker isn't scheduled for today.
+            // Not droppable, no walkerId dataset (so Sortable.create skips it),
+            // no click handler so an assignment can't drop here. Visually
+            // distinct from `lane-unavailable` (admin-override yellow) — this
+            // grey signals "not on the schedule" rather than "blocked".
+            const wrap = document.createElement('div');
+            wrap.className = 'board-lane lane-not-scheduled';
+
+            const hdr = document.createElement('div');
+            hdr.className = 'lane-header';
+            hdr.innerHTML = `<span class="lane-title text-muted">${slot}</span>`;
+            wrap.appendChild(hdr);
+
+            const body = document.createElement('div');
+            body.className = 'lane-not-scheduled-body';
+            body.textContent = 'Unavailable';
+            wrap.appendChild(body);
+
+            return wrap;
         }
 
         function makeLane(walkerId, slot, isWalkerLane, isUnavail = false) {
