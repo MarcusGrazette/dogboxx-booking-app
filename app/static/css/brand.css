@@ -194,6 +194,13 @@ html, body {
   overscroll-behavior-y: contain;
 }
 
+/* Belt-and-braces: if any iOS version still rubber-bands past
+   overscroll-behavior, the bounce reveals the navbar's dark colour
+   (the navbar is sticky at the top) instead of a white flash. */
+html {
+  background-color: #1B1B1B;
+}
+
 main.container {
   text-align: left; /* override the global text-center on main */
   padding-top: 1.5rem;
