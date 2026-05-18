@@ -170,6 +170,23 @@
     text-overflow: ellipsis;
 }
 
+/* Portrait phones: dog name is the key info, so give it the full
+   card width. Hide the avatar and drag handle to recover horizontal
+   space, allow the card to wrap, and force the name/owner block to
+   take a full row so the pills and badges wrap to the next line. */
+@media (max-width: 767.98px) {
+    .board-card {
+        flex-wrap: wrap;
+    }
+    .board-dog-img,
+    .drag-handle {
+        display: none;
+    }
+    .board-card-info {
+        flex: 1 1 100%;
+    }
+}
+
 
 /* ── Column headers ────────────────────────────────────────────────────────── */
 .board-col-header {
