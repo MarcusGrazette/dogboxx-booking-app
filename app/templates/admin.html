@@ -50,6 +50,17 @@
     width: 100%;
     min-width: 0;
   }
+
+  /* Assign modal: claim near-full viewport on small screens.
+     Bootstrap's modal-xl falls back to lg/md max-widths with
+     auto-margins below 1200px, which on landscape phones leaves
+     ~60px gutters on each side — wasted space for the embedded
+     board. Drop max-width and tighten margin so the board has
+     room to breathe. */
+  #assignModal .modal-dialog {
+    max-width: none;
+    margin: 0.5rem;
+  }
 }
 .cal-card-header {
   padding: 14px 16px 10px;
