@@ -31,6 +31,19 @@
   border: 1px solid #ececec;
   overflow: hidden;
 }
+
+/* Portrait phones: stack vertically with calendar on top so the calendar
+   grid isn't squeezed by the detail card's 340px floor. Landscape
+   phones (>=768px) keep the side-by-side layout. */
+@media (max-width: 767.98px) {
+  .dash-wrap {
+    flex-direction: column;
+  }
+  .detail-card {
+    width: 100%;
+    min-width: 0;
+  }
+}
 .cal-card-header {
   padding: 14px 16px 10px;
   border-bottom: 1px solid #f0f0f0;
