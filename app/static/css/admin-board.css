@@ -46,6 +46,27 @@
     color: #856404;
 }
 
+/* Placeholder lane for a slot the walker isn't scheduled for today.
+   Visually distinct from .lane-unavailable (admin-override yellow) —
+   this means "not on the schedule" rather than "scheduled but blocked". */
+.board-lane.lane-not-scheduled {
+    background: #f1f3f5;
+    border-style: dashed;
+    border-color: #ced4da;
+    cursor: not-allowed;
+}
+
+.lane-not-scheduled-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    color: #adb5bd;
+    font-size: 0.8rem;
+    font-style: italic;
+    letter-spacing: 0.02em;
+}
+
 .board-lane.lane-target:hover {
     background: #f7ceee;
 }
@@ -147,6 +168,23 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* Portrait phones: dog name is the key info, so give it the full
+   card width. Hide the avatar and drag handle to recover horizontal
+   space, allow the card to wrap, and force the name/owner block to
+   take a full row so the pills and badges wrap to the next line. */
+@media (max-width: 767.98px) {
+    .board-card {
+        flex-wrap: wrap;
+    }
+    .board-dog-img,
+    .drag-handle {
+        display: none;
+    }
+    .board-card-info {
+        flex: 1 1 100%;
+    }
 }
 
 

@@ -185,6 +185,15 @@ body {
   font-family: 'Nunito', 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
+/* Suppress iOS Safari rubber-band overscroll at the document edges so the
+   PWA feels native — the white flash on flick-down at the top is gone and
+   the bottom doesn't bounce either. Inner scrollable elements (modals,
+   overflow:auto lists) still scroll normally because `contain` only
+   blocks the bounce from propagating to the document. iOS 16+. */
+html, body {
+  overscroll-behavior-y: contain;
+}
+
 main.container {
   text-align: left; /* override the global text-center on main */
   padding-top: 1.5rem;

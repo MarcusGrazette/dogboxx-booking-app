@@ -109,7 +109,7 @@
             <div class="card-body p-3">
                 {{ calendar_widget('client-booking-cal', config={'selectable': true}, show_loading=false) }}
                 <div class="cal-legend mb-3">
-                    <span><span class="cal-legend-dot pending"></span>Pending</span>
+                    <span><span class="cal-legend-dot pending"></span>Requested</span>
                     <span><span class="cal-legend-dot confirmed"></span>Confirmed</span>
                 </div>
                 <p class="small text-muted mb-0" id="selected-date-label">
@@ -327,7 +327,7 @@
                                     style="min-width:90px;">Confirmed</span>
                                 {% elif booking.status == 'requested' %}
                                 <span class="badge rounded-pill py-2 text-center"
-                                    style="min-width:90px; background-color:#fff3cd; color:#856404;">Pending</span>
+                                    style="min-width:90px; background-color:#fff3cd; color:#856404;">Requested</span>
                                 {% elif booking.status == 'waitlisted' %}
                                 <span class="badge rounded-pill text-bg-info py-2 text-center"
                                     style="min-width:90px;">Waitlisted</span>
@@ -381,7 +381,7 @@
                                     style="min-width:90px;">Confirmed</span>
                                 {% elif booking.status == 'requested' %}
                                 <span class="badge rounded-pill py-2 text-center"
-                                    style="min-width:90px; background-color:#fff3cd; color:#856404;">Pending</span>
+                                    style="min-width:90px; background-color:#fff3cd; color:#856404;">Requested</span>
                                 {% elif booking.status == 'waitlisted' %}
                                 <span class="badge rounded-pill text-bg-info py-2 text-center"
                                     style="min-width:90px;">Waitlisted</span>
@@ -550,7 +550,7 @@
             <div class="modal-body pt-1">
                 <p class="mb-0" style="font-size: 0.92rem;">
                     We may not be able to take a same-day booking. It'll be marked as
-                    <strong>pending</strong> and flagged to Lydia. You'll get a notification if
+                    <strong>requested</strong> and flagged to Lydia. You'll get a notification if
                     she confirms it. Thanks for bearing with us!
                 </p>
             </div>
@@ -1188,7 +1188,7 @@
             ? `<span class="badge rounded-pill text-bg-info py-2 text-center" style="min-width:90px;">Waitlisted</span>`
             : booking.status === 'confirmed'
                 ? `<span class="badge rounded-pill text-bg-success py-2 text-center" style="min-width:90px;">Confirmed</span>`
-                : `<span class="badge rounded-pill py-2 text-center" style="min-width:90px; background-color:#fff3cd; color:#856404;">Pending</span>`;
+                : `<span class="badge rounded-pill py-2 text-center" style="min-width:90px; background-color:#fff3cd; color:#856404;">Requested</span>`;
 
         // "New" badge — fades out after 4s
         const newBadge = `<span class="badge bg-pink ms-1 new-booking-badge"

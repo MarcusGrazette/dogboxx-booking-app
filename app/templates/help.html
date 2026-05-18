@@ -148,6 +148,7 @@
                 <a href="#booking-a-walk">Booking a walk</a>
                 <a href="#booking-a-drop-in">Booking a drop-in</a>
                 <a href="#recurring-bookings">Recurring bookings</a>
+                <a href="#same-day-booking">Same-day booking</a>
                 <a href="#managing-bookings">Managing bookings</a>
                 <a href="#cancellations">Cancellations</a>
                 <a href="#pausing-walks">Pausing walks</a>
@@ -216,7 +217,7 @@
                         </ol>
                         <div class="help-tip">
                             <i class="bi bi-info-circle me-1"></i>
-                            Drop ins show as 'pending' until Lydia confirms them. You'll see a notification when she
+                            Drop ins show as 'requested' until Lydia confirms them. You'll see a notification when she
                             does.
                         </div>
                     </div>
@@ -253,6 +254,34 @@
                 </div>
             </section>
 
+            {# ─────────────────────────────── SAME-DAY BOOKING ─ #}
+            <section class="help-section" id="same-day-booking">
+                <div class="row align-items-center g-4">
+                    <div class="col-12 col-md-6 order-1">
+                        <h2><i class="bi bi-lightning-fill section-icon"></i>Same-day booking</h2>
+                        <ul class="mb-0">
+                            <li>Same-day bookings are marked as <strong>requested</strong> and flagged to Lydia for
+                                review.</li>
+                            <li>She plans the pickup schedule in advance, so it may not always be possible to accept a
+                                last-minute booking.</li>
+                            <li>You'll get a notification if she confirms your booking request.</li>
+                        </ul>
+                        <div class="help-tip">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Thanks for bearing with us!
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6 order-2">
+                        {# Replace with: <img src="{{ url_for('static', filename='help/same-day.png') }}"
+                            alt="Same-day booking" class="help-screenshot"> #}
+                        <div class="help-screenshot-placeholder">
+                            <i class="bi bi-image" style="font-size:2rem;"></i>
+                            <span>help/same-day.png</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             {# ─────────────────────────────── MANAGING BOOKINGS ─ #}
             <section class="help-section" id="managing-bookings">
                 <div class="row align-items-center g-4">
@@ -267,7 +296,7 @@
                     <div class="col-12 col-md-6 order-1 order-md-2">
                         <h2><i class="bi bi-list-check section-icon"></i>Managing bookings</h2>
                         <p>You'll see upcoming bookings on your home screen. The calendar on the home screen highlights
-                            dates with bookings. Green for confirmed and yellow for pending. Tap a date to filter the
+                            dates with bookings. Green for confirmed and yellow for requested. Tap a date to filter the
                             list.
                         </p>
                         <ul class="mb-0">
