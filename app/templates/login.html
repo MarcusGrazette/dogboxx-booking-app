@@ -114,5 +114,16 @@
         btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
     });
 }());
+
+// Clear the iOS PWA home-screen badge whenever the login page is reached —
+// covers explicit logout and silent session expiry. setAppBadge persists on
+// the installed PWA across navigations, so without this it survives logout.
+// iOS only honours the Badging API from the SW, so route through postMessage.
+(function () {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.ready.then(function (reg) {
+        if (reg.active) reg.active.postMessage({ type: 'SET_BADGE', count: 0 });
+    }).catch(function () {});
+}());
 </script>
 {% endblock %}
