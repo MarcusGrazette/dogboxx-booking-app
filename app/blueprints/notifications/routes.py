@@ -99,12 +99,23 @@ def push_subscribe():
     if not p256dh or not auth:
         return jsonify({'ok': False, 'error': 'missing keys'}), 400
 
-    # Upsert: update if endpoint exists, otherwise insert
+    # Upsert: update if endpoint exists for this user, otherwise insert.
+    # If the endpoint exists under a *different* user (e.g. shared browser,
+    # or leaked endpoint URL), delete the old row before inserting — never
+    # silently transfer ownership, since push endpoints are sensitive.
     sub = PushSubscription.query.filter_by(endpoint=endpoint).first()
+    if sub and sub.user_id != current_user.id:
+        current_app.logger.warning(
+            'Push subscription endpoint reassigned from user %s to user %s',
+            sub.user_id, current_user.id,
+        )
+        db.session.delete(sub)
+        db.session.flush()  # release unique constraint on endpoint before re-insert
+        sub = None
+
     if sub:
-        sub.user_id  = current_user.id
-        sub.p256dh   = p256dh
-        sub.auth     = auth
+        sub.p256dh = p256dh
+        sub.auth   = auth
     else:
         sub = PushSubscription(
             user_id=current_user.id,

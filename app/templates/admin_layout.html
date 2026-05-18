@@ -159,7 +159,7 @@
             <nav class="mt-2">
                 <ul class="nav sidebar-menu flex-column" role="menu">
 
-                    <!-- Dashboard -->
+                    {# ── Top-level ─────────────────────────────────────── #}
                     <li class="nav-item">
                         <a href="{{ url_for('admin.index') }}"
                            class="nav-link {% if request.endpoint == 'admin.index' %}active{% endif %}">
@@ -168,44 +168,15 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a href="{{ url_for('admin.revenue') }}"
-                           class="nav-link {% if request.endpoint == 'admin.revenue' %}active{% endif %}">
-                            <i class="bi bi-currency-pound me-2"></i>
-                            <span>Revenue</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="{{ url_for('admin.invoicing') }}"
-                           class="nav-link {% if request.endpoint in ['admin.invoicing', 'admin.invoicing_detail'] %}active{% endif %}">
-                            <i class="bi bi-receipt me-2"></i>
-                            <span>Invoicing</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="{{ url_for('admin.newsletter') }}"
-                           class="nav-link {% if request.endpoint == 'admin.newsletter' %}active{% endif %}">
-                            <i class="bi bi-envelope-paper me-2"></i>
-                            <span>Newsletter</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="{{ url_for('admin.daily_messages') }}"
-                           class="nav-link {% if request.endpoint in ['admin.daily_messages', 'admin.delete_daily_message', 'admin.bulk_delete_old_daily_messages'] %}active{% endif %}">
-                            <i class="bi bi-megaphone me-2"></i>
-                            <span>Daily Messages</span>
+                        <a href="{{ url_for('admin.activity_feed') }}"
+                           class="nav-link {% if request.endpoint == 'admin.activity_feed' %}active{% endif %}">
+                            <i class="bi bi-activity me-2"></i>
+                            <span>Activity</span>
                         </a>
                     </li>
 
-                    <!-- Bookings -->
+                    {# ── Bookings ──────────────────────────────────────── #}
                     <li class="nav-header">Bookings</li>
-                    <li class="nav-item">
-                        <a href="{{ url_for('admin.board') }}"
-                           class="nav-link d-flex align-items-center justify-content-between {% if request.endpoint == 'admin.board' %}active{% endif %}">
-                            <span><i class="bi bi-calendar-check me-2"></i>Group Walks</span>
-                            <span class="badge rounded-pill ms-1" id="pending-badge-group-walks"
-                                  style="background:#E02FAC; font-size:0.65rem; {% if pending_group_walks == 0 %}display:none;{% endif %}">{{ pending_group_walks }}</span>
-                        </a>
-                    </li>
                     <li class="nav-item">
                         <a href="{{ url_for('admin.drop_in_board') }}"
                            class="nav-link d-flex align-items-center justify-content-between {% if request.endpoint == 'admin.drop_in_board' %}active{% endif %}">
@@ -222,7 +193,7 @@
                         </a>
                     </li>
 
-                    <!-- Rosters -->
+                    {# ── Rosters ───────────────────────────────────────── #}
                     <li class="nav-header">Rosters</li>
                     <li class="nav-item">
                         <a href="{{ url_for('admin.dogs') }}"
@@ -245,11 +216,38 @@
                             <span>Walkers</span>
                         </a>
                     </li>
+
+                    {# ── Comms ─────────────────────────────────────────── #}
+                    <li class="nav-header">Comms</li>
                     <li class="nav-item">
-                        <a href="{{ url_for('admin.activity_feed') }}"
-                           class="nav-link {% if request.endpoint == 'admin.activity_feed' %}active{% endif %}">
-                            <i class="bi bi-activity me-2"></i>
-                            <span>Activity</span>
+                        <a href="{{ url_for('admin.newsletter') }}"
+                           class="nav-link {% if request.endpoint == 'admin.newsletter' %}active{% endif %}">
+                            <i class="bi bi-envelope-paper me-2"></i>
+                            <span>Newsletter</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('admin.daily_messages') }}"
+                           class="nav-link {% if request.endpoint in ['admin.daily_messages', 'admin.delete_daily_message', 'admin.bulk_delete_old_daily_messages'] %}active{% endif %}">
+                            <i class="bi bi-megaphone me-2"></i>
+                            <span>Daily Messages</span>
+                        </a>
+                    </li>
+
+                    {# ── Finance ───────────────────────────────────────── #}
+                    <li class="nav-header">Finance</li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('admin.revenue') }}"
+                           class="nav-link {% if request.endpoint == 'admin.revenue' %}active{% endif %}">
+                            <i class="bi bi-currency-pound me-2"></i>
+                            <span>Revenue</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('admin.invoicing') }}"
+                           class="nav-link {% if request.endpoint in ['admin.invoicing', 'admin.invoicing_detail'] %}active{% endif %}">
+                            <i class="bi bi-receipt me-2"></i>
+                            <span>Invoicing</span>
                         </a>
                     </li>
 
@@ -353,14 +351,13 @@ document.addEventListener('hide.bs.modal', function (event) {
 
 <script nonce="{{ csp_nonce }}">
 // Refresh sidebar pending-booking badge counts after board actions.
-// Called by the group-walks and drop-in board templates.
+// Called by the drop-in board template.
 function refreshPendingBadges() {
     fetch('/admin/api/pending-counts')
         .then(r => r.ok ? r.json() : null)
         .then(d => {
             if (!d) return;
-            _setPendingBadge('pending-badge-group-walks', d.group_walks);
-            _setPendingBadge('pending-badge-drop-ins',   d.drop_ins);
+            _setPendingBadge('pending-badge-drop-ins', d.drop_ins);
         })
         .catch(() => {});
 }

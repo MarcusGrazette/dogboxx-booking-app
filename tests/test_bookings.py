@@ -858,3 +858,190 @@ class TestBookingClientNotifications:
             body_lower = (n.body or '').lower()
             assert 'morning' in body_lower
             assert 'afternoon' in body_lower
+
+
+# ---------------------------------------------------------------------------
+# T3e — Same-day booking friction
+#
+# Walker schedules are planned in advance, so same-day client requests skip
+# auto-assignment and sit at status='requested' until an admin reviews them.
+# Admins get a dedicated 'same_day_request' notification.
+# ---------------------------------------------------------------------------
+
+class TestSameDayBooking:
+
+    def _post_book(self, flask_client, payload):
+        return flask_client.post(
+            '/book', data=json.dumps(payload), content_type='application/json',
+        )
+
+    def _post_drop_in(self, flask_client, payload):
+        return flask_client.post(
+            '/book_drop_in', data=json.dumps(payload),
+            content_type='application/json',
+        )
+
+    def _post_both(self, flask_client, payload):
+        return flask_client.post(
+            '/book_both', data=json.dumps(payload),
+            content_type='application/json',
+        )
+
+    def test_book_same_day_stays_requested_with_walker_available(self, app, client):
+        """Even when a walker has capacity, same-day requests skip auto-assign."""
+        from app.models import Notification
+        today = datetime.date.today()
+        with app.app_context():
+            make_walker_with_schedule(
+                f'walker_sd_{id(self)}@test.com', today.weekday(), 'Morning',
+            )
+            make_service(capacity=6)
+            admin = make_user(f'admin_sd_{id(self)}@test.com',
+                              role='walker', is_admin=True)
+            user = make_user(f'cl_sd_{id(self)}@test.com')
+            make_client_profile(user.id)
+            dog = make_dog()
+            attach_dog(dog.id, user.id)
+            db.session.commit()
+            email = user.email
+            admin_id = admin.id
+            dog_id = dog.id
+
+        login(client, email)
+        resp = self._post_book(client, {
+            'dog_id': dog_id, 'date': today.isoformat(), 'slot': 'Morning',
+        })
+        data = resp.get_json()
+        assert resp.status_code == 200
+        assert data['success'] is True
+        assert data['status'] == 'requested'
+
+        with app.app_context():
+            b = Booking.query.one()
+            assert b.status == 'requested'
+            assert b.walker_id is None
+            n = Notification.query.filter_by(
+                recipient_id=admin_id,
+                notification_type='same_day_request',
+            ).first()
+            assert n is not None
+            assert 'same-day' in n.title.lower()
+
+    def test_book_tomorrow_still_auto_confirms(self, app, client):
+        """Regression: the same-day gate must not affect future bookings."""
+        tom = tomorrow()
+        with app.app_context():
+            make_walker_with_schedule(
+                f'walker_tom_{id(self)}@test.com', tom.weekday(), 'Morning',
+            )
+            make_service(capacity=6)
+            user = make_user(f'cl_tom_{id(self)}@test.com')
+            make_client_profile(user.id)
+            dog = make_dog()
+            attach_dog(dog.id, user.id)
+            db.session.commit()
+            email = user.email
+            dog_id = dog.id
+
+        login(client, email)
+        resp = self._post_book(client, {
+            'dog_id': dog_id, 'date': tom.isoformat(), 'slot': 'Morning',
+        })
+        data = resp.get_json()
+        assert resp.status_code == 200
+        assert data['status'] == 'confirmed'
+
+    def test_drop_in_same_day_stays_requested(self, app, client):
+        """Same-day drop-in sits at 'requested' and sends same_day_request notif."""
+        from app.models import Notification
+        today = datetime.date.today()
+        with app.app_context():
+            wu = make_user(f'walker_di_sd_{id(self)}@test.com', role='walker')
+            w = Walker(user_id=wu.id, does_drop_ins=True)
+            db.session.add(w)
+            db.session.flush()
+            db.session.add(WalkerSchedule(
+                walker_id=w.id, day_of_week=today.weekday(),
+                slot='Morning', active=True,
+            ))
+            db.session.add(ServiceType(
+                name='Drop In', slug='drop-in',
+                capacity_model='walker_assigned',
+                slot_type='morning_afternoon',
+                requires_walker=True,
+                default_max_capacity=4, active=True,
+            ))
+            admin = make_user(f'admin_di_sd_{id(self)}@test.com',
+                              role='walker', is_admin=True)
+            user = make_user(f'cl_di_sd_{id(self)}@test.com')
+            make_client_profile(user.id)
+            dog = make_dog()
+            attach_dog(dog.id, user.id)
+            db.session.commit()
+            email = user.email
+            admin_id = admin.id
+            dog_id = dog.id
+
+        login(client, email)
+        resp = self._post_drop_in(client, {
+            'dog_id': dog_id, 'date': today.isoformat(), 'slot': 'Morning',
+        })
+        data = resp.get_json()
+        assert resp.status_code == 200
+        assert data['success'] is True
+        assert data['status'] == 'requested'
+
+        with app.app_context():
+            n = Notification.query.filter_by(
+                recipient_id=admin_id,
+                notification_type='same_day_request',
+            ).first()
+            assert n is not None
+
+    def test_book_both_same_day_stays_requested(self, app, client):
+        """Same-day book_both creates both slots as requested with no walker."""
+        from app.models import Notification
+        today = datetime.date.today()
+        with app.app_context():
+            wu = make_user(f'walker_bb_sd_{id(self)}@test.com', role='walker')
+            w = Walker(user_id=wu.id)
+            db.session.add(w)
+            db.session.flush()
+            db.session.add(WalkerSchedule(
+                walker_id=w.id, day_of_week=today.weekday(),
+                slot='Morning', active=True,
+            ))
+            db.session.add(WalkerSchedule(
+                walker_id=w.id, day_of_week=today.weekday(),
+                slot='Afternoon', active=True,
+            ))
+            make_service(capacity=6)
+            admin = make_user(f'admin_bb_sd_{id(self)}@test.com',
+                              role='walker', is_admin=True)
+            user = make_user(f'cl_bb_sd_{id(self)}@test.com')
+            make_client_profile(user.id)
+            dog = make_dog()
+            attach_dog(dog.id, user.id)
+            db.session.commit()
+            email = user.email
+            admin_id = admin.id
+            dog_id = dog.id
+
+        login(client, email)
+        resp = self._post_both(client, {
+            'dog_id': dog_id, 'date': today.isoformat(),
+        })
+        data = resp.get_json()
+        assert resp.status_code == 200
+        assert data['success'] is True
+        assert all(b['status'] == 'requested' for b in data['bookings'])
+
+        with app.app_context():
+            bookings = Booking.query.all()
+            assert len(bookings) == 2
+            assert all(b.walker_id is None for b in bookings)
+            n = Notification.query.filter_by(
+                recipient_id=admin_id,
+                notification_type='same_day_request',
+            ).first()
+            assert n is not None

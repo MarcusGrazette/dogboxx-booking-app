@@ -414,6 +414,7 @@
   padding: 2px 6px;
   border-radius: 5px;
 }
+
 </style>
 {% endblock %}
 
@@ -889,8 +890,10 @@ window._DASH = {
     }
   };
 
-  assignModalEl.addEventListener('hidden.bs.modal', () => {
-    // Empty the body so a stale board instance can't accumulate listeners
+  assignModalEl.addEventListener('hidden.bs.modal', (e) => {
+    // hidden.bs.modal bubbles — nested confirm modals (decline, slot
+    // override) would otherwise wipe the board out from under the user.
+    if (e.target !== assignModalEl) return;
     document.getElementById('assign-modal-body').innerHTML = '';
     if (modalDirty) {
       modalDirty = false;
@@ -918,6 +921,16 @@ window._DASH = {
       if (!res.ok) throw new Error(res.status);
       document.getElementById('override-modal-body').innerHTML = await res.text();
 
+      // Bootstrap doesn't support nested modals: the confirm modal's z-index
+      // and our parent's opacity would both misbehave. Hoist the confirm
+      // modal out to be a direct child of <body> so the two modals are
+      // siblings and BS's source-order backdrop stacking does the right
+      // thing. The hidden handler below cleans this up on modal close.
+      const $delModal = document.getElementById('schedDeleteModal');
+      if ($delModal && $delModal.parentElement !== document.body) {
+        document.body.appendChild($delModal);
+      }
+
       window.createOverrideForm({
         batchUrl:       '{{ url_for("walker.schedule_changes_batch") }}',
         batchDeleteUrl: '{{ url_for("walker.schedule_changes_batch_delete") }}',
@@ -934,8 +947,14 @@ window._DASH = {
     }
   };
 
-  overrideModalEl.addEventListener('hidden.bs.modal', () => {
+  overrideModalEl.addEventListener('hidden.bs.modal', (e) => {
+    // Same bubbling guard as assignModal — without this, closing the
+    // delete-confirm modal would clear the override form's body.
+    if (e.target !== overrideModalEl) return;
     document.getElementById('override-modal-body').innerHTML = '';
+    // Clean up the orphan delete-confirm modal we hoisted to <body>
+    // when this override modal opened.
+    document.getElementById('schedDeleteModal')?.remove();
     if (overrideDirty) {
       overrideDirty = false;
       refreshDashboard();

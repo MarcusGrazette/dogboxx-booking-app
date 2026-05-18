@@ -32,6 +32,7 @@ NOTIFICATION_META = {
     'booking_confirmed':    ('bi-check-circle-fill',  '#198754'),   # green
     'booking_cancelled':    ('bi-x-circle-fill',       '#dc3545'),   # red
     'booking_requested':    ('bi-calendar-plus-fill',  '#E02FAC'),   # pink
+    'same_day_request':     ('bi-lightning-fill',      '#fd7e14'),   # orange — urgent same-day
     'walker_assigned':      ('bi-person-check-fill',   '#0d6efd'),   # blue
     'walker_availability':  ('bi-calendar-x-fill',     '#fd7e14'),   # orange
     'dental_confirmed':     ('bi-check-circle-fill',   '#198754'),   # green

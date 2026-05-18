@@ -149,7 +149,10 @@
             wrap.style.display = 'flex';
 
             wrap.appendChild(makePendingColumn());
-            state.walkers.forEach(w => wrap.appendChild(makeWalkerColumn(w)));
+            state.walkers.forEach(w => {
+                const col = makeWalkerColumn(w);
+                if (col) wrap.appendChild(col);
+            });
 
             document.querySelectorAll('.sortable-lane').forEach(el => {
                 const { walkerId, slot } = el.dataset;
@@ -199,21 +202,32 @@
         }
 
         function makeWalkerColumn(walker) {
+            const unavailSlots = walker.unavailable_slots || [];
+            const availSlots   = walker.available_slots || [];
+
+            // Hide the column when the walker has no actually-available slots
+            // today — either because they're not scheduled at all, or because
+            // every scheduled/ad-hoc slot has been overridden as unavailable.
+            // (The backend computes available_slots as scheduled+adhoc MINUS
+            // unavailable, so length === 0 catches both cases.)
+            if (availSlots.length === 0) {
+                return null;
+            }
+
             const col = document.createElement('div');
             col.className = 'board-column';
 
-            const unavailSlots = walker.unavailable_slots || [];
-            const allUnavail   = unavailSlots.length > 0
-                && unavailSlots.length >= walker.available_slots.length;
-
             const header = document.createElement('div');
-            header.className = 'board-col-header' + (allUnavail ? ' header-unavailable' : '');
+            header.className = 'board-col-header';
+            // Partial unavailability — name the slot so the admin can see at a
+            // glance that the walker is only available for one of their slots.
+            const unavailBadge = unavailSlots.length > 0
+                ? `<span class="badge bg-warning text-dark ms-1"
+                        title="Marked unavailable — admin override active">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>Unavailable ${unavailSlots.join(', ')}</span>`
+                : '';
             header.innerHTML = `<span><i class="bi bi-person-walking me-1"></i>${walker.name}</span>`
-                + (unavailSlots.length > 0
-                    ? `<span class="badge bg-warning text-dark ms-1"
-                            title="Marked unavailable — admin override active">
-                            <i class="bi bi-exclamation-triangle-fill me-1"></i>Unavailable</span>`
-                    : '');
+                + unavailBadge;
             col.appendChild(header);
 
             walker.available_slots.forEach(slot => {

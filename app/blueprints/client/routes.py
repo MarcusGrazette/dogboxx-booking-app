@@ -14,7 +14,7 @@ from app import db, limiter
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
 from app.utils.uploads import process_dog_photo, process_cropped_photo
 from app.utils.booking_access import get_accessible_dog_ids, user_can_access_booking
-from app.capacity import check_availability, get_slot_availability_summary, auto_assign_walker, get_walker_slot_count, acquire_booking_lock
+from app.capacity import check_availability, get_slot_availability_summary, auto_assign_walker, get_walker_slot_count, acquire_booking_lock, is_date_closed
 from app.forms import OnboardingForm, BookingForm, ProfileForm
 import logging
 import traceback
@@ -100,7 +100,15 @@ def report_bug():
     return jsonify(success=False, message="Failed to send — please try again."), 500
 
 
-def _maybe_auto_confirm(booking, dog, service_slug=ServiceType.WALK, notify=True):
+def _is_same_day(booking_date):
+    """True if booking_date is today (server UTC). Same-day bookings skip
+    auto-assignment — walker schedules are planned in advance, so Lydia
+    reviews these manually."""
+    return booking_date == datetime.now(timezone.utc).date()
+
+
+def _maybe_auto_confirm(booking, dog, service_slug=ServiceType.WALK, notify=True,
+                        same_day=False):
     """Try to auto-assign a walker to a newly-created 'requested' booking.
 
     If a walker with capacity is available, sets the booking to confirmed,
@@ -113,8 +121,13 @@ def _maybe_auto_confirm(booking, dog, service_slug=ServiceType.WALK, notify=True
     the admin notification on no-walker — used by /book_both, which composes
     a single consolidated notification covering every slot in the request.
     Co-owner notifications are always written per-slot regardless.
+
+    same_day=True forces the booking to stay 'requested' (no auto-assign)
+    and uses the 'same_day_request' notification type so admins can spot it.
     """
-    walker = auto_assign_walker(booking.date, booking.slot, service_slug=service_slug)
+    walker = None if same_day else auto_assign_walker(
+        booking.date, booking.slot, service_slug=service_slug
+    )
     if walker:
         booking.walker_id = walker.id
         booking.status = 'confirmed'
@@ -147,11 +160,13 @@ def _maybe_auto_confirm(booking, dog, service_slug=ServiceType.WALK, notify=True
             # Notify admins — needs manual assignment
             admins = User.query.filter_by(is_admin=True).all()
             date_str = booking.date.strftime('%a %-d %b')
+            ntype = 'same_day_request' if same_day else 'booking_requested'
+            title_prefix = 'Same-day request — ' if same_day else ''
             for admin in admins:
                 create_notification(
                     recipient_id=admin.id,
-                    notification_type='booking_requested',
-                    title=f"{booking.user.firstname} requested {dog.name}'s {booking.slot.lower()} walk on {date_str}",
+                    notification_type=ntype,
+                    title=f"{title_prefix}{booking.user.firstname} requested {dog.name}'s {booking.slot.lower()} walk on {date_str}",
                     link='/admin',
                     sender_id=booking.user_id,
                 )
@@ -354,8 +369,9 @@ def index():
                     return redirect(url_for("client.index"))
 
                 # Determine booking status based on capacity
+                same_day = _is_same_day(booking_date)
                 booking_status = 'requested'
-                if not available and can_waitlist:
+                if not same_day and not available and can_waitlist:
                     booking_status = 'waitlisted'
 
                 dog = db.session.get(Dog, dog_id)
@@ -398,10 +414,12 @@ def index():
                     flash(f"All slots are currently full for {booking_slot} on {booking_date.strftime('%d %b')}. "
                           f"You've been added to the waitlist — we'll let you know if a spot opens up.", "info")
                 else:
-                    auto_confirmed = _maybe_auto_confirm(new_booking, dog)
+                    auto_confirmed = _maybe_auto_confirm(new_booking, dog, same_day=same_day)
                     db.session.commit()
                     if auto_confirmed:
                         flash(f"Booking confirmed for {booking_slot} on {booking_date.strftime('%d %b')}!", "success")
+                    elif same_day:
+                        flash("Same-day request submitted — Lydia will confirm shortly.", "info")
                     else:
                         flash("Booking request submitted — we'll confirm it shortly.", "success")
                 return redirect(url_for("client.index"))
@@ -484,10 +502,17 @@ def book():
         acquire_booking_lock(default_service.slug, booking_date, booking_slot)
         available, can_waitlist, capacity_msg = check_availability(default_service, booking_date, booking_slot)
 
-        if not available and not can_waitlist:
+        same_day = _is_same_day(booking_date)
+        closed, close_msg = is_date_closed(booking_date)
+        if closed:
+            return jsonify({'success': False, 'message': close_msg}), 409
+        if not same_day and not available and not can_waitlist:
             return jsonify({'success': False, 'message': capacity_msg}), 409
 
-        booking_status = 'waitlisted' if (not available and can_waitlist) else 'requested'
+        if same_day:
+            booking_status = 'requested'
+        else:
+            booking_status = 'waitlisted' if (not available and can_waitlist) else 'requested'
 
         new_booking = Booking(
             user_id         = current_user.id,
@@ -526,11 +551,13 @@ def book():
             message = (f"All slots are full — you've been added to the waitlist "
                        f"for {booking_slot} on {booking_date.strftime('%d %b')}.")
         else:
-            auto_confirmed = _maybe_auto_confirm(new_booking, dog)
+            auto_confirmed = _maybe_auto_confirm(new_booking, dog, same_day=same_day)
             db.session.commit()
             if auto_confirmed:
                 booking_status = 'confirmed'
                 message = f"Booking confirmed for {booking_slot} on {booking_date.strftime('%d %b')}!"
+            elif same_day:
+                message = "Same-day request submitted — Lydia will confirm shortly."
             else:
                 message = 'Booking request submitted — we\'ll confirm it shortly.'
 
@@ -601,6 +628,10 @@ def book_both():
         return jsonify({'success': False, 'message': 'No service type available.'}), 500
 
     active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
+    same_day = _is_same_day(booking_date)
+    closed, close_msg = is_date_closed(booking_date)
+    if closed:
+        return jsonify({'success': False, 'message': close_msg}), 409
 
     created = []   # (slot, status, booking_obj)
     skipped = []   # slot names skipped (duplicate / no walkers)
@@ -618,11 +649,14 @@ def book_both():
 
         acquire_booking_lock(default_service.slug, booking_date, slot)
         available, can_waitlist, _ = check_availability(default_service, booking_date, slot)
-        if not available and not can_waitlist:
+        if not available and not can_waitlist and not same_day:
             skipped.append(slot)
             continue
 
-        status = 'waitlisted' if (not available and can_waitlist) else 'requested'
+        if same_day:
+            status = 'requested'
+        else:
+            status = 'waitlisted' if (not available and can_waitlist) else 'requested'
         b = Booking(
             user_id         = current_user.id,
             dog_id          = dog_id,
@@ -656,7 +690,7 @@ def book_both():
             # and the consolidated client notification cover them too.
             final_created.append((slot, b.status, b))
         else:
-            auto_confirmed = _maybe_auto_confirm(b, dog, notify=False)
+            auto_confirmed = _maybe_auto_confirm(b, dog, notify=False, same_day=same_day)
             final_created.append((slot, b.status, b))
             if not auto_confirmed:
                 pending_slots.append((slot, status, b))
@@ -680,11 +714,13 @@ def book_both():
         pending_slot_names = [s for s, _, _ in pending_slots]
         slots_str = ' & '.join(s.lower() for s in pending_slot_names)
         suffix = 'walks' if len(pending_slot_names) > 1 else 'walk'
+        ntype = 'same_day_request' if same_day else 'booking_requested'
+        title_prefix = 'Same-day request — ' if same_day else ''
         for admin in User.query.filter_by(is_admin=True).all():
             create_notification(
                 recipient_id      = admin.id,
-                notification_type = 'booking_requested',
-                title             = f"{current_user.firstname} requested {dog.name}'s {slots_str} {suffix} on {date_str_fmt}",
+                notification_type = ntype,
+                title             = f"{title_prefix}{current_user.firstname} requested {dog.name}'s {slots_str} {suffix} on {date_str_fmt}",
                 link              = '/admin',
                 sender_id         = current_user.id,
             )
@@ -794,10 +830,17 @@ def book_drop_in():
 
     acquire_booking_lock(drop_in_service.slug, booking_date, booking_slot)
     available, can_waitlist, capacity_msg = _check(drop_in_service, booking_date, booking_slot)
-    if not available and not can_waitlist:
+    same_day = _is_same_day(booking_date)
+    closed, close_msg = is_date_closed(booking_date)
+    if closed:
+        return jsonify({'success': False, 'message': close_msg}), 409
+    if not available and not can_waitlist and not same_day:
         return jsonify({'success': False, 'message': capacity_msg}), 409
 
-    booking_status = 'waitlisted' if (not available and can_waitlist) else 'requested'
+    if same_day:
+        booking_status = 'requested'
+    else:
+        booking_status = 'waitlisted' if (not available and can_waitlist) else 'requested'
 
     new_booking = Booking(
         user_id         = current_user.id,
@@ -813,11 +856,13 @@ def book_drop_in():
 
     # Notify admins and co-owners
     date_str_fmt = booking_date.strftime('%a %-d %b')
+    ntype = 'same_day_request' if same_day else 'booking_requested'
+    title_prefix = 'Same-day ' if same_day else 'New '
     for admin in User.query.filter_by(is_admin=True).all():
         create_notification(
             recipient_id      = admin.id,
-            notification_type = 'booking_requested',
-            title             = f'New drop-in request for {date_str_fmt}',
+            notification_type = ntype,
+            title             = f'{title_prefix}drop-in request for {date_str_fmt}',
             body              = f'{current_user.firstname} requested {booking_slot} drop-in for {dog.name}',
             link              = '/admin/drop-in-board',
             sender_id         = current_user.id,
@@ -825,7 +870,9 @@ def book_drop_in():
     _notify_co_owners_of_booking(new_booking, dog.name, confirmed=False)
     db.session.commit()
 
-    if booking_status == 'waitlisted':
+    if same_day:
+        message = "Same-day drop-in request submitted — Lydia will confirm shortly."
+    elif booking_status == 'waitlisted':
         message = (f"All drop-in slots are full for {booking_slot} on "
                    f"{booking_date.strftime('%d %b')}. You've been added to the waitlist.")
     else:
@@ -1503,6 +1550,13 @@ def pause_walks():
     end_fmt   = end.strftime('%-d %b')
     n         = len(bookings)
 
+    # Capture per-walker walk counts before clearing walker_id — used for the
+    # grouped walker notifications below (one per walker, not one per walk).
+    walker_walk_counts = {}
+    for b in bookings:
+        if b.walker and b.walker.user_id != current_user.id:
+            walker_walk_counts[b.walker.user_id] = walker_walk_counts.get(b.walker.user_id, 0) + 1
+
     for b in bookings:
         b.status       = 'cancelled'
         b.cancelled_at = now
@@ -1540,6 +1594,17 @@ def pause_walks():
                 )
                 notified.add(ownership.user_id)
 
+    # One notification per walker covering all of their cancelled walks.
+    for walker_user_id, wn in walker_walk_counts.items():
+        create_notification(
+            recipient_id      = walker_user_id,
+            notification_type = 'booking_cancelled',
+            title             = f"{current_user.firstname} paused walks {start_fmt}–{end_fmt}",
+            body              = f"{wn} of your assigned walk{'s' if wn != 1 else ''} cancelled",
+            link              = '/walker/schedule',
+            sender_id         = current_user.id,
+        )
+
     db.session.commit()
     return jsonify(success=True, cancelled_count=n)
 
@@ -1567,6 +1632,9 @@ def cancel_booking():
             return jsonify(success=False, message="You are not authorized to cancel this booking"), 403
 
         is_admin_cancel = current_user.is_admin and booking.user_id != current_user.id
+        # Capture the assigned walker's user_id before clearing the FK below —
+        # we notify them at the end so they know the walk is off their schedule.
+        prior_walker_user_id = booking.walker.user_id if booking.walker else None
         booking.status = "cancelled"
         booking.cancelled_at = datetime.now(timezone.utc)
         booking.cancelled_by = 'admin' if is_admin_cancel else 'client'
@@ -1616,6 +1684,20 @@ def cancel_booking():
                             link='/bookings',
                             sender_id=current_user.id,
                         )
+
+        # Notify the walker who had this booking assigned (skip if they cancelled it themselves).
+        if prior_walker_user_id and prior_walker_user_id != current_user.id:
+            if is_admin_cancel:
+                walker_title = f"{dog_name}'s {booking.slot.lower()} walk on {date_str_fmt} was cancelled"
+            else:
+                walker_title = f"{current_user.firstname} cancelled {dog_name}'s {booking.slot.lower()} walk on {date_str_fmt}"
+            create_notification(
+                recipient_id=prior_walker_user_id,
+                notification_type='booking_cancelled',
+                title=walker_title,
+                link='/walker/schedule',
+                sender_id=current_user.id,
+            )
 
         db.session.commit()
         return jsonify(success=True, message="Booking successfully cancelled")
