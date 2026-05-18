@@ -67,8 +67,11 @@ class DevelopmentConfig(Config):
     LOG_LEVEL = "DEBUG"
     LOG_FILE = "logs/development.log"
     
-    # SQL query logging for development
-    SQLALCHEMY_ECHO = True
+    # SQL query logging for development — opt in with SQL_ECHO=1.
+    # Default off: echo dumps every query to stdout, which the app's
+    # logging config also re-emits via the root handler — page reloads
+    # crawl under the doubled I/O.
+    SQLALCHEMY_ECHO = os.environ.get('SQL_ECHO') == '1'
     
     # No HTTPS enforcement in development
     SESSION_COOKIE_SECURE = False

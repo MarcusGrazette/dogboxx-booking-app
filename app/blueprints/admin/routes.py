@@ -1286,16 +1286,17 @@ def assign_walker():
         # Notify client + walker — label differs by service type
         date_str_fmt = booking.date.strftime('%a %-d %b')
         dog_name = booking.dog.name if booking.dog else 'your dog'
-        service_label = 'drop-in visit' if (booking.service_type and booking.service_type.slug == ServiceType.DROP_IN) else 'walk'
+        service_label = 'drop-in' if (booking.service_type and booking.service_type.slug == ServiceType.DROP_IN) else 'walk'
+        walker_first = walker.user.firstname if walker.user else None
 
         # Send slot-change notification if the slot was overridden
         if slot_override and old_slot and slot and old_slot != slot:
             create_notification(
                 recipient_id=booking.user_id,
                 notification_type='system',
-                title=f"{dog_name}'s {service_label} on {date_str_fmt} has been moved to {slot}",
-                body=f'Originally booked for {old_slot}',
-                link=f'/bookings/{booking.id}',
+                title=f"{dog_name}'s {service_label} on {date_str_fmt} has been moved to {slot.lower()}",
+                body=f'Originally booked for {old_slot.lower()}.',
+                link='/',
                 sender_id=current_user.id,
             )
 
@@ -1304,9 +1305,9 @@ def assign_walker():
             create_notification(
                 recipient_id=booking.user_id,
                 notification_type='booking_confirmed',
-                title=f"{dog_name}'s {service_label} on {date_str_fmt} has been confirmed",
-                body=booking.slot,
-                link=f'/bookings/{booking.id}',
+                title=f"{dog_name}'s {booking.slot.lower()} {service_label} on {date_str_fmt} has been confirmed",
+                body=f'Booked with {walker_first}.' if walker_first else 'Walker assigned.',
+                link='/',
                 sender_id=current_user.id,
             )
 
@@ -1375,7 +1376,7 @@ def decline_booking(booking_id):
             recipient_id=booking.user_id,
             notification_type='booking_cancelled',
             title=f"{dog_name}'s {booking.slot.lower()} {service_label} on {date_str} has been declined",
-            body="Please contact us if you have any questions.",
+            body="Please get in touch if you'd like to discuss.",
             link='/',
             sender_id=current_user.id,
         )
@@ -3076,22 +3077,24 @@ def book_for_dog():
 
         db.session.flush()  # populate booking.ids before notifications
 
-        date_str_fmt = booking_date.strftime('%-d %b %Y')
+        date_str_fmt        = booking_date.strftime('%a %-d %b')
+        walker_date_str_fmt = booking_date.strftime('%-d %b %Y')
         for b in bookings_created:
             if b.status == 'confirmed':
+                walker_first = b.walker.user.firstname if b.walker and b.walker.user else None
                 create_notification(
                     recipient_id=user_id,
                     notification_type='booking_confirmed',
-                    title=f"{dog.name}'s walk on {date_str_fmt} has been confirmed",
-                    body=b.slot,
-                    link=f'/bookings/{b.id}',
+                    title=f"{dog.name}'s {b.slot.lower()} walk on {date_str_fmt} has been confirmed",
+                    body=f'Booked with {walker_first}.' if walker_first else 'Walker assigned.',
+                    link='/',
                     sender_id=current_user.id,
                 )
                 if b.walker.user_id != current_user.id:
                     create_notification(
                         recipient_id=b.walker.user_id,
                         notification_type='walker_assigned',
-                        title=f'You have been assigned a walk on {date_str_fmt}',
+                        title=f'You have been assigned a walk on {walker_date_str_fmt}',
                         body=f'{dog.name} — {b.slot}',
                         link=f'/walker/pickups?date={booking_date.isoformat()}',
                         sender_id=current_user.id,
@@ -3235,13 +3238,16 @@ def recurring_for_dog():
 
             if booking.status == 'confirmed':
                 confirmed += 1
-                date_str_fmt = d.strftime('%-d %b %Y')
+                client_date_fmt = d.strftime('%a %-d %b')
+                walker_date_fmt = d.strftime('%-d %b %Y')
+                walker_first = walker.user.firstname if walker.user else None
+                client_body = f'Booked with {walker_first}.' if walker_first else 'Walker assigned.'
                 notifications.append((user_id, 'booking_confirmed',
-                                       f"{dog.name}'s walk on {date_str_fmt} has been confirmed",
-                                       slot, booking))
+                                       f"{dog.name}'s {slot.lower()} walk on {client_date_fmt} has been confirmed",
+                                       client_body, booking))
                 if walker.user_id != current_user.id:
                     notifications.append((walker.user_id, 'walker_assigned',
-                                           f'You have been assigned a walk on {date_str_fmt}',
+                                           f'You have been assigned a walk on {walker_date_fmt}',
                                            f'{dog.name} — {slot}', booking))
             elif booking.status == 'waitlisted':
                 waitlisted += 1
@@ -3255,7 +3261,7 @@ def recurring_for_dog():
                 notification_type=ntype,
                 title=title,
                 body=body,
-                link=f'/bookings/{bk.id}' if ntype == 'booking_confirmed' else f'/walker/pickups?date={bk.date.isoformat()}',
+                link='/' if ntype == 'booking_confirmed' else f'/walker/pickups?date={bk.date.isoformat()}',
                 sender_id=current_user.id,
             )
 
@@ -3424,8 +3430,8 @@ def dog_bulk_cancel(dog_id):
             create_notification(
                 recipient_id      = owner_user.id,
                 notification_type = 'booking_cancelled',
-                title             = f"{dog.name}'s walks cancelled {start_fmt}–{end_fmt}",
-                body              = f"{n} booking{'s' if n != 1 else ''} cancelled by admin",
+                title             = f"{dog.name}'s walks have been cancelled {start_fmt}–{end_fmt}",
+                body              = f"{n} booking{'s' if n != 1 else ''} cancelled.",
                 link              = '/',
                 sender_id         = current_user.id,
             )
@@ -3510,14 +3516,20 @@ def add_closure():
             Booking.status.in_(active_statuses)
         ).all()
 
-        date_fmt  = closure_date.strftime('%-d %b %Y')
-        body_text = f"DogBoxx is closed on {date_fmt}" + (f" — {reason}" if reason else "")
+        date_fmt  = closure_date.strftime('%a %-d %b')
+        body_text = "DogBoxx is closed" + (f" — {reason}." if reason else ".")
         for booking in bookings:
             booking.status = 'cancelled'
+            dog_name = booking.dog.name if booking.dog else 'Your dog'
+            service_label = (
+                'drop-in'
+                if booking.service_type and booking.service_type.slug == ServiceType.DROP_IN
+                else 'walk'
+            )
             create_notification(
                 recipient_id=booking.user_id,
                 notification_type='booking_cancelled',
-                title=f"Your booking on {date_fmt} has been cancelled",
+                title=f"{dog_name}'s {booking.slot.lower()} {service_label} on {date_fmt} has been cancelled",
                 body=body_text,
                 link='/',
                 sender_id=current_user.id,

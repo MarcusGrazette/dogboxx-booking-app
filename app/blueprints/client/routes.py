@@ -137,12 +137,13 @@ def _maybe_auto_confirm(booking, dog, service_slug=ServiceType.WALK, notify=True
         booking.pickup_order = get_walker_slot_count(walker.id, booking.date, booking.slot, service_slug=service_slug)
         if notify:
             date_str = booking.date.strftime('%a %-d %b')
+            walker_first = walker.user.firstname if walker and walker.user else None
             create_notification(
                 recipient_id=booking.user_id,
                 notification_type='booking_confirmed',
-                title=f'Your walk on {date_str} is confirmed',
-                body=f'{dog.name} is booked for the {booking.slot} slot.',
-                link='/profile',
+                title=f"{dog.name}'s {booking.slot.lower()} walk on {date_str} has been confirmed",
+                body=f'Booked with {walker_first}.' if walker_first else 'Walker assigned.',
+                link='/',
             )
             admins = User.query.filter_by(is_admin=True).all()
             for admin in admins:
@@ -170,6 +171,19 @@ def _maybe_auto_confirm(booking, dog, service_slug=ServiceType.WALK, notify=True
                     link='/admin',
                     sender_id=booking.user_id,
                 )
+            # Client (actor) notification — without this, a non-auto-confirmed
+            # request leaves the bell silent until an admin acts.
+            create_notification(
+                recipient_id=booking.user_id,
+                notification_type=ntype,
+                title=f"{dog.name}'s {booking.slot.lower()} walk on {date_str} has been requested",
+                body=(
+                    'Same-day request — Lydia will confirm shortly.'
+                    if same_day else
+                    "We'll confirm shortly."
+                ),
+                link='/',
+            )
         _notify_co_owners_of_booking(booking, dog.name, confirmed=False)
         return False
 
@@ -185,25 +199,33 @@ def _summarise_book_both_for_client(slot_entries, dog_name, date_str):
 
     def _status_label(status):
         if status == 'confirmed':  return 'confirmed'
-        if status == 'waitlisted': return 'on waitlist'
-        return 'pending'   # 'requested' — admin needs to assign
+        if status == 'waitlisted': return 'on the waitlist'
+        return 'requested'
 
-    parts = [f'{slot} {_status_label(status)}' for slot, status, _ in ordered]
     all_confirmed = all(status == 'confirmed' for _, status, _ in ordered)
     ntype = 'booking_confirmed' if all_confirmed else 'booking_requested'
 
     if len(ordered) == 2:
-        title = (f'Your walks on {date_str} are confirmed'
-                 if all_confirmed
-                 else f'Your walks on {date_str}')
+        if all_confirmed:
+            title = f"{dog_name}'s walks on {date_str} have been confirmed"
+            body = 'Morning and afternoon both booked.'
+        else:
+            title = f"{dog_name}'s walks on {date_str}"
+            parts = [f'{slot.lower()} {_status_label(status)}' for slot, status, _ in ordered]
+            body = ', '.join(parts).capitalize() + '.'
     else:
         slot, status, _ = ordered[0]
+        slot_lower = slot.lower()
         if status == 'confirmed':
-            title = f'Your walk on {date_str} is confirmed'
+            title = f"{dog_name}'s {slot_lower} walk on {date_str} has been confirmed"
+            body = 'Walker assigned.'
+        elif status == 'waitlisted':
+            title = f"{dog_name}'s {slot_lower} walk on {date_str} is on the waitlist"
+            body = "We'll let you know when a spot opens up."
         else:
-            title = f'Your walk request for {date_str}'
+            title = f"{dog_name}'s {slot_lower} walk on {date_str} has been requested"
+            body = "We'll confirm shortly."
 
-    body = f'{dog_name}: ' + ', '.join(parts) + '.'
     return title, body, ntype
 
 
@@ -222,14 +244,19 @@ def _notify_co_owners_of_booking(booking, dog_name, confirmed):
         return
     date_str = booking.date.strftime('%a %-d %b')
     actor = booking.user.firstname if booking.user else 'Someone'
-    verb = 'confirmed' if confirmed else 'requested'
+    verb = 'booked' if confirmed else 'requested'
     notif_type = 'booking_confirmed' if confirmed else 'booking_requested'
+    service_label = (
+        'drop-in'
+        if booking.service_type and booking.service_type.slug == ServiceType.DROP_IN
+        else 'walk'
+    )
     for ownership in other_owners:
         create_notification(
             recipient_id=ownership.user_id,
             notification_type=notif_type,
-            title=f"{actor} {verb} {dog_name}'s {booking.slot.lower()} walk on {date_str}",
-            link='/bookings',
+            title=f"{actor} {verb} {dog_name}'s {booking.slot.lower()} {service_label} on {date_str}",
+            link='/',
             sender_id=booking.user_id,
         )
 
@@ -405,9 +432,9 @@ def index():
                     create_notification(
                         recipient_id=current_user.id,
                         notification_type='booking_requested',
-                        title='Your walk request is on the waitlist',
-                        body=f"{dog_name}'s {booking_slot.lower()} walk on {date_str_fmt} — we'll let you know when a spot opens up.",
-                        link='/profile',
+                        title=f"{dog_name}'s {booking_slot.lower()} walk on {date_str_fmt} is on the waitlist",
+                        body="We'll let you know when a spot opens up.",
+                        link='/',
                     )
                     _notify_co_owners_of_booking(new_booking, dog_name, confirmed=False)
                     db.session.commit()
@@ -542,9 +569,9 @@ def book():
             create_notification(
                 recipient_id      = current_user.id,
                 notification_type = 'booking_requested',
-                title             = 'Your walk request is on the waitlist',
-                body              = f"{dog.name}'s {booking_slot.lower()} walk on {date_str_fmt} — we'll let you know when a spot opens up.",
-                link              = '/profile',
+                title             = f"{dog.name}'s {booking_slot.lower()} walk on {date_str_fmt} is on the waitlist",
+                body              = "We'll let you know when a spot opens up.",
+                link              = '/',
             )
             _notify_co_owners_of_booking(new_booking, dog.name, confirmed=False)
             db.session.commit()
@@ -737,7 +764,7 @@ def book_both():
             notification_type = ntype,
             title             = title,
             body              = body,
-            link              = '/profile',
+            link              = '/',
         )
 
     db.session.commit()
@@ -856,6 +883,7 @@ def book_drop_in():
 
     # Notify admins and co-owners
     date_str_fmt = booking_date.strftime('%a %-d %b')
+    slot_lower = booking_slot.lower()
     ntype = 'same_day_request' if same_day else 'booking_requested'
     title_prefix = 'Same-day ' if same_day else 'New '
     for admin in User.query.filter_by(is_admin=True).all():
@@ -867,6 +895,27 @@ def book_drop_in():
             link              = '/admin/drop-in-board',
             sender_id         = current_user.id,
         )
+
+    # Client (actor) notification — closes the gap where the client got no
+    # bell entry for drop-in requests/waitlists.
+    if booking_status == 'waitlisted':
+        client_title = f"{dog.name}'s {slot_lower} drop-in on {date_str_fmt} is on the waitlist"
+        client_body  = "We'll let you know when a spot opens up."
+    else:
+        client_title = f"{dog.name}'s {slot_lower} drop-in on {date_str_fmt} has been requested"
+        client_body  = (
+            'Same-day request — Lydia will confirm shortly.'
+            if same_day else
+            "We'll confirm shortly."
+        )
+    create_notification(
+        recipient_id      = current_user.id,
+        notification_type = ntype,
+        title             = client_title,
+        body              = client_body,
+        link              = '/',
+    )
+
     _notify_co_owners_of_booking(new_booking, dog.name, confirmed=False)
     db.session.commit()
 
@@ -1587,8 +1636,8 @@ def pause_walks():
                 create_notification(
                     recipient_id      = ownership.user_id,
                     notification_type = 'booking_cancelled',
-                    title             = f"{current_user.firstname} paused walks {start_fmt}–{end_fmt}",
-                    body              = f"{n} booking{'s' if n != 1 else ''} cancelled",
+                    title             = f"{current_user.firstname} paused {dogs_str}'s walks {start_fmt}–{end_fmt}",
+                    body              = f"{n} booking{'s' if n != 1 else ''} cancelled.",
                     link              = '/',
                     sender_id         = current_user.id,
                 )
@@ -1648,12 +1697,17 @@ def cancel_booking():
 
         if is_admin_cancel:
             # Notify the client their walk was cancelled by admin
+            service_label = (
+                'drop-in'
+                if booking.service_type and booking.service_type.slug == ServiceType.DROP_IN
+                else 'walk'
+            )
             create_notification(
                 recipient_id=booking.user_id,
                 notification_type='booking_cancelled',
-                title=f"{dog_name}'s walk on {date_str_fmt} has been cancelled",
-                body=booking.slot,
-                link=f'/bookings/{booking.id}',
+                title=f"{dog_name}'s {booking.slot.lower()} {service_label} on {date_str_fmt} has been cancelled",
+                body="Please get in touch if you'd like to discuss.",
+                link='/',
                 sender_id=current_user.id,
             )
         else:
@@ -1674,14 +1728,18 @@ def cancel_booking():
                     DogOwner.dog_id == booking.dog_id,
                     DogOwner.user_id != current_user.id,
                 ).all()
+                co_service_label = (
+                    'drop-in'
+                    if booking.service_type and booking.service_type.slug == ServiceType.DROP_IN
+                    else 'walk'
+                )
                 for ownership in other_owners:
                     if not (ownership.user and ownership.user.is_admin):
                         create_notification(
                             recipient_id=ownership.user_id,
                             notification_type='booking_cancelled',
-                            title=f"{current_user.firstname} cancelled {dog_name}'s walk",
-                            body=f"{date_str_fmt} · {booking.slot}",
-                            link='/bookings',
+                            title=f"{current_user.firstname} cancelled {dog_name}'s {booking.slot.lower()} {co_service_label} on {date_str_fmt}",
+                            link='/',
                             sender_id=current_user.id,
                         )
 
@@ -1900,18 +1958,33 @@ def recurring_booking():
         slot_label    = 'AM + PM' if slot == 'Both' else slot
         service_label = 'drop-ins' if is_drop_in else 'walks'
 
-        # Single client notification summarising auto-confirmed bookings
-        if confirmed > 0:
+        # Single client notification summarising the recurring submission —
+        # written whenever anything was created, so the bell isn't silent when
+        # every slot ended up pending/waitlisted.
+        pending_total = created + waitlisted
+        total = confirmed + pending_total
+        if total > 0:
+            if confirmed > 0 and pending_total == 0:
+                title = f"{dog.name}'s recurring {service_label} have been confirmed"
+                body  = f'{confirmed} {freq_label} {slot_label} {service_label} booked.'
+                ntype = 'booking_confirmed'
+            elif confirmed == 0:
+                title = f"{dog.name}'s recurring {service_label} have been requested"
+                body  = f"{pending_total} {freq_label} {slot_label} {service_label} — we'll confirm shortly."
+                ntype = 'booking_requested'
+            else:
+                title = f"{dog.name}'s recurring {service_label}"
+                body  = f"{confirmed} confirmed, {pending_total} awaiting confirmation."
+                ntype = 'booking_requested'
             create_notification(
                 recipient_id=current_user.id,
-                notification_type='booking_confirmed',
-                title=f'{confirmed} recurring {service_label} confirmed',
-                body=f'Your {freq_label} {slot_label} {service_label} for {dog.name} have been booked.',
+                notification_type=ntype,
+                title=title,
+                body=body,
                 link='/',
             )
 
         # Single admin notification for anything still pending / waitlisted
-        pending_total = created + waitlisted
         if pending_total > 0:
             admins = User.query.filter_by(is_admin=True).all()
             for admin in admins:

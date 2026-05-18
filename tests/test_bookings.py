@@ -765,7 +765,7 @@ class TestBookingClientNotifications:
                 f"expected 1 client notification, got {len(client_notifs)}"
             n = client_notifs[0]
             assert 'waitlist' in n.title.lower()
-            assert 'morning' in (n.body or '').lower()
+            assert 'morning' in n.title.lower()
 
     def test_book_both_mixed_outcome_writes_one_consolidated_notification(self, app, client):
         """Regression: /book_both with one confirmed + one waitlisted slot used
