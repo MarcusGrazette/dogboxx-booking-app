@@ -183,6 +183,10 @@
 /* ---- Page layout tweaks ---- */
 body {
   font-family: 'Nunito', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  /* Dark body so any residual iOS overscroll bounce reveals navbar-dark
+     at both edges instead of a white flash. Bootstrap's --bs-body-bg
+     (#F6F6F6) is preserved for everything else that uses the variable. */
+  background-color: #1B1B1B;
 }
 
 /* Suppress iOS Safari rubber-band overscroll at the document edges so the
