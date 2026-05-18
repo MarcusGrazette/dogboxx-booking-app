@@ -34,10 +34,17 @@
 
 /* Portrait phones: stack vertically with calendar on top so the calendar
    grid isn't squeezed by the detail card's 340px floor. Landscape
-   phones (>=768px) keep the side-by-side layout. */
+   phones (>=768px) keep the side-by-side layout.
+   Both cards need explicit width:100% because .dash-wrap uses
+   align-items: flex-start, so children don't stretch to fill the
+   cross-axis when flex-direction becomes column. */
 @media (max-width: 767.98px) {
   .dash-wrap {
     flex-direction: column;
+  }
+  .cal-card {
+    flex: none;
+    width: 100%;
   }
   .detail-card {
     width: 100%;
