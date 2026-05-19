@@ -453,6 +453,21 @@
                         <input type="date" class="form-control form-control-sm" id="bc-end">
                     </div>
                 </div>
+                <label class="form-label small fw-semibold mb-1 d-block">Cancel</label>
+                <div class="btn-group btn-group-sm w-100 mb-3" role="group" aria-label="Slots to cancel">
+                    <input type="radio" class="btn-check" name="bc-slot" id="bc-slot-morning" value="Morning" autocomplete="off">
+                    <label class="btn btn-outline-secondary" for="bc-slot-morning">
+                        <i class="bi bi-sunrise me-1"></i>Morning
+                    </label>
+                    <input type="radio" class="btn-check" name="bc-slot" id="bc-slot-afternoon" value="Afternoon" autocomplete="off">
+                    <label class="btn btn-outline-secondary" for="bc-slot-afternoon">
+                        <i class="bi bi-sunset me-1"></i>Afternoon
+                    </label>
+                    <input type="radio" class="btn-check" name="bc-slot" id="bc-slot-both" value="Both" autocomplete="off" checked>
+                    <label class="btn btn-outline-secondary" for="bc-slot-both">
+                        <i class="bi bi-layers-fill me-1"></i>Both
+                    </label>
+                </div>
                 <button type="button" class="btn btn-sm btn-outline-secondary" id="bc-preview-btn">
                     <i class="bi bi-eye me-1"></i>Preview affected walks
                 </button>
@@ -1026,12 +1041,19 @@ document.addEventListener('DOMContentLoaded', function () {
     let bcActiveDogId   = null;
     let bcPreviewCount  = 0;
 
+    // Returns array — empty for "Both" (server treats missing/empty as all slots).
+    function bcSelectedSlots() {
+        const v = document.querySelector('input[name="bc-slot"]:checked')?.value;
+        return (v === 'Morning' || v === 'Afternoon') ? [v] : [];
+    }
+
     document.querySelectorAll('.cancel-range-btn').forEach(btn => {
         btn.addEventListener('click', function () {
             bcActiveDogId = this.dataset.dogId;
             bcDogName.textContent = this.dataset.dogName;
             bcStart.value = '';
             bcEnd.value   = '';
+            document.getElementById('bc-slot-both').checked = true;
             bcPreviewRes.innerHTML = '';
             bcConfirmBtn.style.display = 'none';
             bcConfirmBtn.disabled = true;
@@ -1046,6 +1068,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
         const params = new URLSearchParams({ start: bcStart.value, end: bcEnd.value });
+        bcSelectedSlots().forEach(s => params.append('slots', s));
         bcLoading.style.display = '';
         bcPreviewRes.innerHTML  = '';
         bcConfirmBtn.style.display = 'none';
@@ -1097,7 +1120,7 @@ document.addEventListener('DOMContentLoaded', function () {
         fetch(`/admin/dogs/${bcActiveDogId}/bulk-cancel`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
-            body: JSON.stringify({ start: bcStart.value, end: bcEnd.value }),
+            body: JSON.stringify({ start: bcStart.value, end: bcEnd.value, slots: bcSelectedSlots() }),
         })
         .then(r => r.json())
         .then(data => {
