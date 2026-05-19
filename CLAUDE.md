@@ -121,7 +121,7 @@ venv/bin/flask run --host=0.0.0.0 --port=5000
 
 | Role | Email | Password |
 |---|---|---|
-| Admin + Walker (Owner) | lydia@dogboxx.org | changeme123! |
+| Admin + Walker (Owner) | lydia@dogboxx.org | adminpass |
 | Walker | testwalker@dogboxx.org | walkies123 |
 | Client | john.doe@example.com | clientpass |
 

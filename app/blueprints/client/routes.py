@@ -1541,13 +1541,20 @@ def pause_walks_preview():
     if (end - start).days > 365:
         return jsonify(success=False, error="Range cannot exceed one year"), 400
 
+    # Optional slot filter — accepts repeated ?slots=Morning&slots=Afternoon.
+    # 0 or 2 valid values = no filter (Both). Exactly 1 narrows to that slot.
+    slot_filter = [s for s in request.args.getlist('slots') if s in ('Morning', 'Afternoon')]
+
     dog_ids = get_accessible_dog_ids(current_user.id)
-    bookings = Booking.query.filter(
+    q = Booking.query.filter(
         Booking.dog_id.in_(dog_ids),
         Booking.date >= start,
         Booking.date <= end,
         Booking.status.notin_(['cancelled', 'rejected', 'completed']),
-    ).order_by(Booking.date, Booking.slot).all()
+    )
+    if len(slot_filter) == 1:
+        q = q.filter(Booking.slot == slot_filter[0])
+    bookings = q.order_by(Booking.date, Booking.slot).all()
 
     return jsonify(
         success=True,
@@ -1581,13 +1588,20 @@ def pause_walks():
     if (end - start).days > 365:
         return jsonify(success=False, error="Range cannot exceed one year"), 400
 
+    # Optional slot filter — 0 or 2 valid values = no filter (Both). 1 = narrow.
+    slots_raw   = data.get('slots') or []
+    slot_filter = [s for s in slots_raw if s in ('Morning', 'Afternoon')]
+
     dog_ids = get_accessible_dog_ids(current_user.id)
-    bookings = Booking.query.filter(
+    q = Booking.query.filter(
         Booking.dog_id.in_(dog_ids),
         Booking.date >= start,
         Booking.date <= end,
         Booking.status.notin_(['cancelled', 'rejected', 'completed']),
-    ).order_by(Booking.date).all()
+    )
+    if len(slot_filter) == 1:
+        q = q.filter(Booking.slot == slot_filter[0])
+    bookings = q.order_by(Booking.date).all()
 
     if not bookings:
         return jsonify(success=True, cancelled_count=0)
@@ -1598,6 +1612,7 @@ def pause_walks():
     start_fmt = start.strftime('%-d %b')
     end_fmt   = end.strftime('%-d %b')
     n         = len(bookings)
+    slot_label = slot_filter[0].lower() + ' ' if len(slot_filter) == 1 else ''
 
     # Capture per-walker walk counts before clearing walker_id — used for the
     # grouped walker notifications below (one per walker, not one per walk).
@@ -1617,7 +1632,7 @@ def pause_walks():
         create_notification(
             recipient_id      = admin.id,
             notification_type = 'booking_cancelled',
-            title             = f"{current_user.firstname} paused walks {start_fmt}–{end_fmt}",
+            title             = f"{current_user.firstname} paused {slot_label}walks {start_fmt}–{end_fmt}",
             body              = f"{n} booking{'s' if n != 1 else ''} cancelled · {dogs_str}",
             link              = f'/admin/clients/{current_user.id}',
             sender_id         = current_user.id,
@@ -1636,7 +1651,7 @@ def pause_walks():
                 create_notification(
                     recipient_id      = ownership.user_id,
                     notification_type = 'booking_cancelled',
-                    title             = f"{current_user.firstname} paused {dogs_str}'s walks {start_fmt}–{end_fmt}",
+                    title             = f"{current_user.firstname} paused {dogs_str}'s {slot_label}walks {start_fmt}–{end_fmt}",
                     body              = f"{n} booking{'s' if n != 1 else ''} cancelled.",
                     link              = '/',
                     sender_id         = current_user.id,
@@ -1648,7 +1663,7 @@ def pause_walks():
         create_notification(
             recipient_id      = walker_user_id,
             notification_type = 'booking_cancelled',
-            title             = f"{current_user.firstname} paused walks {start_fmt}–{end_fmt}",
+            title             = f"{current_user.firstname} paused {slot_label}walks {start_fmt}–{end_fmt}",
             body              = f"{wn} of your assigned walk{'s' if wn != 1 else ''} cancelled",
             link              = '/walker/schedule',
             sender_id         = current_user.id,

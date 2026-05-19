@@ -3351,7 +3351,10 @@ def dog_cancel_preview(dog_id):
     if (end - start).days > 365:
         return jsonify(success=False, message="Range cannot exceed one year"), 400
 
-    bookings = (
+    # Optional slot filter — 0 or 2 valid values = no filter (Both). 1 = narrow.
+    slot_filter = [s for s in request.args.getlist('slots') if s in ('Morning', 'Afternoon')]
+
+    q = (
         Booking.query
         .filter(
             Booking.dog_id == dog_id,
@@ -3359,9 +3362,10 @@ def dog_cancel_preview(dog_id):
             Booking.date <= end,
             Booking.status.notin_(['cancelled', 'rejected', 'completed']),
         )
-        .order_by(Booking.date, Booking.slot)
-        .all()
     )
+    if len(slot_filter) == 1:
+        q = q.filter(Booking.slot == slot_filter[0])
+    bookings = q.order_by(Booking.date, Booking.slot).all()
 
     return jsonify(
         success=True,
@@ -3396,7 +3400,11 @@ def dog_bulk_cancel(dog_id):
     if (end - start).days > 365:
         return jsonify(success=False, message="Range cannot exceed one year"), 400
 
-    bookings = (
+    # Optional slot filter — 0 or 2 valid values = no filter (Both). 1 = narrow.
+    slots_raw   = data.get('slots') or []
+    slot_filter = [s for s in slots_raw if s in ('Morning', 'Afternoon')]
+
+    q = (
         Booking.query
         .filter(
             Booking.dog_id == dog_id,
@@ -3404,9 +3412,10 @@ def dog_bulk_cancel(dog_id):
             Booking.date <= end,
             Booking.status.notin_(['cancelled', 'rejected', 'completed']),
         )
-        .order_by(Booking.date)
-        .all()
     )
+    if len(slot_filter) == 1:
+        q = q.filter(Booking.slot == slot_filter[0])
+    bookings = q.order_by(Booking.date).all()
 
     if not bookings:
         return jsonify(success=True, cancelled_count=0)
@@ -3415,6 +3424,7 @@ def dog_bulk_cancel(dog_id):
     n = len(bookings)
     start_fmt = start.strftime('%-d %b')
     end_fmt   = end.strftime('%-d %b')
+    slot_label = slot_filter[0].lower() + ' ' if len(slot_filter) == 1 else ''
 
     for b in bookings:
         b.status       = 'cancelled'
@@ -3430,7 +3440,7 @@ def dog_bulk_cancel(dog_id):
             create_notification(
                 recipient_id      = owner_user.id,
                 notification_type = 'booking_cancelled',
-                title             = f"{dog.name}'s walks have been cancelled {start_fmt}–{end_fmt}",
+                title             = f"{dog.name}'s {slot_label}walks have been cancelled {start_fmt}–{end_fmt}",
                 body              = f"{n} booking{'s' if n != 1 else ''} cancelled.",
                 link              = '/',
                 sender_id         = current_user.id,

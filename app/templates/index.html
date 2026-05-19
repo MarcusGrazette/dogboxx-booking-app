@@ -236,6 +236,21 @@
                                 <input type="date" class="form-control form-control-sm" id="pause-end-date">
                             </div>
                         </div>
+                        <label class="form-label small fw-semibold mb-1 d-block">Cancel</label>
+                        <div class="btn-group btn-group-sm w-100 mb-3" role="group" aria-label="Slots to cancel">
+                            <input type="radio" class="btn-check" name="pause-slot" id="pause-slot-morning" value="Morning" autocomplete="off">
+                            <label class="btn btn-outline-secondary" for="pause-slot-morning">
+                                <i class="bi bi-sunrise me-1"></i>Morning
+                            </label>
+                            <input type="radio" class="btn-check" name="pause-slot" id="pause-slot-afternoon" value="Afternoon" autocomplete="off">
+                            <label class="btn btn-outline-secondary" for="pause-slot-afternoon">
+                                <i class="bi bi-sunset me-1"></i>Afternoon
+                            </label>
+                            <input type="radio" class="btn-check" name="pause-slot" id="pause-slot-both" value="Both" autocomplete="off" checked>
+                            <label class="btn btn-outline-secondary" for="pause-slot-both">
+                                <i class="bi bi-layers-fill me-1"></i>Both
+                            </label>
+                        </div>
                         <button class="btn btn-sm w-100 fw-semibold" id="pause-preview-btn" disabled
                             style="background:#fff3cd;border:1px solid #f59e0b;color:#92400e;">
                             Preview affected walks<i class="bi bi-arrow-right ms-1"></i>
@@ -1422,13 +1437,20 @@
         });
         endEl.addEventListener('change', checkDates);
 
+        // Returns array — empty for "Both" (server treats missing/empty as all slots).
+        function selectedSlots() {
+            const v = document.querySelector('input[name="pause-slot"]:checked')?.value;
+            return (v === 'Morning' || v === 'Afternoon') ? [v] : [];
+        }
+
         previewBtn.addEventListener('click', function () {
             const csrf = document.querySelector('input[name=csrf_token]')?.value;
             previewBtn.disabled = true;
             previewBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Loading…';
             step1Err.style.display = 'none';
 
-            fetch(`{{ url_for('client.pause_walks_preview') }}?start=${startEl.value}&end=${endEl.value}`, {
+            const slotQs = selectedSlots().map(s => `&slots=${encodeURIComponent(s)}`).join('');
+            fetch(`{{ url_for('client.pause_walks_preview') }}?start=${startEl.value}&end=${endEl.value}${slotQs}`, {
                 headers: { 'X-CSRFToken': csrf }
             })
                 .then(r => r.json())
@@ -1478,7 +1500,7 @@
             fetch('{{ url_for("client.pause_walks") }}', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
-                body: JSON.stringify({ start: startEl.value, end: endEl.value })
+                body: JSON.stringify({ start: startEl.value, end: endEl.value, slots: selectedSlots() })
             })
                 .then(r => r.json())
                 .then(data => {
