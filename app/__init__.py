@@ -414,7 +414,9 @@ def create_app(config_name=None):
     def health():
         from sqlalchemy import text as sql_text
         try:
-            db.session.execute(sql_text('SELECT 1'))
+            # Reading a representative seeded table — catches "DB is up but
+            # wrong/empty/unmigrated" cases that a bare SELECT 1 would miss.
+            db.session.execute(sql_text('SELECT 1 FROM service_types LIMIT 1'))
             return '', 200
         except Exception as e:
             app.logger.error(f'Health check failed: {e}')
