@@ -2,7 +2,7 @@
 Email sending via Resend.
 
 Usage:
-    from app.utils.email import send_email, send_newsletter_batch
+    from app.utils.email import send_email, send_newsletter_batch, send_broadcast_batch
     send_email(
         to="user@example.com",
         subject="Reset your password",
@@ -23,6 +23,7 @@ Required environment variables:
     APP_BASE_URL    — e.g. https://dogboxx.up.railway.app
 """
 
+import html as _html
 import logging
 import os
 import re
@@ -162,4 +163,93 @@ def send_newsletter_batch(subject: str, html_template: str, recipients: list) ->
             return {'sent': 0, 'failed': len(batch)}
     except requests.RequestException as e:
         logging.error(f"Newsletter batch send failed: {e}")
+        return {'sent': 0, 'failed': len(batch)}
+
+
+def send_broadcast_batch(subject: str, body_text: str, recipients: list) -> dict:
+    """
+    Send a stripped-down operational broadcast (e.g. weather cancellation) to a
+    list of recipients via Resend batch API.
+
+    body_text is plain text. Newlines are preserved as <br>; the body is HTML
+    escaped before insertion. No unsubscribe link (operational, not marketing).
+
+    Each recipient dict must have: email, firstname.
+
+    Returns {'sent': int, 'failed': int}
+    """
+    api_key = os.environ.get("RESEND_API_KEY")
+    mail_from = os.environ.get("MAIL_FROM", "Dogboxx <noreply@dogboxx.org>")
+
+    if not api_key:
+        logging.error("RESEND_API_KEY is not set — cannot send broadcast")
+        return {'sent': 0, 'failed': len(recipients)}
+
+    RESEND_BATCH_URL = "https://api.resend.com/emails/batch"
+
+    body_html = _html.escape(body_text).replace("\n", "<br>")
+
+    SHELL = """<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title></title>
+</head>
+<body style="margin:0;padding:0;background-color:#f6f3f2;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+      <td align="center" style="background-color:#f6f3f2;padding:32px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="560" style="max-width:560px;width:100%;">
+          <tr>
+            <td style="background-color:#1B1B1B;border-bottom:3px solid #E02FAC;padding:18px 32px;border-radius:6px 6px 0 0;">
+              <span style="font-size:1.35rem;font-weight:800;color:#ffffff;letter-spacing:-0.01em;">DogBoxx</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#ffffff;border:1px solid #e2dfde;border-top:none;border-radius:0 0 6px 6px;padding:32px;">
+              <p style="margin:0 0 16px 0;font-size:1rem;color:#3d3d3d;">Hi {{firstname}},</p>
+              <div style="font-size:1rem;color:#3d3d3d;line-height:1.6;">{{body}}</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+    batch = []
+    for r in recipients:
+        html = SHELL.replace("{{firstname}}", _html.escape(r.get("firstname") or ""))
+        html = html.replace("{{body}}", body_html)
+        batch.append({
+            "from": mail_from,
+            "to": [r["email"]],
+            "subject": subject,
+            "html": html,
+        })
+
+    if not batch:
+        return {'sent': 0, 'failed': 0}
+
+    try:
+        resp = requests.post(
+            RESEND_BATCH_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json=batch,
+            timeout=30,
+        )
+        if resp.status_code in (200, 201):
+            sent = len(batch)
+            logging.info(f"Broadcast batch sent: {sent} emails, subject: {subject!r}")
+            return {'sent': sent, 'failed': 0}
+        else:
+            logging.error(f"Resend broadcast batch error {resp.status_code}: {resp.text}")
+            return {'sent': 0, 'failed': len(batch)}
+    except requests.RequestException as e:
+        logging.error(f"Broadcast batch send failed: {e}")
         return {'sent': 0, 'failed': len(batch)}

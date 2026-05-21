@@ -595,6 +595,46 @@ class Closure(db.Model):
     created_by = db.relationship('User', foreign_keys=[created_by_id])
 
 
+class Broadcast(db.Model):
+    """Admin-authored one-shot message to all clients booked on a given date/slot.
+
+    Recipients are computed at send time from confirmed bookings (primary +
+    secondary co-owners). Delivered via in-app notification, email, or both.
+    Rows are kept for audit / "past broadcasts" history.
+    """
+    __tablename__ = 'broadcasts'
+
+    # scope_slot values: 'all' (whole day), 'morning', 'afternoon'.
+    # 'morning' matches booking slots Morning + Half Day AM + Full Day;
+    # 'afternoon' matches Afternoon + Half Day PM + Full Day.
+    SCOPE_ALL = 'all'
+    SCOPE_MORNING = 'morning'
+    SCOPE_AFTERNOON = 'afternoon'
+    VALID_SCOPES = (SCOPE_ALL, SCOPE_MORNING, SCOPE_AFTERNOON)
+
+    id = db.Column(db.Integer, primary_key=True)
+    sender_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    sent_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                        nullable=False, index=True)
+
+    scope_date = db.Column(db.Date, nullable=False, index=True)
+    scope_slot = db.Column(db.String(20), nullable=False)
+
+    subject = db.Column(db.String(200), nullable=False)
+    body = db.Column(db.Text, nullable=False)
+
+    bell_sent = db.Column(db.Boolean, nullable=False, default=False)
+    email_sent = db.Column(db.Boolean, nullable=False, default=False)
+
+    recipient_count = db.Column(db.Integer, nullable=False, default=0)
+
+    sender = db.relationship('User', foreign_keys=[sender_id])
+
+    def __repr__(self):
+        return (f'<Broadcast {self.id} {self.scope_date} {self.scope_slot} '
+                f'→ {self.recipient_count} recipients>')
+
+
 class DailyMessage(db.Model):
     """A message from the business owner to the walker team, shown at the top
     of the pickup list for a given date. One message per day (UNIQUE on date).
