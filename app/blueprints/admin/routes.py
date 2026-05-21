@@ -4055,13 +4055,26 @@ def broadcasts():
         flash(" — ".join(parts), "success")
         return redirect(url_for("admin.broadcasts"))
 
-    # GET — fresh form
+    # GET — fresh form. Honour ?scope_date and ?scope_slot query params so the
+    # action bar on the board can deep-link into the composer pre-scoped.
+    # Invalid values fall back to the defaults rather than 400 — the page is
+    # interactive, the admin can still fix it via the form.
+    prefill_date_str = request.args.get("scope_date", "").strip()
+    try:
+        prefill_date = _date.fromisoformat(prefill_date_str) if prefill_date_str else today
+    except ValueError:
+        prefill_date = today
+
+    prefill_slot = request.args.get("scope_slot", "").strip()
+    if prefill_slot not in Broadcast.VALID_SCOPES:
+        prefill_slot = Broadcast.SCOPE_ALL
+
     return render_template(
         "admin_broadcasts.html",
         today=today,
         form={
-            "scope_date": today.isoformat(),
-            "scope_slot": Broadcast.SCOPE_ALL,
+            "scope_date": prefill_date.isoformat(),
+            "scope_slot": prefill_slot,
             "subject": "",
             "body": "",
             "channel_bell": True,
