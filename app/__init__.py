@@ -126,6 +126,20 @@ def create_app(config_name=None):
 
     # Initialize Flask-Migrate for database migrations
     migrate.init_app(app, db)
+
+    # Cache expected Alembic head(s) once at boot for /health to compare against.
+    # Soft-fail to None if Alembic's API ever changes — /health then skips the
+    # check rather than blocking the deploy.
+    try:
+        import os as _os
+        from alembic.script import ScriptDirectory
+        from alembic.config import Config as _AlembicConfig
+        _cfg = _AlembicConfig()
+        _cfg.set_main_option('script_location', _os.path.join(app.root_path, '..', 'migrations'))
+        app.config['EXPECTED_MIGRATION_HEADS'] = set(ScriptDirectory.from_config(_cfg).get_heads())
+    except Exception as _e:
+        app.logger.warning(f'Could not determine expected migration heads: {_e}')
+        app.config['EXPECTED_MIGRATION_HEADS'] = None
     
     # Initialize Rate Limiter with default limits
     limiter.init_app(app)
@@ -414,7 +428,21 @@ def create_app(config_name=None):
     def health():
         from sqlalchemy import text as sql_text
         try:
-            db.session.execute(sql_text('SELECT 1'))
+            # Reading a representative seeded table — catches "DB is up but
+            # wrong/empty/unmigrated" cases that a bare SELECT 1 would miss.
+            db.session.execute(sql_text('SELECT 1 FROM service_types LIMIT 1'))
+
+            # Migration head check — refuses traffic if the running container's
+            # migration files are ahead of the DB (or vice versa).
+            expected = app.config.get('EXPECTED_MIGRATION_HEADS')
+            if expected:
+                rows = db.session.execute(sql_text('SELECT version_num FROM alembic_version')).fetchall()
+                current = {r[0] for r in rows}
+                if current != expected:
+                    app.logger.error(
+                        f'Migration head mismatch — DB at {sorted(current)}, expected {sorted(expected)}'
+                    )
+                    return '', 503
             return '', 200
         except Exception as e:
             app.logger.error(f'Health check failed: {e}')
