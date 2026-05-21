@@ -1,0 +1,275 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}Broadcasts{% endblock %}
+{% block page_title %}Broadcasts{% endblock %}
+{% block page_subtitle %}Notify everyone booked on a given day or slot{% endblock %}
+
+{% block head_extra %}
+<style>
+  .recipient-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    background: #f4ecf2;
+    color: #1B1B1B;
+    font-size: 0.82rem;
+    margin: 0.15rem;
+  }
+  .recipient-pill .dogs {
+    color: #6c757d;
+    font-size: 0.75rem;
+  }
+  .preview-empty {
+    color: #6c757d;
+    font-style: italic;
+    padding: 0.5rem 0;
+  }
+  #broadcast-body {
+    font-family: inherit;
+    font-size: 0.95rem;
+    line-height: 1.55;
+    min-height: 180px;
+  }
+</style>
+{% endblock %}
+
+{% block main %}
+<form method="post" action="{{ url_for('admin.broadcasts') }}" id="broadcast-form" autocomplete="off">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="row g-4">
+
+    {# ── Scope ──────────────────────────────────────────────────────────── #}
+    <div class="col-12 col-lg-5">
+      <div class="card h-100">
+        <div class="card-header">
+          <h5 class="card-title mb-0"><i class="bi bi-calendar-event me-2"></i>Scope</h5>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label for="scope_date" class="form-label fw-semibold">Date</label>
+            <input type="date" id="scope_date" name="scope_date"
+                   class="form-control"
+                   value="{{ form.scope_date }}"
+                   min="{{ today.isoformat() }}"
+                   required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label fw-semibold">Slot</label>
+            <div class="btn-group d-flex" role="group" aria-label="Slot scope">
+              {% for value, label in [('all', 'All day'), ('morning', 'Morning'), ('afternoon', 'Afternoon')] %}
+              <input type="radio" class="btn-check" name="scope_slot"
+                     id="scope_{{ value }}" value="{{ value }}"
+                     {% if form.scope_slot == value %}checked{% endif %}>
+              <label class="btn btn-outline-secondary" for="scope_{{ value }}">{{ label }}</label>
+              {% endfor %}
+            </div>
+          </div>
+          <p class="small text-muted mt-3 mb-0">
+            Includes confirmed bookings only. Both primary and secondary owners get the message.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    {# ── Recipients preview ────────────────────────────────────────────── #}
+    <div class="col-12 col-lg-7">
+      <div class="card h-100">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <h5 class="card-title mb-0"><i class="bi bi-people me-2"></i>Recipients</h5>
+          <span class="badge bg-secondary" id="recipient-count">—</span>
+        </div>
+        <div class="card-body">
+          <div id="recipient-list" class="preview-empty">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    {# ── Compose ───────────────────────────────────────────────────────── #}
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0"><i class="bi bi-pencil-square me-2"></i>Compose</h5>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label for="subject" class="form-label fw-semibold">Subject</label>
+            <input type="text" id="subject" name="subject"
+                   class="form-control"
+                   placeholder="e.g. Walks cancelled today — bad weather"
+                   value="{{ form.subject }}"
+                   maxlength="200"
+                   required>
+          </div>
+          <div class="mb-3">
+            <label for="broadcast-body" class="form-label fw-semibold">Body</label>
+            <textarea id="broadcast-body" name="body"
+                      class="form-control"
+                      rows="8"
+                      placeholder="Hi — heads up: heavy rain is forecast for this afternoon, so we're moving today's PM walks to tomorrow at the same time. Let us know if that doesn't work for you."
+                      required>{{ form.body }}</textarea>
+            <small class="text-muted">Line breaks are preserved.</small>
+          </div>
+
+          <div class="row g-3 align-items-center">
+            <div class="col-12 col-md-auto">
+              <label class="form-label fw-semibold mb-2">Send via</label>
+              <div class="d-flex gap-3">
+                <div class="form-check">
+                  <input type="checkbox" id="channel_bell" name="channel_bell"
+                         class="form-check-input"
+                         {% if form.channel_bell %}checked{% endif %}>
+                  <label class="form-check-label" for="channel_bell">
+                    <i class="bi bi-bell me-1"></i>In-app notification
+                  </label>
+                </div>
+                <div class="form-check">
+                  <input type="checkbox" id="channel_email" name="channel_email"
+                         class="form-check-input"
+                         {% if form.channel_email %}checked{% endif %}>
+                  <label class="form-check-label" for="channel_email">
+                    <i class="bi bi-envelope me-1"></i>Email
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-md ms-md-auto text-md-end">
+              <button type="button" class="btn btn-primary" id="send-btn" disabled>
+                <i class="bi bi-send me-1"></i>Send broadcast
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+</form>
+
+{# ── Confirm modal ───────────────────────────────────────────────────────── #}
+<div class="modal fade" id="confirm-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Send this broadcast?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-1">Sending to <strong id="confirm-count">—</strong> client(s).</p>
+        <p class="mb-0 text-muted small">
+          Channels: <span id="confirm-channels">—</span>
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="confirm-send">Yes, send</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+(function () {
+  const dateInput = document.getElementById('scope_date');
+  const slotRadios = document.querySelectorAll('input[name="scope_slot"]');
+  const listEl = document.getElementById('recipient-list');
+  const countEl = document.getElementById('recipient-count');
+  const sendBtn = document.getElementById('send-btn');
+  const bellCb = document.getElementById('channel_bell');
+  const emailCb = document.getElementById('channel_email');
+  const form = document.getElementById('broadcast-form');
+  const confirmCount = document.getElementById('confirm-count');
+  const confirmChannels = document.getElementById('confirm-channels');
+  const confirmModal = new bootstrap.Modal(document.getElementById('confirm-modal'));
+  const confirmSend = document.getElementById('confirm-send');
+
+  let lastCount = 0;
+  let pendingFetch = null;
+
+  function selectedSlot() {
+    for (const r of slotRadios) if (r.checked) return r.value;
+    return 'all';
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function renderRecipients(data) {
+    lastCount = data.count;
+    countEl.textContent = data.count + (data.count === 1 ? ' client' : ' clients');
+    if (data.count === 0) {
+      listEl.className = 'preview-empty';
+      listEl.textContent = 'No clients are booked for this scope.';
+      sendBtn.disabled = true;
+      return;
+    }
+    listEl.className = '';
+    const pills = data.recipients.map(r => {
+      const dogs = r.dogs.length
+        ? '<span class="dogs">— ' + r.dogs.map(escapeHtml).join(', ') + '</span>'
+        : '';
+      return '<span class="recipient-pill">' + escapeHtml(r.name) + dogs + '</span>';
+    });
+    listEl.innerHTML = pills.join(' ');
+    sendBtn.disabled = false;
+  }
+
+  function refreshPreview() {
+    const date = dateInput.value;
+    const slot = selectedSlot();
+    if (!date) return;
+    listEl.className = 'preview-empty';
+    listEl.textContent = 'Loading…';
+    countEl.textContent = '…';
+    sendBtn.disabled = true;
+    if (pendingFetch) pendingFetch.abort();
+    pendingFetch = new AbortController();
+    fetch('/admin/broadcasts/preview?scope_date=' + encodeURIComponent(date) + '&scope_slot=' + encodeURIComponent(slot), {
+      signal: pendingFetch.signal,
+      credentials: 'same-origin',
+    })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(renderRecipients)
+      .catch(err => {
+        if (err && err.name === 'AbortError') return;
+        listEl.className = 'preview-empty';
+        listEl.textContent = 'Could not load recipients — try again.';
+        countEl.textContent = '—';
+      });
+  }
+
+  dateInput.addEventListener('change', refreshPreview);
+  slotRadios.forEach(r => r.addEventListener('change', refreshPreview));
+
+  sendBtn.addEventListener('click', () => {
+    if (!bellCb.checked && !emailCb.checked) {
+      alert('Pick at least one delivery channel.');
+      return;
+    }
+    if (lastCount === 0) return;
+    confirmCount.textContent = lastCount;
+    const channels = [];
+    if (bellCb.checked) channels.push('notification bell');
+    if (emailCb.checked) channels.push('email');
+    confirmChannels.textContent = channels.join(' + ');
+    confirmModal.show();
+  });
+
+  confirmSend.addEventListener('click', () => {
+    confirmSend.disabled = true;
+    confirmSend.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending…';
+    form.submit();
+  });
+
+  // Initial load
+  refreshPreview();
+})();
+</script>
+{% endblock %}

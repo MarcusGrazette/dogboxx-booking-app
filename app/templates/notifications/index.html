@@ -49,7 +49,7 @@
                             </small>
                         </div>
                         {% if n.body %}
-                        <div class="text-muted small mt-1">{{ n.body }}</div>
+                        <div class="text-muted small mt-1 notif-body">{{ n.body }}</div>
                         {% endif %}
                         {% if not n.is_unread %}
                         <div class="mt-1">
@@ -80,6 +80,9 @@
 .notif-unread {
     background-color: #fce8f6;
     border-left: 3px solid #E02FAC;
+}
+.notif-body {
+    white-space: pre-wrap;
 }
 </style>
 {% endblock %}
