@@ -428,3 +428,52 @@ class TestBroadcastPreview:
         iso = date.today().isoformat()
         resp = client.get(f'/admin/broadcasts/preview?scope_date={iso}&scope_slot=evening')
         assert resp.status_code == 400
+
+
+# ── GET /admin/broadcasts deep-link prefill ───────────────────────────────
+
+class TestBroadcastDeepLink:
+
+    def test_prefill_from_query_params(self, app, client):
+        with app.app_context():
+            admin = _user('admin@dl-bcast.test.com', role='walker', is_admin=True)
+            db.session.commit()
+            admin_email = admin.email
+
+        _login(client, admin_email)
+        target = (date.today() + timedelta(days=2)).isoformat()
+        resp = client.get(
+            f'/admin/broadcasts?scope_date={target}&scope_slot=morning'
+        )
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        # The composer's date input gets the prefilled value
+        assert f'value="{target}"' in html
+        # The "morning" radio is the one marked checked
+        assert 'id="scope_morning"' in html
+        # Find the morning radio's snippet and confirm it's checked
+        morning_idx = html.find('id="scope_morning"')
+        assert morning_idx > 0
+        snippet = html[max(0, morning_idx - 50):morning_idx + 300]
+        assert 'checked' in snippet
+
+    def test_bad_params_fall_back_to_defaults(self, app, client):
+        """Invalid query params should not 400 — the page is interactive,
+        the admin can fix the scope inline. Falls back to today + all."""
+        with app.app_context():
+            admin = _user('admin@dl2-bcast.test.com', role='walker', is_admin=True)
+            db.session.commit()
+            admin_email = admin.email
+
+        _login(client, admin_email)
+        resp = client.get(
+            '/admin/broadcasts?scope_date=notadate&scope_slot=evening'
+        )
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        # Falls back to today
+        assert f'value="{date.today().isoformat()}"' in html
+        # Falls back to scope_all
+        all_idx = html.find('id="scope_all"')
+        snippet = html[max(0, all_idx - 50):all_idx + 300]
+        assert 'checked' in snippet

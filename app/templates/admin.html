@@ -490,6 +490,35 @@
         <h6 class="modal-title fw-bold mb-0" id="assign-modal-title">Assign walks</h6>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
+      <!-- Broadcast action bar — deep-links into /admin/broadcasts scoped to the
+           modal's date. Lives outside #assign-modal-body so the fragment-fetch
+           innerHTML swap never overwrites it. -->
+      <div class="px-3 pt-3 pb-2 border-bottom">
+        <div class="d-flex flex-column flex-md-row gap-2 align-items-md-center">
+          <div class="me-md-auto small">
+            <i class="bi bi-broadcast text-muted me-1"></i>
+            <span class="text-muted">Notify clients booked on</span>
+            <strong id="modal-broadcast-bar-date">today</strong>
+          </div>
+          <div class="d-flex flex-column flex-md-row gap-2" role="group" aria-label="Broadcast scope">
+            <a id="modal-broadcast-bar-all"
+               href="{{ url_for('admin.broadcasts') }}"
+               class="btn btn-outline-secondary">
+              <i class="bi bi-people me-1"></i>All day
+            </a>
+            <a id="modal-broadcast-bar-morning"
+               href="{{ url_for('admin.broadcasts') }}"
+               class="btn btn-outline-secondary">
+              <i class="bi bi-sunrise me-1"></i>Morning
+            </a>
+            <a id="modal-broadcast-bar-afternoon"
+               href="{{ url_for('admin.broadcasts') }}"
+               class="btn btn-outline-secondary">
+              <i class="bi bi-sunset me-1"></i>Afternoon
+            </a>
+          </div>
+        </div>
+      </div>
       <div class="modal-body" id="assign-modal-body">
         <div class="text-center py-5 text-muted">
           <div class="spinner-border spinner-border-sm text-primary"></div>
@@ -865,6 +894,32 @@ window._DASH = {
     }
   }
 
+  // Update the broadcast action bar in the assign modal — same deep-link
+  // pattern as the standalone /admin/board action bar, but anchored to the
+  // date the modal was opened for rather than a live calendar selection.
+  const BROADCAST_BASE = '{{ url_for("admin.broadcasts") }}';
+  function updateModalBroadcastBar(dateStr) {
+    const allBtn = document.getElementById('modal-broadcast-bar-all');
+    const amBtn  = document.getElementById('modal-broadcast-bar-morning');
+    const pmBtn  = document.getElementById('modal-broadcast-bar-afternoon');
+    const dateEl = document.getElementById('modal-broadcast-bar-date');
+    if (!allBtn) return;
+    const q = (slot) => `${BROADCAST_BASE}?scope_date=${dateStr}&scope_slot=${slot}`;
+    allBtn.href = q('all');
+    amBtn.href  = q('morning');
+    pmBtn.href  = q('afternoon');
+
+    const todayIso = new Date().toISOString().slice(0, 10);
+    if (dateStr === todayIso) {
+      dateEl.textContent = 'today';
+    } else {
+      const d = new Date(dateStr + 'T00:00:00');
+      dateEl.textContent = d.toLocaleDateString('en-GB', {
+        weekday: 'short', day: 'numeric', month: 'short',
+      });
+    }
+  }
+
   window._openAssignModal = async function (dateStr) {
     document.getElementById('assign-modal-title').textContent =
       `Assign walks — ${fmtDateLabel(dateStr)}`;
@@ -872,6 +927,7 @@ window._DASH = {
       '<div class="text-center py-5 text-muted">'
       + '<div class="spinner-border spinner-border-sm text-primary"></div>'
       + '<div class="mt-2 small">Loading…</div></div>';
+    updateModalBroadcastBar(dateStr);
     modalDirty = false;
     assignModal.show();
 
