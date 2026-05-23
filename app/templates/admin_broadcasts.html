@@ -67,17 +67,17 @@
 {% block main %}
 <div class="row g-4">
 
-  {# ── Compose ─────────────────────────────────────────────────────────── #}
+  {# ── Col 1: Audience + Compose (single form spans both cards) ────────── #}
   <div class="col-12 col-lg-7">
-    <div class="card">
-      <div class="card-header">
-        <h5 class="card-title mb-0"><i class="bi bi-pencil-square me-2"></i>Compose broadcast</h5>
-      </div>
-      <div class="card-body">
-        <form method="post" action="{{ url_for('admin.broadcasts') }}" id="broadcast-form" autocomplete="off">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <form method="post" action="{{ url_for('admin.broadcasts') }}" id="broadcast-form" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-          {# Scope row: date + slot side by side #}
+      {# Audience card — date, slot, recipients preview #}
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="card-title mb-0"><i class="bi bi-people-fill me-2"></i>Audience</h5>
+        </div>
+        <div class="card-body">
           <div class="row g-3 mb-3">
             <div class="col-12 col-md-5">
               <label for="scope_date" class="form-label fw-semibold">Date</label>
@@ -100,8 +100,7 @@
             </div>
           </div>
 
-          {# Recipients preview — compact, scrollable, lives inline with compose #}
-          <div class="mb-3">
+          <div>
             <label class="form-label fw-semibold mb-1 d-flex align-items-center justify-content-between">
               <span><i class="bi bi-people me-1"></i>Recipients</span>
               <span class="badge bg-secondary fw-normal" id="recipient-count">—</span>
@@ -113,7 +112,15 @@
               Confirmed bookings only. Both primary and secondary owners get the message.
             </small>
           </div>
+        </div>
+      </div>
 
+      {# Compose card — subject, body, channels, send #}
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0"><i class="bi bi-pencil-square me-2"></i>Compose</h5>
+        </div>
+        <div class="card-body">
           <div class="mb-3">
             <label for="subject" class="form-label fw-semibold">Subject</label>
             <input type="text" id="subject" name="subject"
@@ -162,15 +169,14 @@
               </button>
             </div>
           </div>
-
-        </form>
+        </div>
       </div>
-    </div>
+    </form>
   </div>
 
-  {# ── Past broadcasts ─────────────────────────────────────────────────── #}
+  {# ── Col 2: Past broadcasts — full-height card ───────────────────────── #}
   <div class="col-12 col-lg-5">
-    <div class="card">
+    <div class="card h-100">
       <div class="card-header d-flex align-items-center justify-content-between">
         <h5 class="card-title mb-0"><i class="bi bi-clock-history me-2"></i>Past broadcasts</h5>
         {% if past_broadcasts %}
@@ -184,7 +190,7 @@
         {% endif %}
       </div>
       {% if past_broadcasts %}
-      <div class="list-group list-group-flush" style="max-height:680px;overflow-y:auto;">
+      <div class="list-group list-group-flush flex-grow-1" style="overflow-y:auto;min-height:0;">
         {% for b in past_broadcasts %}
         {% set scope_label = {'all': 'All day', 'morning': 'Morning', 'afternoon': 'Afternoon'}[b.scope_slot] %}
         <div class="list-group-item broadcast-history-row" data-id="{{ b.id }}">
@@ -209,9 +215,11 @@
         {% endfor %}
       </div>
       {% else %}
-      <div class="card-body text-center text-muted py-4">
-        <i class="bi bi-megaphone display-5 d-block mb-2 opacity-25"></i>
-        No broadcasts sent yet.
+      <div class="card-body flex-grow-1 d-flex flex-column justify-content-center text-center text-muted py-4">
+        <div>
+          <i class="bi bi-megaphone display-5 d-block mb-2 opacity-25"></i>
+          No broadcasts sent yet.
+        </div>
       </div>
       {% endif %}
     </div>
