@@ -9,7 +9,7 @@ Covers:
 - /admin/broadcasts/preview JSON endpoint.
 - Auth: non-admins are blocked.
 """
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import text
@@ -477,3 +477,116 @@ class TestBroadcastDeepLink:
         all_idx = html.find('id="scope_all"')
         snippet = html[max(0, all_idx - 50):all_idx + 300]
         assert 'checked' in snippet
+
+
+# ── Past broadcasts list + bulk delete ────────────────────────────────────
+
+def _broadcast_row(sender_id, scope_date, scope_slot='all', subject='Subj',
+                   body='Body', sent_at=None, recipient_count=1,
+                   bell_sent=True, email_sent=False):
+    b = Broadcast(
+        sender_id=sender_id,
+        scope_date=scope_date,
+        scope_slot=scope_slot,
+        subject=subject,
+        body=body,
+        sent_at=sent_at or datetime.now(timezone.utc),
+        recipient_count=recipient_count,
+        bell_sent=bell_sent,
+        email_sent=email_sent,
+    )
+    db.session.add(b)
+    db.session.flush()
+    return b
+
+
+class TestBroadcastHistory:
+
+    def test_renders_past_broadcasts_in_descending_order(self, app, client):
+        with app.app_context():
+            admin = _user('admin@h1-bcast.test.com', role='walker', is_admin=True)
+            now = datetime.now(timezone.utc)
+            _broadcast_row(admin.id, date.today(),
+                           subject='Most recent',
+                           sent_at=now)
+            _broadcast_row(admin.id, date.today() - timedelta(days=2),
+                           subject='Older one',
+                           sent_at=now - timedelta(days=2))
+            db.session.commit()
+            admin_email = admin.email
+
+        _login(client, admin_email)
+        resp = client.get('/admin/broadcasts')
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        # Both subjects render
+        assert 'Most recent' in html
+        assert 'Older one' in html
+        # Newer subject appears before the older subject in markup
+        assert html.find('Most recent') < html.find('Older one')
+
+    def test_empty_history_shows_empty_state(self, app, client):
+        with app.app_context():
+            admin = _user('admin@h2-bcast.test.com', role='walker', is_admin=True)
+            db.session.commit()
+            admin_email = admin.email
+
+        _login(client, admin_email)
+        resp = client.get('/admin/broadcasts')
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        assert 'No broadcasts sent yet' in html
+        # Bulk-delete button is hidden when there's nothing to delete
+        assert 'Delete &gt;30 days old' not in html
+
+
+class TestBulkDeleteOldBroadcasts:
+
+    def test_deletes_rows_older_than_30_days(self, app, client):
+        with app.app_context():
+            admin = _user('admin@bd1-bcast.test.com', role='walker', is_admin=True)
+            now = datetime.now(timezone.utc)
+            # Old — should be deleted
+            old = _broadcast_row(admin.id, date.today() - timedelta(days=60),
+                                 subject='Ancient',
+                                 sent_at=now - timedelta(days=45))
+            # Borderline (30 days exactly) — keeps
+            borderline = _broadcast_row(admin.id, date.today() - timedelta(days=29),
+                                        subject='Borderline',
+                                        sent_at=now - timedelta(days=29))
+            # Recent — keeps
+            recent = _broadcast_row(admin.id, date.today(),
+                                    subject='Fresh',
+                                    sent_at=now)
+            db.session.commit()
+            admin_email = admin.email
+            old_id = old.id
+            borderline_id = borderline.id
+            recent_id = recent.id
+
+        _login(client, admin_email)
+        resp = client.post('/admin/broadcasts/bulk-delete-old',
+                           follow_redirects=False)
+        assert resp.status_code == 302
+        assert resp.location.endswith('/admin/broadcasts')
+
+        with app.app_context():
+            remaining_ids = {b.id for b in Broadcast.query.all()}
+            assert old_id not in remaining_ids
+            assert borderline_id in remaining_ids
+            assert recent_id in remaining_ids
+
+    def test_non_admin_blocked(self, app, client):
+        with app.app_context():
+            c1 = _user('client@bd2-bcast.test.com'); _client(c1.id)
+            db.session.commit()
+            email = c1.email
+
+        _login(client, email)
+        resp = client.post('/admin/broadcasts/bulk-delete-old',
+                           follow_redirects=False)
+        assert resp.status_code in (302, 403)
+        # If 302, it must NOT have been the success redirect to /admin/broadcasts
+        if resp.status_code == 302:
+            assert '/admin/broadcasts' not in (resp.location or '') \
+                   or '/auth/login' in (resp.location or '')

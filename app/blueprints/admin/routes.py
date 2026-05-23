@@ -3986,6 +3986,12 @@ def broadcasts():
         if errors:
             for e in errors:
                 flash(e, "error")
+            past_broadcasts = (
+                Broadcast.query
+                .options(joinedload(Broadcast.sender))
+                .order_by(Broadcast.sent_at.desc())
+                .all()
+            )
             return render_template(
                 "admin_broadcasts.html",
                 today=today,
@@ -3997,6 +4003,7 @@ def broadcasts():
                     "channel_bell": channel_bell,
                     "channel_email": channel_email,
                 },
+                past_broadcasts=past_broadcasts,
             )
 
         # Send: bell first (synchronous DB writes), then email batch.
@@ -4069,6 +4076,13 @@ def broadcasts():
     if prefill_slot not in Broadcast.VALID_SCOPES:
         prefill_slot = Broadcast.SCOPE_ALL
 
+    past_broadcasts = (
+        Broadcast.query
+        .options(joinedload(Broadcast.sender))
+        .order_by(Broadcast.sent_at.desc())
+        .all()
+    )
+
     return render_template(
         "admin_broadcasts.html",
         today=today,
@@ -4080,6 +4094,7 @@ def broadcasts():
             "channel_bell": True,
             "channel_email": True,
         },
+        past_broadcasts=past_broadcasts,
     )
 
 
@@ -4117,6 +4132,25 @@ def broadcasts_preview():
             for user, dogs in pairs
         ],
     )
+
+
+@admin_bp.route("/broadcasts/bulk-delete-old", methods=["POST"])
+@login_required
+@admin_required
+def bulk_delete_old_broadcasts():
+    """Remove Broadcast audit rows older than 30 days (by sent_at).
+
+    Mirrors /admin/daily-messages/bulk-delete-old. Broadcasts are immutable
+    audit history; this is purely housekeeping for the admin's history view.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    deleted = Broadcast.query.filter(Broadcast.sent_at < cutoff).delete()
+    db.session.commit()
+    flash(
+        f"Deleted {deleted} broadcast{'s' if deleted != 1 else ''} older than 30 days.",
+        "success",
+    )
+    return redirect(url_for("admin.broadcasts"))
 
 
 # ── CSV Client Import ─────────────────────────────────────────────────────────
