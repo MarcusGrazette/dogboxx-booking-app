@@ -53,6 +53,42 @@
     </div>
 </div>{% endif %}
 
+<!-- Broadcast action bar — deep-links into /admin/broadcasts pre-scoped to the
+     currently-selected calendar date. Buttons are large + spaced away from the
+     board to avoid accidental taps; sending still requires composer + confirm. -->
+<div class="row mb-3" id="broadcast-bar-row">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm" id="broadcast-bar">
+            <div class="card-body py-3">
+                <div class="d-flex flex-column flex-md-row gap-2 align-items-md-center">
+                    <div class="me-md-auto small">
+                        <i class="bi bi-broadcast text-muted me-1"></i>
+                        <span class="text-muted">Notify clients booked on</span>
+                        <strong id="broadcast-bar-date">today</strong>
+                    </div>
+                    <div class="d-flex gap-2" role="group" aria-label="Broadcast scope">
+                        <a id="broadcast-bar-all"
+                           href="{{ url_for('admin.broadcasts') }}"
+                           class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-people me-1"></i>All day
+                        </a>
+                        <a id="broadcast-bar-morning"
+                           href="{{ url_for('admin.broadcasts') }}"
+                           class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-sunrise me-1"></i>Morning
+                        </a>
+                        <a id="broadcast-bar-afternoon"
+                           href="{{ url_for('admin.broadcasts') }}"
+                           class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-sunset me-1"></i>Afternoon
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Row 2: Full-width board (selection hint, board wrap, confirm modals) -->
 <div class="row">
     <div class="col-12">
@@ -221,6 +257,32 @@
         onDateSelect:    loadWeekChart,
     });
 
+    // ── Broadcast action bar — updates button hrefs + date label as the
+    // calendar selection changes. Buttons deep-link into /admin/broadcasts
+    // pre-scoped; sending still requires the composer + confirm modal.
+    const BROADCAST_BASE = '{{ url_for("admin.broadcasts") }}';
+    function updateBroadcastBar(dateStr) {
+        const allBtn  = document.getElementById('broadcast-bar-all');
+        const amBtn   = document.getElementById('broadcast-bar-morning');
+        const pmBtn   = document.getElementById('broadcast-bar-afternoon');
+        const dateEl  = document.getElementById('broadcast-bar-date');
+        if (!allBtn) return;
+        const q = (slot) => `${BROADCAST_BASE}?scope_date=${dateStr}&scope_slot=${slot}`;
+        allBtn.href = q('all');
+        amBtn.href  = q('morning');
+        pmBtn.href  = q('afternoon');
+
+        const todayIso = new Date().toISOString().slice(0, 10);
+        if (dateStr === todayIso) {
+            dateEl.textContent = 'today';
+        } else {
+            const d = new Date(dateStr + 'T00:00:00');
+            dateEl.textContent = d.toLocaleDateString('en-GB', {
+                weekday: 'short', day: 'numeric', month: 'short',
+            });
+        }
+    }
+
     // Calendar drives the board's date (decoupled from the board itself)
     document.addEventListener('DOMContentLoaded', () => {
         const todayStr = new Date().toISOString().slice(0, 10);
@@ -241,10 +303,14 @@
                         cal.setHighlightedDates(highlighted);
                     });
             },
-            onDateClick(year, month, day, dateStr) { board.setDate(dateStr); },
+            onDateClick(year, month, day, dateStr) {
+                board.setDate(dateStr);
+                updateBroadcastBar(dateStr);
+            },
         });
         cal.selectDate(todayStr);
         board.setDate(todayStr);
+        updateBroadcastBar(todayStr);
     });
 
 }());

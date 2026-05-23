@@ -11,7 +11,7 @@ from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError
-from app.models import User, Booking, Walker, Dog, Client, WalkerSchedule, DogOwner, WalkerUnavailability, WalkerAdHocAvailability, ServiceType, Notification, Closure
+from app.models import User, Booking, Walker, Dog, Client, WalkerSchedule, DogOwner, WalkerUnavailability, WalkerAdHocAvailability, ServiceType, Notification, Closure, Broadcast
 from app import db
 from app.capacity import get_max_per_walker, get_walker_slot_count, get_drop_in_capacity, auto_assign_walker, get_available_walkers
 from app.utils.db_error_handler import handle_db_errors
@@ -3937,6 +3937,220 @@ def newsletter_test():
                        message="Test email sent to lydia@dogboxx.org.")
     return jsonify(success=False,
                    message="Test email failed — check logs."), 500
+
+
+# ── Broadcasts ────────────────────────────────────────────────────────────────
+
+@admin_bp.route("/broadcasts", methods=["GET", "POST"])
+@login_required
+@admin_required
+def broadcasts():
+    """Compose and send a one-shot broadcast to clients booked on a given date/slot."""
+    from datetime import date as _date
+    from app.utils.broadcasts import resolve_recipients, scope_slot_label
+    from app.utils.email import send_broadcast_batch
+    from app.utils.notifications import create_notification
+
+    today = _date.today()
+
+    if request.method == "POST":
+        # Parse + validate inputs
+        date_str = request.form.get("scope_date", "").strip()
+        scope_slot = request.form.get("scope_slot", "").strip()
+        subject = request.form.get("subject", "").strip()
+        body = request.form.get("body", "").strip()
+        channel_bell = request.form.get("channel_bell") == "on"
+        channel_email = request.form.get("channel_email") == "on"
+
+        errors = []
+        try:
+            scope_date = _date.fromisoformat(date_str)
+        except ValueError:
+            scope_date = None
+            errors.append("Pick a valid date.")
+        if scope_slot not in Broadcast.VALID_SCOPES:
+            errors.append("Pick a valid slot scope.")
+        if not subject:
+            errors.append("Subject is required.")
+        if not body:
+            errors.append("Body is required.")
+        if not (channel_bell or channel_email):
+            errors.append("Pick at least one delivery channel.")
+
+        recipients = []
+        if scope_date and scope_slot in Broadcast.VALID_SCOPES:
+            recipients = resolve_recipients(scope_date, scope_slot)
+            if not recipients:
+                errors.append("No clients are booked for that scope — nothing to send.")
+
+        if errors:
+            for e in errors:
+                flash(e, "error")
+            past_broadcasts = (
+                Broadcast.query
+                .options(joinedload(Broadcast.sender))
+                .order_by(Broadcast.sent_at.desc())
+                .all()
+            )
+            return render_template(
+                "admin_broadcasts.html",
+                today=today,
+                form={
+                    "scope_date": date_str,
+                    "scope_slot": scope_slot,
+                    "subject": subject,
+                    "body": body,
+                    "channel_bell": channel_bell,
+                    "channel_email": channel_email,
+                },
+                past_broadcasts=past_broadcasts,
+            )
+
+        # Send: bell first (synchronous DB writes), then email batch.
+        sender_id = current_user.id
+        title = subject
+        if channel_bell:
+            for user, _dogs in recipients:
+                create_notification(
+                    recipient_id=user.id,
+                    notification_type='system',
+                    title=title,
+                    body=body,
+                    link=None,  # falls through to /notifications in the bell template
+                    sender_id=sender_id,
+                )
+
+        email_result = {'sent': 0, 'failed': 0}
+        if channel_email:
+            email_recipients = [
+                {"email": user.email, "firstname": user.firstname}
+                for user, _dogs in recipients
+                if user.email
+            ]
+            email_result = send_broadcast_batch(
+                subject=subject,
+                body_text=body,
+                recipients=email_recipients,
+            )
+
+        # Audit row — written regardless of email success so we always have a record.
+        broadcast = Broadcast(
+            sender_id=sender_id,
+            scope_date=scope_date,
+            scope_slot=scope_slot,
+            subject=subject,
+            body=body,
+            bell_sent=channel_bell,
+            email_sent=channel_email,
+            recipient_count=len(recipients),
+        )
+        db.session.add(broadcast)
+        db.session.commit()
+
+        # User-facing summary
+        scope_label = scope_slot_label(scope_slot)
+        parts = [f"Sent to {len(recipients)} client(s) for {scope_date.isoformat()} {scope_label}"]
+        if channel_bell:
+            parts.append("notification bell delivered")
+        if channel_email:
+            if email_result.get('failed'):
+                parts.append(
+                    f"email: {email_result['sent']} sent, {email_result['failed']} failed"
+                )
+            else:
+                parts.append(f"email: {email_result['sent']} sent")
+        flash(" — ".join(parts), "success")
+        return redirect(url_for("admin.broadcasts"))
+
+    # GET — fresh form. Honour ?scope_date and ?scope_slot query params so the
+    # action bar on the board can deep-link into the composer pre-scoped.
+    # Invalid values fall back to the defaults rather than 400 — the page is
+    # interactive, the admin can still fix it via the form.
+    prefill_date_str = request.args.get("scope_date", "").strip()
+    try:
+        prefill_date = _date.fromisoformat(prefill_date_str) if prefill_date_str else today
+    except ValueError:
+        prefill_date = today
+
+    prefill_slot = request.args.get("scope_slot", "").strip()
+    if prefill_slot not in Broadcast.VALID_SCOPES:
+        prefill_slot = Broadcast.SCOPE_ALL
+
+    past_broadcasts = (
+        Broadcast.query
+        .options(joinedload(Broadcast.sender))
+        .order_by(Broadcast.sent_at.desc())
+        .all()
+    )
+
+    return render_template(
+        "admin_broadcasts.html",
+        today=today,
+        form={
+            "scope_date": prefill_date.isoformat(),
+            "scope_slot": prefill_slot,
+            "subject": "",
+            "body": "",
+            "channel_bell": True,
+            "channel_email": True,
+        },
+        past_broadcasts=past_broadcasts,
+    )
+
+
+@admin_bp.route("/broadcasts/preview", methods=["GET"])
+@login_required
+@admin_required
+def broadcasts_preview():
+    """JSON endpoint — returns the resolved recipient list for a date + scope.
+
+    Used by the composer page to live-update the recipient preview as the
+    admin changes the scope picker.
+    """
+    from datetime import date as _date
+    from app.utils.broadcasts import resolve_recipients
+
+    date_str = request.args.get("scope_date", "").strip()
+    scope_slot = request.args.get("scope_slot", "").strip()
+    try:
+        scope_date = _date.fromisoformat(date_str)
+    except ValueError:
+        return jsonify(error="Invalid date"), 400
+    if scope_slot not in Broadcast.VALID_SCOPES:
+        return jsonify(error="Invalid scope"), 400
+
+    pairs = resolve_recipients(scope_date, scope_slot)
+    return jsonify(
+        count=len(pairs),
+        recipients=[
+            {
+                "user_id": user.id,
+                "name": user.full_name,
+                "email": user.email,
+                "dogs": [d.name for d in dogs],
+            }
+            for user, dogs in pairs
+        ],
+    )
+
+
+@admin_bp.route("/broadcasts/bulk-delete-old", methods=["POST"])
+@login_required
+@admin_required
+def bulk_delete_old_broadcasts():
+    """Remove Broadcast audit rows older than 30 days (by sent_at).
+
+    Mirrors /admin/daily-messages/bulk-delete-old. Broadcasts are immutable
+    audit history; this is purely housekeeping for the admin's history view.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    deleted = Broadcast.query.filter(Broadcast.sent_at < cutoff).delete()
+    db.session.commit()
+    flash(
+        f"Deleted {deleted} broadcast{'s' if deleted != 1 else ''} older than 30 days.",
+        "success",
+    )
+    return redirect(url_for("admin.broadcasts"))
 
 
 # ── CSV Client Import ─────────────────────────────────────────────────────────

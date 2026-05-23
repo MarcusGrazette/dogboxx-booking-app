@@ -264,6 +264,13 @@
                             <span>Daily Messages</span>
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('admin.broadcasts') }}"
+                           class="nav-link {% if request.endpoint == 'admin.broadcasts' %}active{% endif %}">
+                            <i class="bi bi-broadcast me-2"></i>
+                            <span>Broadcasts</span>
+                        </a>
+                    </li>
 
                     {# ── Finance ───────────────────────────────────────── #}
                     <li class="nav-header">Finance</li>
