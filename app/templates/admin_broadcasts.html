@@ -10,90 +10,110 @@
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.25rem 0.6rem;
+    padding: 0.2rem 0.55rem;
     border-radius: 999px;
     background: #f4ecf2;
     color: #1B1B1B;
-    font-size: 0.82rem;
-    margin: 0.15rem;
+    font-size: 0.78rem;
+    margin: 0.1rem;
   }
   .recipient-pill .dogs {
     color: #6c757d;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
+  }
+  .recipient-preview-box {
+    background: #fafafa;
+    border: 1px solid #e2dfde;
+    border-radius: 0.375rem;
+    padding: 0.5rem 0.75rem;
+    max-height: 120px;
+    overflow-y: auto;
   }
   .preview-empty {
     color: #6c757d;
     font-style: italic;
-    padding: 0.5rem 0;
+    font-size: 0.85rem;
   }
   #broadcast-body {
     font-family: inherit;
     font-size: 0.95rem;
     line-height: 1.55;
-    min-height: 180px;
+    min-height: 140px;
+  }
+  .broadcast-history-row {
+    cursor: pointer;
+  }
+  .broadcast-history-row.expanded {
+    background: #fdf4fa;
+  }
+  .broadcast-history-body {
+    white-space: pre-wrap;
+    font-size: 0.85rem;
+    color: #3d3d3d;
+    background: #fff;
+    border: 1px solid #eee;
+    border-radius: 0.25rem;
+    padding: 0.6rem 0.75rem;
+    margin-top: 0.5rem;
+  }
+  .channel-icon {
+    font-size: 0.9rem;
+    color: #888;
+    margin-left: 0.25rem;
   }
 </style>
 {% endblock %}
 
 {% block main %}
-<form method="post" action="{{ url_for('admin.broadcasts') }}" id="broadcast-form" autocomplete="off">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="row g-4">
 
-  <div class="row g-4">
+  {# ── Compose ─────────────────────────────────────────────────────────── #}
+  <div class="col-12 col-lg-7">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-0"><i class="bi bi-pencil-square me-2"></i>Compose broadcast</h5>
+      </div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('admin.broadcasts') }}" id="broadcast-form" autocomplete="off">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-    {# ── Scope ──────────────────────────────────────────────────────────── #}
-    <div class="col-12 col-lg-5">
-      <div class="card h-100">
-        <div class="card-header">
-          <h5 class="card-title mb-0"><i class="bi bi-calendar-event me-2"></i>Scope</h5>
-        </div>
-        <div class="card-body">
-          <div class="mb-3">
-            <label for="scope_date" class="form-label fw-semibold">Date</label>
-            <input type="date" id="scope_date" name="scope_date"
-                   class="form-control"
-                   value="{{ form.scope_date }}"
-                   min="{{ today.isoformat() }}"
-                   required>
-          </div>
-          <div class="mb-2">
-            <label class="form-label fw-semibold">Slot</label>
-            <div class="btn-group d-flex" role="group" aria-label="Slot scope">
-              {% for value, label in [('all', 'All day'), ('morning', 'Morning'), ('afternoon', 'Afternoon')] %}
-              <input type="radio" class="btn-check" name="scope_slot"
-                     id="scope_{{ value }}" value="{{ value }}"
-                     {% if form.scope_slot == value %}checked{% endif %}>
-              <label class="btn btn-outline-secondary" for="scope_{{ value }}">{{ label }}</label>
-              {% endfor %}
+          {# Scope row: date + slot side by side #}
+          <div class="row g-3 mb-3">
+            <div class="col-12 col-md-5">
+              <label for="scope_date" class="form-label fw-semibold">Date</label>
+              <input type="date" id="scope_date" name="scope_date"
+                     class="form-control"
+                     value="{{ form.scope_date }}"
+                     min="{{ today.isoformat() }}"
+                     required>
+            </div>
+            <div class="col-12 col-md-7">
+              <label class="form-label fw-semibold">Slot</label>
+              <div class="btn-group d-flex" role="group" aria-label="Slot scope">
+                {% for value, label in [('all', 'All day'), ('morning', 'Morning'), ('afternoon', 'Afternoon')] %}
+                <input type="radio" class="btn-check" name="scope_slot"
+                       id="scope_{{ value }}" value="{{ value }}"
+                       {% if form.scope_slot == value %}checked{% endif %}>
+                <label class="btn btn-outline-secondary" for="scope_{{ value }}">{{ label }}</label>
+                {% endfor %}
+              </div>
             </div>
           </div>
-          <p class="small text-muted mt-3 mb-0">
-            Includes confirmed bookings only. Both primary and secondary owners get the message.
-          </p>
-        </div>
-      </div>
-    </div>
 
-    {# ── Recipients preview ────────────────────────────────────────────── #}
-    <div class="col-12 col-lg-7">
-      <div class="card h-100">
-        <div class="card-header d-flex align-items-center justify-content-between">
-          <h5 class="card-title mb-0"><i class="bi bi-people me-2"></i>Recipients</h5>
-          <span class="badge bg-secondary" id="recipient-count">—</span>
-        </div>
-        <div class="card-body">
-          <div id="recipient-list" class="preview-empty">Loading…</div>
-        </div>
-      </div>
-    </div>
+          {# Recipients preview — compact, scrollable, lives inline with compose #}
+          <div class="mb-3">
+            <label class="form-label fw-semibold mb-1 d-flex align-items-center justify-content-between">
+              <span><i class="bi bi-people me-1"></i>Recipients</span>
+              <span class="badge bg-secondary fw-normal" id="recipient-count">—</span>
+            </label>
+            <div class="recipient-preview-box">
+              <div id="recipient-list" class="preview-empty">Loading…</div>
+            </div>
+            <small class="text-muted">
+              Confirmed bookings only. Both primary and secondary owners get the message.
+            </small>
+          </div>
 
-    {# ── Compose ───────────────────────────────────────────────────────── #}
-    <div class="col-12">
-      <div class="card">
-        <div class="card-header">
-          <h5 class="card-title mb-0"><i class="bi bi-pencil-square me-2"></i>Compose</h5>
-        </div>
-        <div class="card-body">
           <div class="mb-3">
             <label for="subject" class="form-label fw-semibold">Subject</label>
             <input type="text" id="subject" name="subject"
@@ -103,12 +123,13 @@
                    maxlength="200"
                    required>
           </div>
+
           <div class="mb-3">
             <label for="broadcast-body" class="form-label fw-semibold">Body</label>
             <textarea id="broadcast-body" name="body"
                       class="form-control"
-                      rows="8"
-                      placeholder="Hi — heads up: heavy rain is forecast for this afternoon, so we're moving today's PM walks to tomorrow at the same time. Let us know if that doesn't work for you."
+                      rows="6"
+                      placeholder="Hi — heads up: heavy rain is forecast for this afternoon, so we're moving today's PM walks to tomorrow at the same time."
                       required>{{ form.body }}</textarea>
             <small class="text-muted">Line breaks are preserved.</small>
           </div>
@@ -142,12 +163,61 @@
             </div>
           </div>
 
-        </div>
+        </form>
       </div>
     </div>
-
   </div>
-</form>
+
+  {# ── Past broadcasts ─────────────────────────────────────────────────── #}
+  <div class="col-12 col-lg-5">
+    <div class="card">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <h5 class="card-title mb-0"><i class="bi bi-clock-history me-2"></i>Past broadcasts</h5>
+        {% if past_broadcasts %}
+        <form method="post" action="{{ url_for('admin.bulk_delete_old_broadcasts') }}"
+              onsubmit="return confirm('Delete all broadcasts older than 30 days?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-trash me-1"></i>Delete &gt;30 days old
+          </button>
+        </form>
+        {% endif %}
+      </div>
+      {% if past_broadcasts %}
+      <div class="list-group list-group-flush" style="max-height:680px;overflow-y:auto;">
+        {% for b in past_broadcasts %}
+        {% set scope_label = {'all': 'All day', 'morning': 'Morning', 'afternoon': 'Afternoon'}[b.scope_slot] %}
+        <div class="list-group-item broadcast-history-row" data-id="{{ b.id }}">
+          <div class="d-flex align-items-start justify-content-between gap-2">
+            <div class="flex-grow-1 min-width-0">
+              <div class="fw-semibold small text-truncate">{{ b.subject }}</div>
+              <div class="text-muted" style="font-size:0.75rem;">
+                {{ b.scope_date.strftime('%a %-d %b') }} · {{ scope_label }}
+                · sent {{ b.sent_at.strftime('%-d %b %H:%M') }}
+              </div>
+            </div>
+            <div class="d-flex align-items-center flex-shrink-0" style="font-size:0.78rem;">
+              <span class="badge bg-light text-dark border" title="Recipient count">
+                <i class="bi bi-people me-1"></i>{{ b.recipient_count }}
+              </span>
+              {% if b.bell_sent %}<i class="bi bi-bell-fill channel-icon" title="In-app notification sent"></i>{% endif %}
+              {% if b.email_sent %}<i class="bi bi-envelope-fill channel-icon" title="Email sent"></i>{% endif %}
+            </div>
+          </div>
+          <div class="broadcast-history-body d-none">{{ b.body }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="card-body text-center text-muted py-4">
+        <i class="bi bi-megaphone display-5 d-block mb-2 opacity-25"></i>
+        No broadcasts sent yet.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
 
 {# ── Confirm modal ───────────────────────────────────────────────────────── #}
 <div class="modal fade" id="confirm-modal" tabindex="-1" aria-hidden="true">
@@ -266,6 +336,16 @@
     confirmSend.disabled = true;
     confirmSend.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending…';
     form.submit();
+  });
+
+  // Past broadcasts — click row to toggle expanded body
+  document.querySelectorAll('.broadcast-history-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const body = row.querySelector('.broadcast-history-body');
+      if (!body) return;
+      body.classList.toggle('d-none');
+      row.classList.toggle('expanded');
+    });
   });
 
   // Initial load
