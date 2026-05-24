@@ -20,7 +20,7 @@
 
 // ── Cache config ──────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'v26';
+const CACHE_VERSION = 'v27';
 const CACHE_NAME    = `dogboxx-${CACHE_VERSION}`;
 
 /**
@@ -240,7 +240,7 @@ self.addEventListener('push', function (event) {
     }
   }
 
-  var APP_NAME    = 'Dogboxx';
+  var APP_NAME    = 'DogBoxx';
   var DEFAULT_ICON  = '/static/android-chrome-192x192.png';
   var DEFAULT_BADGE = '/static/badge-mono.png';
 
