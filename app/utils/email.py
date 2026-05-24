@@ -19,7 +19,7 @@ Usage:
 
 Required environment variables:
     RESEND_API_KEY  — from https://resend.com/api-keys
-    MAIL_FROM       — verified sender address, e.g. "Dogboxx <noreply@dogboxx.org>"
+    MAIL_FROM       — verified sender address, e.g. "DogBoxx <noreply@dogboxx.org>"
     APP_BASE_URL    — e.g. https://dogboxx.up.railway.app
 """
 
@@ -35,7 +35,7 @@ RESEND_API_URL = "https://api.resend.com/emails"
 def send_email(to: str, subject: str, html: str) -> bool:
     """Send a transactional email via Resend. Returns True on success."""
     api_key = os.environ.get("RESEND_API_KEY")
-    mail_from = os.environ.get("MAIL_FROM", "Dogboxx <noreply@dogboxx.org>")
+    mail_from = os.environ.get("MAIL_FROM", "DogBoxx <noreply@dogboxx.org>")
 
     if not api_key:
         logging.error("RESEND_API_KEY is not set — cannot send email")
@@ -79,7 +79,7 @@ def send_newsletter_batch(subject: str, html_template: str, recipients: list) ->
     Returns {'sent': int, 'failed': int}
     """
     api_key = os.environ.get("RESEND_API_KEY")
-    mail_from = os.environ.get("NEWSLETTER_MAIL_FROM") or os.environ.get("MAIL_FROM", "Dogboxx <noreply@dogboxx.org>")
+    mail_from = os.environ.get("NEWSLETTER_MAIL_FROM") or os.environ.get("MAIL_FROM", "DogBoxx <noreply@dogboxx.org>")
 
     if not api_key:
         logging.error("RESEND_API_KEY is not set — cannot send newsletter")
@@ -179,7 +179,7 @@ def send_broadcast_batch(subject: str, body_text: str, recipients: list) -> dict
     Returns {'sent': int, 'failed': int}
     """
     api_key = os.environ.get("RESEND_API_KEY")
-    mail_from = os.environ.get("MAIL_FROM", "Dogboxx <noreply@dogboxx.org>")
+    mail_from = os.environ.get("MAIL_FROM", "DogBoxx <noreply@dogboxx.org>")
 
     if not api_key:
         logging.error("RESEND_API_KEY is not set — cannot send broadcast")
