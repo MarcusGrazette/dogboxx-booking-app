@@ -2661,10 +2661,11 @@ def walker_schedule_json(walker_id):
             db.session.add(WalkerSchedule(
                 walker_id=walker_id, day_of_week=e['day'], slot=e['slot'], active=True
             ))
-        db.session.commit()
 
-        # Count confirmed future bookings that fall on removed day/slot combos.
-        # These bookings remain valid but the admin should know to review them.
+        # Confirmed future bookings on the now-removed (weekday, slot) combos
+        # are no longer guaranteed — reset them to 'requested' (walker_id=None)
+        # so they surface in the pending column on the board for reassignment,
+        # and notify each affected client once with their per-client count.
         affected_count = 0
         if removed:
             from datetime import date as _date
@@ -2678,10 +2679,30 @@ def walker_schedule_json(walker_id):
                 )
                 .all()
             )
-            affected_count = sum(
-                1 for b in future_confirmed
-                if (b.date.weekday(), b.slot) in removed
-            )
+            per_client = {}
+            for b in future_confirmed:
+                if (b.date.weekday(), b.slot) in removed:
+                    b.walker_id = None
+                    b.status = 'requested'
+                    per_client[b.user_id] = per_client.get(b.user_id, 0) + 1
+                    affected_count += 1
+
+            for client_user_id, n in per_client.items():
+                noun = 'booking' if n == 1 else 'bookings'
+                create_notification(
+                    recipient_id=client_user_id,
+                    notification_type='system',
+                    title=f"Status change - {n} {noun} moved to 'requested'",
+                    body=(
+                        "A walker availability change means we need to reassign "
+                        "your bookings. No need to do anything, you'll get "
+                        "notifications as the bookings are updated."
+                    ),
+                    link='/',
+                    sender_id=current_user.id,
+                )
+
+        db.session.commit()
 
         logging.info(f"Admin {current_user.id} updated schedule for walker {walker_id} via modal")
         return jsonify(success=True, affected_count=affected_count)

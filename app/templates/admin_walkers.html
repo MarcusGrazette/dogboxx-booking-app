@@ -449,8 +449,9 @@ scheduleSaveBtn.addEventListener('click', function () {
             if (data.affected_count > 0) {
                 var noun = data.affected_count === 1 ? 'booking' : 'bookings';
                 scheduleWarning.textContent = 'Schedule saved. ' + data.affected_count + ' confirmed ' +
-                    noun + ' assigned to this walker fall on days no longer in their schedule — ' +
-                    'check the bookings board and reassign as needed.';
+                    noun + ' on days no longer in this walker’s schedule ' +
+                    (data.affected_count === 1 ? 'has' : 'have') +
+                    ' been moved back to pending. Affected clients have been notified.';
                 scheduleWarning.style.display = '';
                 scheduleTable.style.display   = 'none';
                 scheduleJustSaved = true;
