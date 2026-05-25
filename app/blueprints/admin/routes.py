@@ -3526,10 +3526,13 @@ def add_closure():
             Booking.status.in_(active_statuses)
         ).all()
 
+        now = datetime.now(timezone.utc)
         date_fmt  = closure_date.strftime('%a %-d %b')
         body_text = "DogBoxx is closed" + (f" — {reason}." if reason else ".")
         for booking in bookings:
             booking.status = 'cancelled'
+            booking.cancelled_at = now
+            booking.cancelled_by = 'admin'
             dog_name = booking.dog.name if booking.dog else 'Your dog'
             service_label = (
                 'drop-in'
