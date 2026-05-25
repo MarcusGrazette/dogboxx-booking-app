@@ -29,6 +29,7 @@ Always check out `develop` before starting new work.
 | Database | PostgreSQL (prod), SQLite supported for quick local dev |
 | Frontend | Jinja2, Bootstrap 5, AdminLTE 3, Bootstrap Icons, vanilla JS |
 | Email | Resend API (`noreply@dogboxx.org` verified) |
+| Push | Web Push API via `pywebpush` (VAPID); iOS PWA service worker in `app/static/js/sw.js` |
 | CI | GitHub Actions — Postgres-backed: `flask db upgrade` → `flask db check` → `pytest` on push/PR |
 
 ---
@@ -53,8 +54,10 @@ config.py       Dev / Test / Production config classes
 migrations/     Alembic migration files
 seed.py                Base seed data + loads test data from seed_data/ JSON files
 seed_may_demo.py       Demo bookings for May 18–29 2026: 10 walks/slot/weekday (randomised ±2) + 3–5 drop-ins/day
+seed_june_demo.py      Demo bookings for 8–12 June 2026 — mix of normal and at-capacity days so waitlist visualisation can be tested (walks only)
 seed_data/             JSON files (users, clients, dogs, walkers, bookings) loaded by seed.py
 app/seed_db/seeder.py  Seeder functions — called by seed.py, not run directly
+run.py                 App entry point + Flask CLI commands (create-admin, make-walker, seed-service-types)
 ```
 
 ---
@@ -63,18 +66,23 @@ app/seed_db/seeder.py  Seeder functions — called by seed.py, not run directly
 
 | Model | Notes |
 |---|---|
-| `User` | All users. `role` = client/walker, `is_admin` boolean. Business owner is walker + admin. |
+| `User` | All users. `role` = client/walker; `is_admin` and `is_super_admin` booleans. Business owner is walker + super-admin. Only super-admins can toggle `is_admin` on other walkers. |
 | `Client` | Address + onboarding data. **No `pickup_instructions` field** — that lives on `Dog`. |
 | `Walker` | Linked to User via 1:1 |
 | `Dog` | Profile (name, breed, DOB, photo, notes, pickup_instructions). Pickup notes are per-dog and shared by all co-owners. |
 | `DogOwner` | Many-to-many dogs ↔ users, `role` = primary/secondary |
 | `Booking` | Links user, dog, service type, date, slot, walker, status |
-| `ServiceType` | Currently: Group Walk, Drop-in |
+| `BookingStatusChange` | Audit-trail row for each booking status transition (who, when, from → to) |
+| `ServiceType` | Currently seeded: Group Walk, Doggy Day Care (`day-care`), Drop In. Day Care is seeded but not yet booking-enabled in the UI. |
 | `WalkerSchedule` | Default weekly pattern (day_of_week + slot) |
 | `WalkerUnavailability` | Date-specific exceptions to a walker's schedule |
 | `WalkerAdHocAvailability` | One-off available days outside a walker's default schedule |
 | `PricingConfig` | Pricing history (used by invoicing). Fields: `price_per_walk`, `double_slot_discount`, `weekly_discount` (per-walk, for weeks ≥5 walks), `price_per_drop_in`, `effective_from`. |
 | `DailyMessage` | Admin-authored announcements shown to walkers on the pickup list. |
+| `Closure` | Date on which DogBoxx is closed. Creating a closure rejects new bookings on that date and cancels existing active ones (with notifications). |
+| `Broadcast` | Admin one-shot message to clients booked on a given date/slot. Recipients resolved at send time from confirmed bookings (primary + secondary co-owners). Delivered via bell, email, or both; rows kept for audit. |
+| `PushSubscription` | Stored Web Push endpoint per user/device (for iOS PWA + Android push notifications). |
+| `WalkEvent` | Walker-recorded pickup/drop-off events for individual bookings. |
 | `Notification` | In-app bell notifications (read/unread) |
 
 **Booking statuses:** `requested` → `confirmed` / `waitlisted` / `cancelled`
@@ -134,7 +142,7 @@ pytest                    # run all tests (SQLite locally)
 pytest tests/test_auth.py # specific file
 ```
 
-168 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing, password reset. All should pass. CI runs on every push/PR — don't merge anything that breaks CI.
+208 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing, password reset, super-admin, broadcasts. All should pass. CI runs on every push/PR — don't merge anything that breaks CI.
 
 CI runs three steps in order against a real Postgres instance:
 1. `flask db upgrade` — verifies the full migration chain runs cleanly from scratch
@@ -180,7 +188,10 @@ flask seed-service-types  # seed Group Walk / Drop In / Day Care service types (
 | `app/capacity.py` | Walk capacity checks, `auto_assign_walker()`, `acquire_booking_lock()` (advisory lock for concurrent booking requests) |
 | `app/models.py` | All SQLAlchemy models |
 | `app/utils/notifications.py` | Notification creation helpers |
+| `app/utils/broadcasts.py` | Broadcast recipient resolution (`resolve_recipients`, `scope_slot_label`) — used by `/admin/broadcasts` |
+| `app/utils/webpush.py` | Web Push delivery helpers (VAPID-signed push to stored `PushSubscription` rows) |
 | `app/templates/email/password_reset.html` | Password reset email — table-based Jinja template, CSS-only wordmark, no embedded image |
+| `run.py` | App entry point + Flask CLI commands (`create-admin`, `make-walker`, `seed-service-types`) |
 | `config.py` | Dev/Test/Prod config classes |
 | `FEATURES.md` | Feature tracker — check here before starting new work |
 | `scripts/start.sh` | Production startup — creates volume symlink, runs migrations, starts gunicorn |
@@ -208,6 +219,9 @@ flask seed-service-types  # seed Group Walk / Drop In / Day Care service types (
 - **Cross-service duplicate bookings**: a partial unique index on `(dog_id, date, slot)` for active bookings means a dog cannot have two bookings in the same slot regardless of service type. The booking flow treats any same-slot duplicate as an error with a descriptive message (e.g. "Fido already has a drop in booked for that slot") — no override UX.
 - **Concurrent booking safety**: `acquire_booking_lock()` in `capacity.py` acquires a PostgreSQL transaction-scoped advisory lock on `(service, date, slot)` before each capacity check. Called at all 7 booking-creation sites. No-op on SQLite.
 - **Admin notification fan-out**: all admin notifications use `User.query.filter_by(is_admin=True).all()` — any walker promoted to admin via the toggle on `/admin/walkers` (sets `is_admin=True`) immediately receives the full admin notification stream. They also get full access to `/admin/*` routes.
+- **`is_super_admin` vs `is_admin`**: `is_admin` gates `/admin/*` access and the admin notification fan-out. `is_super_admin` is a stricter flag held only by the business owner; only super-admins can toggle `is_admin` on/off for other walkers (`toggle_walker_admin` in `app/blueprints/admin/routes.py` enforces this), and a super-admin's own admin status cannot be changed via the UI.
+- **Admin Broadcasts**: `/admin/broadcasts` lets admins send a one-shot message to clients booked on a chosen date + slot scope (`all` / `morning` / `afternoon`). Recipients are resolved at send time from confirmed bookings (primary + secondary co-owners) by `app/utils/broadcasts.py::resolve_recipients`. Each send creates a `Broadcast` row plus bell notifications and/or emails; "morning" matches Morning + Half Day AM + Full Day, "afternoon" matches Afternoon + Half Day PM + Full Day. A broadcast bar also appears on the assignment board and assign modal.
+- **`/health` checks**: the health endpoint reads a real table (not just `SELECT 1`) and verifies the DB is at the latest Alembic head, so Railway's healthcheck fails fast if migrations didn't run.
 - **Invoicing DogOwner queries**: `/admin/invoicing` and `/admin/clients/<id>` both use batched DogOwner lookups (4–5 fixed queries, not N+1). Pattern: collect all IDs, batch-fetch, index into dicts, loop body is pure lookups.
 - **`seed_data/bookings.json`** uses `date_offset` (integer days from today) instead of hard-coded dates, so test bookings are always relative to the current date. The seeder also accepts `date` (absolute ISO string) for backward compatibility.
 
