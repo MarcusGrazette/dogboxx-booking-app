@@ -19,7 +19,11 @@ Usage:
 
 Required environment variables:
     RESEND_API_KEY  — from https://resend.com/api-keys
-    MAIL_FROM       — verified sender address, e.g. "DogBoxx <noreply@dogboxx.org>"
+    MAIL_NO_REPLY   — verified sender for transactional mail (password reset, bug
+                      report). e.g. "DogBoxx <noreply@dogboxx.org>"
+    MAIL_REPLY      — verified sender for client-facing mail clients can reply to
+                      (newsletter, broadcasts). e.g. "Lydia <lydia@dogboxx.org>".
+                      Falls back to MAIL_NO_REPLY with a warning if unset.
     APP_BASE_URL    — e.g. https://dogboxx.up.railway.app
 """
 
@@ -32,10 +36,23 @@ import requests
 RESEND_API_URL = "https://api.resend.com/emails"
 
 
+def _mail_reply_sender() -> str:
+    """Sender for client-replyable mail (newsletter, broadcasts).
+
+    Falls back to MAIL_NO_REPLY if MAIL_REPLY is unset so a missed Railway var
+    sends from noreply instead of failing the send entirely.
+    """
+    reply = os.environ.get("MAIL_REPLY")
+    if reply:
+        return reply
+    logging.warning("MAIL_REPLY not set — falling back to MAIL_NO_REPLY")
+    return os.environ.get("MAIL_NO_REPLY", "DogBoxx <noreply@dogboxx.org>")
+
+
 def send_email(to: str, subject: str, html: str) -> bool:
     """Send a transactional email via Resend. Returns True on success."""
     api_key = os.environ.get("RESEND_API_KEY")
-    mail_from = os.environ.get("MAIL_FROM", "DogBoxx <noreply@dogboxx.org>")
+    mail_from = os.environ.get("MAIL_NO_REPLY", "DogBoxx <noreply@dogboxx.org>")
 
     if not api_key:
         logging.error("RESEND_API_KEY is not set — cannot send email")
@@ -79,7 +96,7 @@ def send_newsletter_batch(subject: str, html_template: str, recipients: list) ->
     Returns {'sent': int, 'failed': int}
     """
     api_key = os.environ.get("RESEND_API_KEY")
-    mail_from = os.environ.get("NEWSLETTER_MAIL_FROM") or os.environ.get("MAIL_FROM", "DogBoxx <noreply@dogboxx.org>")
+    mail_from = _mail_reply_sender()
 
     if not api_key:
         logging.error("RESEND_API_KEY is not set — cannot send newsletter")
@@ -179,7 +196,7 @@ def send_broadcast_batch(subject: str, body_text: str, recipients: list) -> dict
     Returns {'sent': int, 'failed': int}
     """
     api_key = os.environ.get("RESEND_API_KEY")
-    mail_from = os.environ.get("MAIL_FROM", "DogBoxx <noreply@dogboxx.org>")
+    mail_from = _mail_reply_sender()
 
     if not api_key:
         logging.error("RESEND_API_KEY is not set — cannot send broadcast")

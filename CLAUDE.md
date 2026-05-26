@@ -101,7 +101,8 @@ See `.env.example`. Required:
 | `FLASK_ENV` | `development` or `production` |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `RESEND_API_KEY` | Email via Resend |
-| `MAIL_FROM` | Verified sender (noreply@dogboxx.org) |
+| `MAIL_NO_REPLY` | Verified sender for transactional mail — password reset, bug report (noreply@dogboxx.org) |
+| `MAIL_REPLY` | Verified sender for client-replyable mail — newsletter, broadcasts (lydia@dogboxx.org). Falls back to `MAIL_NO_REPLY` if unset. |
 | `APP_BASE_URL` | Public URL — used in password reset links |
 
 Optional: `REDIS_URL` for persistent rate limiting (falls back to in-memory).
@@ -216,6 +217,9 @@ flask seed-service-types  # seed Group Walk / Drop In / Day Care service types (
 - **CSV import dog gender**: CSV accepts `M`/`F`; must be mapped to `male`/`female` before writing to the `Dog` model (PostgreSQL enum). Already fixed in `csv_import_confirm`.
 - **`ClientCreateForm` dog validation**: name + gender required together if either is provided; DOB is optional.
 - **Slot override in `assign_walker`**: POST accepts `slot_override: true` (JSON boolean) to bypass the walker schedule check and allow assigning a booking to a different slot than booked. The route captures `old_slot` before updating and sends a `system` notification to the client if the slot changed. A pre-commit conflict check (409) guards against the case where the dog already has an active booking for the target slot.
+- **Walker availability change must reset confirmed bookings**: when a walker loses availability for a (date, slot) — via `deactivate_walker`, `admin_add_unavailability`, or `walker_schedule_json` removing a (weekday, slot) — existing future confirmed bookings on that combo must be reset to `walker_id=None, status='requested'` and the client notified once with a per-client count. Skipping the reset creates UI-orphan bookings: still `confirmed` in DB but render nowhere on `/admin/board` (no lane for the unscheduled walker, not in pending). Any new code path that removes walker availability must follow this pattern.
+- **PG enum slot comparisons in raw SQL**: `bookings.slot` is enum `booking_slot`; `walker_schedules.slot`, `walker_adhoc_availability.slot`, and `walker_unavailabilities.slot` are enum `schedule_slot`. Same string values, different PG types — `=` fails. Cast to text (`a.slot::text = b.slot::text`) when joining across these tables. SQLite would silently allow it; the failure only surfaces on Postgres.
+- **DOW mapping in raw SQL**: `WalkerSchedule.day_of_week` follows Python's `date.weekday()` (0=Mon..6=Sun). PG's `EXTRACT(DOW FROM date)` returns 0=Sun..6=Sat — different. Use `EXTRACT(ISODOW FROM date)::int - 1` to convert.
 - **Cross-service duplicate bookings**: a partial unique index on `(dog_id, date, slot)` for active bookings means a dog cannot have two bookings in the same slot regardless of service type. The booking flow treats any same-slot duplicate as an error with a descriptive message (e.g. "Fido already has a drop in booked for that slot") — no override UX.
 - **Concurrent booking safety**: `acquire_booking_lock()` in `capacity.py` acquires a PostgreSQL transaction-scoped advisory lock on `(service, date, slot)` before each capacity check. Called at all 7 booking-creation sites. No-op on SQLite.
 - **Admin notification fan-out**: all admin notifications use `User.query.filter_by(is_admin=True).all()` — any walker promoted to admin via the toggle on `/admin/walkers` (sets `is_admin=True`) immediately receives the full admin notification stream. They also get full access to `/admin/*` routes.

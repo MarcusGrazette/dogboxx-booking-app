@@ -2960,7 +2960,18 @@ def dogs():
         for row in rows
     ]
     from datetime import date as date_type
-    return render_template("admin_dogs.html", dogs_data=dogs_data, today=date_type.today())
+    service_types = (
+        ServiceType.query
+        .filter_by(active=True, slot_type='morning_afternoon')
+        .order_by(ServiceType.name)
+        .all()
+    )
+    return render_template(
+        "admin_dogs.html",
+        dogs_data=dogs_data,
+        today=date_type.today(),
+        service_types=service_types,
+    )
 
 
 @admin_bp.route("/dogs/<int:dog_id>/update", methods=["POST"])
@@ -3022,13 +3033,26 @@ def book_for_dog():
         if not data:
             return jsonify(success=False, message="No data received"), 400
 
-        dog_id    = data.get('dog_id')
-        user_id   = data.get('user_id')
-        date_str  = data.get('date', '')
-        slot      = data.get('slot', '')
+        dog_id          = data.get('dog_id')
+        user_id         = data.get('user_id')
+        date_str        = data.get('date', '')
+        slot            = data.get('slot', '')
+        service_type_id = data.get('service_type_id')
 
         if not all([dog_id, user_id, date_str, slot]):
             return jsonify(success=False, message="Missing required fields"), 400
+
+        # Resolve service — default to Walk for back-compat if not supplied.
+        if service_type_id:
+            service = db.session.get(ServiceType, service_type_id)
+            if not service or not service.active or service.slot_type != 'morning_afternoon':
+                return jsonify(success=False, message="Invalid service type"), 400
+        else:
+            service = ServiceType.query.filter_by(slug=ServiceType.WALK, active=True).first()
+            if not service:
+                return jsonify(success=False, message="No service type available"), 400
+
+        is_drop_in = service.slug == ServiceType.DROP_IN
 
         from datetime import date as date_type
         try:
@@ -3039,7 +3063,8 @@ def book_for_dog():
         if booking_date <= date_type.today():
             return jsonify(success=False, message="Date must be in the future"), 400
 
-        if slot not in ('Morning', 'Afternoon', 'Both'):
+        valid_slots = ('Morning', 'Afternoon') if is_drop_in else ('Morning', 'Afternoon', 'Both')
+        if slot not in valid_slots:
             return jsonify(success=False, message="Invalid slot"), 400
 
         dog = db.session.get(Dog, dog_id)
@@ -3048,7 +3073,9 @@ def book_for_dog():
 
         slots_to_book = ['Morning', 'Afternoon'] if slot == 'Both' else [slot]
 
-        # Duplicate check for all slots before creating any
+        # Duplicate check for all slots before creating any. The active-booking
+        # uniqueness index treats any service type the same, so a drop-in
+        # collides with an existing walk in the same slot (and vice versa).
         active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
         for s in slots_to_book:
             existing = Booking.query.filter(
@@ -3061,15 +3088,13 @@ def book_for_dog():
                 label = f"the {s.lower()} slot" if slot == 'Both' else "that slot"
                 return jsonify(success=False, message=f"This dog already has a booking for {label} on that date"), 400
 
-        default_service = ServiceType.query.filter_by(slug=ServiceType.WALK, active=True).first()
-        if not default_service:
-            return jsonify(success=False, message="No service type available"), 400
+        service_label = service.name.lower()
 
         bookings_created = []
         for s in slots_to_book:
-            acquire_booking_lock(default_service.slug, booking_date, s)
+            acquire_booking_lock(service.slug, booking_date, s)
             available, can_waitlist, capacity_msg = check_availability(
-                default_service, booking_date, s, admin_override=True
+                service, booking_date, s, admin_override=True
             )
             if not available and not can_waitlist:
                 return jsonify(success=False, message=capacity_msg), 400
@@ -3077,14 +3102,17 @@ def book_for_dog():
             booking = Booking(
                 user_id=user_id,
                 dog_id=dog_id,
-                service_type_id=default_service.id,
+                service_type_id=service.id,
                 date=booking_date,
                 slot=s,
                 status='waitlisted',
             )
             db.session.add(booking)
 
-            if available:
+            # Drop-ins are never auto-assigned — they land as requested
+            # (or waitlisted) for an admin to confirm manually, matching the
+            # public client/book_drop_in flow.
+            if available and not is_drop_in:
                 walker = auto_assign_walker(booking_date, s)
                 if walker:
                     booking.walker_id = walker.id
@@ -3093,6 +3121,8 @@ def book_for_dog():
                     booking.pickup_order = get_walker_slot_count(walker.id, booking_date, s)
                 else:
                     booking.status = 'requested'
+            elif available:
+                booking.status = 'requested'
 
             bookings_created.append(booking)
 
@@ -3106,7 +3136,7 @@ def book_for_dog():
                 create_notification(
                     recipient_id=user_id,
                     notification_type='booking_confirmed',
-                    title=f"{dog.name}'s {b.slot.lower()} walk on {date_str_fmt} has been confirmed",
+                    title=f"{dog.name}'s {b.slot.lower()} {service_label} on {date_str_fmt} has been confirmed",
                     body=f'Booked with {walker_first}.' if walker_first else 'Walker assigned.',
                     link='/',
                     sender_id=current_user.id,
@@ -3115,7 +3145,7 @@ def book_for_dog():
                     create_notification(
                         recipient_id=b.walker.user_id,
                         notification_type='walker_assigned',
-                        title=f'You have been assigned a walk on {walker_date_str_fmt}',
+                        title=f'You have been assigned a {service_label} on {walker_date_str_fmt}',
                         body=f'{dog.name} — {b.slot}',
                         link=f'/walker/pickups?date={booking_date.isoformat()}',
                         sender_id=current_user.id,
@@ -3126,14 +3156,14 @@ def book_for_dog():
         if len(bookings_created) == 1:
             b = bookings_created[0]
             return jsonify(success=True, status=b.status,
-                           message=f"Booking {b.status} for {dog.name} on {date_str_fmt}")
+                           message=f"{service.name} {b.status} for {dog.name} on {date_str_fmt}")
         else:
             statuses = [b.status for b in bookings_created]
             if len(set(statuses)) == 1:
-                msg = f"Both walks {statuses[0]} for {dog.name} on {date_str_fmt}"
+                msg = f"Both {service_label}s {statuses[0]} for {dog.name} on {date_str_fmt}"
             else:
                 parts = [f"{b.slot}: {b.status}" for b in bookings_created]
-                msg = f"Walks booked for {dog.name} on {date_str_fmt} — {', '.join(parts)}"
+                msg = f"{service.name} bookings for {dog.name} on {date_str_fmt} — {', '.join(parts)}"
             return jsonify(success=True, status=statuses[0], message=msg)
 
     except Exception as e:
@@ -3152,16 +3182,25 @@ def recurring_for_dog():
         if not data:
             return jsonify(success=False, message="No data received"), 400
 
-        dog_id    = data.get('dog_id')
-        user_id   = data.get('user_id')
-        start_str = data.get('start_date', '')
-        end_str   = data.get('end_date', '')
-        day_slots = data.get('day_slots', [])
+        dog_id          = data.get('dog_id')
+        user_id         = data.get('user_id')
+        start_str       = data.get('start_date', '')
+        end_str         = data.get('end_date', '')
+        day_slots       = data.get('day_slots', [])
+        service_type_id = data.get('service_type_id')
 
         if not all([dog_id, user_id, start_str, end_str]):
             return jsonify(success=False, message="Missing required fields"), 400
         if not day_slots:
             return jsonify(success=False, message="Please select at least one day"), 400
+
+        # Recurring bookings are walk-only. Reject any other service type so a
+        # client mistake (or hand-crafted request) can't create recurring
+        # drop-ins, which we don't support.
+        if service_type_id:
+            svc = db.session.get(ServiceType, service_type_id)
+            if not svc or svc.slug != ServiceType.WALK:
+                return jsonify(success=False, message="Recurring bookings are only available for walks"), 400
 
         for entry in day_slots:
             if entry.get('day') not in range(5):
@@ -4120,6 +4159,49 @@ def broadcasts():
         },
         past_broadcasts=past_broadcasts,
     )
+
+
+@admin_bp.route("/broadcasts/test", methods=["POST"])
+@login_required
+@admin_required
+def broadcasts_test():
+    """Send a test broadcast email to the current admin.
+
+    Returns JSON so the compose page never reloads — keeps the admin's draft
+    (subject + body + scope + channel toggles) intact while they iterate. Test
+    sends bypass scope resolution and the bell channel: a test is just the
+    composed subject + body delivered as a single email to current_user.
+    """
+    from app.utils.email import send_broadcast_batch
+
+    subject = request.form.get("subject", "").strip()
+    body = request.form.get("body", "").strip()
+
+    if not subject or not body:
+        return jsonify(
+            success=False,
+            message="Write a subject and body before sending a test.",
+        ), 400
+
+    if not current_user.email:
+        return jsonify(
+            success=False,
+            message="Your account has no email address on file.",
+        ), 400
+
+    result = send_broadcast_batch(
+        subject=f"[TEST] {subject}",
+        body_text=body,
+        recipients=[{
+            "email": current_user.email,
+            "firstname": current_user.firstname or "there",
+        }],
+    )
+    if result.get("sent"):
+        return jsonify(success=True,
+                       message=f"Test email sent to {current_user.email}.")
+    return jsonify(success=False,
+                   message="Test email failed — check logs."), 500
 
 
 @admin_bp.route("/broadcasts/preview", methods=["GET"])
