@@ -163,7 +163,12 @@
                 </div>
               </div>
             </div>
-            <div class="col-12 col-md ms-md-auto text-md-end">
+            <div class="col-12 col-md ms-md-auto text-md-end d-flex gap-2 align-items-center justify-content-md-end">
+              {# Inline status for the test-send AJAX response — keeps the draft. #}
+              <span id="test-status" class="small text-muted" aria-live="polite"></span>
+              <button type="button" class="btn btn-outline-secondary" id="test-send-btn">
+                <i class="bi bi-send-check me-1"></i>Send test
+              </button>
               <button type="button" class="btn btn-primary" id="send-btn" disabled>
                 <i class="bi bi-send me-1"></i>Send broadcast
               </button>
@@ -344,6 +349,54 @@
     confirmSend.disabled = true;
     confirmSend.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending…';
     form.submit();
+  });
+
+  // Test send — AJAX POST to /admin/broadcasts/test, keeps the draft intact.
+  const testBtn = document.getElementById('test-send-btn');
+  const testStatus = document.getElementById('test-status');
+  const subjectInput = document.getElementById('subject');
+  const bodyInput = document.getElementById('broadcast-body');
+
+  function setTestStatus(message, kind) {
+    testStatus.textContent = message || '';
+    testStatus.className = 'small ' + (
+      kind === 'success' ? 'text-success' :
+      kind === 'error' ? 'text-danger' :
+      kind === 'pending' ? 'text-muted' : 'text-muted'
+    );
+  }
+
+  testBtn.addEventListener('click', () => {
+    const subject = (subjectInput.value || '').trim();
+    const body = (bodyInput.value || '').trim();
+    if (!subject || !body) {
+      setTestStatus('Write a subject and body first.', 'error');
+      return;
+    }
+    testBtn.disabled = true;
+    setTestStatus('Sending…', 'pending');
+
+    const fd = new FormData();
+    fd.append('csrf_token', form.querySelector('input[name="csrf_token"]').value);
+    fd.append('subject', subject);
+    fd.append('body', body);
+
+    fetch('{{ url_for("admin.broadcasts_test") }}', {
+      method: 'POST',
+      body: fd,
+      credentials: 'same-origin',
+    })
+      .then(r => r.json().then(data => ({ ok: r.ok, data })))
+      .then(res => {
+        if (res.ok && res.data.success) {
+          setTestStatus('✓ ' + res.data.message, 'success');
+        } else {
+          setTestStatus('✗ ' + (res.data.message || 'Test send failed.'), 'error');
+        }
+        setTimeout(() => setTestStatus('', ''), 5000);
+      })
+      .catch(() => setTestStatus('✗ Network error — please try again.', 'error'))
+      .finally(() => { testBtn.disabled = false; });
   });
 
   // Past broadcasts — click row to toggle expanded body

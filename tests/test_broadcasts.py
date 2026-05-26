@@ -384,6 +384,74 @@ class TestBroadcastSend:
         assert resp.status_code in (302, 403)
 
 
+# ── Route: POST /admin/broadcasts/test ─────────────────────────────────────
+
+class TestBroadcastTestSend:
+
+    def test_test_send_emails_current_admin_and_skips_audit(
+            self, app, client, captured_broadcasts):
+        with app.app_context():
+            admin = _user('admin@bt-bcast.test.com', firstname='Lydia',
+                          role='walker', is_admin=True)
+            db.session.commit()
+            admin_email = admin.email
+
+        _login(client, admin_email)
+        resp = client.post('/admin/broadcasts/test', data={
+            'subject': 'Preview subject',
+            'body': 'Preview body line.',
+        })
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data['success'] is True
+        assert admin_email in data['message']
+
+        # Email batch called with [TEST] prefix and just the admin's address.
+        assert len(captured_broadcasts) == 1
+        sent = captured_broadcasts[0]
+        assert sent['subject'] == '[TEST] Preview subject'
+        assert sent['body'] == 'Preview body line.'
+        assert sent['recipients'] == [{'email': admin_email, 'firstname': 'Lydia'}]
+
+        # No audit row, no notifications — test is email-only.
+        with app.app_context():
+            assert Broadcast.query.count() == 0
+            assert Notification.query.count() == 0
+
+    def test_test_send_rejects_missing_subject_or_body(
+            self, app, client, captured_broadcasts):
+        with app.app_context():
+            admin = _user('admin@bt2-bcast.test.com', role='walker', is_admin=True)
+            db.session.commit()
+            admin_email = admin.email
+
+        _login(client, admin_email)
+        resp = client.post('/admin/broadcasts/test', data={
+            'subject': '', 'body': 'just a body',
+        })
+        assert resp.status_code == 400
+        assert resp.get_json()['success'] is False
+        assert captured_broadcasts == []
+
+        resp = client.post('/admin/broadcasts/test', data={
+            'subject': 'just a subject', 'body': '   ',
+        })
+        assert resp.status_code == 400
+        assert captured_broadcasts == []
+
+    def test_test_send_non_admin_blocked(self, app, client):
+        with app.app_context():
+            c1 = _user('client@bt3-bcast.test.com'); _client(c1.id)
+            db.session.commit()
+            email = c1.email
+
+        _login(client, email)
+        resp = client.post('/admin/broadcasts/test',
+                           data={'subject': 'X', 'body': 'Y'},
+                           follow_redirects=False)
+        assert resp.status_code in (302, 403)
+
+
 # ── Route: GET /admin/broadcasts/preview ───────────────────────────────────
 
 class TestBroadcastPreview:

@@ -4161,6 +4161,49 @@ def broadcasts():
     )
 
 
+@admin_bp.route("/broadcasts/test", methods=["POST"])
+@login_required
+@admin_required
+def broadcasts_test():
+    """Send a test broadcast email to the current admin.
+
+    Returns JSON so the compose page never reloads — keeps the admin's draft
+    (subject + body + scope + channel toggles) intact while they iterate. Test
+    sends bypass scope resolution and the bell channel: a test is just the
+    composed subject + body delivered as a single email to current_user.
+    """
+    from app.utils.email import send_broadcast_batch
+
+    subject = request.form.get("subject", "").strip()
+    body = request.form.get("body", "").strip()
+
+    if not subject or not body:
+        return jsonify(
+            success=False,
+            message="Write a subject and body before sending a test.",
+        ), 400
+
+    if not current_user.email:
+        return jsonify(
+            success=False,
+            message="Your account has no email address on file.",
+        ), 400
+
+    result = send_broadcast_batch(
+        subject=f"[TEST] {subject}",
+        body_text=body,
+        recipients=[{
+            "email": current_user.email,
+            "firstname": current_user.firstname or "there",
+        }],
+    )
+    if result.get("sent"):
+        return jsonify(success=True,
+                       message=f"Test email sent to {current_user.email}.")
+    return jsonify(success=False,
+                   message="Test email failed — check logs."), 500
+
+
 @admin_bp.route("/broadcasts/preview", methods=["GET"])
 @login_required
 @admin_required
