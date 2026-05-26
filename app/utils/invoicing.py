@@ -59,10 +59,13 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
     )
 
     confirmed = [b for b in bookings if b.status in ('confirmed', 'completed')]
+    # Admin-cancelled bookings (including those auto-cancelled by a closure) are
+    # never billed — the short-notice policy only applies to client cancellations.
     late_cancels = [
         b for b in bookings
         if b.status == 'cancelled'
         and b.cancelled_at is not None
+        and b.cancelled_by != 'admin'
         and (b.date - b.cancelled_at.date()).days < _cancellation_notice_days(b)
     ]
     all_billable = confirmed + late_cancels
