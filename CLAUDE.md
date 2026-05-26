@@ -101,7 +101,8 @@ See `.env.example`. Required:
 | `FLASK_ENV` | `development` or `production` |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `RESEND_API_KEY` | Email via Resend |
-| `MAIL_FROM` | Verified sender (noreply@dogboxx.org) |
+| `MAIL_NO_REPLY` | Verified sender for transactional mail — password reset, bug report (noreply@dogboxx.org) |
+| `MAIL_REPLY` | Verified sender for client-replyable mail — newsletter, broadcasts (lydia@dogboxx.org). Falls back to `MAIL_NO_REPLY` if unset. |
 | `APP_BASE_URL` | Public URL — used in password reset links |
 
 Optional: `REDIS_URL` for persistent rate limiting (falls back to in-memory).

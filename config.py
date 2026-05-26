@@ -48,7 +48,8 @@ class Config:
     
     # Email (Resend)
     RESEND_API_KEY = os.environ.get('RESEND_API_KEY')
-    MAIL_FROM = os.environ.get('MAIL_FROM', 'DogBoxx <noreply@dogboxx.org>')
+    MAIL_NO_REPLY = os.environ.get('MAIL_NO_REPLY', 'DogBoxx <noreply@dogboxx.org>')
+    MAIL_REPLY = os.environ.get('MAIL_REPLY', 'Lydia <lydia@dogboxx.org>')
     APP_BASE_URL = os.environ.get('APP_BASE_URL', 'http://localhost:5000')
 
     # Rate Limiting Configuration
