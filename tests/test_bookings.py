@@ -127,6 +127,20 @@ def make_service(capacity=6):
     return st
 
 
+def make_drop_in_service(capacity=6):
+    st = ServiceType(
+        name='Drop In', slug='drop-in',
+        capacity_model='walker_assigned',
+        slot_type='morning_afternoon',
+        requires_walker=True,
+        default_max_capacity=capacity,
+        active=True,
+    )
+    db.session.add(st)
+    db.session.flush()
+    return st
+
+
 def login(flask_client, email, password='Testpass1!'):
     return flask_client.post('/auth/login', data={
         'email': email,
@@ -654,6 +668,138 @@ class TestAdminRecurringForDog:
         assert data['success'] is True
         assert data['skipped'] == 1
         assert data.get('confirmed', 0) + data.get('requested', 0) == 0
+
+
+# ---------------------------------------------------------------------------
+# T3c-bis — Admin book_for_dog with a non-walk service type (drop-in)
+# ---------------------------------------------------------------------------
+
+class TestAdminBookForDogServiceType:
+    """The /admin/dogs Book modal supports picking a service type. Drop-ins
+    must never auto-assign a walker, and 'Both' is walks-only."""
+
+    def _post(self, flask_client, payload):
+        return flask_client.post(
+            '/admin/book_for_dog',
+            data=json.dumps(payload),
+            content_type='application/json',
+        )
+
+    def test_drop_in_creates_requested_booking_with_no_walker(self, app, client):
+        with app.app_context():
+            tom = tomorrow()
+            # Walker exists with capacity — confirms we still don't auto-assign
+            # for drop-ins (matches the public client/book_drop_in flow).
+            w = make_walker_with_schedule(
+                f'walker_di_{id(self)}@test.com', tom.weekday(), 'Morning',
+            )
+            w.does_drop_ins = True
+            make_service(capacity=6)
+            drop_in = make_drop_in_service(capacity=6)
+            admin = make_user(f'admin_di_{id(self)}@test.com', role='walker', is_admin=True)
+            client_user = make_user(f'cl_di_{id(self)}@test.com', role='client')
+            make_client_profile(client_user.id)
+            dog = make_dog()
+            attach_dog(dog.id, client_user.id)
+            db.session.commit()
+            dog_id = dog.id
+            user_id = client_user.id
+            admin_email = admin.email
+            drop_in_id = drop_in.id
+
+        login(client, admin_email)
+        resp = self._post(client, {
+            'dog_id': dog_id,
+            'user_id': user_id,
+            'service_type_id': drop_in_id,
+            'date': tomorrow().isoformat(),
+            'slot': 'Morning',
+        })
+        data = resp.get_json()
+        assert resp.status_code == 200, data
+        assert data['success'] is True
+        assert data['status'] == 'requested'
+
+        with app.app_context():
+            b = Booking.query.filter_by(dog_id=dog_id).one()
+            assert b.service_type_id == drop_in_id
+            assert b.walker_id is None
+            assert b.status == 'requested'
+
+    def test_drop_in_rejects_both_slot(self, app, client):
+        with app.app_context():
+            tom = tomorrow()
+            w = make_walker_with_schedule(
+                f'walker_db_{id(self)}@test.com', tom.weekday(), 'Morning',
+            )
+            w.does_drop_ins = True
+            make_service(capacity=6)
+            drop_in = make_drop_in_service(capacity=6)
+            admin = make_user(f'admin_db_{id(self)}@test.com', role='walker', is_admin=True)
+            client_user = make_user(f'cl_db_{id(self)}@test.com', role='client')
+            make_client_profile(client_user.id)
+            dog = make_dog()
+            attach_dog(dog.id, client_user.id)
+            db.session.commit()
+            dog_id = dog.id
+            user_id = client_user.id
+            admin_email = admin.email
+            drop_in_id = drop_in.id
+
+        login(client, admin_email)
+        resp = self._post(client, {
+            'dog_id': dog_id,
+            'user_id': user_id,
+            'service_type_id': drop_in_id,
+            'date': tomorrow().isoformat(),
+            'slot': 'Both',
+        })
+        data = resp.get_json()
+        assert resp.status_code == 400
+        assert data['success'] is False
+        assert 'slot' in data['message'].lower()
+
+
+class TestAdminRecurringForDogRejectsNonWalk:
+    """Recurring bookings are walk-only by design. The endpoint must reject
+    any other service type even if a caller sends one."""
+
+    def test_drop_in_service_id_rejected(self, app, client):
+        mon = next_monday()
+
+        with app.app_context():
+            make_walker_with_schedule(
+                f'walker_rr_{id(self)}@test.com', mon.weekday(), 'Morning',
+            )
+            make_service(capacity=6)
+            drop_in = make_drop_in_service(capacity=6)
+            admin = make_user(f'admin_rr_{id(self)}@test.com', role='walker', is_admin=True)
+            client_user = make_user(f'cl_rr_{id(self)}@test.com', role='client')
+            dog = make_dog()
+            attach_dog(dog.id, client_user.id)
+            db.session.commit()
+            dog_id = dog.id
+            user_id = client_user.id
+            admin_email = admin.email
+            drop_in_id = drop_in.id
+
+        login(client, admin_email)
+        resp = client.post(
+            '/admin/recurring_for_dog',
+            data=json.dumps({
+                'dog_id': dog_id,
+                'user_id': user_id,
+                'service_type_id': drop_in_id,
+                'start_date': mon.isoformat(),
+                'end_date': mon.isoformat(),
+                'day_slots': [{'day': mon.weekday(), 'slot': 'Morning'}],
+            }),
+            content_type='application/json',
+        )
+        data = resp.get_json()
+        assert resp.status_code == 400
+        assert data['success'] is False
+        assert 'walks' in data['message'].lower()
 
 
 # ---------------------------------------------------------------------------

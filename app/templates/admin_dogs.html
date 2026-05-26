@@ -142,7 +142,7 @@
             <div class="modal-header">
                 <h5 class="modal-title" id="bookingModalLabel">
                     <i class="bi bi-calendar-plus me-2 text-primary"></i>
-                    Book a walk for <span id="modal-dog-name"></span>
+                    Book for <span id="modal-dog-name"></span>
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -152,6 +152,17 @@
                     This will appear as a pending booking, same as if they booked themselves.
                 </p>
 
+                <!-- Service type -->
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Service</label>
+                    <select class="form-select" id="modal-service-type">
+                        {% for st in service_types %}
+                        <option value="{{ st.id }}" data-slug="{{ st.slug }}"
+                                {% if st.slug == 'group-walk' %}selected{% endif %}>{{ st.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
                 <!-- Slot (single booking only) -->
                 <div class="mb-3" id="single-slot-group">
                     <label class="form-label fw-semibold">Slot</label>
@@ -159,7 +170,7 @@
                         <option value="">Select a slot…</option>
                         <option value="Morning">Morning</option>
                         <option value="Afternoon">Afternoon</option>
-                        <option value="Both">Both (AM + PM)</option>
+                        <option value="Both" id="modal-slot-both-opt">Both (AM + PM)</option>
                     </select>
                 </div>
 
@@ -169,8 +180,8 @@
                     <input type="date" class="form-control" id="modal-date">
                 </div>
 
-                <!-- Recurring toggle -->
-                <div class="form-check form-switch mb-2">
+                <!-- Recurring toggle (walks only) -->
+                <div class="form-check form-switch mb-2" id="modal-recur-row">
                     <input class="form-check-input" type="checkbox" id="modal-recur-toggle">
                     <label class="form-check-label small fw-semibold" for="modal-recur-toggle">
                         Recurring booking
@@ -213,7 +224,7 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
                 <button type="button" class="btn btn-primary" id="modal-submit-btn">
-                    <i class="bi bi-check-lg me-1"></i>Request walk
+                    <i class="bi bi-check-lg me-1"></i>Request booking
                 </button>
             </div>
         </div>
@@ -495,9 +506,12 @@ document.addEventListener('DOMContentLoaded', function () {
     const modal         = new bootstrap.Modal(document.getElementById('bookingModal'));
     const modalDogName  = document.getElementById('modal-dog-name');
     const modalOwner    = document.getElementById('modal-owner-name');
+    const serviceSel    = document.getElementById('modal-service-type');
     const slotSel       = document.getElementById('modal-slot');
+    const slotBothOpt   = document.getElementById('modal-slot-both-opt');
     const dateInput     = document.getElementById('modal-date');
     const recurToggle   = document.getElementById('modal-recur-toggle');
+    const recurRow      = document.getElementById('modal-recur-row');
     const recurPanel    = document.getElementById('recurring-panel');
     const startInput    = document.getElementById('modal-start-date');
     const endInput      = document.getElementById('modal-end-date');
@@ -506,6 +520,36 @@ document.addEventListener('DOMContentLoaded', function () {
     const submitBtn       = document.getElementById('modal-submit-btn');
     const resultDiv       = document.getElementById('modal-result');
     const recurCount      = document.getElementById('recurring-count');
+
+    // Adjust modal affordances for the selected service. Drop-ins don't
+    // support "Both" slots (server-side rejected) and aren't available as
+    // recurring bookings.
+    function selectedServiceSlug() {
+        const opt = serviceSel.options[serviceSel.selectedIndex];
+        return opt ? opt.dataset.slug : '';
+    }
+    function syncServiceUI() {
+        const isDropIn = selectedServiceSlug() === 'drop-in';
+        if (isDropIn) {
+            if (slotSel.value === 'Both') slotSel.value = '';
+            slotBothOpt.hidden   = true;
+            slotBothOpt.disabled = true;
+            recurToggle.checked = false;
+            recurRow.style.display     = 'none';
+            recurPanel.style.display   = 'none';
+            singleGroup.style.display     = 'block';
+            singleSlotGroup.style.display = 'block';
+            submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request booking';
+        } else {
+            slotBothOpt.hidden   = false;
+            slotBothOpt.disabled = false;
+            recurRow.style.display = '';
+            submitBtn.innerHTML = recurToggle.checked
+                ? '<i class="bi bi-check-lg me-1"></i>Request recurring walks'
+                : '<i class="bi bi-check-lg me-1"></i>Request booking';
+        }
+    }
+    serviceSel.addEventListener('change', syncServiceUI);
 
     let activeDogId  = null;
     let activeUserId = null;
@@ -526,6 +570,10 @@ document.addEventListener('DOMContentLoaded', function () {
             modalOwner.textContent   = this.dataset.ownerName;
 
             // Reset form
+            // Default service to Group Walk on open
+            for (const opt of serviceSel.options) {
+                if (opt.dataset.slug === 'group-walk') { serviceSel.value = opt.value; break; }
+            }
             slotSel.value       = '';
             dateInput.value     = '';
             startInput.value    = '';
@@ -538,7 +586,8 @@ document.addEventListener('DOMContentLoaded', function () {
             recurCount.style.display = 'none';
             resultDiv.style.display = 'none';
             submitBtn.disabled = false;
-            submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request walk';
+            submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request booking';
+            syncServiceUI();
 
             modal.show();
         });
@@ -557,7 +606,7 @@ document.addEventListener('DOMContentLoaded', function () {
             singleSlotGroup.style.display = 'block';
             recurPanel.style.display      = 'none';
             recurCount.style.display      = 'none';
-            submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request walk';
+            submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request booking';
         }
     });
 
@@ -625,8 +674,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
                 body: JSON.stringify({
-                    dog_id:  parseInt(activeDogId),
-                    user_id: parseInt(activeUserId),
+                    dog_id:          parseInt(activeDogId),
+                    user_id:         parseInt(activeUserId),
+                    service_type_id: parseInt(serviceSel.value),
                     date, slot,
                 }),
             })
@@ -638,12 +688,12 @@ document.addEventListener('DOMContentLoaded', function () {
                     showResult('danger', data.message || 'Something went wrong');
                 }
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request walk';
+                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request booking';
             })
             .catch(() => {
                 showResult('danger', 'Network error — please try again.');
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request walk';
+                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request booking';
             });
 
         } else {
@@ -675,11 +725,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
                 body: JSON.stringify({
-                    dog_id:     parseInt(activeDogId),
-                    user_id:    parseInt(activeUserId),
-                    start_date: startDate,
-                    end_date:   endDate,
-                    day_slots:  daySlots,
+                    dog_id:          parseInt(activeDogId),
+                    user_id:         parseInt(activeUserId),
+                    service_type_id: parseInt(serviceSel.value),
+                    start_date:      startDate,
+                    end_date:        endDate,
+                    day_slots:       daySlots,
                 }),
             })
             .then(r => r.json())
@@ -902,6 +953,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     activeUserId = d.userId;
                     modalDogName.textContent          = d.dogName;
                     modalOwner.textContent            = d.ownerName;
+                    for (const opt of serviceSel.options) {
+                        if (opt.dataset.slug === 'group-walk') { serviceSel.value = opt.value; break; }
+                    }
                     slotSel.value                     = '';
                     dateInput.value                   = '';
                     startInput.value                  = '';
@@ -914,7 +968,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     recurCount.style.display          = 'none';
                     resultDiv.style.display           = 'none';
                     submitBtn.disabled                = false;
-                    submitBtn.innerHTML               = '<i class="bi bi-check-lg me-1"></i>Request walk';
+                    submitBtn.innerHTML               = '<i class="bi bi-check-lg me-1"></i>Request booking';
+                    syncServiceUI();
                     modal.show();
                 }
             };
