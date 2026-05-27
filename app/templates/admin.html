@@ -32,13 +32,16 @@
   overflow: hidden;
 }
 
-/* Portrait phones: stack vertically with calendar on top so the calendar
-   grid isn't squeezed by the detail card's 340px floor. Landscape
-   phones (>=768px) keep the side-by-side layout.
+/* Stack vertically (calendar on top) when there isn't enough horizontal
+   room for the detail card's 340px floor + a usable calendar grid.
+   Fires for portrait phones (<768px wide) AND landscape phones, which
+   report ~800–950px wide but have short viewport heights — orientation
+   + max-height isolates them from tablets, which stay side-by-side.
    Both cards need explicit width:100% because .dash-wrap uses
    align-items: flex-start, so children don't stretch to fill the
    cross-axis when flex-direction becomes column. */
-@media (max-width: 767.98px) {
+@media (max-width: 767.98px),
+       (orientation: landscape) and (max-height: 500px) {
   .dash-wrap {
     flex-direction: column;
   }

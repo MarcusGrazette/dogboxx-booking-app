@@ -50,7 +50,12 @@ def client(app):
 
 def make_user(firstname='Test', lastname='User', email=None, role='client',
               is_admin=False, password='Testpass1!'):
-    """Create and persist a User. Returns the User instance."""
+    """Create and persist a User. Returns the User instance.
+
+    Commits the session so the row is durable across HTTP request
+    boundaries — fixtures consumed by the logged_in_* helpers must be
+    visible to the test client's request connection, which on Postgres
+    uses its own session and won't see uncommitted rows."""
     if email is None:
         import uuid
         email = f'test_{uuid.uuid4().hex[:8]}@example.com'
@@ -63,7 +68,7 @@ def make_user(firstname='Test', lastname='User', email=None, role='client',
         hashed_password=generate_password_hash(password),
     )
     _db.session.add(user)
-    _db.session.flush()
+    _db.session.commit()
     return user
 
 
@@ -82,7 +87,7 @@ def walker_user():
                      email='walker@test.dogboxx.org', role='walker')
     walker = Walker(user_id=user.id)
     _db.session.add(walker)
-    _db.session.flush()
+    _db.session.commit()
     return user
 
 
@@ -93,7 +98,7 @@ def client_user():
                      email='client@test.dogboxx.org', role='client')
     profile = Client(user_id=user.id, onboarding_completed=True)
     _db.session.add(profile)
-    _db.session.flush()
+    _db.session.commit()
     return user
 
 
@@ -105,7 +110,7 @@ def dog(client_user):
     _db.session.flush()
     assoc = DogOwner(dog_id=dog.id, user_id=client_user.id, role='primary')
     _db.session.add(assoc)
-    _db.session.flush()
+    _db.session.commit()
     return dog
 
 
@@ -122,7 +127,7 @@ def service_type():
         active=True,
     )
     _db.session.add(st)
-    _db.session.flush()
+    _db.session.commit()
     return st
 
 

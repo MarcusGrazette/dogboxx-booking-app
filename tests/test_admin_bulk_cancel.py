@@ -1,0 +1,168 @@
+"""
+Tests for /admin/dogs/<dog_id>/cancel-preview and /bulk-cancel.
+
+Covers the day-of-week filter added on top of the existing range + slot
+filters. Empty/missing `days` = no filter (backward compat with any caller
+that doesn't send the field).
+
+Important: conftest fixtures (client_user, dog, service_type) only flush —
+they don't commit. On Postgres, opening a nested `with app.app_context():`
+gives a fresh session that can't see the uncommitted parents, and FK
+checks fail. So we operate inside the autouse `db` fixture's context and
+let `_seed_bookings` commit the whole graph in one transaction.
+"""
+import datetime
+import json
+
+from app import db
+from app.models import Booking
+
+
+def _next_weekday(target_dow, after=None):
+    """Nearest future date whose weekday() == target_dow (0=Mon)."""
+    d = (after or datetime.date.today()) + datetime.timedelta(days=1)
+    while d.weekday() != target_dow:
+        d += datetime.timedelta(days=1)
+    return d
+
+
+def _seed_bookings(user, dog, service_type, dates, slot='Morning'):
+    """Create requested bookings for the given dates. Returns list of IDs.
+
+    Commits the whole session — so the flushed-but-uncommitted fixture
+    rows (user, dog, dog_owner, service_type) are persisted together
+    with the new booking, satisfying Postgres FK constraints."""
+    ids = []
+    for d in dates:
+        b = Booking(
+            user_id=user.id,
+            dog_id=dog.id,
+            service_type_id=service_type.id,
+            date=d,
+            slot=slot,
+            status='requested',
+        )
+        db.session.add(b)
+        db.session.flush()
+        ids.append(b.id)
+    db.session.commit()
+    return ids
+
+
+class TestCancelPreviewDayFilter:
+    """GET /admin/dogs/<id>/cancel-preview?days=…"""
+
+    def test_filter_narrows_to_selected_weekday(self, client_user, dog, service_type,
+                                                 logged_in_admin):
+        tue = _next_weekday(1)  # Tuesday
+        wed = _next_weekday(2)  # Wednesday
+        _seed_bookings(client_user, dog, service_type, [tue, wed])
+        start = min(tue, wed).isoformat()
+        end   = (tue + datetime.timedelta(days=14)).isoformat()
+
+        # Only Tuesdays (weekday=1)
+        resp = logged_in_admin.get(
+            f'/admin/dogs/{dog.id}/cancel-preview'
+            f'?start={start}&end={end}&days=1'
+        )
+        data = resp.get_json()
+        assert resp.status_code == 200, data
+        assert data['success'] is True
+        # Both seeded bookings sit in the range; only Tuesday should match.
+        assert data['count'] == 1
+
+    def test_no_days_param_returns_all_days(self, client_user, dog, service_type,
+                                             logged_in_admin):
+        """Regression guard: existing callers don't send `days` and must keep working."""
+        tue = _next_weekday(1)
+        wed = _next_weekday(2)
+        _seed_bookings(client_user, dog, service_type, [tue, wed])
+        start = min(tue, wed).isoformat()
+        end   = (tue + datetime.timedelta(days=14)).isoformat()
+
+        resp = logged_in_admin.get(
+            f'/admin/dogs/{dog.id}/cancel-preview?start={start}&end={end}'
+        )
+        data = resp.get_json()
+        assert resp.status_code == 200
+        assert data['count'] == 2
+
+    def test_invalid_day_values_ignored_not_400(self, client_user, dog, service_type,
+                                                  logged_in_admin):
+        """Bogus values dropped silently, mirroring slot-filter behaviour."""
+        tue = _next_weekday(1)
+        _seed_bookings(client_user, dog, service_type, [tue])
+        start = tue.isoformat()
+        end   = (tue + datetime.timedelta(days=7)).isoformat()
+
+        # 'foo' is non-int, 9 is out of 0..4 range — both ignored, leaving day=1.
+        resp = logged_in_admin.get(
+            f'/admin/dogs/{dog.id}/cancel-preview'
+            f'?start={start}&end={end}&days=foo&days=9&days=1'
+        )
+        data = resp.get_json()
+        assert resp.status_code == 200, data
+        assert data['count'] == 1
+
+    def test_day_and_slot_filter_combined(self, client_user, dog, service_type,
+                                            logged_in_admin):
+        tue = _next_weekday(1)
+        # Two bookings on Tuesday: AM and PM
+        _seed_bookings(client_user, dog, service_type, [tue], slot='Morning')
+        _seed_bookings(client_user, dog, service_type, [tue], slot='Afternoon')
+        start = tue.isoformat()
+        end   = (tue + datetime.timedelta(days=7)).isoformat()
+
+        resp = logged_in_admin.get(
+            f'/admin/dogs/{dog.id}/cancel-preview'
+            f'?start={start}&end={end}&days=1&slots=Morning'
+        )
+        data = resp.get_json()
+        assert resp.status_code == 200
+        assert data['count'] == 1
+        assert data['bookings'][0]['slot'] == 'Morning'
+
+
+class TestBulkCancelDayFilter:
+    """POST /admin/dogs/<id>/bulk-cancel with the day filter."""
+
+    def test_only_filtered_weekday_cancelled(self, client_user, dog, service_type,
+                                              logged_in_admin):
+        tue = _next_weekday(1)
+        wed = _next_weekday(2)
+        ids = _seed_bookings(client_user, dog, service_type, [tue, wed])
+        start = min(tue, wed).isoformat()
+        end   = (tue + datetime.timedelta(days=14)).isoformat()
+        tue_id, wed_id = (ids[0], ids[1]) if tue < wed else (ids[1], ids[0])
+
+        resp = logged_in_admin.post(
+            f'/admin/dogs/{dog.id}/bulk-cancel',
+            data=json.dumps({'start': start, 'end': end, 'days': [1]}),
+            content_type='application/json',
+        )
+        data = resp.get_json()
+        assert resp.status_code == 200, data
+        assert data['cancelled_count'] == 1
+
+        assert db.session.get(Booking, tue_id).status == 'cancelled'
+        assert db.session.get(Booking, wed_id).status == 'requested'
+
+    def test_all_five_days_equivalent_to_no_filter(self, client_user, dog, service_type,
+                                                     logged_in_admin):
+        """User-facing UX: all-checked = same effect as the old no-day-filter button."""
+        tue = _next_weekday(1)
+        wed = _next_weekday(2)
+        _seed_bookings(client_user, dog, service_type, [tue, wed])
+        start = min(tue, wed).isoformat()
+        end   = (tue + datetime.timedelta(days=14)).isoformat()
+
+        resp = logged_in_admin.post(
+            f'/admin/dogs/{dog.id}/bulk-cancel',
+            data=json.dumps({
+                'start': start, 'end': end, 'days': [0, 1, 2, 3, 4],
+            }),
+            content_type='application/json',
+        )
+        data = resp.get_json()
+        assert resp.status_code == 200
+        assert data['cancelled_count'] == 2
