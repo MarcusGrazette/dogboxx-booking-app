@@ -209,6 +209,7 @@ flask seed-service-types  # seed Group Walk / Drop In / Day Care service types (
 - **`CACHE_VERSION` in `app/static/js/sw.js` is bumped automatically** by a PostToolUse hook (`.claude/hooks/bump-cache-version.sh`) whenever `brand.css`, `reusable-calendar.css`, or `reusable-calendar.js` are edited. For other changes to `PRECACHE_ASSETS`, bump manually.
 - This is a live production app with real clients — be careful with data migrations and deploys
 - **PR workflow**: push changes to `develop` and notify the user to test first. Only open a PR to `main` after the user has confirmed the changes look good. This avoids merging then immediately following up with a fix PR.
+- **Run `git fetch origin` before drafting a PR body**: local `origin/main` is often stale because `main` updates whenever a PR merges. Computing the diff against a stale ref produces PR bodies that list commits already shipped in a prior PR. Always `git fetch origin --prune` first, then use `git log origin/main..develop` for the real commit set.
 - **Notification preferences**: `notification_preference` on `User` is always `'email'` — WhatsApp was removed. The email toggle on `/profile` controls `email_marketing` (newsletter), not booking notification emails.
 - **Invoicing discounts**: double-slot discount (same-day AM+PM walks) and weekly discount (≥5 confirmed walks in ISO week) are both applied in `app/utils/invoicing.py`. Both are configurable via `/admin/revenue`.
 - **Brand name spelling**: `DogBoxx` — capital D and capital B. Used consistently across all templates.
