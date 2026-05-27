@@ -479,6 +479,13 @@
                         <i class="bi bi-layers-fill me-1"></i>Both
                     </label>
                 </div>
+                <label class="form-label small fw-semibold mb-1 d-block">Days of week</label>
+                <div class="btn-group btn-group-sm w-100 mb-3" role="group" aria-label="Days of week">
+                    {% for n, lbl in [(0,'Mon'),(1,'Tue'),(2,'Wed'),(3,'Thu'),(4,'Fri')] %}
+                    <input type="checkbox" class="btn-check bc-day" id="bc-day-{{ n }}" value="{{ n }}" autocomplete="off" checked>
+                    <label class="btn btn-outline-secondary" for="bc-day-{{ n }}">{{ lbl }}</label>
+                    {% endfor %}
+                </div>
                 <button type="button" class="btn btn-sm btn-outline-secondary" id="bc-preview-btn">
                     <i class="bi bi-eye me-1"></i>Preview affected walks
                 </button>
@@ -1102,6 +1109,13 @@ document.addEventListener('DOMContentLoaded', function () {
         return (v === 'Morning' || v === 'Afternoon') ? [v] : [];
     }
 
+    // Returns array of ints 0..4 for the checked day boxes. Server treats
+    // empty as no filter (matches slots) — UI defaults to all 5 checked.
+    function bcSelectedDays() {
+        return Array.from(document.querySelectorAll('.bc-day:checked'))
+            .map(el => parseInt(el.value, 10));
+    }
+
     document.querySelectorAll('.cancel-range-btn').forEach(btn => {
         btn.addEventListener('click', function () {
             bcActiveDogId = this.dataset.dogId;
@@ -1109,6 +1123,7 @@ document.addEventListener('DOMContentLoaded', function () {
             bcStart.value = '';
             bcEnd.value   = '';
             document.getElementById('bc-slot-both').checked = true;
+            document.querySelectorAll('.bc-day').forEach(el => { el.checked = true; });
             bcPreviewRes.innerHTML = '';
             bcConfirmBtn.style.display = 'none';
             bcConfirmBtn.disabled = true;
@@ -1124,6 +1139,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         const params = new URLSearchParams({ start: bcStart.value, end: bcEnd.value });
         bcSelectedSlots().forEach(s => params.append('slots', s));
+        bcSelectedDays().forEach(d => params.append('days', d));
         bcLoading.style.display = '';
         bcPreviewRes.innerHTML  = '';
         bcConfirmBtn.style.display = 'none';
@@ -1175,7 +1191,12 @@ document.addEventListener('DOMContentLoaded', function () {
         fetch(`/admin/dogs/${bcActiveDogId}/bulk-cancel`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
-            body: JSON.stringify({ start: bcStart.value, end: bcEnd.value, slots: bcSelectedSlots() }),
+            body: JSON.stringify({
+                start: bcStart.value,
+                end: bcEnd.value,
+                slots: bcSelectedSlots(),
+                days: bcSelectedDays(),
+            }),
         })
         .then(r => r.json())
         .then(data => {

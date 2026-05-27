@@ -3390,6 +3390,20 @@ def dog_upcoming_bookings(dog_id):
     )
 
 
+def _parse_day_filter(raw_values):
+    """Parse repeated 'days' params into a set of weekday ints (0=Mon..4=Fri).
+    Bogus values are silently dropped, matching the slot-filter approach."""
+    out = set()
+    for v in raw_values:
+        try:
+            n = int(v)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= n <= 4:
+            out.add(n)
+    return out
+
+
 @admin_bp.route("/dogs/<int:dog_id>/cancel-preview")
 @login_required
 @admin_required
@@ -3413,6 +3427,8 @@ def dog_cancel_preview(dog_id):
 
     # Optional slot filter — 0 or 2 valid values = no filter (Both). 1 = narrow.
     slot_filter = [s for s in request.args.getlist('slots') if s in ('Morning', 'Afternoon')]
+    # Optional day-of-week filter — empty set = no filter (matches slot semantic).
+    day_filter = _parse_day_filter(request.args.getlist('days'))
 
     q = (
         Booking.query
@@ -3426,6 +3442,11 @@ def dog_cancel_preview(dog_id):
     if len(slot_filter) == 1:
         q = q.filter(Booking.slot == slot_filter[0])
     bookings = q.order_by(Booking.date, Booking.slot).all()
+
+    # Filter weekdays in Python — avoids the Postgres DOW-offset gotcha
+    # (see CLAUDE.md), and the per-dog dataset is small.
+    if day_filter:
+        bookings = [b for b in bookings if b.date.weekday() in day_filter]
 
     return jsonify(
         success=True,
@@ -3463,6 +3484,8 @@ def dog_bulk_cancel(dog_id):
     # Optional slot filter — 0 or 2 valid values = no filter (Both). 1 = narrow.
     slots_raw   = data.get('slots') or []
     slot_filter = [s for s in slots_raw if s in ('Morning', 'Afternoon')]
+    # Optional day-of-week filter — empty set = no filter (matches slot semantic).
+    day_filter = _parse_day_filter(data.get('days') or [])
 
     q = (
         Booking.query
@@ -3477,6 +3500,10 @@ def dog_bulk_cancel(dog_id):
         q = q.filter(Booking.slot == slot_filter[0])
     bookings = q.order_by(Booking.date).all()
 
+    # Filter weekdays in Python (see preview route for rationale).
+    if day_filter:
+        bookings = [b for b in bookings if b.date.weekday() in day_filter]
+
     if not bookings:
         return jsonify(success=True, cancelled_count=0)
 
@@ -3485,6 +3512,19 @@ def dog_bulk_cancel(dog_id):
     start_fmt = start.strftime('%-d %b')
     end_fmt   = end.strftime('%-d %b')
     slot_label = slot_filter[0].lower() + ' ' if len(slot_filter) == 1 else ''
+
+    # Day-of-week label: only include when filter is a strict subset (1–4 of
+    # the 5 weekdays). All-5 selected = same effective filter as no days at all.
+    DOW_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+    DOW_ABBR  = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+    if 0 < len(day_filter) < 5:
+        sorted_days = sorted(day_filter)
+        if len(sorted_days) == 1:
+            day_label = DOW_NAMES[sorted_days[0]] + ' '
+        else:
+            day_label = '/'.join(DOW_ABBR[d] for d in sorted_days) + ' '
+    else:
+        day_label = ''
 
     for b in bookings:
         b.status       = 'cancelled'
@@ -3500,7 +3540,7 @@ def dog_bulk_cancel(dog_id):
             create_notification(
                 recipient_id      = owner_user.id,
                 notification_type = 'booking_cancelled',
-                title             = f"{dog.name}'s {slot_label}walks have been cancelled {start_fmt}–{end_fmt}",
+                title             = f"{dog.name}'s {day_label}{slot_label}walks have been cancelled {start_fmt}–{end_fmt}",
                 body              = f"{n} booking{'s' if n != 1 else ''} cancelled.",
                 link              = '/',
                 sender_id         = current_user.id,
