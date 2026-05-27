@@ -72,7 +72,7 @@
 
     {# Toast CSS lives in brand.css — loaded by both client and admin layouts #}
 
-    {# Pull-to-refresh indicator (iOS PWA standalone only — see <script> below) #}
+    {# Pull-to-refresh indicator (iOS + Android PWA standalone — see pwa-pull-to-refresh.js) #}
     <style>
         .ptr-indicator {
             position: fixed;
@@ -440,83 +440,6 @@
             });
         }
 
-        // Pull-to-refresh for iOS PWAs (Safari strips the native gesture in
-        // standalone mode). Opt out per-element with data-no-ptr.
-        (function () {
-            if (window.navigator.standalone !== true) return;
-
-            var THRESHOLD = 70;
-            var MAX_PULL  = 120;
-            var startY = 0;
-            var pulling = false;
-            var pullDistance = 0;
-            var indicator = null;
-            var icon = null;
-
-            function ensureIndicator() {
-                if (indicator) return;
-                indicator = document.createElement('div');
-                indicator.className = 'ptr-indicator';
-                indicator.innerHTML = '<i class="bi bi-arrow-clockwise"></i>';
-                document.body.appendChild(indicator);
-                icon = indicator.querySelector('i');
-            }
-
-            function show(distance) {
-                ensureIndicator();
-                indicator.classList.remove('ptr-springback');
-                indicator.style.transform = 'translateY(' + (distance - 60) + 'px)';
-                indicator.style.opacity = Math.min(1, distance / THRESHOLD);
-                icon.style.transform = 'rotate(' + (distance * 3) + 'deg)';
-            }
-
-            function hide() {
-                if (!indicator) return;
-                indicator.classList.add('ptr-springback');
-                indicator.style.transform = 'translateY(-60px)';
-                indicator.style.opacity = '0';
-            }
-
-            function startRefresh() {
-                ensureIndicator();
-                indicator.classList.remove('ptr-springback');
-                indicator.classList.add('ptr-refreshing');
-                indicator.style.transform = 'translateY(20px)';
-                indicator.style.opacity = '1';
-                window.location.reload();
-            }
-
-            document.addEventListener('touchstart', function (e) {
-                if (window.scrollY > 0) return;
-                if (e.target.closest && e.target.closest('[data-no-ptr]')) return;
-                startY = e.touches[0].clientY;
-                pulling = true;
-                pullDistance = 0;
-            }, { passive: true });
-
-            document.addEventListener('touchmove', function (e) {
-                if (!pulling) return;
-                if (window.scrollY > 0) { pulling = false; hide(); return; }
-                var dy = e.touches[0].clientY - startY;
-                if (dy <= 0) { pulling = false; hide(); return; }
-                // Damped pull — feels like rubber band
-                pullDistance = Math.min(MAX_PULL, dy * 0.5);
-                show(pullDistance);
-                if (e.cancelable) e.preventDefault();
-            }, { passive: false });
-
-            document.addEventListener('touchend', function () {
-                if (!pulling) return;
-                pulling = false;
-                if (pullDistance >= THRESHOLD) {
-                    startRefresh();
-                } else {
-                    hide();
-                }
-                pullDistance = 0;
-            }, { passive: true });
-        }());
-
         // Bootstrap modal a11y: blur any descendant focus before Bootstrap applies
         // aria-hidden during close, otherwise the browser warns about hiding a
         // focused element from assistive tech. hide.bs.modal bubbles to document.
@@ -527,6 +450,8 @@
             }
         });
     </script>
+
+    <script src="{{ url_for('static', filename='js/pwa-pull-to-refresh.js') }}" nonce="{{ csp_nonce }}"></script>
 </body>
 
 </html>

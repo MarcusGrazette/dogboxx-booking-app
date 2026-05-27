@@ -27,7 +27,7 @@ Always check out `develop` before starting new work.
 | Backend | Python 3.12, Flask, SQLAlchemy, Flask-Migrate (Alembic) |
 | Auth | Flask-Login, Flask-WTF (CSRF), Flask-Limiter (rate limiting) |
 | Database | PostgreSQL (prod), SQLite supported for quick local dev |
-| Frontend | Jinja2, Bootstrap 5, AdminLTE 3, Bootstrap Icons, vanilla JS |
+| Frontend | Jinja2, Bootstrap 5.3, Bootstrap Icons, vanilla JS (admin layout refactored from AdminLTE in PR #91) |
 | Email | Resend API (`noreply@dogboxx.org` verified) |
 | Push | Web Push API via `pywebpush` (VAPID); iOS PWA service worker in `app/static/js/sw.js` |
 | CI | GitHub Actions — Postgres-backed: `flask db upgrade` → `flask db check` → `pytest` on push/PR |
