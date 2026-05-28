@@ -561,12 +561,11 @@ document.addEventListener('DOMContentLoaded', function () {
     let activeDogId  = null;
     let activeUserId = null;
 
-    // ── Min date: tomorrow ──────────────────────────────────────────────────
+    // Single-booking date has no min — admin can record past or same-day bookings.
+    // Recurring start stays future-only (no use case for past-dated recurring sets).
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
-    dateInput.min  = tomorrowStr;
-    startInput.min = tomorrowStr;
+    startInput.min = tomorrow.toISOString().slice(0, 10);
 
     // ── Open modal ──────────────────────────────────────────────────────────
     document.querySelectorAll('.book-btn').forEach(btn => {

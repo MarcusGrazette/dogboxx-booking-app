@@ -337,12 +337,17 @@ class Booking(db.Model):
     confirmed_at = db.Column(db.DateTime, nullable=True)
     cancelled_at = db.Column(db.DateTime, nullable=True)
     cancelled_by = db.Column(db.Enum('client', 'admin', name='cancelled_by_type'), nullable=True)
+    # NULL = client booked it themselves (default for legacy rows and all client-route
+    # bookings). Non-null + that user is_admin = admin-initiated booking.
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
     # Relationships
-    user = db.relationship('User', backref=db.backref('bookings', lazy=True))
+    user = db.relationship('User', foreign_keys=[user_id],
+                           backref=db.backref('bookings', lazy=True))
     dog = db.relationship('Dog', backref=db.backref('bookings', lazy=True))
     walker = db.relationship('Walker', backref=db.backref('bookings', lazy=True))
     service_type = db.relationship('ServiceType', backref=db.backref('bookings', lazy=True))
+    created_by = db.relationship('User', foreign_keys=[created_by_id])
     status_history = db.relationship('BookingStatusChange', back_populates='booking',
                                      order_by='BookingStatusChange.created_at', lazy='dynamic')
 
@@ -367,6 +372,7 @@ class Booking(db.Model):
             'confirmed_at': self.confirmed_at.isoformat() if self.confirmed_at else None,
             'cancelled_at': self.cancelled_at.isoformat() if self.cancelled_at else None,
             'cancelled_by': self.cancelled_by,
+            'created_by_id': self.created_by_id,
         }
 
 

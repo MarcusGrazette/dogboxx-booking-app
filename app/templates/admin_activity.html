@@ -36,6 +36,7 @@
                 <option value="all">All activity</option>
                 <option value="client">Clients only</option>
                 <option value="walker">Walkers only</option>
+                <option value="admin">Admin only</option>
               </select>
             </div>
           </div>
@@ -99,11 +100,17 @@
                 {# Who #}
                 <td class="align-middle">
                   <div class="d-flex align-items-center gap-2">
-                    {# Avatar circle #}
+                    {# Avatar circle — colour-coded by actor type #}
                     {% if event.actor_type == 'walker' %}
                     <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 fw-bold"
                          style="width:32px;height:32px;font-size:0.68rem;
                                 background:rgba(107,33,168,0.1);color:#6b21a8;">
+                      {{ event.initials }}
+                    </div>
+                    {% elif event.actor_type == 'admin' %}
+                    <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 fw-bold"
+                         style="width:32px;height:32px;font-size:0.68rem;
+                                background:rgba(253,126,20,0.12);color:#c45c00;">
                       {{ event.initials }}
                     </div>
                     {% else %}
@@ -124,6 +131,11 @@
                         <span class="badge fw-normal"
                               style="font-size:0.62rem;background:rgba(107,33,168,0.1);color:#6b21a8;padding:2px 6px;">
                           Walker
+                        </span>
+                        {% elif event.actor_type == 'admin' %}
+                        <span class="badge fw-normal"
+                              style="font-size:0.62rem;background:rgba(253,126,20,0.12);color:#c45c00;padding:2px 6px;">
+                          Admin
                         </span>
                         {% else %}
                         <span class="badge fw-normal"
