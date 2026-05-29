@@ -1535,7 +1535,8 @@ def activity_feed():
 
     # ── New bookings created this month (non-cancelled) ───────────────────────
     for b in (Booking.query
-              .options(joinedload(Booking.user), joinedload(Booking.dog), joinedload(Booking.service_type))
+              .options(joinedload(Booking.user), joinedload(Booking.dog),
+                       joinedload(Booking.service_type), joinedload(Booking.created_by))
               .filter(Booking.created_at >= dt_start, Booking.created_at < dt_end,
                       ~Booking.status.in_(['cancelled', 'rejected']))
               .all()):
@@ -1549,13 +1550,27 @@ def activity_feed():
             badge, verb = 'waitlisted', 'Waitlisted for'
         else:
             badge, verb = 'requested', 'Requested'
-        events.append(_make_event(
-            ts=b.created_at, actor_type='client', actor_name=b.user.full_name,
-            actor_id=b.user_id,
-            description=f"{verb} {b.dog.name}'s {b.slot.lower()} {svc_label} on {walk_date}",
-            badge=badge, activity_type='booking',
-            link=url_for('admin.client_detail', client_id=b.user_id),
-        ))
+        # Admin-initiated booking: render with the admin as actor and surface
+        # the client name in the description. Falls back to client actor when
+        # created_by_id is null (legacy rows + all client-route bookings).
+        admin_creator = b.created_by if (b.created_by_id and b.created_by and b.created_by.is_admin) else None
+        if admin_creator:
+            events.append(_make_event(
+                ts=b.created_at, actor_type='admin',
+                actor_name=admin_creator.full_name, actor_id=admin_creator.id,
+                description=(f"{verb} {b.dog.name}'s {b.slot.lower()} {svc_label} "
+                             f"on {walk_date} for {b.user.full_name}"),
+                badge=badge, activity_type='booking',
+                link=url_for('admin.client_detail', client_id=b.user_id),
+            ))
+        else:
+            events.append(_make_event(
+                ts=b.created_at, actor_type='client', actor_name=b.user.full_name,
+                actor_id=b.user_id,
+                description=f"{verb} {b.dog.name}'s {b.slot.lower()} {svc_label} on {walk_date}",
+                badge=badge, activity_type='booking',
+                link=url_for('admin.client_detail', client_id=b.user_id),
+            ))
 
     # ── Cancellations this month ───────────────────────────────────────────────
     for b in (Booking.query
@@ -3060,8 +3075,10 @@ def book_for_dog():
         except ValueError:
             return jsonify(success=False, message="Invalid date format"), 400
 
-        if booking_date <= date_type.today():
-            return jsonify(success=False, message="Date must be in the future"), 400
+        # Admin bookings allow any date — past, today, or future. Used for
+        # back-filling missed bookings (so they hit invoicing) or recording a
+        # same-day walk that wasn't booked in advance. Closure / capacity /
+        # duplicate-active-booking checks downstream still apply.
 
         valid_slots = ('Morning', 'Afternoon') if is_drop_in else ('Morning', 'Afternoon', 'Both')
         if slot not in valid_slots:
@@ -3106,6 +3123,7 @@ def book_for_dog():
                 date=booking_date,
                 slot=s,
                 status='waitlisted',
+                created_by_id=current_user.id,
             )
             db.session.add(booking)
 
@@ -3130,18 +3148,37 @@ def book_for_dog():
 
         date_str_fmt        = booking_date.strftime('%a %-d %b')
         walker_date_str_fmt = booking_date.strftime('%-d %b %Y')
+        admin_first         = current_user.firstname or 'Admin'
+        admin_books_self    = (current_user.id == int(user_id))
+        is_past             = booking_date < date_type.today()
+        # Use 'walk' / 'drop-in' in client-facing notifications — matches the
+        # canonical svc_label pattern used in client/routes.py. service.name
+        # ("Group Walk" / "Drop In") is admin-facing only.
+        svc_label = 'drop-in' if is_drop_in else 'walk'
         for b in bookings_created:
             if b.status == 'confirmed':
                 walker_first = b.walker.user.firstname if b.walker and b.walker.user else None
+                if admin_books_self:
+                    # Admin happens to own this dog — match the client flow's wording
+                    client_title = f"{dog.name}'s {b.slot.lower()} {svc_label} on {date_str_fmt} has been confirmed"
+                    client_body  = f'Booked with {walker_first}.' if walker_first else 'Walker assigned.'
+                else:
+                    client_title = f"{admin_first} booked a {b.slot.lower()} {svc_label} for {dog.name} on your behalf"
+                    if walker_first:
+                        client_body = f"Booked on {date_str_fmt} with {walker_first}."
+                    else:
+                        client_body = f"Booked on {date_str_fmt}."
                 create_notification(
                     recipient_id=user_id,
                     notification_type='booking_confirmed',
-                    title=f"{dog.name}'s {b.slot.lower()} {service_label} on {date_str_fmt} has been confirmed",
-                    body=f'Booked with {walker_first}.' if walker_first else 'Walker assigned.',
+                    title=client_title,
+                    body=client_body,
                     link='/',
                     sender_id=current_user.id,
                 )
-                if b.walker.user_id != current_user.id:
+                # Skip walker notification for past dates — the walk already
+                # happened (or didn't); pinging the walker about it is noise.
+                if b.walker.user_id != current_user.id and not is_past:
                     create_notification(
                         recipient_id=b.walker.user_id,
                         notification_type='walker_assigned',
@@ -3283,6 +3320,7 @@ def recurring_for_dog():
                 date=d,
                 slot=slot,
                 status='waitlisted',
+                created_by_id=current_user.id,
             )
             db.session.add(booking)
 
