@@ -196,9 +196,13 @@ never hear about.
 - **Bulk-cancel** (`dog_bulk_cancel`, `admin/routes.py:3578`) notifies dog owners only — the walker
   whose schedule just changed isn't told.
 
-### 7.5 Walk pickup/drop-off events produce no notifications
-`WalkEvent` rows (walker-recorded pickup/drop-off) create **zero** notifications. Clients get nothing
-when their dog is collected or dropped home — a likely-desirable addition.
+### 7.5 Walk pickup/drop-off events aren't recorded at all
+`WalkEvent` is a **third dead table** (alongside `BookingStatusChange` §8.2 and the `dental_*` types
+§7.6): the model + `Booking` relationship (`models.py:577`) + `__init__.py` import exist, but **no code
+ever writes a `WalkEvent` row, and there is no pickup/drop-off recording UI**. So clients get nothing
+when their dog is collected or dropped home — and the gap is deeper than notifications: the events
+themselves don't exist. Recording pickup/drop-off is a **prerequisite feature**, not just a missing
+notification (see §9.9 D2).
 
 ### 7.6 Dead notification types
 `dental_confirmed` and `dental_available` are defined in `NOTIFICATION_META`
@@ -291,7 +295,7 @@ admin schedule changes are filed under "client" or "walker" and never appear und
 | Closure created (`add_closure`) | ✅ per-booking cancels | ⚠️ partial — the resulting cancellations appear (mis-attributed, §8.3); the closure itself is not an event |
 | Broadcast sent (`broadcasts`) | ✅ clients | ❌ |
 | Dog access revoked (`revoke-access`) | ✅ secondary | ❌ |
-| Walk pickup / drop-off (`WalkEvent`) | none | ❌ |
+| Walk pickup / drop-off (`WalkEvent`) | none | ❌ — and the events aren't recorded at all (dead table, §7.5) |
 
 ### 8.5 Grouping consistency (feed vs notifications)
 
@@ -314,3 +318,227 @@ The feed is **uniformly per-row (individual)** and never groups.
 - **Badge shows current status, not status at the event's timestamp.** A booking created `requested`
   then later confirmed renders as "Booked" *at its creation time* — so the feed can misrepresent what
   happened when, and the confirmation itself has no row (§8.4).
+
+---
+
+# Part II — Target design & implementation plan
+
+> This half is a **build plan**, written to be handed to a future implementer (likely me) with no
+> other context. It turns the findings in Part I (§1–8) into a concrete, sessioned roadmap.
+> Sessions are independently shippable and ordered so each builds on the last. Line numbers reference
+> the tree at the time of writing (commit `4bce185`) — re-grep before editing.
+
+## 9.1 Target architecture
+
+Two layers, sharing one set of action points:
+
+1. **Action log (system of record).** Durable, append-only, **never user-capped**. Records *what
+   happened and who did it*, with `from → to` and a timestamp. Built on the already-migrated
+   `BookingStatusChange` table for bookings, plus existing availability / closure / walk-event tables.
+   Drives `/admin/activity`.
+2. **Notifications (alerts).** Emitted from the same action points, **grouped per recipient** for bulk
+   actions, and capped (the bell is ephemeral). Drives bell + Web Push.
+
+**Five load-bearing principles:**
+
+- **P1 — One chokepoint for booking transitions.** All status changes route through
+  `transition_booking()` (§9.3). This is why the §7 gaps can't recur: you cannot change a status
+  without logging it and (optionally) notifying. *Not* an ORM `after_flush` listener — two sites use
+  bulk `.update()` (`admin/routes.py:2440`, `:2529`) that bypass ORM events, and the listener can't see
+  `current_user` reliably.
+- **P2 — Attribution is recorded, never inferred.** The feed reads `changed_by_id` / `created_by_id`
+  from the log. It must never guess the actor from row ownership (the current §8.3 bug).
+- **P3 — One text source.** A single `summarise()` produces notification text *and* feed descriptions
+  for a given event kind, so wording is identical regardless of who triggered it (§8.6, §7.7).
+- **P4 — Group at emit time for notifications; keep rows granular for the log.** Notifications
+  consolidate per recipient (one "5 walks booked" alert). The action log keeps one row per booking
+  (audit needs granularity) and *visually* clusters via a `batch_id` stamped on all rows from one bulk
+  action (**decided D4: collapsible clusters**, §9.6).
+- **P5 — Don't cap the audit, do cap the bell.** Caps apply only to `Notification` (§9.7); the action
+  log retains everything.
+
+## 9.2 Schema changes
+
+| Change | Table | Migration | Notes |
+|---|---|---|---|
+| *(none — already migrated)* | `booking_status_changes` | — | Model + table + `Booking.status_history` exist. Just start writing rows. |
+| Add `created_by_id` (FK users, nullable, indexed) | `walker_unavailabilities` | new | Fixes §8.3 admin-on-behalf attribution. Backfill NULL = legacy/self-service. |
+| Add `created_by_id` (FK users, nullable, indexed) | `walker_adhoc_availability` | new | Same. |
+| Add `batch_id` (String(36), nullable, indexed) | `booking_status_changes` | new (Session 1) | Correlates rows from one bulk action so the feed clusters them (decided D4). Generated once per bulk action, stamped on every BSC row it produces. Land the column in Session 1 so bulk paths can stamp it from the start. |
+
+All schema work goes through Alembic (`flask db migrate` + commit the file); CI's `flask db upgrade` →
+`flask db check` will fail otherwise. Backfill existing rows in the same migration (set `created_by_id`
+NULL — interpreted as "self-service / unknown").
+
+## 9.3 Core helpers (new code)
+
+**`app/utils/booking_status.py`** — the transition chokepoint (P1):
+
+```python
+_UNSET = object()
+
+def transition_booking(booking, to_status, *, actor_id, notes=None,
+                       walker_id=_UNSET, batch_id=None):
+    """Mutate a booking's status and append a BookingStatusChange row.
+    Sets confirmed_at / cancelled_at / cancelled_by as implied by to_status.
+    If walker_id is passed, updates it (None to unassign). Returns the BSC row.
+    Caller still commits."""
+
+def record_booking_created(booking, *, actor_id, batch_id=None):
+    """First BSC row for a new booking: from_status=None, to_status=booking.status."""
+
+def bulk_transition(bookings, to_status, *, actor_id, notes=None, batch_id=None):
+    """Loop helper for the bulk sites — replaces the two raw .update() calls so
+    each affected row gets a BSC. Returns the list of BSC rows."""
+```
+
+**`app/utils/notifications.py`** — grouping (P3, P4):
+
+```python
+class NotificationBatch:
+    """Collects notification intents during one request, then emits ONE grouped
+    notification per (recipient_id, kind) on flush(). Reused by every bulk path
+    so client- and admin-initiated actions group identically."""
+    def __init__(self, sender_id): ...
+    def add(self, recipient_id, kind, **payload): ...   # kind e.g. 'booking_confirmed'
+    def flush(self): ...   # groups, calls summarise(), calls create_notification()
+
+def summarise(kind, payloads) -> tuple[title, body, ntype, link]:
+    """Single source of notification text. 1 payload → existing single-item wording;
+    N payloads → grouped wording ('Daisy's 5 walks confirmed'). Also exported for the
+    feed so descriptions match (P3)."""
+```
+
+Existing inline-grouped client paths (`pause_walks`, `book_both`, `recurring_booking`) are refactored
+onto `NotificationBatch` so the bespoke summarisation logic lives in one place.
+
+## 9.4 Notification text & grouping spec
+
+The canonical contract `summarise()` implements. (Recipient fan-out is orthogonal — every row applies
+per recipient.)
+
+| Event kind | Single-item text | Grouped (N) text | Type |
+|---|---|---|---|
+| `booking_confirmed` | "Daisy's morning walk on Mon 1 Jun confirmed" | "Daisy's 5 walks confirmed (Mon 1 – Fri 5 Jun)" | `booking_confirmed` |
+| `booking_requested` | "Daisy's morning walk on Mon 1 Jun requested" | "Daisy's 5 walks requested" | `booking_requested` |
+| `booking_waitlisted` | "…on the waitlist" | "3 walks waitlisted" | `booking_requested` |
+| `booking_cancelled` | "…cancelled" | "5 walks cancelled (Mon 1 – Fri 5 Jun)" | `booking_cancelled` |
+| `booking_reset` *(new)* | "Daisy's Mon 1 Jun walk needs a new walker" | "3 of your walks are being reassigned" | `system` |
+| `walker_assigned` | "Assigned a walk on 1 Jun — Daisy, Morning" | "Assigned 5 walks (1–5 Jun)" | `walker_assigned` |
+
+## 9.5 Closing the gaps — §7/§8 → change map
+
+| Finding | Fix | Session |
+|---|---|---|
+| §7.1 walker self-service reset is silent to clients | `transition_booking` reset → emit `booking_reset` (grouped per client) | 3 |
+| §7.2 `deactivate_walker` / `admin_add_unavailability` reset, notify nobody | same — both routed through `bulk_transition` + batch notify | 3 |
+| §7.3 admin pending bookings never reach client | notify client on requested/waitlisted (not just confirmed) in `book_for_dog`/`recurring_for_dog` | 2 |
+| §7.4 closures & bulk-cancel skip co-owners + walker | expand recipients (co-owners, ex-walker) in `add_closure`, `dog_bulk_cancel` | 3 |
+| §7.5 walk pickup/drop-off not recorded (dead `WalkEvent` table) | **out of scope** (decided D2) — recording pickup/drop-off is a separate prerequisite feature; revisit notifications once events exist | — |
+| §7.6 dead `dental_*` types | delete from `NOTIFICATION_META` | 2 |
+| §7.7 wording inconsistency | route walker text through `summarise()` (`'walk'`/`'drop-in'`) | 2 |
+| §7.8 admin bulk grouping inconsistent | `NotificationBatch` in `recurring_for_dog`, `book_for_dog`, `add_closure`, `dog_bulk_cancel` | 2 |
+| §7.9 client bookings don't notify walker | **decided D3: yes** — notify the walker (grouped) on auto-assign, matching admin assignment | 3 |
+| §8.2 `BookingStatusChange` never written | write via `transition_booking` everywhere | 1 |
+| §8.3 cancellations/admin-unavail mis-attributed | feed reads `changed_by_id`/`created_by_id` | 4 |
+| §8.4 missing events (confirm, slot move, schedule edit, closure, broadcast) | feed unions the log sources (walk events excluded — not recorded, §7.5) | 4 |
+| §8.5 feed/notif grouping mismatch | keep feed rows granular; `batch_id` collapses bulk actions into one expandable row (decided D4) | 4–5 |
+| §8.6 badge = current status, not transition | feed badge from `to_status` of the BSC row | 4 |
+
+## 9.6 Activity feed rebuild (§8 → robust action log)
+
+Rewrite `activity_feed()` (`admin/routes.py:1493`) to **union the action-log sources** instead of
+reconstructing from current state:
+
+- `BookingStatusChange` — every booking event. Actor = `changed_by`; badge = `to_status`; description
+  via `summarise()`. Covers creation, confirm, reject, cancel, slot-change (note), reset/reassign.
+- `WalkerUnavailability` / `WalkerAdHocAvailability` — actor = `created_by_id` if set, else the walker.
+- `Closure` — "DogBoxx closed on <date>" event (actor = `created_by_id`, already on the model).
+- `Broadcast` — "broadcast sent to N clients" (actor = `sender_id`).
+- *(future)* `WalkEvent` — pickup / drop-off, **once recording is built** (§7.5, D2). Not a source today.
+
+Then: actor filter ("Admin only" now correct, P2); `batch_id` collapses a bulk action into one
+expandable row (decided D4); paginate the union (it can be large — keep the month scope, index
+`created_at` on each source). Per-booking history is now also available via `Booking.status_history`
+for a future booking-detail timeline.
+
+## 9.7 Notification caps review
+
+Current: `NOTIF_DB_CAP=50`, `NOTIF_PAGE_CAP=20`, `NOTIF_BELL_CAP=5` (`notifications.py:22-24`).
+
+- The **action log is uncapped** (P5) — full history now lives there, so the bell no longer needs to.
+- Grouping (§9.4) cuts volume sharply, especially for admins (the heaviest recipients via fan-out).
+- **Decided (D1):** bell dropdown **5** (unchanged); page **20 → 50**; DB store **50 → 100**. *Not*
+  role-aware — a single flat cap for all users; admins rely on the action-log feed for deep history.
+  No migration — these are constants in `notifications.py:22-24`.
+
+## 9.8 Session breakdown (handoff checklist)
+
+Each session is one PR to `develop`, green CI, independently shippable.
+
+**Session 1 — Action-log foundation (no behaviour change).**
+- Migration: add `batch_id` (String(36), nullable, indexed) to `booking_status_changes` (D4) so bulk
+  paths can stamp it from the start.
+- Add `app/utils/booking_status.py` (`transition_booking`, `record_booking_created`, `bulk_transition`);
+  bulk paths generate one `batch_id` (`uuid4().hex`) and pass it to every row.
+- Refactor all ~17 transition sites to use it. Sites: creation — `client/routes.py` index POST, `book`,
+  `book_both`, `book_drop_in`, `recurring_booking`; `admin/routes.py` `book_for_dog`, `recurring_for_dog`.
+  Confirm/assign — `_maybe_auto_confirm`, `assign_walker`. Reject — `decline_booking`. Cancel —
+  `cancel_booking`, `pause_walks`, `dog_bulk_cancel`, `add_closure`. Reset — `add_unavailability`,
+  `schedule_changes_batch`, `walker_schedule_json`, `admin_add_unavailability`, `deactivate_walker`
+  (convert the two `.update()` calls to `bulk_transition`).
+- **DoD:** every transition writes one BSC row with correct `from`/`to`/`changed_by_id`. Notifications
+  unchanged. **Tests:** new `tests/test_booking_status_log.py` — one assertion per transition type
+  (create→requested/confirmed/waitlisted, confirm, reject, client/admin cancel, reset). Extend
+  `test_admin_assign_walker.py`, `test_walker_schedule_modal_reset.py`, `test_admin_bulk_cancel.py` to
+  assert BSC rows + actor.
+
+**Session 2 — Notification grouping + text unification.**
+- Add `NotificationBatch` + `summarise()`. Migrate `recurring_for_dog`, `book_for_dog`, `add_closure`,
+  `dog_bulk_cancel` to grouped emit (§7.8). Refactor `pause_walks`, `book_both`, `recurring_booking`
+  onto the shared helper. Fix §7.3 (notify on pending), §7.6 (drop `dental_*`), §7.7 (wording).
+- **DoD:** an admin booking 5 recurring walks produces **one** client notification, text-identical to
+  the client-initiated equivalent. **Tests:** new `tests/test_notification_grouping.py`; update
+  `test_notifications.py`. Assert N-row bulk action → 1 notification/recipient with correct count + text.
+
+**Session 3 — Close reset/recipient gaps.**
+- `booking_reset` notification on every reset path (§7.1, §7.2), grouped per client. Expand closure /
+  bulk-cancel recipients to co-owners + ex-walker (§7.4). Notify the walker (grouped) on client-booking
+  auto-assign (§7.9, decided D3).
+- **DoD:** no reset path is silent to the client; closures notify co-owners + walker. **Tests:** extend
+  `test_walker_schedule_changes.py`, `test_walker_schedule_modal_reset.py`; new cases in
+  `test_admin_bulk_cancel.py` and a closures test for co-owner/walker fan-out.
+
+**Session 4 — Activity feed → action log.**
+- Migration: `created_by_id` on the two availability tables; set it in `admin_add_unavailability` (+
+  walker self-service sets it to the walker's user, or leaves NULL). Rewrite `activity_feed()` to union
+  the log sources (§9.6); actor from the log; badge from `to_status`; add Closure / Broadcast sources.
+  (No `WalkEvent` source — not recorded, §7.5.)
+- **DoD:** confirmations, slot moves, closures, broadcasts all appear; "Admin only" filter returns
+  exactly admin-initiated events. **Tests:** new `tests/test_activity_feed.py` — confirm event presence
+  per source, correct `actor_type` per initiator, admin-filter correctness, badge = transition.
+
+**Session 5 — Caps + feed clustering (polish).**
+- Apply cap decision (D1: page 50, store 100). Feed clustering: consume `batch_id` to collapse a bulk
+  action into one expandable feed row (D4).
+- **DoD:** caps updated; bulk actions render as one expandable feed row that expands to the individual
+  bookings. **Tests:** cap-pruning test; feed-clustering test (bulk action → 1 cluster row → N children).
+- *(Out of scope, D2):* walk-event recording + notifications — a separate feature; the `WalkEvent` table
+  is currently dead (§7.5).
+
+## 9.9 Decisions
+
+- **D1 — Caps → DECIDED: bump.** Page 20→50, DB store 50→100, bell 5 (unchanged). Flat for all users,
+  not role-aware; admins use the action-log feed for deep history. (§9.7)
+- **D2 — Walk-event notifications → DECIDED: out of scope.** Pickup/drop-off events **aren't recorded**
+  — `WalkEvent` is a dead table (§7.5). Recording them (a walker UI + writes) is a separate prerequisite
+  feature; notifications are revisited only once the events exist. Removed from Sessions 4 & 5.
+- **D3 — Walker auto-assign notification → DECIDED: yes.** Client-booking auto-assign sends the walker a
+  grouped `walker_assigned`, matching admin assignment. (§7.9, Session 3)
+- **D4 — Feed clustering / `batch_id` → DECIDED: collapsible clusters.** `batch_id` on
+  `booking_status_changes` (Session 1 migration); the feed collapses a bulk action into one expandable
+  row (Session 5). (§9.6)
+- **D5 — Backfill → RECOMMENDED (not yet confirmed): start fresh.** Begin the action log empty; keep the
+  legacy current-state reconstruction as a read-only fallback for pre-rollout months. Backfilling
+  `BookingStatusChange` from `Booking` timestamps is possible but approximate (no real actor on old
+  rows). Confirm before Session 4. *(Only remaining open item.)*

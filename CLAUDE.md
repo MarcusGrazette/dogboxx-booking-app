@@ -82,7 +82,7 @@ run.py                 App entry point + Flask CLI commands (create-admin, make-
 | `Closure` | Date on which DogBoxx is closed. Creating a closure rejects new bookings on that date and cancels existing active ones (with notifications). |
 | `Broadcast` | Admin one-shot message to clients booked on a given date/slot. Recipients resolved at send time from confirmed bookings (primary + secondary co-owners). Delivered via bell, email, or both; rows kept for audit. |
 | `PushSubscription` | Stored Web Push endpoint per user/device (for iOS PWA + Android push notifications). |
-| `WalkEvent` | Walker-recorded pickup/drop-off events for individual bookings. |
+| `WalkEvent` | Intended for walker-recorded pickup/drop-off events per booking. **Currently unused — model + `Booking` relationship exist, but NO code writes rows and there is no pickup/drop-off recording UI, so the table is always empty.** Recording these is an unbuilt prerequisite feature — see `docs/NOTIFICATIONS.md` §7.5. |
 | `Notification` | In-app bell notifications (read/unread) |
 
 **Booking statuses:** `requested` → `confirmed` / `waitlisted` / `cancelled`
