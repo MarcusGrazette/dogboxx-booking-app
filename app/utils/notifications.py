@@ -35,8 +35,6 @@ NOTIFICATION_META = {
     'same_day_request':     ('bi-lightning-fill',      '#fd7e14'),   # orange — urgent same-day
     'walker_assigned':      ('bi-person-check-fill',   '#0d6efd'),   # blue
     'walker_availability':  ('bi-calendar-x-fill',     '#fd7e14'),   # orange
-    'dental_confirmed':     ('bi-check-circle-fill',   '#198754'),   # green
-    'dental_available':     ('bi-calendar-event-fill', '#E02FAC'),   # pink
     'system':               ('bi-info-circle-fill',    '#6c757d'),   # grey
 }
 
