@@ -3151,19 +3151,23 @@ def book_for_dog():
         admin_first         = current_user.firstname or 'Admin'
         admin_books_self    = (current_user.id == int(user_id))
         is_past             = booking_date < date_type.today()
+        # Use 'walk' / 'drop-in' in client-facing notifications — matches the
+        # canonical svc_label pattern used in client/routes.py. service.name
+        # ("Group Walk" / "Drop In") is admin-facing only.
+        svc_label = 'drop-in' if is_drop_in else 'walk'
         for b in bookings_created:
             if b.status == 'confirmed':
                 walker_first = b.walker.user.firstname if b.walker and b.walker.user else None
                 if admin_books_self:
-                    # Admin happens to own this dog — original wording reads more naturally
-                    client_title = f"{dog.name}'s {b.slot.lower()} {service_label} on {date_str_fmt} has been confirmed"
+                    # Admin happens to own this dog — match the client flow's wording
+                    client_title = f"{dog.name}'s {b.slot.lower()} {svc_label} on {date_str_fmt} has been confirmed"
                     client_body  = f'Booked with {walker_first}.' if walker_first else 'Walker assigned.'
                 else:
-                    client_title = f"{admin_first} booked a {service_label} on {date_str_fmt} on your behalf"
-                    body_parts   = [f"{dog.name} — {b.slot}"]
+                    client_title = f"{admin_first} booked a {b.slot.lower()} {svc_label} for {dog.name} on your behalf"
                     if walker_first:
-                        body_parts.append(f"with {walker_first}")
-                    client_body  = ". ".join(body_parts) + "."
+                        client_body = f"Booked on {date_str_fmt} with {walker_first}."
+                    else:
+                        client_body = f"Booked on {date_str_fmt}."
                 create_notification(
                     recipient_id=user_id,
                     notification_type='booking_confirmed',
