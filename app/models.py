@@ -465,8 +465,9 @@ class Notification(db.Model):
     sender_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # None = system
 
     # Type drives icon/colour in UI. Keep as string for flexibility.
-    # Expected values: booking_confirmed, booking_cancelled, booking_requested,
-    #                  walker_assigned, dental_confirmed, dental_available, system
+    # Expected values (see NOTIFICATION_META in app/utils/notifications.py):
+    #   booking_confirmed, booking_cancelled, booking_requested, same_day_request,
+    #   walker_assigned, walker_availability, system
     notification_type = db.Column(db.String(50), nullable=False, index=True)
 
     title = db.Column(db.String(200), nullable=False)
@@ -559,32 +560,6 @@ class PushSubscription(db.Model):
                             onupdate=lambda: datetime.now(timezone.utc))
 
     user = db.relationship('User', backref=db.backref('push_subscriptions', lazy=True))
-
-
-class WalkEvent(db.Model):
-    """Tracks pickup/dropoff events during walks."""
-    __tablename__ = 'walk_events'
-
-    id = db.Column(db.Integer, primary_key=True)
-    booking_id = db.Column(db.Integer, db.ForeignKey('bookings.id'), nullable=False)
-    event_type = db.Column(db.Enum('en_route', 'picked_up', 'dropped_off',
-                                    name='walk_event_type'), nullable=False)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-    latitude = db.Column(db.Float, nullable=True)
-    longitude = db.Column(db.Float, nullable=True)
-
-    booking = db.relationship('Booking', backref=db.backref('walk_events', lazy=True,
-                                                             order_by='WalkEvent.created_at'))
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'booking_id': self.booking_id,
-            'event_type': self.event_type,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'latitude': self.latitude,
-            'longitude': self.longitude,
-        }
 
 
 class Closure(db.Model):

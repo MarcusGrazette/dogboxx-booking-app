@@ -37,7 +37,7 @@
 | 21 | P1 | M | ✅ | **Walker management** | Create walkers. Set/edit default schedule. Mark unavailability. |
 | 22 | P2 | S | ✅ | **Admin is also a walker** | is_admin flag on User. Admin can be a walker. "My Pickup List" in admin sidebar. |
 | 23 | P2 | M | ✅ | **Admin dashboard stats** | Stat cards (pending, clients, dogs, walkers), 4-week booking chart by slot+status, walker availability grid. Revenue on /admin/revenue. |
-| 24 | P3 | L | 🔲 | **Dental cleans service type** | Admin: manage available date+time slots. Client: book from available slots. Stubbed in nav. |
+| 24 | P3 | L | 🔲 | **Dental cleans service type** | Admin: manage available date+time slots. Client: book from available slots. Stubbed in nav. Premature `dental_confirmed`/`dental_available` notification types were removed (2026-05-29) — re-add when built. |
 | 25 | P3 | L | ❌ | **Invoicing (standalone)** | Superseded by #26. |
 | 26 | P2 | L | ✅ | **Invoicing view (admin)** | /admin/invoicing: monthly summary per client. /admin/invoicing/<id>: line items + weekly breakdown. Billable cancels (<5 days notice), double-slot discount, drop-in pricing. PricingConfig history. |
 | 27 | P2 | L | ✅ | **Multiple clients per dog** | dog_owners join table with primary/secondary roles. Admin join/revoke modal. Secondary owners can book and view shared dogs. |
@@ -91,7 +91,7 @@
 |---|---|
 | Firebase Auth migration | Overkill for current scale. Flask-Login is sufficient. Revisit post-launch. |
 | Public client self-registration | Business prefers admin-created accounts (vets clients first). Register route still exists but not promoted. |
-| Walker pickup status tracking (en_route / picked_up / dropped_off) | WalkEvent model exists in docs plan. Deprioritised — pickup list is the priority. |
+| Walker pickup status tracking (en_route / picked_up / dropped_off) | Anticipatory `WalkEvent` model/table was never wired up (no writes, no recording UI) and has been **removed** (migration `b40f4de664d4`, 2026-05-29). Rebuild the table fresh in the same PR as the feature if/when prioritised — pickup list remains the priority. |
 
 ---
 
