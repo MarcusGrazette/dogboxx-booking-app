@@ -538,7 +538,30 @@ Each session is one PR to `develop`, green CI, independently shippable.
 - **D4 — Feed clustering / `batch_id` → DECIDED: collapsible clusters.** `batch_id` on
   `booking_status_changes` (Session 1 migration); the feed collapses a bulk action into one expandable
   row (Session 5). (§9.6)
-- **D5 — Backfill → RECOMMENDED (not yet confirmed): start fresh.** Begin the action log empty; keep the
-  legacy current-state reconstruction as a read-only fallback for pre-rollout months. Backfilling
-  `BookingStatusChange` from `Booking` timestamps is possible but approximate (no real actor on old
-  rows). Confirm before Session 4. *(Only remaining open item.)*
+- **D5 — Backfill → RECOMMENDED: start fresh** (default; confirm before Session 4). The action log
+  begins empty and records only transitions from rollout forward. The feed is **hybrid by month**: read
+  the log for months ≥ rollout, fall back to the existing current-state reconstruction for earlier
+  months (so past history isn't blank). Carry both paths only during the overlap; delete the legacy path
+  once the cutover scrolls into the rarely-viewed past.
+
+  *Why not backfill.* What we can recover from each existing `Booking`: `created_at`, `confirmed_at`,
+  `cancelled_at`, `cancelled_by` (role only), `created_by_id`. Three hard limits make a full backfill
+  lossy and dishonest:
+  1. **`BookingStatusChange.changed_by_id` is `NOT NULL`** — every backfilled row needs an actor, but
+     there is **no historical actor** for confirmations/assignments (no `confirmed_by`/`assigned_by`
+     field ever existed) and only a *role* (`'client'`/`'admin'`), not a user, for cancellations. A
+     backfill must therefore **fabricate** actors — polluting the log's most valuable column with fiction
+     that can't be told apart from real rows.
+  2. **Only coarse timestamps survive** — all reset/reassign churn is gone, so reconstructed history
+     looks *cleaner than reality* (arguably worse than an honest gap).
+  3. It's a **one-shot migration against live production data** — extra risk + tests for history nobody
+     scrolls back to often.
+
+  Start-fresh keeps the log 100% trustworthy (real actors only), avoids the risky migration, and still
+  shows past months via the legacy fallback. The seam (richer attributed events after cutover, coarser
+  inferred events before) self-heals over time.
+
+  *What would change this → minimal backfill.* If per-booking history on a future booking-detail page is
+  wanted for old bookings, do a **creation-rows-only** backfill (actor = `created_by_id`, else
+  `user_id` — both real) and **skip** confirm/cancel rows rather than fabricate actors. Populates
+  `Booking.status_history` honestly; old bookings just show a "created" event.
