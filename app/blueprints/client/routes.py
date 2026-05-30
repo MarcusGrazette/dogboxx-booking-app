@@ -18,10 +18,14 @@ from app.capacity import check_availability, get_slot_availability_summary, auto
 from app.forms import OnboardingForm, BookingForm, ProfileForm
 import logging
 import traceback
+import uuid
 from datetime import datetime, timezone, timedelta, date as date_type
 
 from app.blueprints.client import client_bp
 from app.utils.notifications import create_notification
+from app.utils.booking_status import (
+    transition_booking, record_booking_created, bulk_transition,
+)
 from app.utils.decorators import has_client_access
 
 
@@ -108,7 +112,7 @@ def _is_same_day(booking_date):
 
 
 def _maybe_auto_confirm(booking, dog, service_slug=ServiceType.WALK, notify=True,
-                        same_day=False):
+                        same_day=False, batch_id=None):
     """Try to auto-assign a walker to a newly-created 'requested' booking.
 
     If a walker with capacity is available, sets the booking to confirmed,
@@ -129,9 +133,10 @@ def _maybe_auto_confirm(booking, dog, service_slug=ServiceType.WALK, notify=True
         booking.date, booking.slot, service_slug=service_slug
     )
     if walker:
-        booking.walker_id = walker.id
-        booking.status = 'confirmed'
-        booking.confirmed_at = datetime.now(timezone.utc)
+        # transition_booking sets status='confirmed', confirmed_at, walker_id and
+        # logs the requested→confirmed BSC row. Actor is the booking creator.
+        transition_booking(booking, 'confirmed', actor_id=current_user.id,
+                            walker_id=walker.id, batch_id=batch_id)
         # Set pickup_order to next available position in this walker's slot
         from app.capacity import get_walker_slot_count
         booking.pickup_order = get_walker_slot_count(walker.id, booking.date, booking.slot, service_slug=service_slug)
@@ -412,6 +417,7 @@ def index():
                 )
                 db.session.add(new_booking)
                 db.session.flush()  # get ID before notifications
+                record_booking_created(new_booking, actor_id=current_user.id)
 
                 if booking_status == 'waitlisted':
                     admins = User.query.filter_by(is_admin=True).all()
@@ -551,6 +557,7 @@ def book():
         )
         db.session.add(new_booking)
         db.session.flush()  # get ID before notifications
+        record_booking_created(new_booking, actor_id=current_user.id)
 
         if booking_status == 'waitlisted':
             admins = User.query.filter_by(is_admin=True).all()
@@ -701,6 +708,12 @@ def book_both():
 
     db.session.flush()  # get IDs before notifications
 
+    # One batch_id ties together both slots of this single book-both action so
+    # the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
+    batch_id = uuid.uuid4().hex
+    for _slot, _status, b in created:
+        record_booking_created(b, actor_id=current_user.id, batch_id=batch_id)
+
     # Auto-assign or notify admins for each booking independently. We pass
     # notify=False to _maybe_auto_confirm and compose one consolidated
     # client + admin notification below, so the bell shows a single entry
@@ -717,7 +730,8 @@ def book_both():
             # and the consolidated client notification cover them too.
             final_created.append((slot, b.status, b))
         else:
-            auto_confirmed = _maybe_auto_confirm(b, dog, notify=False, same_day=same_day)
+            auto_confirmed = _maybe_auto_confirm(b, dog, notify=False, same_day=same_day,
+                                                 batch_id=batch_id)
             final_created.append((slot, b.status, b))
             if not auto_confirmed:
                 pending_slots.append((slot, status, b))
@@ -879,6 +893,7 @@ def book_drop_in():
     )
     db.session.add(new_booking)
     db.session.flush()
+    record_booking_created(new_booking, actor_id=current_user.id)
     db.session.commit()
 
     # Notify admins and co-owners
@@ -1606,7 +1621,6 @@ def pause_walks():
     if not bookings:
         return jsonify(success=True, cancelled_count=0)
 
-    now       = datetime.now(timezone.utc)
     dog_names = sorted({b.dog.name for b in bookings if b.dog})
     dogs_str  = ', '.join(dog_names)
     start_fmt = start.strftime('%-d %b')
@@ -1621,11 +1635,11 @@ def pause_walks():
         if b.walker and b.walker.user_id != current_user.id:
             walker_walk_counts[b.walker.user_id] = walker_walk_counts.get(b.walker.user_id, 0) + 1
 
-    for b in bookings:
-        b.status       = 'cancelled'
-        b.cancelled_at = now
-        b.cancelled_by = 'client'
-        b.walker_id    = None
+    # One batch_id ties together every cancellation in this pause action so the
+    # activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
+    batch_id = uuid.uuid4().hex
+    bulk_transition(bookings, 'cancelled', actor_id=current_user.id,
+                    walker_id=None, cancelled_by='client', batch_id=batch_id)
 
     # One admin notification covering the whole pause
     for admin in User.query.filter_by(is_admin=True).all():
@@ -1699,10 +1713,12 @@ def cancel_booking():
         # Capture the assigned walker's user_id before clearing the FK below —
         # we notify them at the end so they know the walk is off their schedule.
         prior_walker_user_id = booking.walker.user_id if booking.walker else None
-        booking.status = "cancelled"
-        booking.cancelled_at = datetime.now(timezone.utc)
-        booking.cancelled_by = 'admin' if is_admin_cancel else 'client'
-        booking.walker_id = None  # Unassign walker
+        # transition_booking sets status, cancelled_at and logs the BSC row.
+        # cancelled_by records who cancelled (admin acting on a client's booking
+        # vs the client/owner themselves); walker_id=None unassigns.
+        transition_booking(booking, 'cancelled', actor_id=current_user.id,
+                            cancelled_by='admin' if is_admin_cancel else 'client',
+                            walker_id=None)
         # Do NOT commit here — notifications are added below and everything
         # commits atomically at the end. An early commit would make the
         # cancellation irreversible if the notification step later raises.
@@ -1910,6 +1926,10 @@ def recurring_booking():
         active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
         confirmed = created = waitlisted = skipped = 0
 
+        # One batch_id ties together every booking in this recurring series so
+        # the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
+        batch_id = uuid.uuid4().hex
+
         slots_to_book = ['Morning', 'Afternoon'] if slot == 'Both' else [slot]
 
         for d in target_dates:
@@ -1950,6 +1970,7 @@ def recurring_booking():
                     status=status,
                 )
                 db.session.add(booking)
+                record_booking_created(booking, actor_id=current_user.id, batch_id=batch_id)
 
                 if status == 'waitlisted':
                     waitlisted += 1
@@ -1957,9 +1978,8 @@ def recurring_booking():
                     # Try to auto-assign a walker, same as single bookings
                     walker = auto_assign_walker(d, s, service_slug=service_slug)
                     if walker:
-                        booking.walker_id    = walker.id
-                        booking.status       = 'confirmed'
-                        booking.confirmed_at = datetime.now(timezone.utc)
+                        transition_booking(booking, 'confirmed', actor_id=current_user.id,
+                                           walker_id=walker.id, batch_id=batch_id)
                         booking.pickup_order = get_walker_slot_count(walker.id, d, s, service_slug=service_slug)
                         confirmed += 1
                     else:

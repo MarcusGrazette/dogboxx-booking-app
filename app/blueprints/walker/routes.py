@@ -16,6 +16,8 @@ from datetime import datetime, timezone, timedelta, date
 from app.blueprints.walker import walker_bp
 from app.utils.decorators import walker_required
 from app.utils.notifications import create_notification
+from app.utils.booking_status import bulk_transition
+import uuid
 
 
 def _double_booked_dog_ids(selected_date):
@@ -284,9 +286,10 @@ def add_unavailability():
     affected = Booking.query.filter_by(
         walker_id=walker.id, date=unavail_date, slot=slot, status='confirmed',
     ).all()
-    for b in affected:
-        b.walker_id = None
-        b.status = 'requested'
+    # Reset to requested (walker unassigned) so they resurface as pending, and
+    # log a BSC row per booking. Actor = the walker making themselves unavailable.
+    bulk_transition(affected, 'requested', actor_id=current_user.id,
+                    walker_id=None, batch_id=uuid.uuid4().hex)
 
     walker_name = walker.user.firstname
     date_label = unavail_date.strftime('%a %-d %b')
@@ -566,6 +569,9 @@ def schedule_changes_batch():
     skipped_reasons = []
     skipped = 0
     affected_count = 0
+    # One batch_id ties together every booking reset by this batch schedule
+    # change so the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
+    batch_id = uuid.uuid4().hex
 
     current = start_date
     while current <= end_date:
@@ -592,13 +598,14 @@ def schedule_changes_batch():
                 db.session.flush()
                 created_unavail_ids.append(row.id)
 
-                # Reset any confirmed bookings for this slot back to requested.
-                for b in Booking.query.filter_by(
+                # Reset any confirmed bookings for this slot back to requested,
+                # logging a BSC row per booking. Actor = whoever applied the batch.
+                affected = Booking.query.filter_by(
                     walker_id=walker.id, date=current, slot=slot, status='confirmed',
-                ).all():
-                    b.walker_id = None
-                    b.status = 'requested'
-                    affected_count += 1
+                ).all()
+                bulk_transition(affected, 'requested', actor_id=current_user.id,
+                                walker_id=None, batch_id=batch_id)
+                affected_count += len(affected)
             else:  # available
                 if slot in scheduled_slots:
                     skipped += 1

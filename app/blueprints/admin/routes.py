@@ -24,10 +24,14 @@ import secrets
 import logging
 import traceback
 import json
+import uuid
 
 from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
 from app.utils.notifications import create_notification
+from app.utils.booking_status import (
+    transition_booking, record_booking_created, bulk_transition,
+)
 from app.capacity import check_availability, acquire_booking_lock
 
 
@@ -1196,8 +1200,8 @@ def assign_walker():
 
         # If walker_id is None, this is an unassignment operation
         if walker_id is None:
-            booking.walker_id = None
-            booking.status = "requested"
+            transition_booking(booking, 'requested', actor_id=current_user.id,
+                               walker_id=None)
             db.session.commit()
             
             return jsonify(
@@ -1277,9 +1281,10 @@ def assign_walker():
                     message=f"{booking.dog.name} already has an active {slot.lower()} booking on this date"
                 ), 409
 
-        # Update walker assignment and slot
-        booking.walker_id = walker.id
-        booking.status = 'confirmed'
+        # Update walker assignment and slot. transition_booking sets status,
+        # confirmed_at, walker_id and logs the BSC row (actor = the admin).
+        transition_booking(booking, 'confirmed', actor_id=current_user.id,
+                           walker_id=walker.id)
         if slot:
             booking.slot = slot
 
@@ -1363,9 +1368,9 @@ def decline_booking(booking_id):
         if booking.status not in Booking.PENDING_STATUSES:
             return jsonify(success=False, message="Only pending or waitlisted bookings can be declined"), 400
 
-        booking.status = 'rejected'
-        booking.cancelled_at = datetime.now(timezone.utc)
-        booking.cancelled_by = 'admin'
+        # transition_booking sets status, cancelled_at and logs the BSC row.
+        transition_booking(booking, 'rejected', actor_id=current_user.id,
+                           cancelled_by='admin')
         db.session.commit()
 
         service_label = 'drop-in' if (booking.service_type and booking.service_type.slug == ServiceType.DROP_IN) else 'walk'
@@ -2432,12 +2437,16 @@ def remove_walker_role(walker_user_id):
     from datetime import date as _date
     today = _date.today()
 
-    # Reassign future confirmed bookings so they stay on the board
-    Booking.query.filter(
+    # Reassign future confirmed bookings so they stay on the board. Fetch the
+    # rows (not a bulk .update()) so each transition is logged via bulk_transition
+    # with a shared batch_id. Actor = the admin removing the role.
+    affected = Booking.query.filter(
         Booking.walker_id == user.walker.id,
         Booking.date >= today,
         Booking.status == 'confirmed',
-    ).update({'walker_id': None, 'status': 'requested'}, synchronize_session=False)
+    ).all()
+    bulk_transition(affected, 'requested', actor_id=current_user.id,
+                    walker_id=None, batch_id=uuid.uuid4().hex)
 
     # Deactivate schedule so they no longer appear on future capacity
     WalkerSchedule.query.filter_by(walker_id=user.walker.id).update(
@@ -2519,14 +2528,18 @@ def deactivate_walker(walker_id):
 
         user.active = False
 
-        # Return future confirmed bookings to pending so they stay visible on the board
+        # Return future confirmed bookings to pending so they stay visible on the
+        # board. Fetch the rows (not a bulk .update()) so each transition is
+        # logged via bulk_transition. Actor = the admin deactivating the walker.
         from datetime import date as _date
         today = _date.today()
-        Booking.query.filter(
+        affected = Booking.query.filter(
             Booking.walker_id == user.walker.id,
             Booking.date >= today,
             Booking.status == 'confirmed',
-        ).update({'walker_id': None, 'status': 'requested'}, synchronize_session=False)
+        ).all()
+        bulk_transition(affected, 'requested', actor_id=current_user.id,
+                        walker_id=None, batch_id=uuid.uuid4().hex)
 
         # Deactivate schedule rows so the walker no longer appears on future board dates
         WalkerSchedule.query.filter_by(walker_id=user.walker.id).update(
@@ -2694,11 +2707,13 @@ def walker_schedule_json(walker_id):
                 )
                 .all()
             )
+            # Shared batch_id so the feed can cluster this schedule edit's resets.
+            batch_id = uuid.uuid4().hex
             per_client = {}
             for b in future_confirmed:
                 if (b.date.weekday(), b.slot) in removed:
-                    b.walker_id = None
-                    b.status = 'requested'
+                    transition_booking(b, 'requested', actor_id=current_user.id,
+                                       walker_id=None, batch_id=batch_id)
                     per_client[b.user_id] = per_client.get(b.user_id, 0) + 1
                     affected_count += 1
 
@@ -2924,9 +2939,10 @@ def admin_add_unavailability(walker_id):
     affected = Booking.query.filter_by(
         walker_id=walker.id, date=unavail_date, slot=slot, status='confirmed',
     ).all()
-    for b in affected:
-        b.walker_id = None
-        b.status = 'requested'
+    # Reset to requested (walker unassigned), logging a BSC row per booking.
+    # Actor = the admin marking the walker unavailable.
+    bulk_transition(affected, 'requested', actor_id=current_user.id,
+                    walker_id=None, batch_id=uuid.uuid4().hex)
 
     db.session.commit()
 
@@ -3108,6 +3124,9 @@ def book_for_dog():
         service_label = service.name.lower()
 
         bookings_created = []
+        # Shared batch_id so the feed can cluster a single admin booking action
+        # (e.g. 'Both' slots) — NOTIFICATIONS.md §9.2, D4.
+        batch_id = uuid.uuid4().hex
         for s in slots_to_book:
             acquire_booking_lock(service.slug, booking_date, s)
             available, can_waitlist, capacity_msg = check_availability(
@@ -3116,16 +3135,19 @@ def book_for_dog():
             if not available and not can_waitlist:
                 return jsonify(success=False, message=capacity_msg), 400
 
+            # Resolved initial status: waitlisted only if the slot is full,
+            # otherwise requested. A successful auto-assign then confirms it.
             booking = Booking(
                 user_id=user_id,
                 dog_id=dog_id,
                 service_type_id=service.id,
                 date=booking_date,
                 slot=s,
-                status='waitlisted',
+                status='waitlisted' if not available else 'requested',
                 created_by_id=current_user.id,
             )
             db.session.add(booking)
+            record_booking_created(booking, actor_id=current_user.id, batch_id=batch_id)
 
             # Drop-ins are never auto-assigned — they land as requested
             # (or waitlisted) for an admin to confirm manually, matching the
@@ -3133,14 +3155,9 @@ def book_for_dog():
             if available and not is_drop_in:
                 walker = auto_assign_walker(booking_date, s)
                 if walker:
-                    booking.walker_id = walker.id
-                    booking.status = 'confirmed'
-                    booking.confirmed_at = datetime.now(timezone.utc)
+                    transition_booking(booking, 'confirmed', actor_id=current_user.id,
+                                       walker_id=walker.id, batch_id=batch_id)
                     booking.pickup_order = get_walker_slot_count(walker.id, booking_date, s)
-                else:
-                    booking.status = 'requested'
-            elif available:
-                booking.status = 'requested'
 
             bookings_created.append(booking)
 
@@ -3286,6 +3303,9 @@ def recurring_for_dog():
         active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
         confirmed = requested = waitlisted = skipped = 0
         notifications = []
+        # One batch_id ties together every booking in this recurring series so
+        # the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
+        batch_id = uuid.uuid4().hex
 
         for d, slot in target_pairs:
             existing = Booking.query.filter(
@@ -3313,26 +3333,27 @@ def recurring_for_dog():
                 skipped += 1
                 continue
 
+            # Resolved initial status: waitlisted only if the slot is full,
+            # otherwise requested. A successful auto-assign then confirms it.
             booking = Booking(
                 user_id=user_id,
                 dog_id=dog_id,
                 service_type_id=default_service.id,
                 date=d,
                 slot=slot,
-                status='waitlisted',
+                status='waitlisted' if not available else 'requested',
                 created_by_id=current_user.id,
             )
             db.session.add(booking)
+            record_booking_created(booking, actor_id=current_user.id, batch_id=batch_id)
 
+            walker = None
             if available:
                 walker = auto_assign_walker(d, slot)
                 if walker:
-                    booking.walker_id = walker.id
-                    booking.status = 'confirmed'
-                    booking.confirmed_at = datetime.now(timezone.utc)
+                    transition_booking(booking, 'confirmed', actor_id=current_user.id,
+                                       walker_id=walker.id, batch_id=batch_id)
                     booking.pickup_order = get_walker_slot_count(walker.id, d, slot)
-                else:
-                    booking.status = 'requested'
 
             if booking.status == 'confirmed':
                 confirmed += 1
@@ -3545,7 +3566,6 @@ def dog_bulk_cancel(dog_id):
     if not bookings:
         return jsonify(success=True, cancelled_count=0)
 
-    now = datetime.now(timezone.utc)
     n = len(bookings)
     start_fmt = start.strftime('%-d %b')
     end_fmt   = end.strftime('%-d %b')
@@ -3564,11 +3584,10 @@ def dog_bulk_cancel(dog_id):
     else:
         day_label = ''
 
-    for b in bookings:
-        b.status       = 'cancelled'
-        b.cancelled_at = now
-        b.cancelled_by = 'admin'
-        b.walker_id    = None
+    # One batch_id ties together every cancellation in this bulk-cancel action
+    # so the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
+    bulk_transition(bookings, 'cancelled', actor_id=current_user.id,
+                    walker_id=None, cancelled_by='admin', batch_id=uuid.uuid4().hex)
 
     # Notify dog owners (excluding admins)
     owners = DogOwner.query.filter_by(dog_id=dog_id).all()
@@ -3664,13 +3683,16 @@ def add_closure():
             Booking.status.in_(active_statuses)
         ).all()
 
-        now = datetime.now(timezone.utc)
+        # One batch_id ties together every cancellation caused by this closure
+        # so the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
+        batch_id = uuid.uuid4().hex
         date_fmt  = closure_date.strftime('%a %-d %b')
         body_text = "DogBoxx is closed" + (f" — {reason}." if reason else ".")
         for booking in bookings:
-            booking.status = 'cancelled'
-            booking.cancelled_at = now
-            booking.cancelled_by = 'admin'
+            # Closure cancel intentionally leaves walker_id set (unlike client
+            # cancellations) — preserve that by not passing walker_id.
+            transition_booking(booking, 'cancelled', actor_id=current_user.id,
+                               cancelled_by='admin', batch_id=batch_id)
             dog_name = booking.dog.name if booking.dog else 'Your dog'
             service_label = (
                 'drop-in'
