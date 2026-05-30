@@ -68,8 +68,10 @@ git clone git@github.com:MarcusGrazette/dogboxx-booking-app.git
 cd dogboxx-booking-app
 python -m venv venv
 source venv/bin/activate       # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # local dev: app + test tooling (pytest etc.)
 ```
+
+> `requirements-dev.txt` includes `requirements.txt` plus the test suite tooling. Use the plain `requirements.txt` only for runtime-only installs (production does this automatically).
 
 ### 2. Configure environment variables
 
@@ -127,6 +129,61 @@ python seed_demo_bookings.py
 ```
 
 This adds walker unavailability on specific days to reduce capacity and trigger the waitlist, then seeds requested/confirmed/waitlisted bookings across all 3 weeks.
+
+---
+
+## Running Tests
+
+The test suite runs against **PostgreSQL by default**, matching CI and production. SQLite silently hides a class of bugs that only surface on Postgres (native enum constraints, enum-type comparisons in raw SQL, FK visibility across request connections), so Postgres is the trustworthy signal.
+
+### Against Postgres (default — recommended)
+
+**1. Install Postgres if you don't already have it.** Match the major version CI and production use (16) for full fidelity.
+
+```bash
+# macOS (Homebrew)
+brew install postgresql@16
+brew services start postgresql@16
+
+# Debian/Ubuntu
+sudo apt install postgresql && sudo service postgresql start
+```
+
+**2. Create a test database.** It's separate from any dev database and holds nothing but the test schema, which the suite creates and drops on every run.
+
+```bash
+createdb dogboxx_test
+```
+
+On a fresh Homebrew install, local connections use your macOS username with no password (trust auth), and `createdb` makes a DB owned by that user. If you already run a dev Postgres with a `dogboxx` role, create it owned by that role instead (`createdb -O dogboxx dogboxx_test`) so you can reuse your dev credentials.
+
+**3. Point the suite at it** via a line in your `.env` (it's loaded before config is read, so plain `pytest` picks it up — no shell export needed). Use whatever user/password your Postgres expects:
+
+```bash
+# .env — Homebrew default (your macOS user, no password):
+TEST_DATABASE_URL=postgresql://YOUR_MACOS_USERNAME@localhost:5432/dogboxx_test
+# ...or, reusing an existing dev Postgres role:
+# TEST_DATABASE_URL=postgresql://dogboxx:<your-dev-password>@localhost:5432/dogboxx_test
+```
+
+**4. Run it:**
+
+```bash
+pytest                          # runs against dogboxx_test
+pytest tests/test_auth.py       # a single file
+```
+
+If `TEST_DATABASE_URL` is unset, `TestingConfig` falls back to `postgresql://dogboxx:dogboxx@localhost:5432/dogboxx_test` (the credentials CI uses); locally that simply fails to authenticate rather than touching any real data.
+
+### Fast SQLite escape hatch
+
+For a quicker inner loop (the suite is ~2–3× faster on in-memory SQLite), opt out:
+
+```bash
+USE_SQLITE=1 pytest
+```
+
+Use this for rapid iteration, but **re-run against Postgres before pushing** — and remember CI always runs on Postgres regardless.
 
 ---
 
@@ -194,7 +251,7 @@ The app uses three config classes in `config.py`:
 | Config | Used when | Notes |
 |---|---|---|
 | `DevelopmentConfig` | `FLASK_ENV=development` | Debug on, SQLAlchemy echo, CSP report-only |
-| `TestingConfig` | Tests | In-memory SQLite, CSRF disabled |
+| `TestingConfig` | Tests | PostgreSQL by default (`USE_SQLITE=1` for SQLite), CSRF disabled |
 | `ProductionConfig` | `FLASK_ENV=production` | Secure cookies, strict CSP, Redis rate limiting |
 
 ---
