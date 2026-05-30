@@ -15,7 +15,7 @@ import datetime
 import json
 
 from app import db
-from app.models import Booking
+from app.models import Booking, BookingStatusChange
 
 
 def _next_weekday(target_dow, after=None):
@@ -166,3 +166,31 @@ class TestBulkCancelDayFilter:
         data = resp.get_json()
         assert resp.status_code == 200
         assert data['cancelled_count'] == 2
+
+    def test_bulk_cancel_writes_bsc_rows_with_admin_actor(self, client_user, dog,
+                                                          service_type, admin_user,
+                                                          logged_in_admin):
+        """Session 1: each cancellation logs a BSC row attributed to the admin,
+        all sharing one batch_id so the feed can cluster the action."""
+        tue = _next_weekday(1)
+        wed = _next_weekday(2)
+        _seed_bookings(client_user, dog, service_type, [tue, wed])
+        start = min(tue, wed).isoformat()
+        end   = (tue + datetime.timedelta(days=14)).isoformat()
+        admin_id = admin_user.id
+
+        resp = logged_in_admin.post(
+            f'/admin/dogs/{dog.id}/bulk-cancel',
+            data=json.dumps({'start': start, 'end': end, 'days': [0, 1, 2, 3, 4]}),
+            content_type='application/json',
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()['cancelled_count'] == 2
+
+        rows = BookingStatusChange.query.all()
+        assert len(rows) == 2
+        assert all(r.to_status == 'cancelled' for r in rows)
+        assert all(r.from_status == 'requested' for r in rows)
+        assert all(r.changed_by_id == admin_id for r in rows)
+        batch_ids = {r.batch_id for r in rows}
+        assert len(batch_ids) == 1 and None not in batch_ids

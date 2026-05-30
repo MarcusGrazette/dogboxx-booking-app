@@ -386,6 +386,11 @@ class BookingStatusChange(db.Model):
     to_status = db.Column(db.String(20), nullable=False)
     changed_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     notes = db.Column(db.Text, nullable=True)
+    # Correlates rows produced by one bulk action so the activity feed can
+    # collapse them into a single expandable cluster. NULL for single-row
+    # transitions. uuid4().hex generated once per bulk action, stamped on
+    # every row it produces.
+    batch_id = db.Column(db.String(36), nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     booking = db.relationship('Booking', back_populates='status_history')
@@ -399,6 +404,7 @@ class BookingStatusChange(db.Model):
             'to_status': self.to_status,
             'changed_by_id': self.changed_by_id,
             'notes': self.notes,
+            'batch_id': self.batch_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
