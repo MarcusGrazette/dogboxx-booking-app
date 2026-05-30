@@ -530,9 +530,10 @@ Each session is one PR to `develop`, green CI, independently shippable.
 
 - **D1 — Caps → DECIDED: bump.** Page 20→50, DB store 50→100, bell 5 (unchanged). Flat for all users,
   not role-aware; admins use the action-log feed for deep history. (§9.7)
-- **D2 — Walk-event notifications → DECIDED: out of scope.** Pickup/drop-off events **aren't recorded**
-  — `WalkEvent` is a dead table (§7.5). Recording them (a walker UI + writes) is a separate prerequisite
-  feature; notifications are revisited only once the events exist. Removed from Sessions 4 & 5.
+- **D2 — Walk-event notifications → DECIDED: out of scope.** Pickup/drop-off events **aren't recorded**.
+  The speculative `WalkEvent` model + table were removed in PR #113 (migration `b40f4de664d4`, §7.5).
+  Recording them (a walker UI + writes + a fresh table) is a separate prerequisite feature; notifications
+  are revisited only once the events exist. Removed from Sessions 4 & 5.
 - **D3 — Walker auto-assign notification → DECIDED: yes.** Client-booking auto-assign sends the walker a
   grouped `walker_assigned`, matching admin assignment. (§7.9, Session 3)
 - **D4 — Feed clustering / `batch_id` → DECIDED: collapsible clusters.** `batch_id` on
