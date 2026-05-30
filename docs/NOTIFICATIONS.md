@@ -197,9 +197,9 @@ never hear about.
   whose schedule just changed isn't told.
 
 ### 7.5 Walk pickup/drop-off events aren't recorded at all
-`WalkEvent` is a **third dead table** (alongside `BookingStatusChange` §8.2 and the `dental_*` types
-§7.6): the model + `Booking` relationship (`models.py:577`) + `__init__.py` import exist, but **no code
-ever writes a `WalkEvent` row, and there is no pickup/drop-off recording UI**. So clients get nothing
+`WalkEvent` is a **dead table** (like the `dental_*` types §7.6, and like `BookingStatusChange` §8.2
+*was* before Session 1 wired it up): the model + `Booking` relationship (`models.py:577`) + `__init__.py`
+import exist, but **no code ever writes a `WalkEvent` row, and there is no pickup/drop-off recording UI**. So clients get nothing
 when their dog is collected or dropped home — and the gap is deeper than notifications: the events
 themselves don't exist. Recording pickup/drop-off is a **prerequisite feature**, not just a missing
 notification (see §9.9 D2).
@@ -260,15 +260,16 @@ relationship `Booking.status_history`) is purpose-built for this feed: `from_sta
 `changed_by_id` (**NOT NULL**), `notes`, `created_at` — a full per-transition trail naming the acting
 user.
 
-**It is never written. Zero constructor calls exist in the codebase; the table is always empty.**
+~~**It is never written. Zero constructor calls exist in the codebase; the table is always empty.**~~
 Because the real transition log doesn't exist, the feed reconstructs an approximation from *current*
 `Booking` state — which is why it cannot show confirmations / reassignments / slot changes and cannot
 reliably attribute cancellations (§8.3–8.4).
 
-> ⚠️ **Contradicts CLAUDE.md**, which describes `BookingStatusChange` as "Audit-trail row for each
-> booking status transition (who, when, from → to)." Nothing populates it. Wiring it up at every
-> transition (it already carries `changed_by_id`) and driving the feed from it would fix §8.3 and
-> §8.4 at the source — and let the feed and notifications share one description helper for text.
+> ✅ **RESOLVED (Session 1, PR #114).** Every transition now writes a `BookingStatusChange` row via the
+> `app/utils/booking_status.py` chokepoint (§9.3); `batch_id` added (migration `6913631b986e`). The
+> table is now populated with correct `from`/`to`/`changed_by_id`. **The feed itself still does not
+> read it** — `activity_feed()` continues to reconstruct from current `Booking` state, so §8.3/§8.4
+> remain open until the Session 4 rebuild (§9.6) switches the feed to union the log sources.
 
 ### 8.3 Attribution correctness ("who initiated")
 
@@ -364,7 +365,7 @@ Two layers, sharing one set of action points:
 | *(none — already migrated)* | `booking_status_changes` | — | Model + table + `Booking.status_history` exist. Just start writing rows. |
 | Add `created_by_id` (FK users, nullable, indexed) | `walker_unavailabilities` | new | Fixes §8.3 admin-on-behalf attribution. Backfill NULL = legacy/self-service. |
 | Add `created_by_id` (FK users, nullable, indexed) | `walker_adhoc_availability` | new | Same. |
-| Add `batch_id` (String(36), nullable, indexed) | `booking_status_changes` | new (Session 1) | Correlates rows from one bulk action so the feed clusters them (decided D4). Generated once per bulk action, stamped on every BSC row it produces. Land the column in Session 1 so bulk paths can stamp it from the start. |
+| ✅ Add `batch_id` (String(36), nullable, indexed) | `booking_status_changes` | **`6913631b986e` (Session 1, PR #114, landed)** | Correlates rows from one bulk action so the feed clusters them (decided D4). Generated once per bulk action (`uuid4().hex`), stamped on every BSC row it produces. Stamped by all bulk paths now; **not read yet** (feed clustering is Session 4/5). |
 
 All schema work goes through Alembic (`flask db migrate` + commit the file); CI's `flask db upgrade` →
 `flask db check` will fail otherwise. Backfill existing rows in the same migration (set `created_by_id`
@@ -447,7 +448,7 @@ per recipient.)
 | §7.7 wording inconsistency | route walker text through `summarise()` (`'walk'`/`'drop-in'`) | 2 |
 | §7.8 admin bulk grouping inconsistent | `NotificationBatch` in `recurring_for_dog`, `book_for_dog`, `add_closure`, `dog_bulk_cancel` | 2 |
 | §7.9 client bookings don't notify walker | **decided D3: yes** — notify the walker (grouped) on auto-assign, matching admin assignment | 3 |
-| §8.2 `BookingStatusChange` never written | write via `transition_booking` everywhere | 1 |
+| §8.2 `BookingStatusChange` never written | ✅ **DONE (PR #114)** — written via `transition_booking` everywhere | 1 |
 | §8.3 cancellations/admin-unavail mis-attributed | feed reads `changed_by_id`/`created_by_id` | 4 |
 | §8.4 missing events (confirm, slot move, schedule edit, closure, broadcast) | feed unions the log sources (walk events excluded — not recorded, §7.5) | 4 |
 | §8.5 feed/notif grouping mismatch | keep feed rows granular; `batch_id` collapses bulk actions into one expandable row (decided D4) | 4–5 |
@@ -484,22 +485,26 @@ Current: `NOTIF_DB_CAP=50`, `NOTIF_PAGE_CAP=20`, `NOTIF_BELL_CAP=5` (`notificati
 
 Each session is one PR to `develop`, green CI, independently shippable.
 
-**Session 1 — Action-log foundation (no behaviour change).**
-- Migration: add `batch_id` (String(36), nullable, indexed) to `booking_status_changes` (D4) so bulk
-  paths can stamp it from the start.
-- Add `app/utils/booking_status.py` (`transition_booking`, `record_booking_created`, `bulk_transition`);
-  bulk paths generate one `batch_id` (`uuid4().hex`) and pass it to every row.
-- Refactor all ~17 transition sites to use it. Sites: creation — `client/routes.py` index POST, `book`,
+**✅ Session 1 — Action-log foundation (no behaviour change). DONE — PR #114, merged to `develop`.**
+- ✅ Migration `6913631b986e`: added `batch_id` (String(36), nullable, indexed) to `booking_status_changes` (D4).
+- ✅ Added `app/utils/booking_status.py` (`transition_booking`, `record_booking_created`, `bulk_transition`);
+  bulk paths generate one `batch_id` (`uuid4().hex`) and pass it to every row. `transition_booking`/
+  `bulk_transition` also take an explicit `cancelled_by` kwarg (client vs admin — not derivable from status).
+- ✅ Refactored all transition sites. Sites: creation — `client/routes.py` index POST, `book`,
   `book_both`, `book_drop_in`, `recurring_booking`; `admin/routes.py` `book_for_dog`, `recurring_for_dog`.
   Confirm/assign — `_maybe_auto_confirm`, `assign_walker`. Reject — `decline_booking`. Cancel —
   `cancel_booking`, `pause_walks`, `dog_bulk_cancel`, `add_closure`. Reset — `add_unavailability`,
-  `schedule_changes_batch`, `walker_schedule_json`, `admin_add_unavailability`, `deactivate_walker`
-  (convert the two `.update()` calls to `bulk_transition`).
-- **DoD:** every transition writes one BSC row with correct `from`/`to`/`changed_by_id`. Notifications
-  unchanged. **Tests:** new `tests/test_booking_status_log.py` — one assertion per transition type
-  (create→requested/confirmed/waitlisted, confirm, reject, client/admin cancel, reset). Extend
-  `test_admin_assign_walker.py`, `test_walker_schedule_modal_reset.py`, `test_admin_bulk_cancel.py` to
-  assert BSC rows + actor.
+  `schedule_changes_batch`, `walker_schedule_json`, `admin_add_unavailability`, plus **both** raw
+  `.update()` calls (`remove_walker_role` *and* `deactivate_walker`) converted to `bulk_transition`.
+  - Note: `book_for_dog`/`recurring_for_dog` previously created rows at a placeholder `'waitlisted'`
+    overwritten before flush — now compute the *resolved* initial status (`waitlisted` only if full,
+    else `requested`) so the log shows the real created→confirmed path, not a phantom transition.
+- ✅ **DoD met:** every transition writes one BSC row with correct `from`/`to`/`changed_by_id`; notifications
+  unchanged; 274 tests pass on Postgres CI. New `tests/test_booking_status_log.py` (helper unit tests +
+  per-transition route wiring); extended `test_admin_assign_walker.py`, `test_walker_schedule_modal_reset.py`,
+  `test_admin_bulk_cancel.py` to assert BSC rows + actor + shared `batch_id`.
+- **Carried into later sessions:** the feed still reconstructs from current `Booking` state — it does
+  **not** read the log yet (Session 4, §9.6). `batch_id` is stamped but unread (Session 4/5 clustering).
 
 **Session 2 — Notification grouping + text unification.**
 - Add `NotificationBatch` + `summarise()`. Migrate `recurring_for_dog`, `book_for_dog`, `add_closure`,
