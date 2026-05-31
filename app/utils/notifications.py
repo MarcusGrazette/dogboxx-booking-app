@@ -176,3 +176,216 @@ def mark_all_read(user_id):
     # Broadcast to all other open surfaces for this user
     from app.sse import broadcast
     broadcast(user_id, 'read_all', {})
+
+
+# ── Grouped notifications: one text source + a per-request batcher ─────────────
+# NOTIFICATIONS.md §9.3/§9.4 (Session 2). summarise() is the single source of
+# booking-notification text — used for both the bell and (later, Session 4) the
+# activity feed, so wording is identical regardless of who triggered the event.
+
+# Event "kind" → notification_type styling key (§2). 'booking_waitlisted' is a
+# flavour of 'booking_requested' for styling purposes.
+_KIND_NTYPE = {
+    'booking_confirmed':  'booking_confirmed',
+    'booking_requested':  'booking_requested',
+    'booking_waitlisted': 'booking_requested',
+    'booking_cancelled':  'booking_cancelled',
+    'walker_assigned':    'walker_assigned',
+}
+
+# Actor-prefixed verb per kind ("Lydia booked …", "John cancelled …").
+_KIND_VERB = {
+    'booking_confirmed':  'booked',
+    'booking_requested':  'requested',
+    'booking_waitlisted': 'requested',
+    'booking_cancelled':  'cancelled',
+}
+
+
+def _fmt_day(d):
+    """'Mon 1 Jun' — platform %-d (no leading zero)."""
+    return d.strftime('%a %-d %b')
+
+
+def _fmt_day_long(d):
+    """'1 Jun 2026' — walker-facing date."""
+    return d.strftime('%-d %b %Y')
+
+
+def _fmt_range(dates):
+    """Compact span: 'Mon 1 Jun' for one day, else 'Mon 1 – Fri 5 Jun'
+    (month dropped on the low end when both ends share a month/year)."""
+    lo, hi = min(dates), max(dates)
+    if lo == hi:
+        return _fmt_day(lo)
+    if (lo.month, lo.year) == (hi.month, hi.year):
+        return f"{lo.strftime('%a %-d')} – {hi.strftime('%a %-d %b')}"
+    return f"{_fmt_day(lo)} – {_fmt_day(hi)}"
+
+
+def _plural(label, n):
+    """'walk'→'walks', 'drop-in'→'drop-ins'."""
+    return label if n == 1 else label + 's'
+
+
+def summarise(kind, payloads, *, actor_first=None):
+    """Single source of booking-notification text (NOTIFICATIONS.md §9.4).
+
+    kind:     one of _KIND_NTYPE.
+    payloads: list of per-booking dicts. Recognised keys:
+                dog_name    (str)              — required
+                slot        ('Morning'/...)    — single-item wording
+                date        (datetime.date)    — required
+                svc_label   ('walk'/'drop-in') — default 'walk'
+                walker_name (str|None)         — confirmed: 'Booked with X.'
+                reason      (str|None)         — cancelled: e.g. closure reason
+    actor_first: when set, frames as '<actor> booked/requested/cancelled …'
+                 (admin-on-behalf, or fan-out to admins/co-owners). When None,
+                 uses reflexive owner wording ('… confirmed').
+
+    Returns (title, body, notification_type, link). The link is a sensible
+    default; callers may override it per recipient via NotificationBatch.add.
+    """
+    if not payloads:
+        raise ValueError("summarise() needs at least one payload")
+
+    ntype = _KIND_NTYPE[kind]
+    n = len(payloads)
+    dates = [p['date'] for p in payloads]
+    dog_names = sorted({p['dog_name'] for p in payloads})
+    one_dog = dog_names[0] if len(dog_names) == 1 else None
+    svc_labels = {p.get('svc_label', 'walk') for p in payloads}
+    svc = svc_labels.pop() if len(svc_labels) == 1 else 'walk'
+
+    # ── Walker assignment — its own template, ignores actor_first ─────────────
+    if kind == 'walker_assigned':
+        if n == 1:
+            p = payloads[0]
+            title = f"You have been assigned a {svc} on {_fmt_day_long(p['date'])}"
+            body  = f"{p['dog_name']} — {p['slot']}"
+            link  = f"/walker/pickups?date={p['date'].isoformat()}"
+        else:
+            title = f"You have been assigned {n} {_plural(svc, n)} ({_fmt_range(dates)})"
+            body  = ', '.join(dog_names)
+            link  = '/walker/schedule'
+        return title, body, ntype, link
+
+    # ── Booking events ───────────────────────────────────────────────────────
+    dog_pfx = f"{one_dog}'s " if one_dog else ""
+
+    if n == 1:
+        p = payloads[0]
+        slot_lower = (p.get('slot') or '').lower()
+        when = _fmt_day(p['date'])
+        if actor_first:
+            verb = _KIND_VERB[kind]
+            title = f"{actor_first} {verb} {dog_pfx}{slot_lower} {svc} on {when}"
+            if kind == 'booking_confirmed':
+                w = p.get('walker_name')
+                body = f"Booked with {w}." if w else "Walker assigned."
+            elif kind == 'booking_waitlisted':
+                body = "On the waitlist — we'll let you know when a spot opens up."
+            elif kind == 'booking_cancelled':
+                body = p.get('reason')
+            else:
+                body = None
+        else:
+            if kind == 'booking_confirmed':
+                title = f"{dog_pfx}{slot_lower} {svc} on {when} confirmed"
+                w = p.get('walker_name')
+                body = f"Booked with {w}." if w else "Walker assigned."
+            elif kind == 'booking_requested':
+                title = f"{dog_pfx}{slot_lower} {svc} on {when} requested"
+                body = "We'll confirm shortly."
+            elif kind == 'booking_waitlisted':
+                title = f"{dog_pfx}{slot_lower} {svc} on {when} is on the waitlist"
+                body = "We'll let you know when a spot opens up."
+            else:  # booking_cancelled
+                title = f"{dog_pfx}{slot_lower} {svc} on {when} cancelled"
+                body = p.get('reason')
+        return title, body, ntype, '/'
+
+    # ── Grouped (N booking rows) ─────────────────────────────────────────────
+    span = _fmt_range(dates)
+    things = f"{n} {_plural(svc, n)}"
+    multi_dog_suffix = '' if one_dog else f" · {', '.join(dog_names)}"
+
+    if actor_first:
+        verb = _KIND_VERB[kind]
+        title = f"{actor_first} {verb} {dog_pfx}{things} ({span})"
+    else:
+        word = {
+            'booking_confirmed':  'confirmed',
+            'booking_requested':  'requested',
+            'booking_waitlisted': 'waitlisted',
+            'booking_cancelled':  'cancelled',
+        }[kind]
+        title = f"{dog_pfx}{things} {word} ({span})"
+
+    if kind == 'booking_confirmed':
+        body = f"{n} {_plural(svc, n)} booked.{multi_dog_suffix}".rstrip()
+    elif kind == 'booking_cancelled':
+        reasons = {p.get('reason') for p in payloads if p.get('reason')}
+        if len(reasons) == 1:
+            body = reasons.pop()
+        else:
+            body = f"{n} booking{'s' if n != 1 else ''} cancelled.{multi_dog_suffix}".rstrip()
+    else:  # requested / waitlisted
+        body = "We'll confirm shortly." if not multi_dog_suffix else f"{n} bookings.{multi_dog_suffix}".rstrip()
+
+    return title, body, ntype, '/'
+
+
+class NotificationBatch:
+    """Collect per-recipient notification intents during one request, then emit
+    ONE grouped notification per (recipient_id, kind) on flush() (§9.3).
+
+    Every bulk path routes through this so client- and admin-initiated actions
+    group identically. Like create_notification(), flush() does NOT commit —
+    the caller still commits.
+
+    Usage:
+        batch = NotificationBatch(actor_id=current_user.id)
+        for b in bookings:
+            batch.add(b.user_id, 'booking_confirmed',
+                      dog_name=dog.name, slot=b.slot, date=b.date,
+                      walker_name=walker_first)
+        batch.flush()
+    """
+
+    def __init__(self, actor_id):
+        self.actor_id = actor_id
+        self._groups = {}   # (recipient_id, kind) -> {actor_first, link, payloads}
+
+    def add(self, recipient_id, kind, *, actor_first=None, link=None, **payload):
+        """Queue one booking-event for a recipient. Repeated calls with the same
+        (recipient_id, kind) accumulate into one grouped notification. The first
+        add for a group fixes its actor_first / link override."""
+        if kind not in _KIND_NTYPE:
+            raise ValueError(f"unknown notification kind: {kind!r}")
+        key = (recipient_id, kind)
+        grp = self._groups.get(key)
+        if grp is None:
+            grp = {'actor_first': actor_first, 'link': link, 'payloads': []}
+            self._groups[key] = grp
+        grp['payloads'].append(payload)
+        return self
+
+    def flush(self):
+        """Emit one create_notification per group (in add order). Returns the
+        list of Notification rows. Clears the batch."""
+        notifs = []
+        for (recipient_id, kind), grp in self._groups.items():
+            title, body, ntype, default_link = summarise(
+                kind, grp['payloads'], actor_first=grp['actor_first']
+            )
+            notifs.append(create_notification(
+                recipient_id=recipient_id,
+                notification_type=ntype,
+                title=title,
+                body=body,
+                link=grp['link'] or default_link,
+                sender_id=self.actor_id,
+            ))
+        self._groups.clear()
+        return notifs
