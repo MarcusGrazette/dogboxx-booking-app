@@ -139,9 +139,13 @@ venv/bin/flask run --host=0.0.0.0 --port=5000
 ## Tests
 
 ```bash
-pytest                    # run all tests (SQLite locally)
+createdb -O dogboxx dogboxx_test   # one-time: test DB on your existing dev Postgres
+pytest                    # run all tests — Postgres by default (matches CI/prod)
+USE_SQLITE=1 pytest       # fast SQLite escape hatch (hides PG-only bugs; re-run on PG before pushing)
 pytest tests/test_auth.py # specific file
 ```
+
+Tests default to PostgreSQL (`TestingConfig` in `config.py`) so the local signal matches CI — SQLite silently hides enum constraints, enum-type casts, and FK-commit semantics. Set `TEST_DATABASE_URL` in `.env` to a `dogboxx_test` DB on your existing dev Postgres (reuse your dev creds; tests create/drop their own tables there, never touching the dev DB). If unset, the fallback uses CI's creds and simply fails to authenticate locally rather than touching real data. `USE_SQLITE=1` opts into in-memory SQLite for a faster loop; CI always runs on Postgres regardless.
 
 208 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing, password reset, super-admin, broadcasts. All should pass. CI runs on every push/PR — don't merge anything that breaks CI.
 
