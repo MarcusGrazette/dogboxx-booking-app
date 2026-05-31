@@ -28,7 +28,7 @@ import uuid
 
 from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
-from app.utils.notifications import create_notification
+from app.utils.notifications import create_notification, NotificationBatch
 from app.utils.booking_status import (
     transition_booking, record_booking_created, bulk_transition,
 )

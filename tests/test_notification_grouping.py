@@ -10,6 +10,7 @@ Two layers:
 from datetime import date
 
 import pytest
+from werkzeug.security import generate_password_hash
 
 from app import db
 from app.models import Notification, User
@@ -196,14 +197,14 @@ def test_kind_ntype_mapping_complete():
 # ── NotificationBatch ────────────────────────────────────────────────────────
 
 def _make_user(email):
-    u = User(email=email, firstname='Test', lastname='User', role='client')
-    u.set_password('x')
+    u = User(email=email, firstname='Test', lastname='User', role='client',
+             hashed_password=generate_password_hash('x'))
     db.session.add(u)
     db.session.commit()
     return u
 
 
-def test_batch_groups_same_recipient_kind(app, _db):
+def test_batch_groups_same_recipient_kind(app, db):
     """5 confirmed walks for one client → exactly ONE notification (the DoD)."""
     client = _make_user('batch-group@example.com')
     batch = NotificationBatch(actor_id=client.id)
@@ -219,7 +220,7 @@ def test_batch_groups_same_recipient_kind(app, _db):
     assert notif.notification_type == 'booking_confirmed'
 
 
-def test_batch_admin_on_behalf_actor_prefix(app, _db):
+def test_batch_admin_on_behalf_actor_prefix(app, db):
     """Admin booking 5 recurring walks → ONE client notification with actor prefix."""
     admin  = _make_user('batch-admin@example.com')
     client = _make_user('batch-client@example.com')
@@ -235,7 +236,7 @@ def test_batch_admin_on_behalf_actor_prefix(app, _db):
     assert notif.sender_id == admin.id
 
 
-def test_batch_separates_recipients_and_kinds(app, _db):
+def test_batch_separates_recipients_and_kinds(app, db):
     a = _make_user('batch-a@example.com')
     b = _make_user('batch-b@example.com')
     batch = NotificationBatch(actor_id=a.id)
@@ -249,7 +250,7 @@ def test_batch_separates_recipients_and_kinds(app, _db):
     assert Notification.query.filter_by(recipient_id=b.id).count() == 1
 
 
-def test_batch_link_override(app, _db):
+def test_batch_link_override(app, db):
     admin  = _make_user('batch-link-admin@example.com')
     client = _make_user('batch-link-client@example.com')
     batch = NotificationBatch(actor_id=admin.id)
@@ -263,7 +264,7 @@ def test_batch_link_override(app, _db):
     assert notif.link == f'/admin/clients/{client.id}'
 
 
-def test_flush_clears_batch(app, _db):
+def test_flush_clears_batch(app, db):
     u = _make_user('batch-clear@example.com')
     batch = NotificationBatch(actor_id=u.id)
     batch.add(u.id, 'booking_confirmed', dog_name='Daisy', slot='Morning', date=date(2026, 6, 1))
