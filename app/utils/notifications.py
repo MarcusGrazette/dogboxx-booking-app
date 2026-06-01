@@ -19,8 +19,8 @@ from app import db
 from app.models import Notification
 
 # ── Caps ──────────────────────────────────────────────────────────────────────
-NOTIF_DB_CAP   = 50   # max stored per user (oldest pruned at insert time)
-NOTIF_PAGE_CAP = 20   # max shown on the full notifications page
+NOTIF_DB_CAP   = 100  # max stored per user (oldest pruned at insert time)
+NOTIF_PAGE_CAP = 50   # max shown on the full notifications page
 NOTIF_BELL_CAP = 5    # max shown in the navbar bell dropdown
 
 
