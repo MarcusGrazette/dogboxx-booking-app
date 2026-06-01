@@ -28,7 +28,7 @@ def upgrade():
             'fk_walker_unavail_created_by',
             'users', ['created_by_id'], ['id'],
         )
-        batch_op.create_index('ix_walker_unavail_created_by_id', ['created_by_id'])
+        batch_op.create_index('ix_walker_unavailabilities_created_by_id', ['created_by_id'])
 
     with op.batch_alter_table('walker_adhoc_availability', schema=None) as batch_op:
         batch_op.add_column(sa.Column('created_by_id', sa.Integer(), nullable=True))
@@ -36,16 +36,16 @@ def upgrade():
             'fk_walker_adhoc_created_by',
             'users', ['created_by_id'], ['id'],
         )
-        batch_op.create_index('ix_walker_adhoc_created_by_id', ['created_by_id'])
+        batch_op.create_index('ix_walker_adhoc_availability_created_by_id', ['created_by_id'])
 
 
 def downgrade():
     with op.batch_alter_table('walker_adhoc_availability', schema=None) as batch_op:
-        batch_op.drop_index('ix_walker_adhoc_created_by_id')
+        batch_op.drop_index('ix_walker_adhoc_availability_created_by_id')
         batch_op.drop_constraint('fk_walker_adhoc_created_by', type_='foreignkey')
         batch_op.drop_column('created_by_id')
 
     with op.batch_alter_table('walker_unavailabilities', schema=None) as batch_op:
-        batch_op.drop_index('ix_walker_unavail_created_by_id')
+        batch_op.drop_index('ix_walker_unavailabilities_created_by_id')
         batch_op.drop_constraint('fk_walker_unavail_created_by', type_='foreignkey')
         batch_op.drop_column('created_by_id')
