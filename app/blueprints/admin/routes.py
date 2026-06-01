@@ -2541,6 +2541,15 @@ def deactivate_walker(walker_id):
         bulk_transition(affected, 'requested', actor_id=current_user.id,
                         walker_id=None, batch_id=uuid.uuid4().hex)
 
+        # Notify each affected client (§7.2): one grouped booking_reset per user.
+        if affected:
+            client_batch = NotificationBatch(actor_id=current_user.id)
+            for b in affected:
+                client_batch.add(b.user_id, 'booking_reset',
+                                 dog_name=b.dog.name, slot=b.slot, date=b.date,
+                                 svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
+            client_batch.flush()
+
         # Deactivate schedule rows so the walker no longer appears on future board dates
         WalkerSchedule.query.filter_by(walker_id=user.walker.id).update(
             {'active': False}, synchronize_session=False
@@ -2693,7 +2702,7 @@ def walker_schedule_json(walker_id):
         # Confirmed future bookings on the now-removed (weekday, slot) combos
         # are no longer guaranteed — reset them to 'requested' (walker_id=None)
         # so they surface in the pending column on the board for reassignment,
-        # and notify each affected client once with their per-client count.
+        # and notify each affected client with a grouped booking_reset (§7.1).
         affected_count = 0
         if removed:
             from datetime import date as _date
@@ -2709,28 +2718,16 @@ def walker_schedule_json(walker_id):
             )
             # Shared batch_id so the feed can cluster this schedule edit's resets.
             batch_id = uuid.uuid4().hex
-            per_client = {}
+            client_batch = NotificationBatch(actor_id=current_user.id)
             for b in future_confirmed:
                 if (b.date.weekday(), b.slot) in removed:
                     transition_booking(b, 'requested', actor_id=current_user.id,
                                        walker_id=None, batch_id=batch_id)
-                    per_client[b.user_id] = per_client.get(b.user_id, 0) + 1
+                    client_batch.add(b.user_id, 'booking_reset',
+                                     dog_name=b.dog.name, slot=b.slot, date=b.date,
+                                     svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
                     affected_count += 1
-
-            for client_user_id, n in per_client.items():
-                noun = 'booking' if n == 1 else 'bookings'
-                create_notification(
-                    recipient_id=client_user_id,
-                    notification_type='system',
-                    title=f"Status change - {n} {noun} moved to 'requested'",
-                    body=(
-                        "A walker availability change means we need to reassign "
-                        "your bookings. No need to do anything, you'll get "
-                        "notifications as the bookings are updated."
-                    ),
-                    link='/',
-                    sender_id=current_user.id,
-                )
+            client_batch.flush()
 
         db.session.commit()
 
@@ -2943,6 +2940,15 @@ def admin_add_unavailability(walker_id):
     # Actor = the admin marking the walker unavailable.
     bulk_transition(affected, 'requested', actor_id=current_user.id,
                     walker_id=None, batch_id=uuid.uuid4().hex)
+
+    # Notify each affected client (§7.2): one grouped booking_reset per user.
+    if affected:
+        client_batch = NotificationBatch(actor_id=current_user.id)
+        for b in affected:
+            client_batch.add(b.user_id, 'booking_reset',
+                             dog_name=b.dog.name, slot=b.slot, date=b.date,
+                             svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
+        client_batch.flush()
 
     db.session.commit()
 
@@ -3558,12 +3564,25 @@ def dog_bulk_cancel(dog_id):
 
     n = len(bookings)
 
+    # Capture walker IDs before bulk_transition clears them (§7.4).
+    # Maps walker.user_id → list of (slot, date, svc_label) for notifications.
+    walker_payloads = {}
+    for b in bookings:
+        if b.walker_id and b.walker and b.walker.user_id:
+            wuid = b.walker.user_id
+            if wuid != current_user.id:
+                b_svc = 'drop-in' if b.service_type and b.service_type.slug == ServiceType.DROP_IN else 'walk'
+                walker_payloads.setdefault(wuid, []).append(
+                    dict(dog_name=dog.name, slot=b.slot, date=b.date, svc_label=b_svc)
+                )
+
     # One batch_id ties together every cancellation in this bulk-cancel action
     # so the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
     bulk_transition(bookings, 'cancelled', actor_id=current_user.id,
                     walker_id=None, cancelled_by='admin', batch_id=uuid.uuid4().hex)
 
-    # Notify dog owners (excluding admins) — one grouped notice each (§9.3/§9.4).
+    # Notify dog owners (excluding admins) and assigned walkers (§7.4) —
+    # one grouped notice each.
     batch = NotificationBatch(actor_id=current_user.id)
     owners = DogOwner.query.filter_by(dog_id=dog_id).all()
     for o in owners:
@@ -3574,6 +3593,9 @@ def dog_bulk_cancel(dog_id):
                          and b.service_type.slug == ServiceType.DROP_IN else 'walk')
                 batch.add(owner_user.id, 'booking_cancelled',
                           dog_name=dog.name, slot=b.slot, date=b.date, svc_label=b_svc)
+    for wuid, payloads in walker_payloads.items():
+        for p in payloads:
+            batch.add(wuid, 'booking_cancelled', **p)
     batch.flush()
 
     try:
@@ -3660,9 +3682,8 @@ def add_closure():
         # so the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
         batch_id  = uuid.uuid4().hex
         body_text = "DogBoxx is closed" + (f" — {reason}." if reason else ".")
-        # Grouped per owner (§9.3/§9.4): a client with several bookings on the
-        # closed day gets one cancellation notice, not one per booking.
-        # (Co-owner / walker fan-out is Session 3, §7.4.)
+        # Grouped per recipient (§9.3/§9.4, §7.4): primary owner, co-owners,
+        # and assigned walker each get one consolidated notice.
         batch = NotificationBatch(actor_id=current_user.id)
         for booking in bookings:
             # Closure cancel intentionally leaves walker_id set (unlike client
@@ -3674,10 +3695,27 @@ def add_closure():
                 if booking.service_type and booking.service_type.slug == ServiceType.DROP_IN
                 else 'walk'
             )
-            batch.add(booking.user_id, 'booking_cancelled',
-                      dog_name=(booking.dog.name if booking.dog else 'Your dog'),
-                      slot=booking.slot, date=closure_date,
-                      svc_label=svc_label, reason=body_text)
+            dog_name = booking.dog.name if booking.dog else 'Your dog'
+            payload  = dict(dog_name=dog_name, slot=booking.slot,
+                            date=closure_date, svc_label=svc_label, reason=body_text)
+
+            # Primary owner
+            batch.add(booking.user_id, 'booking_cancelled', **payload)
+
+            # Co-owners (§7.4): other non-admin users who share this dog
+            if booking.dog_id:
+                for o in DogOwner.query.filter_by(dog_id=booking.dog_id).all():
+                    if o.user_id == booking.user_id:
+                        continue
+                    co_user = db.session.get(User, o.user_id)
+                    if co_user and not co_user.is_admin:
+                        batch.add(co_user.id, 'booking_cancelled', **payload)
+
+            # Assigned walker (§7.4): skip if unset or if it's the acting admin
+            if booking.walker_id and booking.walker:
+                walker_uid = booking.walker.user_id
+                if walker_uid and walker_uid != current_user.id:
+                    batch.add(walker_uid, 'booking_cancelled', **payload)
 
         batch.flush()
         db.session.commit()

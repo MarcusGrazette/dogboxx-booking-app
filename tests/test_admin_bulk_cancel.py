@@ -14,8 +14,10 @@ let `_seed_bookings` commit the whole graph in one transaction.
 import datetime
 import json
 
+from werkzeug.security import generate_password_hash
+
 from app import db
-from app.models import Booking, BookingStatusChange
+from app.models import Booking, BookingStatusChange, Walker, WalkerSchedule, Notification
 
 
 def _next_weekday(target_dow, after=None):
@@ -194,3 +196,51 @@ class TestBulkCancelDayFilter:
         assert all(r.changed_by_id == admin_id for r in rows)
         batch_ids = {r.batch_id for r in rows}
         assert len(batch_ids) == 1 and None not in batch_ids
+
+
+class TestBulkCancelWalkerNotification:
+    """Session 3 (§7.4): assigned walkers must be notified when their bookings
+    are bulk-cancelled."""
+
+    def _make_walker(self, email='walker_bc@test.com'):
+        from app.models import User as _User
+        u = _User(firstname='Walker', lastname='BC', email=email, role='walker',
+                  hashed_password=generate_password_hash('Testpass1!'))
+        db.session.add(u); db.session.flush()
+        w = Walker(user_id=u.id)
+        db.session.add(w); db.session.commit()
+        return u, w
+
+    def test_bulk_cancel_notifies_assigned_walker(self, client_user, dog, service_type,
+                                                  admin_user, logged_in_admin):
+        """Confirmed bookings assigned to a walker are bulk-cancelled → the walker
+        gets exactly one grouped booking_cancelled notification."""
+        mon = _next_weekday(0)
+        wed = _next_weekday(2)
+        walker_u, walker = self._make_walker()
+
+        # Seed confirmed bookings assigned to the walker.
+        for d in (mon, wed):
+            b = Booking(user_id=client_user.id, dog_id=dog.id,
+                        service_type_id=service_type.id, date=d,
+                        slot='Morning', status='confirmed', walker_id=walker.id)
+            db.session.add(b)
+        db.session.commit()
+
+        start = min(mon, wed).isoformat()
+        end   = (max(mon, wed) + datetime.timedelta(days=1)).isoformat()
+        walker_uid = walker_u.id
+
+        resp = logged_in_admin.post(
+            f'/admin/dogs/{dog.id}/bulk-cancel',
+            data=json.dumps({'start': start, 'end': end}),
+            content_type='application/json',
+        )
+        assert resp.get_json()['cancelled_count'] == 2
+
+        notifs = Notification.query.filter_by(recipient_id=walker_uid).all()
+        assert len(notifs) == 1
+        n = notifs[0]
+        assert n.notification_type == 'booking_cancelled'
+        # Grouped: "Buddy's 2 walks cancelled (Mon … – Wed …)"
+        assert '2 walks cancelled' in n.title

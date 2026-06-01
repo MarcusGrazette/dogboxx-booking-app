@@ -15,7 +15,7 @@ from datetime import datetime, timezone, timedelta, date
 
 from app.blueprints.walker import walker_bp
 from app.utils.decorators import walker_required
-from app.utils.notifications import create_notification
+from app.utils.notifications import create_notification, NotificationBatch
 from app.utils.booking_status import bulk_transition
 import uuid
 
@@ -305,6 +305,15 @@ def add_unavailability():
             sender_id=current_user.id,
         )
 
+    # Notify each affected client (§7.1): one grouped booking_reset per user.
+    if affected:
+        client_batch = NotificationBatch(actor_id=current_user.id)
+        for b in affected:
+            client_batch.add(b.user_id, 'booking_reset',
+                             dog_name=b.dog.name, slot=b.slot, date=b.date,
+                             svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
+        client_batch.flush()
+
     db.session.commit()
 
     return jsonify(success=True, message="Unavailability added", unavailability=unavail.to_dict()), 201
@@ -572,6 +581,9 @@ def schedule_changes_batch():
     # One batch_id ties together every booking reset by this batch schedule
     # change so the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
     batch_id = uuid.uuid4().hex
+    # Collect all affected bookings across the loop so we can send one grouped
+    # booking_reset per client after the loop (§7.1).
+    all_affected = []
 
     current = start_date
     while current <= end_date:
@@ -606,6 +618,7 @@ def schedule_changes_batch():
                 bulk_transition(affected, 'requested', actor_id=current_user.id,
                                 walker_id=None, batch_id=batch_id)
                 affected_count += len(affected)
+                all_affected.extend(affected)
             else:  # available
                 if slot in scheduled_slots:
                     skipped += 1
@@ -664,6 +677,15 @@ def schedule_changes_batch():
                 link='/admin',
                 sender_id=current_user.id,
             )
+
+    # Notify each affected client (§7.1): one grouped booking_reset per user.
+    if all_affected:
+        client_batch = NotificationBatch(actor_id=current_user.id)
+        for b in all_affected:
+            client_batch.add(b.user_id, 'booking_reset',
+                             dog_name=b.dog.name, slot=b.slot, date=b.date,
+                             svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
+        client_batch.flush()
 
     db.session.commit()
 

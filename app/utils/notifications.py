@@ -190,10 +190,12 @@ _KIND_NTYPE = {
     'booking_requested':  'booking_requested',
     'booking_waitlisted': 'booking_requested',
     'booking_cancelled':  'booking_cancelled',
+    'booking_reset':      'system',
     'walker_assigned':    'walker_assigned',
 }
 
 # Actor-prefixed verb per kind ("Lydia booked …", "John cancelled …").
+# booking_reset has no actor-prefixed variant — always client-reflexive.
 _KIND_VERB = {
     'booking_confirmed':  'booked',
     'booking_requested':  'requested',
@@ -256,6 +258,18 @@ def summarise(kind, payloads, *, actor_first=None):
     one_dog = dog_names[0] if len(dog_names) == 1 else None
     svc_labels = {p.get('svc_label', 'walk') for p in payloads}
     svc = svc_labels.pop() if len(svc_labels) == 1 else 'walk'
+
+    # ── Booking reset (walker reassignment needed) — always reflexive ────────
+    if kind == 'booking_reset':
+        if n == 1:
+            p = payloads[0]
+            svc = p.get('svc_label', 'walk')
+            title = f"{p['dog_name']}'s {_fmt_day(p['date'])} {svc} needs a new walker"
+            body  = "No action needed — we'll reassign and confirm shortly."
+        else:
+            title = f"{n} of your {_plural('walk', n)} are being reassigned"
+            body  = "No action needed — we'll reassign and confirm shortly."
+        return title, body, 'system', '/'
 
     # ── Walker assignment — its own template, ignores actor_first ─────────────
     if kind == 'walker_assigned':
