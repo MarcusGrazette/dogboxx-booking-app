@@ -277,7 +277,8 @@ def add_unavailability():
         walker_id=walker.id,
         date=unavail_date,
         slot=slot,
-        reason=reason
+        reason=reason,
+        created_by_id=current_user.id,
     )
     db.session.add(unavail)
 
@@ -604,7 +605,8 @@ def schedule_changes_batch():
                     skipped += 1
                     continue
                 row = WalkerUnavailability(
-                    walker_id=walker.id, date=current, slot=slot, reason=reason
+                    walker_id=walker.id, date=current, slot=slot, reason=reason,
+                    created_by_id=current_user.id,
                 )
                 db.session.add(row)
                 db.session.flush()
@@ -633,7 +635,8 @@ def schedule_changes_batch():
                     skipped += 1
                     continue
                 row = WalkerAdHocAvailability(
-                    walker_id=walker.id, date=current, slot=slot, reason=reason
+                    walker_id=walker.id, date=current, slot=slot, reason=reason,
+                    created_by_id=current_user.id,
                 )
                 db.session.add(row)
                 db.session.flush()

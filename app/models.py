@@ -422,8 +422,10 @@ class WalkerUnavailability(db.Model):
     slot = db.Column(db.Enum('Morning', 'Afternoon', name='schedule_slot', create_type=False), nullable=False)
     reason = db.Column(db.String(200), nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
 
     walker = db.relationship('Walker', backref='unavailabilities')
+    created_by = db.relationship('User', foreign_keys=[created_by_id])
 
     def to_dict(self):
         return {
@@ -448,8 +450,10 @@ class WalkerAdHocAvailability(db.Model):
     slot = db.Column(db.Enum('Morning', 'Afternoon', name='schedule_slot', create_type=False), nullable=False)
     reason = db.Column(db.String(200), nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
 
     walker = db.relationship('Walker', backref='adhoc_availabilities')
+    created_by = db.relationship('User', foreign_keys=[created_by_id])
 
     def to_dict(self):
         return {

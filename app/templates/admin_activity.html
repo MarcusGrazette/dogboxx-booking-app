@@ -1,7 +1,7 @@
 {% extends "admin_layout.html" %}
 
 {% block page_title %}Activity Feed{% endblock %}
-{% block page_subtitle %}Client bookings and walker availability changes{% endblock %}
+{% block page_subtitle %}Bookings, availability, closures and broadcasts{% endblock %}
 
 {% block main %}
 <div class="row">
@@ -50,6 +50,8 @@
                 <option value="booking">Bookings</option>
                 <option value="cancellation">Cancellations</option>
                 <option value="availability">Availability changes</option>
+                <option value="closure">Closures</option>
+                <option value="broadcast">Broadcasts</option>
               </select>
             </div>
           </div>
