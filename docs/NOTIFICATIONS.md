@@ -506,7 +506,7 @@ Each session is one PR to `develop`, green CI, independently shippable.
 - **Carried into later sessions:** the feed still reconstructs from current `Booking` state — it does
   **not** read the log yet (Session 4, §9.6). `batch_id` is stamped but unread (Session 4/5 clustering).
 
-**Session 2 — Notification grouping + text unification. ◑ ADMIN SIDE SHIPPED (PR pending); client convergence deferred.**
+**Session 2 — Notification grouping + text unification. ✅ SHIPPED (PR #116, merged to `develop`). Client-path convergence carried to follow-up.**
 - ✅ Added `NotificationBatch` + `summarise()` in `app/utils/notifications.py` — the single text source
   (§9.4). Reflexive owner wording by default; **actor-prefixed when `actor_first` is passed** (decided
   this session: keep "Lydia booked …" for admin-on-behalf / fan-out rather than fully reflexive, so the
@@ -528,13 +528,26 @@ Each session is one PR to `develop`, green CI, independently shippable.
   green; Postgres via CI.
 - **Carried:** client-path convergence (above) is the remaining Session 2 item for the follow-up PR.
 
-**Session 3 — Close reset/recipient gaps.**
-- `booking_reset` notification on every reset path (§7.1, §7.2), grouped per client. Expand closure /
-  bulk-cancel recipients to co-owners + ex-walker (§7.4). Notify the walker (grouped) on client-booking
-  auto-assign (§7.9, decided D3).
-- **DoD:** no reset path is silent to the client; closures notify co-owners + walker. **Tests:** extend
-  `test_walker_schedule_changes.py`, `test_walker_schedule_modal_reset.py`; new cases in
-  `test_admin_bulk_cancel.py` and a closures test for co-owner/walker fan-out.
+**Session 3 — Close reset/recipient gaps. ✅ SHIPPED (PR #117, merged to `develop`).**
+- ✅ Added `booking_reset` kind to `summarise()` — single: "Daisy's Mon 1 Jun walk needs a new walker";
+  grouped: "N of your walks are being reassigned"; type `system`.
+- ✅ All five reset paths now emit grouped `booking_reset` per affected client (§7.1, §7.2):
+  `add_unavailability` and `schedule_changes_batch` (walker self-service, previously admins-only);
+  `walker_schedule_json` (admin, migrated from bespoke per-client count text to `NotificationBatch`);
+  `admin_add_unavailability` and `deactivate_walker` (admin, previously silent to everyone).
+- ✅ Closure + bulk-cancel recipient expansion (§7.4): `add_closure` now fans out to co-owners and the
+  assigned walker; `dog_bulk_cancel` now notifies the ex-walker.
+- ✅ Client-booking auto-assign notifies the walker (§7.9, D3): `_maybe_auto_confirm` (notify=True),
+  `book_both`, and `recurring_booking` all send grouped `walker_assigned` to the auto-assigned walker.
+- ✅ Fixed pre-existing bug in `recurring_booking`: client/admin notifications were flushed but never
+  committed (rolled back on teardown). Commit moved to after all notifications.
+- **Tests:** `test_walker_schedule_changes.py` extended (single unavail + batch → client `booking_reset`);
+  `test_walker_schedule_modal_reset.py` updated for new wording; new cases in `test_admin_bulk_cancel.py`
+  (walker fan-out); new `test_closures.py` (co-owner + walker fan-out, no double-notify for admin-as-walker).
+  304 tests pass.
+- **Known gap (not in DoD):** no dedicated test for walker auto-assign notification in `_maybe_auto_confirm`
+  / `book_both` / `recurring_booking` — routes are exercised end-to-end but walker notification count
+  not asserted. Low risk; can be covered in a future pass.
 
 **Session 4 — Activity feed → action log.**
 - Migration: `created_by_id` on the two availability tables; set it in `admin_add_unavailability` (+
