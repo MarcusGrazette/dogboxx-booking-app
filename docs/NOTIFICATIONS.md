@@ -506,13 +506,27 @@ Each session is one PR to `develop`, green CI, independently shippable.
 - **Carried into later sessions:** the feed still reconstructs from current `Booking` state — it does
   **not** read the log yet (Session 4, §9.6). `batch_id` is stamped but unread (Session 4/5 clustering).
 
-**Session 2 — Notification grouping + text unification.**
-- Add `NotificationBatch` + `summarise()`. Migrate `recurring_for_dog`, `book_for_dog`, `add_closure`,
-  `dog_bulk_cancel` to grouped emit (§7.8). Refactor `pause_walks`, `book_both`, `recurring_booking`
-  onto the shared helper. Fix §7.3 (notify on pending), §7.6 (drop `dental_*`), §7.7 (wording).
-- **DoD:** an admin booking 5 recurring walks produces **one** client notification, text-identical to
-  the client-initiated equivalent. **Tests:** new `tests/test_notification_grouping.py`; update
-  `test_notifications.py`. Assert N-row bulk action → 1 notification/recipient with correct count + text.
+**Session 2 — Notification grouping + text unification. ◑ ADMIN SIDE SHIPPED (PR pending); client convergence deferred.**
+- ✅ Added `NotificationBatch` + `summarise()` in `app/utils/notifications.py` — the single text source
+  (§9.4). Reflexive owner wording by default; **actor-prefixed when `actor_first` is passed** (decided
+  this session: keep "Lydia booked …" for admin-on-behalf / fan-out rather than fully reflexive, so the
+  client still sees *who* acted — aligns with the Issue #109 attribution want). `summarise()` returns
+  `(title, body, ntype, link)`; `'booking_waitlisted'` styles as `booking_requested`.
+- ✅ Migrated the four admin paths to grouped emit (§7.8): `recurring_for_dog`, `book_for_dog`,
+  `add_closure`, `dog_bulk_cancel`.
+- ✅ Fixed §7.3 (`book_for_dog`/`recurring_for_dog` now notify the client on **pending and waitlisted**,
+  not only confirmed) and §7.7 (walker text uses canonical `walk`/`drop-in` via `summarise`, not
+  `service.name.lower()`). §7.6 (`dental_*`) was **already clean** — `NOTIFICATION_META` has no such keys.
+- **⏳ DEFERRED to a follow-up PR (decided this session):** refactoring the *client* paths
+  (`pause_walks`, `book_both`, `recurring_booking`) onto the shared helper. They already group per
+  recipient; routing them through `summarise()` would change their (working) client-facing wording, so
+  it was split out to keep this PR's risk to the admin side. Until then, admin- and client-initiated
+  recurring wording differ slightly (admin: canonical grouped form; client: existing bespoke form).
+- **Tests:** new `tests/test_notification_grouping.py` (24 cases — `summarise()` wording matrix +
+  `NotificationBatch` grouping incl. the "5 walks → 1 notification" DoD). Existing `test_bookings.py`
+  admin recurring/book-for-dog route tests exercise the migrated wiring end-to-end. Full SQLite suite
+  green; Postgres via CI.
+- **Carried:** client-path convergence (above) is the remaining Session 2 item for the follow-up PR.
 
 **Session 3 — Close reset/recipient gaps.**
 - `booking_reset` notification on every reset path (§7.1, §7.2), grouped per client. Expand closure /
