@@ -13,6 +13,7 @@ from sqlalchemy import text
 from app import db
 from app.models import (
     User, Walker, WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability,
+    Booking, Dog, DogOwner, Client, ServiceType, Notification,
 )
 
 
@@ -359,3 +360,105 @@ class TestScheduleChangeGrouping:
         assert len(groups) == 2
         assert groups[0]['start_date'] == mon
         assert groups[1]['start_date'] == thu
+
+
+# ---------------------------------------------------------------------------
+# Session 3: client booking_reset notifications on reset paths (§7.1)
+# ---------------------------------------------------------------------------
+
+def _make_client_with_dog(email):
+    """Create a client user + Client profile + Dog + DogOwner. Returns (user, dog)."""
+    from werkzeug.security import generate_password_hash
+    u = User(firstname='Client', lastname='Test', email=email, role='client',
+             hashed_password=generate_password_hash('Testpass1!'))
+    db.session.add(u); db.session.flush()
+    db.session.add(Client(user_id=u.id, onboarding_completed=True)); db.session.flush()
+    dog = Dog(name='Rover', breed='Mixed'); db.session.add(dog); db.session.flush()
+    db.session.add(DogOwner(dog_id=dog.id, user_id=u.id, role='primary'))
+    db.session.commit()
+    return u, dog
+
+
+def _make_service():
+    st = ServiceType(name='Group Walk', slug='group-walk',
+                     capacity_model='walker_assigned', slot_type='morning_afternoon',
+                     requires_walker=True, default_max_capacity=6, active=True)
+    db.session.add(st); db.session.commit()
+    return st
+
+
+def _confirmed_booking(user_id, dog_id, service_type_id, walker_id, date, slot='Morning'):
+    b = Booking(user_id=user_id, dog_id=dog_id, service_type_id=service_type_id,
+                date=date, slot=slot, status='confirmed', walker_id=walker_id)
+    db.session.add(b); db.session.commit()
+    return b
+
+
+class TestClientResetNotifications:
+    """Walker self-service unavailability resets must notify affected clients (§7.1)."""
+
+    def test_single_unavailability_notifies_client(self, app, client):
+        """POST /walker/unavailability with a slot that has a confirmed booking
+        → the booking owner gets exactly one booking_reset notification."""
+        monday = _next_weekday(0)
+        with app.app_context():
+            walker_u, walker = _make_walker(
+                email='walker_notif@test.com',
+                schedule_days=[(0, 'Morning')],
+            )
+            client_u, dog = _make_client_with_dog('client_notif@test.com')
+            st = _make_service()
+            _confirmed_booking(client_u.id, dog.id, st.id, walker.id, monday)
+            walker_email = walker_u.email
+            client_uid = client_u.id
+
+        _login(client, walker_email)
+        resp = client.post('/walker/unavailability', json={
+            'date': monday.isoformat(),
+            'slot': 'Morning',
+        })
+        assert resp.status_code == 201
+
+        with app.app_context():
+            notifs = Notification.query.filter_by(recipient_id=client_uid).all()
+            assert len(notifs) == 1
+            n = notifs[0]
+            assert n.notification_type == 'system'
+            assert 'needs a new walker' in n.title
+            assert 'No action needed' in n.body
+
+    def test_batch_unavailable_notifies_client(self, app, client):
+        """POST /walker/schedule-changes/batch type=unavailable with affected
+        confirmed bookings → the booking owner gets exactly one grouped booking_reset."""
+        monday = _next_weekday(0)
+        tuesday = monday + datetime.timedelta(days=1)  # always after monday
+        with app.app_context():
+            walker_u, walker = _make_walker(
+                email='walker_batch_notif@test.com',
+                schedule_days=[(0, 'Morning'), (1, 'Morning')],
+            )
+            client_u, dog = _make_client_with_dog('client_batch_notif@test.com')
+            st = _make_service()
+            # Two confirmed bookings across two days — both reset by the batch.
+            _confirmed_booking(client_u.id, dog.id, st.id, walker.id, monday)
+            _confirmed_booking(client_u.id, dog.id, st.id, walker.id, tuesday, 'Morning')
+            walker_email = walker_u.email
+            client_uid = client_u.id
+
+        _login(client, walker_email)
+        resp = client.post('/walker/schedule-changes/batch', json={
+            'start_date': monday.isoformat(),
+            'end_date':   tuesday.isoformat(),
+            'slots':      ['Morning'],
+            'type':       'unavailable',
+        })
+        assert resp.get_json()['success'] is True
+
+        with app.app_context():
+            notifs = Notification.query.filter_by(recipient_id=client_uid).all()
+            # Two bookings → one grouped notification.
+            assert len(notifs) == 1
+            n = notifs[0]
+            assert n.notification_type == 'system'
+            assert '2 of your walks' in n.title
+            assert 'No action needed' in n.body

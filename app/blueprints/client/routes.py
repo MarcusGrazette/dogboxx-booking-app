@@ -22,7 +22,7 @@ import uuid
 from datetime import datetime, timezone, timedelta, date as date_type
 
 from app.blueprints.client import client_bp
-from app.utils.notifications import create_notification
+from app.utils.notifications import create_notification, NotificationBatch
 from app.utils.booking_status import (
     transition_booking, record_booking_created, bulk_transition,
 )
@@ -157,6 +157,17 @@ def _maybe_auto_confirm(booking, dog, service_slug=ServiceType.WALK, notify=True
                     notification_type='booking_confirmed',
                     title=f"{booking.user.firstname} booked {dog.name}'s {booking.slot.lower()} walk on {date_str}",
                     link=f'/admin/clients/{booking.user_id}',
+                    sender_id=booking.user_id,
+                )
+            # Notify the auto-assigned walker (§7.9, D3). Skip if the walker is
+            # the booking user themselves (edge case: owner-walker books own dog).
+            if walker.user_id != booking.user_id:
+                create_notification(
+                    recipient_id=walker.user_id,
+                    notification_type='walker_assigned',
+                    title=f"You have been assigned a walk on {booking.date.strftime('%-d %b %Y')}",
+                    body=f"{dog.name} — {booking.slot}",
+                    link=f"/walker/pickups?date={booking.date.isoformat()}",
                     sender_id=booking.user_id,
                 )
         _notify_co_owners_of_booking(booking, dog.name, confirmed=True)
@@ -780,6 +791,16 @@ def book_both():
             body              = body,
             link              = '/',
         )
+
+    # Notify auto-assigned walkers (§7.9): one grouped walker_assigned per walker.
+    walker_batch = NotificationBatch(actor_id=current_user.id)
+    for slot, _status, b in final_created:
+        if b.status == 'confirmed' and b.walker_id and b.walker:
+            wuid = b.walker.user_id
+            if wuid and wuid != current_user.id:
+                walker_batch.add(wuid, 'walker_assigned',
+                                 dog_name=dog.name, slot=slot, date=booking_date)
+    walker_batch.flush()
 
     db.session.commit()
     created = final_created
@@ -1925,6 +1946,7 @@ def recurring_booking():
 
         active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
         confirmed = created = waitlisted = skipped = 0
+        confirmed_bookings = []  # tracks confirmed rows for walker notification (§7.9)
 
         # One batch_id ties together every booking in this recurring series so
         # the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
@@ -1982,12 +2004,14 @@ def recurring_booking():
                                            walker_id=walker.id, batch_id=batch_id)
                         booking.pickup_order = get_walker_slot_count(walker.id, d, s, service_slug=service_slug)
                         confirmed += 1
+                        confirmed_bookings.append(booking)
                     else:
                         created += 1
                 else:
                     created += 1
 
-        db.session.commit()
+        # Flush to ensure booking IDs are set before querying walkers below.
+        db.session.flush()
 
         freq_label    = 'daily' if frequency == 'daily' else 'weekly'
         slot_label    = 'AM + PM' if slot == 'Both' else slot
@@ -2032,6 +2056,16 @@ def recurring_booking():
                     sender_id=current_user.id,
                 )
 
+        # Notify auto-assigned walkers (§7.9): one grouped walker_assigned per walker.
+        if confirmed_bookings:
+            walker_batch = NotificationBatch(actor_id=current_user.id)
+            for b in confirmed_bookings:
+                if b.walker_id and b.walker and b.walker.user_id != current_user.id:
+                    walker_batch.add(b.walker.user_id, 'walker_assigned',
+                                     dog_name=dog.name, slot=b.slot, date=b.date)
+            walker_batch.flush()
+
+        db.session.commit()
         return jsonify(success=True, confirmed=confirmed, created=created, waitlisted=waitlisted, skipped=skipped)
 
     except Exception as e:
