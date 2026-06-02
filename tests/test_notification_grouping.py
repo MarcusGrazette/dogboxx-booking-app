@@ -274,3 +274,26 @@ def test_flush_clears_batch(app, db):
     assert batch.flush() == []
     db.session.commit()
     assert Notification.query.filter_by(recipient_id=u.id).count() == 1
+
+
+# ── Session 5: cap-pruning test (D1) ─────────────────────────────────────────
+
+def test_db_cap_prunes_oldest(app, db):
+    """Creating NOTIF_DB_CAP+1 notifications for one user must leave exactly
+    NOTIF_DB_CAP rows, with the oldest one pruned (D1: cap bumped to 100)."""
+    from app.utils.notifications import create_notification, NOTIF_DB_CAP
+    u = _make_user('cap-test@example.com')
+
+    for i in range(NOTIF_DB_CAP + 1):
+        create_notification(
+            recipient_id=u.id,
+            notification_type='system',
+            title=f'Notification {i}',
+            sender_id=u.id,
+        )
+    db.session.commit()
+
+    stored = Notification.query.filter_by(recipient_id=u.id).count()
+    assert stored == NOTIF_DB_CAP, (
+        f"Expected {NOTIF_DB_CAP} notifications after pruning, got {stored}"
+    )

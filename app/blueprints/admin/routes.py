@@ -1544,13 +1544,108 @@ def activity_feed():
             return 'walker'
         return 'client'
 
-    def _make_event(ts, actor_type, actor_name, actor_id, description, badge, activity_type, link):
+    def _make_event(ts, actor_type, actor_name, actor_id, description, badge, activity_type, link,
+                    batch_id=None, booking_date=None, dog_name_raw=None, svc_label_raw=None):
         parts = actor_name.split()
         initials = (parts[0][0] + (parts[-1][0] if len(parts) > 1 else '')).upper() if parts else '?'
         label, icon, icon_color, badge_bg = BADGE_META.get(badge, ('', 'bi-circle', '#666', 'rgba(0,0,0,0.06)'))
         return dict(ts=ts, actor_type=actor_type, actor_name=actor_name, actor_id=actor_id,
                     description=description, badge=badge, activity_type=activity_type, link=link,
-                    initials=initials, badge_label=label, icon=icon, icon_color=icon_color, badge_bg=badge_bg)
+                    initials=initials, badge_label=label, icon=icon, icon_color=icon_color, badge_bg=badge_bg,
+                    batch_id=batch_id, booking_date=booking_date,
+                    dog_name_raw=dog_name_raw, svc_label_raw=svc_label_raw,
+                    is_cluster=False)
+
+    def _cluster_events(event_list):
+        """Group BSC events sharing a batch_id into collapsible clusters (D4).
+        Non-batch events and single-row batches pass through unchanged."""
+        from collections import defaultdict, Counter
+        # Sort first so clusters appear at the position of their latest child.
+        event_list.sort(key=lambda e: e['ts'] if e['ts'] else datetime.min, reverse=True)
+
+        # Collect all children per batch_id and track first-seen position.
+        batch_children = defaultdict(list)
+        seen = set()
+        ordered_batches = []
+        result = []
+
+        for e in event_list:
+            bid = e.get('batch_id')
+            if bid:
+                batch_children[bid].append(e)
+                if bid not in seen:
+                    seen.add(bid)
+                    ordered_batches.append(bid)
+            else:
+                result.append(e)
+
+        batch_events = []
+        for bid in ordered_batches:
+            children = batch_children[bid]
+            if len(children) == 1:
+                batch_events.append(children[0])
+            else:
+                batch_events.append(_make_cluster(bid, children))
+
+        # Merge non-batch and batch events, re-sort
+        combined = result + batch_events
+        combined.sort(key=lambda e: e['ts'] if e['ts'] else datetime.min, reverse=True)
+        return combined
+
+    def _make_cluster(bid, children):
+        """Build a single cluster-row dict from N children sharing a batch_id."""
+        from collections import Counter
+        ts          = max((c['ts'] for c in children if c['ts']), default=None)
+        actor_type  = children[0]['actor_type']
+        actor_name  = children[0]['actor_name']
+        actor_id    = children[0]['actor_id']
+        initials    = children[0]['initials']
+        activity_type = children[0]['activity_type']
+        link        = children[0]['link']
+
+        # Dominant badge = most common to_status across children
+        badge = Counter(c['badge'] for c in children).most_common(1)[0][0]
+        label, icon, icon_color, badge_bg = BADGE_META.get(badge, ('', 'bi-circle', '#666', 'rgba(0,0,0,0.06)'))
+
+        # Build summary description from structured fields
+        dog_names = sorted({c['dog_name_raw'] for c in children if c.get('dog_name_raw')})
+        dates     = [c['booking_date'] for c in children if c.get('booking_date')]
+        svcs      = {c.get('svc_label_raw', 'walk') for c in children}
+        svc       = svcs.pop() if len(svcs) == 1 else 'walk'
+        n         = len(children)
+        plural    = 's' if n != 1 else ''
+
+        if dates:
+            lo, hi = min(dates), max(dates)
+            if lo == hi:
+                span = lo.strftime('%a %-d %b')
+            elif (lo.month, lo.year) == (hi.month, hi.year):
+                span = f"{lo.strftime('%a %-d')} – {hi.strftime('%a %-d %b')}"
+            else:
+                span = f"{lo.strftime('%a %-d %b')} – {hi.strftime('%a %-d %b')}"
+        else:
+            span = None
+
+        verb_map = {
+            'confirmed': 'confirmed', 'cancelled': 'cancelled',
+            'rejected': 'declined',   'requested': 'requested',
+            'waitlisted': 'waitlisted',
+        }
+        verb     = verb_map.get(badge, badge)
+        dog_pfx  = f"{dog_names[0]}'s " if len(dog_names) == 1 else ''
+        desc     = f"{dog_pfx}{n} {svc}{plural} {verb}"
+        if span:
+            desc += f" ({span})"
+        if len(dog_names) > 1:
+            desc += f" · {', '.join(dog_names)}"
+
+        return dict(
+            ts=ts, actor_type=actor_type, actor_name=actor_name, actor_id=actor_id,
+            description=desc, badge=badge, activity_type=activity_type, link=link,
+            initials=initials, badge_label=label, icon=icon, icon_color=icon_color, badge_bg=badge_bg,
+            batch_id=bid, booking_date=None, dog_name_raw=None, svc_label_raw=None,
+            is_cluster=True, cluster_count=n, children=children,
+        )
 
     events = []
 
@@ -1613,6 +1708,8 @@ def activity_feed():
             actor_name=actor.full_name, actor_id=actor.id,
             description=desc, badge=badge, activity_type=activity_type,
             link=client_link,
+            batch_id=bsc.batch_id, booking_date=b.date,
+            dog_name_raw=b.dog.name, svc_label_raw=svc_label,
         ))
 
     # ── Walker unavailabilities ────────────────────────────────────────────────
@@ -1702,7 +1799,7 @@ def activity_feed():
             link=url_for('admin.broadcasts'),
         ))
 
-    events.sort(key=lambda e: e['ts'] if e['ts'] else datetime.min, reverse=True)
+    events = _cluster_events(events)
 
     # Month dropdown — earliest event across all log sources
     candidates = [

@@ -345,3 +345,80 @@ class TestFeedBadgeFromTransition:
         # Both 'Requested' and 'Booked' badges must appear (one per BSC row)
         assert b'Requested' in resp.data
         assert b'Booked' in resp.data
+
+
+# ---------------------------------------------------------------------------
+# 5. Feed clustering — bulk actions collapse to one expandable row (D4)
+# ---------------------------------------------------------------------------
+
+class TestFeedClustering:
+
+    def test_bulk_action_produces_one_cluster_row(self, app, client):
+        """N BSC rows sharing a batch_id must collapse into a single cluster
+        header row with a toggle, not N individual rows (DoD: 'bulk actions
+        render as one expandable feed row that expands to the individual
+        bookings')."""
+        import uuid
+        monday = _next_weekday(0)
+        tuesday = monday + datetime.timedelta(days=1)
+        with app.app_context():
+            admin = _make_user('af_clust_admin@test.com', role='walker', is_admin=True)
+            client_u = _make_user('af_clust_client@test.com', role='client')
+            db.session.add(Client(user_id=client_u.id, onboarding_completed=True))
+            st = _make_service()
+            dog = _make_dog(client_u.id)
+
+            # Simulate a bulk cancel: two bookings share one batch_id
+            batch_id = uuid.uuid4().hex
+            for d in (monday, tuesday):
+                b = Booking(user_id=client_u.id, dog_id=dog.id,
+                            service_type_id=st.id, date=d,
+                            slot='Morning', status='requested')
+                db.session.add(b)
+                db.session.flush()
+                record_booking_created(b, actor_id=client_u.id, batch_id=batch_id)
+                transition_booking(b, 'cancelled', actor_id=admin.id,
+                                   cancelled_by='admin', batch_id=batch_id)
+            db.session.commit()
+
+            # Sanity: 4 BSC rows, 2 creation + 2 cancel, all with same batch_id
+            bsc_rows = BookingStatusChange.query.filter_by(batch_id=batch_id).all()
+            assert len(bsc_rows) == 4
+
+        _login(client, 'af_clust_admin@test.com')
+        resp = _get_feed(client, _this_month())
+        assert resp.status_code == 200
+
+        # The cluster header row must appear
+        assert b'class="activity-row cluster-header' in resp.data
+        # The expand toggle must be present
+        assert b'class="btn btn-link btn-sm p-0 cluster-toggle' in resp.data
+        # Child rows must be present but hidden by default
+        assert b'class="cluster-child' in resp.data
+
+    def test_single_bsc_row_no_batch_renders_plain(self, app, client):
+        """A BSC row with no batch_id (single booking action) must render as
+        a plain row — no cluster chrome."""
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_user('af_plain_admin@test.com', role='walker', is_admin=True)
+            client_u = _make_user('af_plain_client@test.com', role='client')
+            db.session.add(Client(user_id=client_u.id, onboarding_completed=True))
+            st = _make_service()
+            dog = _make_dog(client_u.id)
+            b = Booking(user_id=client_u.id, dog_id=dog.id,
+                        service_type_id=st.id, date=monday,
+                        slot='Morning', status='requested')
+            db.session.add(b)
+            db.session.flush()
+            # No batch_id — single action
+            record_booking_created(b, actor_id=client_u.id)
+            db.session.commit()
+
+        _login(client, 'af_plain_admin@test.com')
+        resp = _get_feed(client, _this_month())
+        assert resp.status_code == 200
+        # No cluster HTML on a plain single-row action (JS may contain the class names
+        # as selectors, so check the class= attribute form which only appears in rows)
+        assert b'class="activity-row cluster-header' not in resp.data
+        assert b'class="cluster-child' not in resp.data
