@@ -204,45 +204,56 @@ def _maybe_auto_confirm(booking, dog, service_slug=ServiceType.WALK, notify=True
         return False
 
 
-def _summarise_book_both_for_client(slot_entries, dog_name, date_str):
+def _summarise_book_both_for_client(slot_entries, dog_name, booking_date):
     """Build (title, body, notification_type) for the single consolidated client
-    notification written by /book_both — covers every slot created in one
-    bell entry instead of one-per-slot.
+    notification from /book_both using summarise() for canonical wording.
 
     slot_entries: list of (slot_name, status, booking) tuples.
+    booking_date: datetime.date — passed through to summarise() for consistent
+                  date formatting (summarise uses %-d, not a pre-formatted string).
     """
+    from app.utils.notifications import summarise as _summarise
     ordered = sorted(slot_entries, key=lambda x: 0 if x[0] == 'Morning' else 1)
 
-    def _status_label(status):
-        if status == 'confirmed':  return 'confirmed'
-        if status == 'waitlisted': return 'on the waitlist'
-        return 'requested'
+    confirmed  = [(s, b) for s, st, b in ordered if st == 'confirmed']
+    waitlisted = [(s, b) for s, st, b in ordered if st == 'waitlisted']
+    requested  = [(s, b) for s, st, b in ordered if st not in ('confirmed', 'waitlisted')]
 
-    all_confirmed = all(status == 'confirmed' for _, status, _ in ordered)
-    ntype = 'booking_confirmed' if all_confirmed else 'booking_requested'
+    # Pure cases: delegate to summarise() for the canonical title; for the 2-slot
+    # AM+PM case keep an explicit slot body ("morning and afternoon both booked.")
+    # since "2 walks booked." drops the slot context that matters here.
+    if confirmed and not waitlisted and not requested:
+        payloads = [dict(dog_name=dog_name, slot=s,
+                         date=booking_date,
+                         walker_name=b.walker.user.firstname if b.walker and b.walker.user else None)
+                    for s, b in confirmed]
+        title, body, ntype, _ = _summarise('booking_confirmed', payloads)
+        if len(confirmed) == 2:
+            slot_names = [s for s, _ in sorted(confirmed, key=lambda x: 0 if x[0] == 'Morning' else 1)]
+            body = f"{' and '.join(s.lower() for s in slot_names)} both booked.".capitalize()
+        return title, body, ntype
 
-    if len(ordered) == 2:
-        if all_confirmed:
-            title = f"{dog_name}'s walks on {date_str} have been confirmed"
-            body = 'Morning and afternoon both booked.'
-        else:
-            title = f"{dog_name}'s walks on {date_str}"
-            parts = [f'{slot.lower()} {_status_label(status)}' for slot, status, _ in ordered]
-            body = ', '.join(parts).capitalize() + '.'
-    else:
-        slot, status, _ = ordered[0]
-        slot_lower = slot.lower()
-        if status == 'confirmed':
-            title = f"{dog_name}'s {slot_lower} walk on {date_str} has been confirmed"
-            body = 'Walker assigned.'
-        elif status == 'waitlisted':
-            title = f"{dog_name}'s {slot_lower} walk on {date_str} is on the waitlist"
-            body = "We'll let you know when a spot opens up."
-        else:
-            title = f"{dog_name}'s {slot_lower} walk on {date_str} has been requested"
-            body = "We'll confirm shortly."
+    if waitlisted and not confirmed and not requested:
+        payloads = [dict(dog_name=dog_name, slot=s, date=booking_date)
+                    for s, _ in waitlisted]
+        title, body, ntype, _ = _summarise('booking_waitlisted', payloads)
+        return title, body, ntype
 
-    return title, body, ntype
+    if requested and not confirmed and not waitlisted:
+        payloads = [dict(dog_name=dog_name, slot=s, date=booking_date)
+                    for s, _ in requested]
+        title, body, ntype, _ = _summarise('booking_requested', payloads)
+        return title, body, ntype
+
+    # Mixed outcome (e.g. one confirmed + one waitlisted): build a short
+    # bespoke summary. The notification type is pessimistic (booking_requested).
+    def _status_label(st):
+        return {'confirmed': 'confirmed', 'waitlisted': 'on the waitlist'}.get(st, 'requested')
+    parts = [f'{s.lower()} {_status_label(st)}' for s, st, _ in ordered]
+    from app.utils.notifications import _fmt_day
+    title = f"{dog_name}'s walks on {_fmt_day(booking_date)}"
+    body  = ', '.join(parts).capitalize() + '.'
+    return title, body, 'booking_requested'
 
 
 def _notify_co_owners_of_booking(booking, dog_name, confirmed):
@@ -747,34 +758,38 @@ def book_both():
             if not auto_confirmed:
                 pending_slots.append((slot, status, b))
 
-    # Admin notification for auto-confirmed slots
-    confirmed_slot_names = [slot for slot, _, b in final_created if b.status == 'confirmed']
-    if confirmed_slot_names:
-        slots_str = ' & '.join(s.lower() for s in confirmed_slot_names)
-        suffix = 'walks' if len(confirmed_slot_names) > 1 else 'walk'
+    # Admin notifications — one grouped notice per admin via NotificationBatch.
+    # Same-day requests use the same_day_request ntype on the admin side.
+    admin_batch = NotificationBatch(actor_id=current_user.id)
+    admin_link  = f'/admin/clients/{current_user.id}'
+    for slot, _, b in final_created:
+        walker_first = b.walker.user.firstname if b.status == 'confirmed' and b.walker and b.walker.user else None
+        if b.status == 'confirmed':
+            kind = 'booking_confirmed'
+        elif b.status == 'waitlisted':
+            kind = 'booking_waitlisted'
+        else:
+            kind = 'booking_requested'
         for admin in User.query.filter_by(is_admin=True).all():
-            create_notification(
-                recipient_id      = admin.id,
-                notification_type = 'booking_confirmed',
-                title             = f"{current_user.firstname} booked {dog.name}'s {slots_str} {suffix} on {date_str_fmt}",
-                link              = f'/admin/clients/{current_user.id}',
-                sender_id         = current_user.id,
-            )
-
-    # Admin notification for any unconfirmed (pending/waitlisted) slots
-    if pending_slots:
-        pending_slot_names = [s for s, _, _ in pending_slots]
-        slots_str = ' & '.join(s.lower() for s in pending_slot_names)
-        suffix = 'walks' if len(pending_slot_names) > 1 else 'walk'
-        ntype = 'same_day_request' if same_day else 'booking_requested'
-        title_prefix = 'Same-day request — ' if same_day else ''
+            admin_batch.add(admin.id, kind,
+                            actor_first=current_user.firstname,
+                            link=admin_link,
+                            dog_name=dog.name, slot=slot, date=booking_date,
+                            walker_name=walker_first)
+    # Same-day pending slots: override notification_type to same_day_request
+    # after flushing — handled by create_notification type kwarg via a separate
+    # create_notification call rather than through summarise() (which has no
+    # same_day_request kind) so admins see the urgency marker.
+    admin_batch.flush()
+    if same_day and pending_slots:
         for admin in User.query.filter_by(is_admin=True).all():
+            pending_slot_names = [s.lower() for s, _, _ in pending_slots]
             create_notification(
-                recipient_id      = admin.id,
-                notification_type = ntype,
-                title             = f"{title_prefix}{current_user.firstname} requested {dog.name}'s {slots_str} {suffix} on {date_str_fmt}",
-                link              = '/admin',
-                sender_id         = current_user.id,
+                recipient_id=admin.id,
+                notification_type='same_day_request',
+                title=f"Same-day request — {current_user.firstname} requested {dog.name}'s {' & '.join(pending_slot_names)} walk{'s' if len(pending_slots) > 1 else ''} on {date_str_fmt}",
+                link='/admin',
+                sender_id=current_user.id,
             )
 
     # Single consolidated client notification covering every created slot.
@@ -782,7 +797,7 @@ def book_both():
     # only surfaced the confirmed slot in the bell.
     if final_created:
         title, body, ntype = _summarise_book_both_for_client(
-            final_created, dog.name, date_str_fmt
+            final_created, dog.name, booking_date
         )
         create_notification(
             recipient_id      = current_user.id,
@@ -1642,19 +1657,36 @@ def pause_walks():
     if not bookings:
         return jsonify(success=True, cancelled_count=0)
 
-    dog_names = sorted({b.dog.name for b in bookings if b.dog})
-    dogs_str  = ', '.join(dog_names)
-    start_fmt = start.strftime('%-d %b')
-    end_fmt   = end.strftime('%-d %b')
-    n         = len(bookings)
-    slot_label = slot_filter[0].lower() + ' ' if len(slot_filter) == 1 else ''
+    n          = len(bookings)
+    admins     = User.query.filter_by(is_admin=True).all()
+    actor_name = current_user.firstname
+    admin_link = f'/admin/clients/{current_user.id}'
 
-    # Capture per-walker walk counts before clearing walker_id — used for the
-    # grouped walker notifications below (one per walker, not one per walk).
-    walker_walk_counts = {}
+    # Build the notification batch before bulk_transition clears walker_id.
+    # NotificationBatch groups by (recipient_id, kind) so each person gets
+    # exactly one grouped notice regardless of how many bookings are in scope.
+    notif_batch = NotificationBatch(actor_id=current_user.id)
     for b in bookings:
-        if b.walker and b.walker.user_id != current_user.id:
-            walker_walk_counts[b.walker.user_id] = walker_walk_counts.get(b.walker.user_id, 0) + 1
+        if not b.dog:
+            continue
+        svc_label = 'drop-in' if b.service_type and b.service_type.slug == ServiceType.DROP_IN else 'walk'
+        payload = dict(dog_name=b.dog.name, slot=b.slot, date=b.date, svc_label=svc_label)
+
+        for admin in admins:
+            notif_batch.add(admin.id, 'booking_cancelled', actor_first=actor_name,
+                            link=admin_link, **payload)
+
+        for ownership in DogOwner.query.filter(
+            DogOwner.dog_id == b.dog_id,
+            DogOwner.user_id != current_user.id,
+        ).all():
+            co_user = db.session.get(User, ownership.user_id)
+            if co_user and not co_user.is_admin:
+                notif_batch.add(co_user.id, 'booking_cancelled', actor_first=actor_name, **payload)
+
+        if b.walker_id and b.walker and b.walker.user_id and b.walker.user_id != current_user.id:
+            notif_batch.add(b.walker.user_id, 'booking_cancelled', actor_first=actor_name,
+                            link='/walker/schedule', **payload)
 
     # One batch_id ties together every cancellation in this pause action so the
     # activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
@@ -1662,48 +1694,7 @@ def pause_walks():
     bulk_transition(bookings, 'cancelled', actor_id=current_user.id,
                     walker_id=None, cancelled_by='client', batch_id=batch_id)
 
-    # One admin notification covering the whole pause
-    for admin in User.query.filter_by(is_admin=True).all():
-        create_notification(
-            recipient_id      = admin.id,
-            notification_type = 'booking_cancelled',
-            title             = f"{current_user.firstname} paused {slot_label}walks {start_fmt}–{end_fmt}",
-            body              = f"{n} booking{'s' if n != 1 else ''} cancelled · {dogs_str}",
-            link              = f'/admin/clients/{current_user.id}',
-            sender_id         = current_user.id,
-        )
-
-    # One notification per co-owner (not one per booking)
-    notified = {current_user.id}
-    for b in bookings:
-        if not b.dog_id:
-            continue
-        for ownership in DogOwner.query.filter(
-            DogOwner.dog_id == b.dog_id,
-            DogOwner.user_id != current_user.id,
-        ).all():
-            if ownership.user_id not in notified and not (ownership.user and ownership.user.is_admin):
-                create_notification(
-                    recipient_id      = ownership.user_id,
-                    notification_type = 'booking_cancelled',
-                    title             = f"{current_user.firstname} paused {dogs_str}'s {slot_label}walks {start_fmt}–{end_fmt}",
-                    body              = f"{n} booking{'s' if n != 1 else ''} cancelled.",
-                    link              = '/',
-                    sender_id         = current_user.id,
-                )
-                notified.add(ownership.user_id)
-
-    # One notification per walker covering all of their cancelled walks.
-    for walker_user_id, wn in walker_walk_counts.items():
-        create_notification(
-            recipient_id      = walker_user_id,
-            notification_type = 'booking_cancelled',
-            title             = f"{current_user.firstname} paused {slot_label}walks {start_fmt}–{end_fmt}",
-            body              = f"{wn} of your assigned walk{'s' if wn != 1 else ''} cancelled",
-            link              = '/walker/schedule',
-            sender_id         = current_user.id,
-        )
-
+    notif_batch.flush()
     db.session.commit()
     return jsonify(success=True, cancelled_count=n)
 
@@ -1946,7 +1937,8 @@ def recurring_booking():
 
         active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
         confirmed = created = waitlisted = skipped = 0
-        confirmed_bookings = []  # tracks confirmed rows for walker notification (§7.9)
+        confirmed_bookings = []  # tracks confirmed rows for walker + client notifications
+        pending_bookings   = []  # tracks requested/waitlisted rows for client + admin notifications
 
         # One batch_id ties together every booking in this recurring series so
         # the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
@@ -1996,6 +1988,7 @@ def recurring_booking():
 
                 if status == 'waitlisted':
                     waitlisted += 1
+                    pending_bookings.append(booking)
                 elif not is_drop_in:
                     # Try to auto-assign a walker, same as single bookings
                     walker = auto_assign_walker(d, s, service_slug=service_slug)
@@ -2007,8 +2000,10 @@ def recurring_booking():
                         confirmed_bookings.append(booking)
                     else:
                         created += 1
+                        pending_bookings.append(booking)
                 else:
                     created += 1
+                    pending_bookings.append(booking)
 
         # Flush to ensure booking IDs are set before querying walkers below.
         db.session.flush()
@@ -2017,44 +2012,36 @@ def recurring_booking():
         slot_label    = 'AM + PM' if slot == 'Both' else slot
         service_label = 'drop-ins' if is_drop_in else 'walks'
 
-        # Single client notification summarising the recurring submission —
-        # written whenever anything was created, so the bell isn't silent when
-        # every slot ended up pending/waitlisted.
+        # Client + admin notifications via NotificationBatch / summarise().
+        # Client gets one notice per outcome kind (confirmed / pending).
+        # Admins are notified only when bookings remain pending/waitlisted.
         pending_total = created + waitlisted
-        total = confirmed + pending_total
-        if total > 0:
-            if confirmed > 0 and pending_total == 0:
-                title = f"{dog.name}'s recurring {service_label} have been confirmed"
-                body  = f'{confirmed} {freq_label} {slot_label} {service_label} booked.'
-                ntype = 'booking_confirmed'
-            elif confirmed == 0:
-                title = f"{dog.name}'s recurring {service_label} have been requested"
-                body  = f"{pending_total} {freq_label} {slot_label} {service_label} — we'll confirm shortly."
-                ntype = 'booking_requested'
-            else:
-                title = f"{dog.name}'s recurring {service_label}"
-                body  = f"{confirmed} confirmed, {pending_total} awaiting confirmation."
-                ntype = 'booking_requested'
-            create_notification(
-                recipient_id=current_user.id,
-                notification_type=ntype,
-                title=title,
-                body=body,
-                link='/',
-            )
+        total         = confirmed + pending_total
 
-        # Single admin notification for anything still pending / waitlisted
-        if pending_total > 0:
-            admins = User.query.filter_by(is_admin=True).all()
+        client_batch = NotificationBatch(actor_id=current_user.id)
+        admin_batch  = NotificationBatch(actor_id=current_user.id)
+        admins       = User.query.filter_by(is_admin=True).all()
+
+        for b in confirmed_bookings:
+            walker_first = b.walker.user.firstname if b.walker and b.walker.user else None
+            client_batch.add(current_user.id, 'booking_confirmed',
+                             dog_name=dog.name, slot=b.slot, date=b.date,
+                             walker_name=walker_first)
+
+        for b in pending_bookings:
+            kind = 'booking_waitlisted' if b.status == 'waitlisted' else 'booking_requested'
+            client_batch.add(current_user.id, kind,
+                             dog_name=dog.name, slot=b.slot, date=b.date)
             for admin in admins:
-                create_notification(
-                    recipient_id=admin.id,
-                    notification_type='booking_requested',
-                    title=f'Recurring booking request — {pending_total} {service_label}',
-                    body=f'{current_user.firstname} requested {freq_label} {slot_label} {service_label} for {dog.name}',
-                    link='/admin',
-                    sender_id=current_user.id,
-                )
+                admin_batch.add(admin.id, kind,
+                                actor_first=current_user.firstname,
+                                link='/admin',
+                                dog_name=dog.name, slot=b.slot, date=b.date)
+
+        if total > 0:
+            client_batch.flush()
+        if pending_total > 0:
+            admin_batch.flush()
 
         # Notify auto-assigned walkers (§7.9): one grouped walker_assigned per walker.
         if confirmed_bookings:
