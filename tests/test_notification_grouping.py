@@ -180,6 +180,40 @@ def test_walker_assigned_grouped():
     assert link == '/walker/schedule'
 
 
+# ── summarise(): booking_reset ───────────────────────────────────────────────
+
+def test_reset_single_dropin_label():
+    """Single reset respects svc_label (already worked pre-F5)."""
+    title, _, ntype, _ = summarise('booking_reset', [
+        {'dog_name': 'Daisy', 'slot': 'Morning', 'date': date(2026, 6, 1),
+         'svc_label': 'drop-in'},
+    ])
+    assert title == "Daisy's Mon 1 Jun drop-in needs a new walker"
+    assert ntype == 'system'
+
+
+def test_reset_grouped_dropin_label():
+    """F5 regression: grouped reset must use svc_label, not hard-coded 'walks'."""
+    payloads = [
+        {'dog_name': 'Daisy', 'slot': 'Morning', 'date': date(2026, 6, 1),
+         'svc_label': 'drop-in'},
+        {'dog_name': 'Daisy', 'slot': 'Morning', 'date': date(2026, 6, 2),
+         'svc_label': 'drop-in'},
+    ]
+    title, _, _, _ = summarise('booking_reset', payloads)
+    assert title == "2 of your drop-ins are being reassigned"
+
+
+def test_reset_grouped_walk_label():
+    """Grouped reset of walks still says 'walks'."""
+    payloads = [
+        {'dog_name': 'Daisy', 'slot': 'Morning', 'date': date(2026, 6, 1)},
+        {'dog_name': 'Rex',   'slot': 'Morning', 'date': date(2026, 6, 2)},
+    ]
+    title, _, _, _ = summarise('booking_reset', payloads)
+    assert title == "2 of your walks are being reassigned"
+
+
 # ── summarise(): contract guards ─────────────────────────────────────────────
 
 def test_empty_payloads_raises():

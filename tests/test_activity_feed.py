@@ -139,6 +139,35 @@ class TestFeedEventSources:
         # Both the 'Booked' (confirmed) and 'Requested' badges should appear
         assert b'Booked' in resp.data or b'Confirmed' in resp.data
 
+    def test_slot_override_renders_as_moved(self, app, client):
+        """F6: a slot-override re-confirm carries a 'slot X → Y' BSC note and the
+        feed renders it as 'Moved … to <slot>', not an indistinguishable confirm."""
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_user('af_admin_move@test.com', role='walker', is_admin=True)
+            client_u = _make_user('af_client_move@test.com', role='client')
+            db.session.add(Client(user_id=client_u.id, onboarding_completed=True))
+            st = _make_service()
+            dog = _make_dog(client_u.id)
+            _, walker = _make_walker_user('af_walker_move@test.com')
+            booking = Booking(user_id=client_u.id, dog_id=dog.id,
+                              service_type_id=st.id, date=monday,
+                              slot='Morning', status='confirmed', walker_id=walker.id)
+            db.session.add(booking)
+            db.session.flush()
+            record_booking_created(booking, actor_id=client_u.id)
+            # Simulate the slot override exactly as assign_walker records it.
+            transition_booking(booking, 'confirmed', actor_id=admin.id,
+                               walker_id=walker.id, notes='slot Morning → Afternoon')
+            booking.slot = 'Afternoon'
+            db.session.commit()
+
+        _login(client, 'af_admin_move@test.com')
+        resp = _get_feed(client, _this_month())
+        assert resp.status_code == 200
+        assert b'Moved' in resp.data
+        assert b'to afternoon' in resp.data
+
     def test_walker_unavailability_appears(self, app, client):
         """A WalkerUnavailability row for this month appears in the feed."""
         monday = _next_weekday(0)

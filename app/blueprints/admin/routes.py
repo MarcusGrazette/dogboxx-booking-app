@@ -1283,8 +1283,13 @@ def assign_walker():
 
         # Update walker assignment and slot. transition_booking sets status,
         # confirmed_at, walker_id and logs the BSC row (actor = the admin).
+        # On a slot override, record the move in the BSC notes (F6) so the
+        # activity feed can tell a slot change apart from a plain re-confirm
+        # (otherwise both look like a confirmed→confirmed row with no detail).
+        slot_was_changed = bool(slot_override and slot and old_slot and old_slot != slot)
+        bsc_notes = f"slot {old_slot} → {slot}" if slot_was_changed else None
         transition_booking(booking, 'confirmed', actor_id=current_user.id,
-                           walker_id=walker.id)
+                           walker_id=walker.id, notes=bsc_notes)
         if slot:
             booking.slot = slot
 
@@ -1295,7 +1300,7 @@ def assign_walker():
         walker_first = walker.user.firstname if walker.user else None
 
         # Send slot-change notification if the slot was overridden
-        if slot_override and old_slot and slot and old_slot != slot:
+        if slot_was_changed:
             create_notification(
                 recipient_id=booking.user_id,
                 notification_type='system',
@@ -1305,7 +1310,6 @@ def assign_walker():
                 sender_id=current_user.id,
             )
 
-        slot_was_changed = slot_override and old_slot and slot and old_slot != slot
         if not slot_was_changed:
             create_notification(
                 recipient_id=booking.user_id,
@@ -1679,7 +1683,12 @@ def activity_feed():
 
         ts = bsc.to_status
         if ts == 'confirmed':
-            desc = f"Confirmed {dog}'s {slot} {svc_label} on {walk_date}"
+            # A slot-override re-confirm carries a "slot X → Y" note (F6) — show
+            # it as a move rather than an indistinguishable re-confirm.
+            if bsc.notes and bsc.notes.startswith('slot '):
+                desc = f"Moved {dog}'s {svc_label} on {walk_date} to {slot}"
+            else:
+                desc = f"Confirmed {dog}'s {slot} {svc_label} on {walk_date}"
             if b.user and atype == 'admin':
                 desc += f" for {b.user.full_name}"
             badge, activity_type = 'confirmed', 'booking'
@@ -2605,6 +2614,18 @@ def remove_walker_role(walker_user_id):
     ).all()
     bulk_transition(affected, 'requested', actor_id=current_user.id,
                     walker_id=None, batch_id=uuid.uuid4().hex)
+
+    # Notify each affected client (§7.2): one grouped booking_reset per user.
+    # Removing the walker role unassigns their confirmed walks just like
+    # deactivate_walker — the client must be told their booking reverted to
+    # pending, not left to discover it silently.
+    if affected:
+        client_batch = NotificationBatch(actor_id=current_user.id)
+        for b in affected:
+            client_batch.add(b.user_id, 'booking_reset',
+                             dog_name=b.dog.name, slot=b.slot, date=b.date,
+                             svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
+        client_batch.flush()
 
     # Deactivate schedule so they no longer appear on future capacity
     WalkerSchedule.query.filter_by(walker_id=user.walker.id).update(
