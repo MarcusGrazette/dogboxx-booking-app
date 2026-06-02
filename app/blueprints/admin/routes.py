@@ -1549,7 +1549,8 @@ def activity_feed():
         return 'client'
 
     def _make_event(ts, actor_type, actor_name, actor_id, description, badge, activity_type, link,
-                    batch_id=None, booking_date=None, dog_name_raw=None, svc_label_raw=None):
+                    batch_id=None, booking_date=None, dog_name_raw=None, svc_label_raw=None,
+                    booking_id=None):
         parts = actor_name.split()
         initials = (parts[0][0] + (parts[-1][0] if len(parts) > 1 else '')).upper() if parts else '?'
         label, icon, icon_color, badge_bg = BADGE_META.get(badge, ('', 'bi-circle', '#666', 'rgba(0,0,0,0.06)'))
@@ -1558,7 +1559,7 @@ def activity_feed():
                     initials=initials, badge_label=label, icon=icon, icon_color=icon_color, badge_bg=badge_bg,
                     batch_id=batch_id, booking_date=booking_date,
                     dog_name_raw=dog_name_raw, svc_label_raw=svc_label_raw,
-                    is_cluster=False)
+                    booking_id=booking_id, is_cluster=False)
 
     def _cluster_events(event_list):
         """Group BSC events sharing a batch_id into collapsible clusters (D4).
@@ -1598,7 +1599,7 @@ def activity_feed():
 
     def _make_cluster(bid, children):
         """Build a single cluster-row dict from N children sharing a batch_id."""
-        from collections import Counter
+        from collections import Counter, defaultdict
         ts          = max((c['ts'] for c in children if c['ts']), default=None)
         actor_type  = children[0]['actor_type']
         actor_name  = children[0]['actor_name']
@@ -1607,16 +1608,33 @@ def activity_feed():
         activity_type = children[0]['activity_type']
         link        = children[0]['link']
 
-        # Dominant badge = most common to_status across children
-        badge = Counter(c['badge'] for c in children).most_common(1)[0][0]
+        # Deduplicate by booking_id: for a booking that transitions
+        # requested→confirmed, two BSC rows share the same batch_id.
+        # Keep only the latest-ts row per booking so the count and badge
+        # reflect the final/terminal state rather than counting each
+        # transition separately.
+        by_booking = defaultdict(list)
+        for c in children:
+            bid_key = c.get('booking_id')
+            if bid_key is not None:
+                by_booking[bid_key].append(c)
+        if by_booking:
+            deduped = [max(rows, key=lambda r: r['ts'] or datetime.min)
+                       for rows in by_booking.values()]
+            deduped.extend(c for c in children if c.get('booking_id') is None)
+        else:
+            deduped = children
+
+        # Dominant badge = most common final status across unique bookings
+        badge = Counter(c['badge'] for c in deduped).most_common(1)[0][0]
         label, icon, icon_color, badge_bg = BADGE_META.get(badge, ('', 'bi-circle', '#666', 'rgba(0,0,0,0.06)'))
 
         # Build summary description from structured fields
-        dog_names = sorted({c['dog_name_raw'] for c in children if c.get('dog_name_raw')})
-        dates     = [c['booking_date'] for c in children if c.get('booking_date')]
-        svcs      = {c.get('svc_label_raw', 'walk') for c in children}
+        dog_names = sorted({c['dog_name_raw'] for c in deduped if c.get('dog_name_raw')})
+        dates     = [c['booking_date'] for c in deduped if c.get('booking_date')]
+        svcs      = {c.get('svc_label_raw', 'walk') for c in deduped}
         svc       = svcs.pop() if len(svcs) == 1 else 'walk'
-        n         = len(children)
+        n         = len(deduped)
         plural    = 's' if n != 1 else ''
 
         if dates:
@@ -1719,6 +1737,7 @@ def activity_feed():
             link=client_link,
             batch_id=bsc.batch_id, booking_date=b.date,
             dog_name_raw=b.dog.name, svc_label_raw=svc_label,
+            booking_id=b.id,
         ))
 
     # ── Walker unavailabilities ────────────────────────────────────────────────

@@ -269,7 +269,7 @@ def summarise(kind, payloads, *, actor_first=None):
         else:
             title = f"{n} of your {_plural(svc, n)} are being reassigned"
             body  = "No action needed — we'll reassign and confirm shortly."
-        return title, body, 'system', '/'
+        return title, body, 'system', '/notifications'
 
     # ── Walker assignment — its own template, ignores actor_first ─────────────
     if kind == 'walker_assigned':
@@ -317,7 +317,7 @@ def summarise(kind, payloads, *, actor_first=None):
             else:  # booking_cancelled
                 title = f"{dog_pfx}{slot_lower} {svc} on {when} cancelled"
                 body = p.get('reason')
-        return title, body, ntype, '/'
+        return title, body, ntype, '/notifications'
 
     # ── Grouped (N booking rows) ─────────────────────────────────────────────
     span = _fmt_range(dates)
@@ -347,7 +347,7 @@ def summarise(kind, payloads, *, actor_first=None):
     else:  # requested / waitlisted
         body = "We'll confirm shortly." if not multi_dog_suffix else f"{n} bookings.{multi_dog_suffix}".rstrip()
 
-    return title, body, ntype, '/'
+    return title, body, ntype, '/notifications'
 
 
 class NotificationBatch:

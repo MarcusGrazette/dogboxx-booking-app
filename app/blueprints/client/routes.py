@@ -2017,9 +2017,10 @@ def recurring_booking():
 
         # Client + admin notifications via NotificationBatch / summarise().
         # Client gets one notice per outcome kind (confirmed / pending).
-        # Admins are notified only when bookings remain pending/waitlisted.
+        # Admins are notified for all outcomes (confirmed and pending/waitlisted).
         pending_total = created + waitlisted
         total         = confirmed + pending_total
+        svc_label     = 'drop-in' if is_drop_in else 'walk'
 
         client_batch = NotificationBatch(actor_id=current_user.id)
         admin_batch  = NotificationBatch(actor_id=current_user.id)
@@ -2029,22 +2030,29 @@ def recurring_booking():
             walker_first = b.walker.user.firstname if b.walker and b.walker.user else None
             client_batch.add(current_user.id, 'booking_confirmed',
                              dog_name=dog.name, slot=b.slot, date=b.date,
-                             walker_name=walker_first)
+                             svc_label=svc_label, walker_name=walker_first)
+            for admin in admins:
+                admin_batch.add(admin.id, 'booking_confirmed',
+                                actor_first=current_user.firstname,
+                                link=f'/admin/clients/{current_user.id}',
+                                dog_name=dog.name, slot=b.slot, date=b.date,
+                                svc_label=svc_label, walker_name=walker_first)
 
         for b in pending_bookings:
             kind = 'booking_waitlisted' if b.status == 'waitlisted' else 'booking_requested'
             client_batch.add(current_user.id, kind,
-                             dog_name=dog.name, slot=b.slot, date=b.date)
+                             dog_name=dog.name, slot=b.slot, date=b.date,
+                             svc_label=svc_label)
             for admin in admins:
                 admin_batch.add(admin.id, kind,
                                 actor_first=current_user.firstname,
                                 link='/admin',
-                                dog_name=dog.name, slot=b.slot, date=b.date)
+                                dog_name=dog.name, slot=b.slot, date=b.date,
+                                svc_label=svc_label)
 
         if total > 0:
             client_batch.flush()
-        if pending_total > 0:
-            admin_batch.flush()
+        admin_batch.flush()
 
         # Notify auto-assigned walkers (§7.9): one grouped walker_assigned per walker.
         if confirmed_bookings:
@@ -2052,7 +2060,8 @@ def recurring_booking():
             for b in confirmed_bookings:
                 if b.walker_id and b.walker and b.walker.user_id != current_user.id:
                     walker_batch.add(b.walker.user_id, 'walker_assigned',
-                                     dog_name=dog.name, slot=b.slot, date=b.date)
+                                     dog_name=dog.name, slot=b.slot, date=b.date,
+                                     svc_label=svc_label)
             walker_batch.flush()
 
         db.session.commit()

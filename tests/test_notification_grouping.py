@@ -31,7 +31,7 @@ def test_single_confirmed_reflexive():
     assert title == "Daisy's morning walk on Mon 1 Jun confirmed"
     assert body == "Booked with Alice."
     assert ntype == 'booking_confirmed'
-    assert link == '/'
+    assert link == '/notifications'
 
 
 def test_single_confirmed_no_walker():
