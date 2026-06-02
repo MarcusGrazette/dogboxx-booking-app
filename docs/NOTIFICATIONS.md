@@ -641,6 +641,9 @@ Each session is one PR to `develop`, green CI, independently shippable.
 > Independent audit of the shipped code on `develop` (`083f4dc`) against the Part II spec. Not a
 > re-implementation — a verification pass for spec-conformance, bugs, logic errors, and efficiency.
 > **Reviewer method below is reproducible; line numbers are as of `083f4dc`.**
+>
+> **Outcome:** all findings resolved. F1/F3/F4/F5/F6 fixed and F2/F7 decided in **PR #121**
+> (`feature/notif-review-fixes` → `develop`); per-finding status in the §11 table.
 
 ## 10. What was verified (and how)
 
