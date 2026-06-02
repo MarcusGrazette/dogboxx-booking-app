@@ -267,7 +267,7 @@ def summarise(kind, payloads, *, actor_first=None):
             title = f"{p['dog_name']}'s {_fmt_day(p['date'])} {svc} needs a new walker"
             body  = "No action needed — we'll reassign and confirm shortly."
         else:
-            title = f"{n} of your {_plural('walk', n)} are being reassigned"
+            title = f"{n} of your {_plural(svc, n)} are being reassigned"
             body  = "No action needed — we'll reassign and confirm shortly."
         return title, body, 'system', '/'
 

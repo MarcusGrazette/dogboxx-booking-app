@@ -2606,6 +2606,18 @@ def remove_walker_role(walker_user_id):
     bulk_transition(affected, 'requested', actor_id=current_user.id,
                     walker_id=None, batch_id=uuid.uuid4().hex)
 
+    # Notify each affected client (§7.2): one grouped booking_reset per user.
+    # Removing the walker role unassigns their confirmed walks just like
+    # deactivate_walker — the client must be told their booking reverted to
+    # pending, not left to discover it silently.
+    if affected:
+        client_batch = NotificationBatch(actor_id=current_user.id)
+        for b in affected:
+            client_batch.add(b.user_id, 'booking_reset',
+                             dog_name=b.dog.name, slot=b.slot, date=b.date,
+                             svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
+        client_batch.flush()
+
     # Deactivate schedule so they no longer appear on future capacity
     WalkerSchedule.query.filter_by(walker_id=user.walker.id).update(
         {'active': False}, synchronize_session=False

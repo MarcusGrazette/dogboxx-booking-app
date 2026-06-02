@@ -462,3 +462,47 @@ class TestClientResetNotifications:
             assert n.notification_type == 'system'
             assert '2 of your walks' in n.title
             assert 'No action needed' in n.body
+
+
+class TestRemoveWalkerRoleResetNotification:
+    """Removing a walker's role unassigns their confirmed walks — the affected
+    client must get a booking_reset, same as deactivate_walker (F1 / §7.2)."""
+
+    def test_remove_walker_role_notifies_affected_client(self, app, client):
+        monday = _next_weekday(0)
+        with app.app_context():
+            # Admin who performs the action.
+            admin = User(firstname='Admin', lastname='Boss', email='admin_rwr@test.com',
+                         role='walker', is_admin=True, active=True,
+                         hashed_password=generate_password_hash('Testpass1!'))
+            db.session.add(admin); db.session.commit()
+            admin_email = admin.email
+
+            # Dual-role walker (must have a Client record for the role removal).
+            walker_u, walker = _make_walker(email='walker_rwr@test.com',
+                                            schedule_days=[(0, 'Morning')])
+            db.session.add(Client(user_id=walker_u.id, onboarding_completed=True))
+            db.session.commit()
+            walker_user_id = walker_u.id
+
+            # A separate client whose confirmed walk is assigned to that walker.
+            client_u, dog = _make_client_with_dog('client_rwr@test.com')
+            st = _make_service()
+            _confirmed_booking(client_u.id, dog.id, st.id, walker.id, monday)
+            client_uid = client_u.id
+            dog_id = dog.id
+
+        _login(client, admin_email)
+        resp = client.post(f'/admin/walkers/{walker_user_id}/remove-walker-role')
+        assert resp.get_json()['success'] is True
+
+        with app.app_context():
+            # Booking reset to pending + unassigned.
+            b = Booking.query.filter_by(dog_id=dog_id).first()
+            assert b.status == 'requested'
+            assert b.walker_id is None
+            # Client told exactly once, with the reset wording.
+            notifs = Notification.query.filter_by(recipient_id=client_uid).all()
+            assert len(notifs) == 1
+            assert notifs[0].notification_type == 'system'
+            assert 'needs a new walker' in notifs[0].title

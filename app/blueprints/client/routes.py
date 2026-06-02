@@ -758,32 +758,35 @@ def book_both():
             if not auto_confirmed:
                 pending_slots.append((slot, status, b))
 
-    # Admin notifications — one grouped notice per admin via NotificationBatch.
-    # Same-day requests use the same_day_request ntype on the admin side.
-    admin_batch = NotificationBatch(actor_id=current_user.id)
-    admin_link  = f'/admin/clients/{current_user.id}'
-    for slot, _, b in final_created:
-        walker_first = b.walker.user.firstname if b.status == 'confirmed' and b.walker and b.walker.user else None
-        if b.status == 'confirmed':
-            kind = 'booking_confirmed'
-        elif b.status == 'waitlisted':
-            kind = 'booking_waitlisted'
-        else:
-            kind = 'booking_requested'
-        for admin in User.query.filter_by(is_admin=True).all():
-            admin_batch.add(admin.id, kind,
-                            actor_first=current_user.firstname,
-                            link=admin_link,
-                            dog_name=dog.name, slot=slot, date=booking_date,
-                            walker_name=walker_first)
-    # Same-day pending slots: override notification_type to same_day_request
-    # after flushing — handled by create_notification type kwarg via a separate
-    # create_notification call rather than through summarise() (which has no
-    # same_day_request kind) so admins see the urgency marker.
-    admin_batch.flush()
-    if same_day and pending_slots:
-        for admin in User.query.filter_by(is_admin=True).all():
-            pending_slot_names = [s.lower() for s, _, _ in pending_slots]
+    # Admin notifications. For a same-day request, admins get a single urgent
+    # same_day_request notice instead of the grouped booking_requested — emitting
+    # both (the old behaviour) double-notified admins for one action (F3). On
+    # same-day every created slot is 'requested' (auto-assign is skipped), so the
+    # same_day_request fully covers the admin side.
+    admins = User.query.filter_by(is_admin=True).all()
+    if not same_day:
+        admin_batch = NotificationBatch(actor_id=current_user.id)
+        admin_link  = f'/admin/clients/{current_user.id}'
+        for slot, _, b in final_created:
+            walker_first = b.walker.user.firstname if b.status == 'confirmed' and b.walker and b.walker.user else None
+            if b.status == 'confirmed':
+                kind = 'booking_confirmed'
+            elif b.status == 'waitlisted':
+                kind = 'booking_waitlisted'
+            else:
+                kind = 'booking_requested'
+            for admin in admins:
+                admin_batch.add(admin.id, kind,
+                                actor_first=current_user.firstname,
+                                link=admin_link,
+                                dog_name=dog.name, slot=slot, date=booking_date,
+                                walker_name=walker_first)
+        admin_batch.flush()
+    elif pending_slots:
+        # summarise() has no same_day_request kind, so this stays a direct
+        # create_notification with the urgency marker.
+        pending_slot_names = [s.lower() for s, _, _ in pending_slots]
+        for admin in admins:
             create_notification(
                 recipient_id=admin.id,
                 notification_type='same_day_request',
