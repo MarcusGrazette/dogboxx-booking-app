@@ -324,10 +324,12 @@ The feed is **uniformly per-row (individual)** and never groups.
 
 # Part II — Target design & implementation plan
 
-> This half is a **build plan**, written to be handed to a future implementer (likely me) with no
-> other context. It turns the findings in Part I (§1–8) into a concrete, sessioned roadmap.
-> Sessions are independently shippable and ordered so each builds on the last. Line numbers reference
-> the tree at the time of writing (commit `4bce185`) — re-grep before editing.
+> **✅ FULLY IMPLEMENTED — all sessions (1, 2, 2b, 3, 4, 5) shipped to `develop` (PRs #114, #116,
+> #117, #118, #119, #120).** This section is now a record of what was built and why, not a live
+> work queue. The roadmap below is preserved for context; §9.8 has per-session shipped status.
+>
+> Original note: This half was a build plan, written to be handed to a future implementer with no
+> other context. Sessions were independently shippable and ordered so each built on the last.
 
 ## 9.1 Target architecture
 
@@ -528,7 +530,7 @@ Each session is one PR to `develop`, green CI, independently shippable.
   green; Postgres via CI.
 - **Carried:** client-path convergence shipped separately (see below).
 
-**Session 2b — Client-path convergence. ✅ SHIPPED (PR pending).**
+**Session 2b — Client-path convergence. ✅ SHIPPED (PR #120, merged to `develop`).**
 - ✅ `pause_walks`: replaced three bespoke notification blocks (admin, co-owner, walker) with a single
   `NotificationBatch` built before `bulk_transition` (to capture walker IDs). All recipients now get
   canonical `booking_cancelled` text from `summarise()` with `actor_first` set.
@@ -540,9 +542,9 @@ Each session is one PR to `develop`, green CI, independently shippable.
   tracks `pending_bookings` (alongside existing `confirmed_bookings`) so both outcome groups are
   available without a second query. Client gets one notice per outcome kind; admins only notified
   when bookings remain pending.
-- **Tests:** 316 pass (317 base − 1 pre-existing test date-ordering bug in
-  `test_admin_bulk_cancel.py::TestBulkCancelDayFilter::test_only_filtered_weekday_cancelled` that
-  surfaces on Tuesdays when `_next_weekday(2)` < `_next_weekday(1)` — unrelated to this PR).
+- **Tests:** 317 pass. (The pre-existing Tuesday date-ordering bug in
+  `test_admin_bulk_cancel.py::TestBulkCancelDayFilter::test_only_filtered_weekday_cancelled` was fixed
+  separately in PR #119 as part of Session 5 CI fixes.)
 
 **Session 3 — Close reset/recipient gaps. ✅ SHIPPED (PR #117, merged to `develop`).**
 - ✅ Added `booking_reset` kind to `summarise()` — single: "Daisy's Mon 1 Jun walk needs a new walker";
