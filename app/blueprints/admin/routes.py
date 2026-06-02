@@ -1687,7 +1687,22 @@ def activity_feed():
                 BookingStatusChange.created_at < dt_end)
         .all()
     )
+
+    # Suppress the creation-as-requested row for any booking that was
+    # immediately auto-confirmed in the same batch. Same batch_id means
+    # same request — a booking requested then confirmed across two separate
+    # admin actions has a different batch_id and keeps both rows visible.
+    _immediate_confirms = {
+        (bsc.booking_id, bsc.batch_id)
+        for bsc in bsc_rows
+        if bsc.to_status == 'confirmed' and bsc.batch_id
+    }
+
     for bsc in bsc_rows:
+        if (bsc.from_status is None and bsc.to_status == 'requested'
+                and bsc.batch_id
+                and (bsc.booking_id, bsc.batch_id) in _immediate_confirms):
+            continue
         b = bsc.booking
         actor = bsc.changed_by
         if not b or not actor or not b.dog:
