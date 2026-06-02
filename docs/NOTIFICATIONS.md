@@ -526,7 +526,23 @@ Each session is one PR to `develop`, green CI, independently shippable.
   `NotificationBatch` grouping incl. the "5 walks → 1 notification" DoD). Existing `test_bookings.py`
   admin recurring/book-for-dog route tests exercise the migrated wiring end-to-end. Full SQLite suite
   green; Postgres via CI.
-- **Carried:** client-path convergence (above) is the remaining Session 2 item for the follow-up PR.
+- **Carried:** client-path convergence shipped separately (see below).
+
+**Session 2b — Client-path convergence. ✅ SHIPPED (PR pending).**
+- ✅ `pause_walks`: replaced three bespoke notification blocks (admin, co-owner, walker) with a single
+  `NotificationBatch` built before `bulk_transition` (to capture walker IDs). All recipients now get
+  canonical `booking_cancelled` text from `summarise()` with `actor_first` set.
+- ✅ `book_both`: admin notifications migrated to `NotificationBatch` + `summarise()`. Same-day pending
+  slots still emit a `same_day_request` notification separately (no kind in `summarise()` for this).
+  `_summarise_book_both_for_client` rewritten to call `summarise()` for pure-outcome cases; mixed
+  outcomes and the 2-slot body ("morning and afternoon both booked.") remain bespoke.
+- ✅ `recurring_booking`: client + admin notifications migrated to `NotificationBatch`. Loop now also
+  tracks `pending_bookings` (alongside existing `confirmed_bookings`) so both outcome groups are
+  available without a second query. Client gets one notice per outcome kind; admins only notified
+  when bookings remain pending.
+- **Tests:** 316 pass (317 base − 1 pre-existing test date-ordering bug in
+  `test_admin_bulk_cancel.py::TestBulkCancelDayFilter::test_only_filtered_weekday_cancelled` that
+  surfaces on Tuesdays when `_next_weekday(2)` < `_next_weekday(1)` — unrelated to this PR).
 
 **Session 3 — Close reset/recipient gaps. ✅ SHIPPED (PR #117, merged to `develop`).**
 - ✅ Added `booking_reset` kind to `summarise()` — single: "Daisy's Mon 1 Jun walk needs a new walker";
@@ -549,20 +565,19 @@ Each session is one PR to `develop`, green CI, independently shippable.
   / `book_both` / `recurring_booking` — routes are exercised end-to-end but walker notification count
   not asserted. Low risk; can be covered in a future pass.
 
-**Session 4 — Activity feed → action log.**
-- Migration: `created_by_id` on the two availability tables; set it in `admin_add_unavailability` (+
-  walker self-service sets it to the walker's user, or leaves NULL). Rewrite `activity_feed()` to union
-  the log sources (§9.6); actor from the log; badge from `to_status`; add Closure / Broadcast sources.
-  (No `WalkEvent` source — not recorded, §7.5.)
-- **DoD:** confirmations, slot moves, closures, broadcasts all appear; "Admin only" filter returns
-  exactly admin-initiated events. **Tests:** new `tests/test_activity_feed.py` — confirm event presence
-  per source, correct `actor_type` per initiator, admin-filter correctness, badge = transition.
+**Session 4 — Activity feed → action log. ✅ SHIPPED (PR #118, merged to `develop`).**
+- ✅ Migration `8f826da874ff`: `created_by_id` on `walker_unavailabilities` + `walker_adhoc_availability`.
+  Set in `admin_add_unavailability`, `add_unavailability`, `schedule_changes_batch`.
+- ✅ Rewrote `activity_feed()` to union BSC, WalkerUnavailability, WalkerAdHocAvailability, Closure,
+  Broadcast sources. Actor from log FK (P2); badge from `to_status` (§8.6). Admin-filter now correct.
+- **Tests:** `test_activity_feed.py` — 10 cases covering event presence, actor attribution,
+  admin-filter correctness, badge = transition. 314 tests pass.
 
-**Session 5 — Caps + feed clustering (polish).**
-- Apply cap decision (D1: page 50, store 100). Feed clustering: consume `batch_id` to collapse a bulk
-  action into one expandable feed row (D4).
-- **DoD:** caps updated; bulk actions render as one expandable feed row that expands to the individual
-  bookings. **Tests:** cap-pruning test; feed-clustering test (bulk action → 1 cluster row → N children).
+**Session 5 — Caps + feed clustering (polish). ✅ SHIPPED (PR #119, merged to `develop`).**
+- ✅ Caps (D1): `NOTIF_DB_CAP` 50→100, `NOTIF_PAGE_CAP` 20→50, bell unchanged. JS `PAGE_SIZE` updated.
+- ✅ Feed clustering (D4): `_cluster_events()` groups BSC rows by `batch_id` into collapsible cluster
+  rows with chevron toggle and child row expansion. Cluster summary built from child payloads.
+- **Tests:** cap-pruning test; cluster HTML presence test; plain-row (no batch_id) test. 317 tests pass.
 - *(Out of scope, D2):* walk-event recording + notifications — a separate feature; the `WalkEvent` table
   is currently dead (§7.5).
 
