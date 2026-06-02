@@ -461,17 +461,25 @@ per recipient.)
 Rewrite `activity_feed()` (`admin/routes.py:1493`) to **union the action-log sources** instead of
 reconstructing from current state:
 
-- `BookingStatusChange` — every booking event. Actor = `changed_by`; badge = `to_status`; description
-  via `summarise()`. Covers creation, confirm, reject, cancel, slot-change (note), reset/reassign.
+- `BookingStatusChange` — every booking event. Actor = `changed_by`; badge = `to_status`. Covers
+  creation, confirm, reject, cancel, slot-change (recorded as a `"slot X → Y"` BSC note and rendered
+  "Moved … to <slot>" — F6), reset/reassign.
 - `WalkerUnavailability` / `WalkerAdHocAvailability` — actor = `created_by_id` if set, else the walker.
 - `Closure` — "DogBoxx closed on <date>" event (actor = `created_by_id`, already on the model).
 - `Broadcast` — "broadcast sent to N clients" (actor = `sender_id`).
 - *(future)* `WalkEvent` — pickup / drop-off, **once recording is built** (§7.5, D2). Not a source today.
 
+> **Feed phrasing vs `summarise()` (F7, decided):** an earlier draft said feed descriptions come from
+> `summarise()`. In the shipped code the feed **deliberately builds its own verb-prefix descriptions**
+> ("Confirmed …", "Cancelled …", "Moved … to <slot>") rather than calling `summarise()` (which produces
+> recipient-facing full sentences, "… confirmed"). The two text systems are intentionally separate:
+> `summarise()` owns *notification* wording (P3), the feed owns *audit* wording. A future editor changing
+> notification text should know it will **not** change the feed, and vice-versa.
+
 Then: actor filter ("Admin only" now correct, P2); `batch_id` collapses a bulk action into one
 expandable row (decided D4); paginate the union (it can be large — keep the month scope, index
-`created_at` on each source). Per-booking history is now also available via `Booking.status_history`
-for a future booking-detail timeline.
+`created_at` on each source — done, F4). Per-booking history is now also available via
+`Booking.status_history` for a future booking-detail timeline.
 
 ## 9.7 Notification caps review
 
@@ -667,10 +675,10 @@ security issues found.
 | F1 | ~~Medium~~ **Fixed** | §7.2 reset | `remove_walker_role` resets confirmed bookings silently — no `booking_reset` to clients. **Fixed on `feature/notif-review-fixes`.** |
 | F2 | ~~Medium~~ **Resolved** | §9.6 / D5 | Feed has no hybrid legacy fallback — pre-rollout months render blank. **Decided 2026-06-02: intended (log-only, keep it simple).** D5 reconciled. |
 | F3 | ~~Low~~ **Fixed** | §3 book_both | Same-day `book_both` double-notifies admins (grouped `booking_requested` **and** `same_day_request`). **Fixed on `feature/notif-review-fixes`.** |
-| F4 | Low | §9.6 perf | `created_at` not indexed on BSC / unavail / adhoc / closure — feed month-range scans them |
+| F4 | ~~Low~~ **Fixed** | §9.6 perf | `created_at` not indexed on BSC / unavail / adhoc / closure — feed month-range scans them. **Fixed (migration `f67a2a1712ad`).** |
 | F5 | ~~Low~~ **Fixed** | §9.4 text | Grouped `booking_reset` hard-codes "walks" — drop-in resets are mislabelled. **Fixed on `feature/notif-review-fixes`.** |
-| F6 | Low | §9.6 log | Slot-override writes a `confirmed→confirmed` BSC with no `notes` — feed can't tell a slot move from a re-confirm |
-| F7 | Low | P3 | Feed builds its own row descriptions instead of calling `summarise()` — the §8.6 wording-drift risk P3 set out to remove is only half-closed |
+| F6 | ~~Low~~ **Fixed** | §9.6 log | Slot-override writes a `confirmed→confirmed` BSC with no `notes` — feed can't tell a slot move from a re-confirm. **Fixed: BSC note + "Moved … to <slot>" feed row.** |
+| F7 | ~~Low~~ **Resolved** | P3 | Feed builds its own row descriptions instead of `summarise()`. **Intentional (audit wording ≠ notification wording); §9.6 clarified.** |
 | O1–O4 | Obs. | — | Non-blocking observations (below) |
 
 ### F1 — `remove_walker_role` resets bookings silently (Medium)
@@ -718,6 +726,10 @@ the pending slots to `admin_batch` (emit only the `same_day_request`), or drop t
 sequential scan. Harmless at current volume (~50 clients) but it's a stated spec item and BSC grows
 fastest. **Fix:** add `index=True` to `BookingStatusChange.created_at` (at minimum) + a migration.
 
+> **FIXED** (`feature/notif-review-fixes`): `index=True` added to `created_at` on all four sources
+> (`models.py`); migration `f67a2a1712ad` creates `ix_<table>_created_at` on each, validated
+> upgrade→downgrade→re-upgrade on a throwaway DB. No autogenerate drift (model names match).
+
 ### F5 — Grouped `booking_reset` mislabels drop-ins as "walks" (Low)
 `notifications.py:270` — the grouped branch hard-codes `_plural('walk', n)` ("N of your walks are being
 reassigned") and ignores `svc_label`, even though every reset caller passes `svc_label='drop-in'` for
@@ -732,6 +744,11 @@ move happened (§9.6 lists "slot-change (note)" as something the log should cove
 notified (`system` notice), so this is a log-fidelity gap, not a silent change. **Fix:** pass
 `notes=f"slot {old_slot}→{slot}"` on the override branch and surface it in the feed description.
 
+> **FIXED** (`feature/notif-review-fixes`): `assign_walker` now passes `notes="slot X → Y"` to
+> `transition_booking` on a slot override (and the duplicated `slot_was_changed` computation was
+> consolidated); the feed renders such rows as "Moved … to <slot>". Regression test in
+> `test_activity_feed.py::test_slot_override_renders_as_moved`.
+
 ### F7 — Feed descriptions bypass `summarise()` (Low, P3 partial)
 P3 ("one text source") aimed for `summarise()` to drive *both* notifications and feed descriptions so
 wording can't drift (§8.6). In practice the feed hand-builds its own verb-prefix strings
@@ -740,6 +757,11 @@ defensible UX choice (feed verb-prefix vs notification full-sentence), but it me
 principle set out to eliminate can still occur — the two text systems are independent. **No action
 required if intentional**; worth a one-line note in §9.6 that the feed deliberately keeps its own
 phrasing, so a future editor doesn't assume `summarise()` covers it.
+
+> **RESOLVED** (`feature/notif-review-fixes`): confirmed intentional — the feed owns *audit* wording
+> (verb-prefix), `summarise()` owns *notification* wording (full sentences). §9.6 now states this
+> explicitly (and corrects the stale "description via `summarise()`" line) so the two text systems
+> aren't mistaken for one. No code change.
 
 ### Observations (non-blocking)
 - **O1 — `confirmed_at` not cleared on reset.** `transition_booking` sets `confirmed_at` on
@@ -765,6 +787,10 @@ phrasing, so a future editor doesn't assume `summarise()` covers it.
 3. ~~**F3, F5**~~ — **fixed** on `feature/notif-review-fixes`: same-day `book_both` no longer
    double-notifies admins (emits only `same_day_request`); grouped `booking_reset` uses the real
    service label. + regression tests.
-4. **F4** — add the `created_at` index (cheap migration; future-proofs the feed). *(open)*
-5. **F6, F7** — log-fidelity / doc-clarity polish; do alongside any future booking-detail-timeline
-   work. *(open)*
+4. ~~**F4**~~ — **fixed** on `feature/notif-review-fixes`: `created_at` indexed on all four feed
+   sources (migration `f67a2a1712ad`).
+5. ~~**F6, F7**~~ — **done** on `feature/notif-review-fixes`: F6 records the slot move in the BSC note
+   and renders "Moved … to <slot>"; F7 confirmed intentional and §9.6 clarified.
+
+**All review findings are now resolved** (F2/F7 by decision, F1/F3/F4/F5/F6 by fix). Remaining genuine
+backlog from the audit is only the explicitly out-of-scope items (D2 walk-event recording).

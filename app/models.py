@@ -391,7 +391,8 @@ class BookingStatusChange(db.Model):
     # transitions. uuid4().hex generated once per bulk action, stamped on
     # every row it produces.
     batch_id = db.Column(db.String(36), nullable=True, index=True)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    # Indexed: the activity feed filters this source by created_at month range (F4).
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     booking = db.relationship('Booking', back_populates='status_history')
     changed_by = db.relationship('User')
@@ -421,7 +422,8 @@ class WalkerUnavailability(db.Model):
     date = db.Column(db.Date, nullable=False)
     slot = db.Column(db.Enum('Morning', 'Afternoon', name='schedule_slot', create_type=False), nullable=False)
     reason = db.Column(db.String(200), nullable=True)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    # Indexed: the activity feed filters this source by created_at month range (F4).
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
 
     walker = db.relationship('Walker', backref='unavailabilities')
@@ -449,7 +451,8 @@ class WalkerAdHocAvailability(db.Model):
     date = db.Column(db.Date, nullable=False)
     slot = db.Column(db.Enum('Morning', 'Afternoon', name='schedule_slot', create_type=False), nullable=False)
     reason = db.Column(db.String(200), nullable=True)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    # Indexed: the activity feed filters this source by created_at month range (F4).
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
 
     walker = db.relationship('Walker', backref='adhoc_availabilities')
@@ -581,7 +584,8 @@ class Closure(db.Model):
     date = db.Column(db.Date, nullable=False, unique=True, index=True)
     reason = db.Column(db.String(200), nullable=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    # Indexed: the activity feed filters this source by created_at month range (F4).
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     created_by = db.relationship('User', foreign_keys=[created_by_id])
 
