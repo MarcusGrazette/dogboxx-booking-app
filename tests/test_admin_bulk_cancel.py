@@ -134,8 +134,9 @@ class TestBulkCancelDayFilter:
         wed = _next_weekday(2)
         ids = _seed_bookings(client_user, dog, service_type, [tue, wed])
         start = min(tue, wed).isoformat()
-        end   = (tue + datetime.timedelta(days=14)).isoformat()
-        tue_id, wed_id = (ids[0], ids[1]) if tue < wed else (ids[1], ids[0])
+        end   = (max(tue, wed) + datetime.timedelta(days=1)).isoformat()
+        # ids[0] is always the tue booking, ids[1] always wed — seeded in that order.
+        tue_id, wed_id = ids[0], ids[1]
 
         resp = logged_in_admin.post(
             f'/admin/dogs/{dog.id}/bulk-cancel',
