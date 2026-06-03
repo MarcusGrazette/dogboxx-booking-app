@@ -24,13 +24,16 @@ _UNSET = object()
 
 
 def transition_booking(booking, to_status, *, actor_id, notes=None,
-                       walker_id=_UNSET, cancelled_by=_UNSET, batch_id=None):
+                       walker_id=_UNSET, cancelled_by=_UNSET, batch_id=None,
+                       old_slot=None, new_slot=None):
     """Mutate a booking's status and append a BookingStatusChange row.
 
     Sets confirmed_at / cancelled_at as implied by to_status. cancelled_by is
     not derivable from the status alone (it records client vs admin), so pass it
     explicitly on cancel/reject paths that need it. If walker_id is passed,
-    updates it (None to unassign). Returns the BSC row. Caller still commits.
+    updates it (None to unassign). Pass old_slot/new_slot on slot-override
+    re-confirms so the activity feed can detect moves structurally. Returns the
+    BSC row. Caller still commits.
     """
     from_status = booking.status
     now = datetime.now(timezone.utc)
@@ -51,6 +54,8 @@ def transition_booking(booking, to_status, *, actor_id, notes=None,
         to_status=to_status,
         changed_by_id=actor_id,
         notes=notes,
+        old_slot=old_slot,
+        new_slot=new_slot,
         batch_id=batch_id,
     )
     db.session.add(bsc)

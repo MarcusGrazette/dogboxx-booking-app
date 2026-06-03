@@ -311,7 +311,7 @@ def add_unavailability():
         client_batch = NotificationBatch(actor_id=current_user.id)
         for b in affected:
             client_batch.add(b.user_id, 'booking_reset',
-                             dog_name=b.dog.name, slot=b.slot, date=b.date,
+                             dog_name=b.dog.name if b.dog else 'Unknown', slot=b.slot, date=b.date,
                              svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
         client_batch.flush()
 
@@ -686,7 +686,7 @@ def schedule_changes_batch():
         client_batch = NotificationBatch(actor_id=current_user.id)
         for b in all_affected:
             client_batch.add(b.user_id, 'booking_reset',
-                             dog_name=b.dog.name, slot=b.slot, date=b.date,
+                             dog_name=b.dog.name if b.dog else 'Unknown', slot=b.slot, date=b.date,
                              svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
         client_batch.flush()
 

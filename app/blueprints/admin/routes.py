@@ -1289,7 +1289,9 @@ def assign_walker():
         slot_was_changed = bool(slot_override and slot and old_slot and old_slot != slot)
         bsc_notes = f"slot {old_slot} → {slot}" if slot_was_changed else None
         transition_booking(booking, 'confirmed', actor_id=current_user.id,
-                           walker_id=walker.id, notes=bsc_notes)
+                           walker_id=walker.id, notes=bsc_notes,
+                           old_slot=old_slot if slot_was_changed else None,
+                           new_slot=slot if slot_was_changed else None)
         if slot:
             booking.slot = slot
 
@@ -1375,7 +1377,6 @@ def decline_booking(booking_id):
         # transition_booking sets status, cancelled_at and logs the BSC row.
         transition_booking(booking, 'rejected', actor_id=current_user.id,
                            cancelled_by='admin')
-        db.session.commit()
 
         service_label = 'drop-in' if (booking.service_type and booking.service_type.slug == ServiceType.DROP_IN) else 'walk'
         dog_name = booking.dog.name if booking.dog else 'your dog'
@@ -1390,6 +1391,7 @@ def decline_booking(booking_id):
             sender_id=current_user.id,
         )
 
+        db.session.commit()
         return jsonify(success=True)
     except Exception as e:
         db.session.rollback()
@@ -1716,9 +1718,9 @@ def activity_feed():
 
         ts = bsc.to_status
         if ts == 'confirmed':
-            # A slot-override re-confirm carries a "slot X → Y" note (F6) — show
+            # A slot-override re-confirm has old_slot/new_slot set (F6) — show
             # it as a move rather than an indistinguishable re-confirm.
-            if bsc.notes and bsc.notes.startswith('slot '):
+            if bsc.old_slot is not None:
                 desc = f"Moved {dog}'s {svc_label} on {walk_date} to {slot}"
             else:
                 desc = f"Confirmed {dog}'s {slot} {svc_label} on {walk_date}"
@@ -2657,7 +2659,7 @@ def remove_walker_role(walker_user_id):
         client_batch = NotificationBatch(actor_id=current_user.id)
         for b in affected:
             client_batch.add(b.user_id, 'booking_reset',
-                             dog_name=b.dog.name, slot=b.slot, date=b.date,
+                             dog_name=b.dog.name if b.dog else 'Unknown', slot=b.slot, date=b.date,
                              svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
         client_batch.flush()
 
@@ -2759,7 +2761,7 @@ def deactivate_walker(walker_id):
             client_batch = NotificationBatch(actor_id=current_user.id)
             for b in affected:
                 client_batch.add(b.user_id, 'booking_reset',
-                                 dog_name=b.dog.name, slot=b.slot, date=b.date,
+                                 dog_name=b.dog.name if b.dog else 'Unknown', slot=b.slot, date=b.date,
                                  svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
             client_batch.flush()
 
@@ -2937,7 +2939,7 @@ def walker_schedule_json(walker_id):
                     transition_booking(b, 'requested', actor_id=current_user.id,
                                        walker_id=None, batch_id=batch_id)
                     client_batch.add(b.user_id, 'booking_reset',
-                                     dog_name=b.dog.name, slot=b.slot, date=b.date,
+                                     dog_name=b.dog.name if b.dog else 'Unknown', slot=b.slot, date=b.date,
                                      svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
                     affected_count += 1
             client_batch.flush()
@@ -3896,6 +3898,19 @@ def add_closure():
         # so the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
         batch_id  = uuid.uuid4().hex
         body_text = "DogBoxx is closed" + (f" — {reason}." if reason else ".")
+
+        # Batch-fetch co-owners to avoid N+1 (one DogOwner query per booking).
+        dog_ids = [b.dog_id for b in bookings if b.dog_id]
+        if dog_ids:
+            ownerships = DogOwner.query.filter(DogOwner.dog_id.in_(dog_ids)).all()
+            co_users = {u.id: u for u in User.query.filter(
+                User.id.in_({o.user_id for o in ownerships})).all()}
+            owners_by_dog = {}
+            for o in ownerships:
+                owners_by_dog.setdefault(o.dog_id, []).append(o)
+        else:
+            owners_by_dog, co_users = {}, {}
+
         # Grouped per recipient (§9.3/§9.4, §7.4): primary owner, co-owners,
         # and assigned walker each get one consolidated notice.
         batch = NotificationBatch(actor_id=current_user.id)
@@ -3917,13 +3932,12 @@ def add_closure():
             batch.add(booking.user_id, 'booking_cancelled', **payload)
 
             # Co-owners (§7.4): other non-admin users who share this dog
-            if booking.dog_id:
-                for o in DogOwner.query.filter_by(dog_id=booking.dog_id).all():
-                    if o.user_id == booking.user_id:
-                        continue
-                    co_user = db.session.get(User, o.user_id)
-                    if co_user and not co_user.is_admin:
-                        batch.add(co_user.id, 'booking_cancelled', **payload)
+            for o in owners_by_dog.get(booking.dog_id, []):
+                if o.user_id == booking.user_id:
+                    continue
+                co_user = co_users.get(o.user_id)
+                if co_user and not co_user.is_admin:
+                    batch.add(co_user.id, 'booking_cancelled', **payload)
 
             # Assigned walker (§7.4): skip if unset or if it's the acting admin
             if booking.walker_id and booking.walker:

@@ -6,6 +6,9 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+    # Business owner first name — used in same-day confirmation messages.
+    OWNER_FIRSTNAME = os.environ.get('OWNER_FIRSTNAME', 'Lydia')
+
     # Web Push (VAPID)
     VAPID_PRIVATE_KEY   = os.environ.get('VAPID_PRIVATE_KEY', '')
     VAPID_PUBLIC_KEY    = os.environ.get('VAPID_PUBLIC_KEY', '')

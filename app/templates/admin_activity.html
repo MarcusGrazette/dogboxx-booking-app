@@ -120,8 +120,8 @@
                   data-activity="{{ event.activity_type }}"
                   data-cluster-id="{{ event.batch_id }}">
                 <td class="ps-3 align-middle">
-                  <div class="fw-semibold small text-body">{{ event.ts.strftime('%a %-d %b') }}</div>
-                  <div class="text-muted" style="font-size:0.78rem;">{{ event.ts.strftime('%H:%M') }}</div>
+                  <div class="fw-semibold small text-body">{{ event.ts.strftime('%a %-d %b') if event.ts else '' }}</div>
+                  <div class="text-muted" style="font-size:0.78rem;">{{ event.ts.strftime('%H:%M') if event.ts else '' }}</div>
                 </td>
                 <td class="align-middle">
                   <div class="d-flex align-items-center gap-2">
@@ -186,8 +186,8 @@
                   data-actor="{{ event.actor_type }}"
                   data-activity="{{ event.activity_type }}">
                 <td class="ps-3 align-middle">
-                  <div class="fw-semibold small text-body">{{ event.ts.strftime('%a %-d %b') }}</div>
-                  <div class="text-muted" style="font-size:0.78rem;">{{ event.ts.strftime('%H:%M') }}</div>
+                  <div class="fw-semibold small text-body">{{ event.ts.strftime('%a %-d %b') if event.ts else '' }}</div>
+                  <div class="text-muted" style="font-size:0.78rem;">{{ event.ts.strftime('%H:%M') if event.ts else '' }}</div>
                 </td>
                 <td class="align-middle">
                   <div class="d-flex align-items-center gap-2">

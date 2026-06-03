@@ -386,6 +386,10 @@ class BookingStatusChange(db.Model):
     to_status = db.Column(db.String(20), nullable=False)
     changed_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     notes = db.Column(db.Text, nullable=True)
+    # Structured slot-change fields — set on slot-override re-confirms so the
+    # activity feed can detect moves without parsing the free-text notes string.
+    old_slot = db.Column(db.String(32), nullable=True)
+    new_slot = db.Column(db.String(32), nullable=True)
     # Correlates rows produced by one bulk action so the activity feed can
     # collapse them into a single expandable cluster. NULL for single-row
     # transitions. uuid4().hex generated once per bulk action, stamped on

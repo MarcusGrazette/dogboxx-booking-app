@@ -5,7 +5,7 @@ This module defines routes for client functionality, including home page, profil
 management, onboarding, and booking management.
 """
 
-from flask import request, redirect, render_template, flash, url_for, jsonify, session
+from flask import current_app, request, redirect, render_template, flash, url_for, jsonify, session
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
@@ -141,35 +141,25 @@ def _maybe_auto_confirm(booking, dog, service_slug=ServiceType.WALK, notify=True
         from app.capacity import get_walker_slot_count
         booking.pickup_order = get_walker_slot_count(walker.id, booking.date, booking.slot, service_slug=service_slug)
         if notify:
-            date_str = booking.date.strftime('%a %-d %b')
             walker_first = walker.user.firstname if walker and walker.user else None
-            create_notification(
-                recipient_id=booking.user_id,
-                notification_type='booking_confirmed',
-                title=f"{dog.name}'s {booking.slot.lower()} walk on {date_str} has been confirmed",
-                body=f'Booked with {walker_first}.' if walker_first else 'Walker assigned.',
-                link='/',
-            )
-            admins = User.query.filter_by(is_admin=True).all()
-            for admin in admins:
-                create_notification(
-                    recipient_id=admin.id,
-                    notification_type='booking_confirmed',
-                    title=f"{booking.user.firstname} booked {dog.name}'s {booking.slot.lower()} walk on {date_str}",
-                    link=f'/admin/clients/{booking.user_id}',
-                    sender_id=booking.user_id,
-                )
+            svc_label = 'drop-in' if service_slug == ServiceType.DROP_IN else 'walk'
+            batch = NotificationBatch(actor_id=current_user.id)
+            batch.add(booking.user_id, 'booking_confirmed',
+                      dog_name=dog.name, slot=booking.slot, date=booking.date,
+                      walker_name=walker_first, svc_label=svc_label)
+            for admin in User.query.filter_by(is_admin=True).all():
+                batch.add(admin.id, 'booking_confirmed',
+                          actor_first=booking.user.firstname,
+                          link=f'/admin/clients/{booking.user_id}',
+                          dog_name=dog.name, slot=booking.slot, date=booking.date,
+                          walker_name=walker_first, svc_label=svc_label)
             # Notify the auto-assigned walker (§7.9, D3). Skip if the walker is
             # the booking user themselves (edge case: owner-walker books own dog).
             if walker.user_id != booking.user_id:
-                create_notification(
-                    recipient_id=walker.user_id,
-                    notification_type='walker_assigned',
-                    title=f"You have been assigned a walk on {booking.date.strftime('%-d %b %Y')}",
-                    body=f"{dog.name} — {booking.slot}",
-                    link=f"/walker/pickups?date={booking.date.isoformat()}",
-                    sender_id=booking.user_id,
-                )
+                batch.add(walker.user_id, 'walker_assigned',
+                          dog_name=dog.name, slot=booking.slot, date=booking.date,
+                          svc_label=svc_label)
+            batch.flush()
         _notify_co_owners_of_booking(booking, dog.name, confirmed=True)
         return True
     else:
@@ -194,7 +184,7 @@ def _maybe_auto_confirm(booking, dog, service_slug=ServiceType.WALK, notify=True
                 notification_type=ntype,
                 title=f"{dog.name}'s {booking.slot.lower()} walk on {date_str} has been requested",
                 body=(
-                    'Same-day request — Lydia will confirm shortly.'
+                    f"Same-day request — {current_app.config['OWNER_FIRSTNAME']} will confirm shortly."
                     if same_day else
                     "We'll confirm shortly."
                 ),
@@ -439,7 +429,8 @@ def index():
                 )
                 db.session.add(new_booking)
                 db.session.flush()  # get ID before notifications
-                record_booking_created(new_booking, actor_id=current_user.id)
+                batch_id = uuid.uuid4().hex
+                record_booking_created(new_booking, actor_id=current_user.id, batch_id=batch_id)
 
                 if booking_status == 'waitlisted':
                     admins = User.query.filter_by(is_admin=True).all()
@@ -469,12 +460,12 @@ def index():
                     flash(f"All slots are currently full for {booking_slot} on {booking_date.strftime('%d %b')}. "
                           f"You've been added to the waitlist — we'll let you know if a spot opens up.", "info")
                 else:
-                    auto_confirmed = _maybe_auto_confirm(new_booking, dog, same_day=same_day)
+                    auto_confirmed = _maybe_auto_confirm(new_booking, dog, same_day=same_day, batch_id=batch_id)
                     db.session.commit()
                     if auto_confirmed:
                         flash(f"Booking confirmed for {booking_slot} on {booking_date.strftime('%d %b')}!", "success")
                     elif same_day:
-                        flash("Same-day request submitted — Lydia will confirm shortly.", "info")
+                        flash(f"Same-day request submitted — {current_app.config['OWNER_FIRSTNAME']} will confirm shortly.", "info")
                     else:
                         flash("Booking request submitted — we'll confirm it shortly.", "success")
                 return redirect(url_for("client.index"))
@@ -579,7 +570,8 @@ def book():
         )
         db.session.add(new_booking)
         db.session.flush()  # get ID before notifications
-        record_booking_created(new_booking, actor_id=current_user.id)
+        batch_id = uuid.uuid4().hex
+        record_booking_created(new_booking, actor_id=current_user.id, batch_id=batch_id)
 
         if booking_status == 'waitlisted':
             admins = User.query.filter_by(is_admin=True).all()
@@ -607,13 +599,13 @@ def book():
             message = (f"All slots are full — you've been added to the waitlist "
                        f"for {booking_slot} on {booking_date.strftime('%d %b')}.")
         else:
-            auto_confirmed = _maybe_auto_confirm(new_booking, dog, same_day=same_day)
+            auto_confirmed = _maybe_auto_confirm(new_booking, dog, same_day=same_day, batch_id=batch_id)
             db.session.commit()
             if auto_confirmed:
                 booking_status = 'confirmed'
                 message = f"Booking confirmed for {booking_slot} on {booking_date.strftime('%d %b')}!"
             elif same_day:
-                message = "Same-day request submitted — Lydia will confirm shortly."
+                message = f"Same-day request submitted — {current_app.config['OWNER_FIRSTNAME']} will confirm shortly."
             else:
                 message = 'Booking request submitted — we\'ll confirm it shortly.'
 
@@ -958,7 +950,7 @@ def book_drop_in():
     else:
         client_title = f"{dog.name}'s {slot_lower} drop-in on {date_str_fmt} has been requested"
         client_body  = (
-            'Same-day request — Lydia will confirm shortly.'
+            f"Same-day request — {current_app.config['OWNER_FIRSTNAME']} will confirm shortly."
             if same_day else
             "We'll confirm shortly."
         )
@@ -974,7 +966,7 @@ def book_drop_in():
     db.session.commit()
 
     if same_day:
-        message = "Same-day drop-in request submitted — Lydia will confirm shortly."
+        message = f"Same-day drop-in request submitted — {current_app.config['OWNER_FIRSTNAME']} will confirm shortly."
     elif booking_status == 'waitlisted':
         message = (f"All drop-in slots are full for {booking_slot} on "
                    f"{booking_date.strftime('%d %b')}. You've been added to the waitlist.")

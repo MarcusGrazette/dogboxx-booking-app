@@ -158,7 +158,8 @@ class TestFeedEventSources:
             record_booking_created(booking, actor_id=client_u.id)
             # Simulate the slot override exactly as assign_walker records it.
             transition_booking(booking, 'confirmed', actor_id=admin.id,
-                               walker_id=walker.id, notes='slot Morning → Afternoon')
+                               walker_id=walker.id, notes='slot Morning → Afternoon',
+                               old_slot='Morning', new_slot='Afternoon')
             booking.slot = 'Afternoon'
             db.session.commit()
 
