@@ -1568,7 +1568,7 @@ def activity_feed():
         Non-batch events and single-row batches pass through unchanged."""
         from collections import defaultdict, Counter
         # Sort first so clusters appear at the position of their latest child.
-        event_list.sort(key=lambda e: e['ts'] if e['ts'] else datetime.min, reverse=True)
+        event_list.sort(key=lambda e: e['ts'] if e['ts'] else datetime.min.replace(tzinfo=timezone.utc), reverse=True)
 
         # Collect all children per batch_id and track first-seen position.
         batch_children = defaultdict(list)
@@ -1596,7 +1596,7 @@ def activity_feed():
 
         # Merge non-batch and batch events, re-sort
         combined = result + batch_events
-        combined.sort(key=lambda e: e['ts'] if e['ts'] else datetime.min, reverse=True)
+        combined.sort(key=lambda e: e['ts'] if e['ts'] else datetime.min.replace(tzinfo=timezone.utc), reverse=True)
         return combined
 
     def _make_cluster(bid, children):
@@ -1621,7 +1621,7 @@ def activity_feed():
             if bid_key is not None:
                 by_booking[bid_key].append(c)
         if by_booking:
-            deduped = [max(rows, key=lambda r: r['ts'] or datetime.min)
+            deduped = [max(rows, key=lambda r: r['ts'] or datetime.min.replace(tzinfo=timezone.utc))
                        for rows in by_booking.values()]
             deduped.extend(c for c in children if c.get('booking_id') is None)
         else:
