@@ -924,7 +924,8 @@ def book_drop_in():
     )
     db.session.add(new_booking)
     db.session.flush()
-    record_booking_created(new_booking, actor_id=current_user.id)
+    batch_id = uuid.uuid4().hex
+    record_booking_created(new_booking, actor_id=current_user.id, batch_id=batch_id)
     db.session.commit()
 
     # Notify admins and co-owners

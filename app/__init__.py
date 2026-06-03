@@ -325,6 +325,10 @@ def create_app(config_name=None):
         from flask_login import current_user
         return dict(home_url=_home_url_for(current_user))
 
+    @app.context_processor
+    def inject_owner_firstname():
+        return dict(owner_firstname=app.config.get('OWNER_FIRSTNAME', 'Lydia'))
+
     @app.template_filter('wa_number')
     def wa_number_filter(phone: str) -> str:
         """Format a phone number for use in a wa.me URL.

@@ -3892,6 +3892,10 @@ def add_closure():
         bookings = Booking.query.filter(
             Booking.date == closure_date,
             Booking.status.in_(active_statuses)
+        ).options(
+            joinedload(Booking.dog),
+            joinedload(Booking.service_type),
+            joinedload(Booking.walker),
         ).all()
 
         # One batch_id ties together every cancellation caused by this closure
