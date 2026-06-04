@@ -1133,14 +1133,6 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    function formatBcDate(iso) {
-        const [y, m, d] = iso.split('-').map(Number);
-        const dt = new Date(y, m - 1, d);
-        const day = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()];
-        const mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()];
-        return `${day} ${d} ${mon}`;
-    }
-
     bcPreviewBtn.addEventListener('click', function () {
         if (!bcStart.value || !bcEnd.value) {
             bcPreviewRes.innerHTML = '<div class="alert alert-warning py-2">Please enter both a start and end date.</div>';
@@ -1175,7 +1167,7 @@ document.addEventListener('DOMContentLoaded', function () {
             data.bookings.forEach(b => {
                 const badgeCls = STATUS_BADGE[b.status] || 'bg-secondary';
                 html += `<tr>
-                    <td>${formatBcDate(b.date)}</td>
+                    <td>${b.date}</td>
                     <td>${b.slot}</td>
                     <td><span class="badge ${badgeCls}">${b.status}</span></td>
                 </tr>`;
