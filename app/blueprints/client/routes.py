@@ -1655,6 +1655,7 @@ def pause_walks():
 
     n          = len(bookings)
     admins     = User.query.filter_by(is_admin=True).all()
+    admin_ids  = {a.id for a in admins}
     actor_name = current_user.firstname
     admin_link = f'/admin/clients/{current_user.id}'
 
@@ -1680,7 +1681,9 @@ def pause_walks():
             if co_user and not co_user.is_admin:
                 notif_batch.add(co_user.id, 'booking_cancelled', actor_first=actor_name, **payload)
 
-        if b.walker_id and b.walker and b.walker.user_id and b.walker.user_id != current_user.id:
+        if (b.walker_id and b.walker and b.walker.user_id
+                and b.walker.user_id != current_user.id
+                and b.walker.user_id not in admin_ids):
             notif_batch.add(b.walker.user_id, 'booking_cancelled', actor_first=actor_name,
                             link='/walker/schedule', **payload)
 
