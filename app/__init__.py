@@ -267,7 +267,7 @@ def create_app(config_name=None):
         # Import all models so they're registered with SQLAlchemy
         from app.models import (User, Client, Dog, DogOwner, Walker,
                                 WalkerSchedule, WalkerAdHocAvailability, ServiceType, Booking,
-                                BookingStatusChange, WalkEvent, Notification, DailyMessage)
+                                BookingStatusChange, Notification, DailyMessage)
 
     # Custom error handler for rate limiting
     @app.errorhandler(413)
@@ -324,6 +324,10 @@ def create_app(config_name=None):
     def inject_home_url():
         from flask_login import current_user
         return dict(home_url=_home_url_for(current_user))
+
+    @app.context_processor
+    def inject_owner_firstname():
+        return dict(owner_firstname=app.config.get('OWNER_FIRSTNAME', 'Lydia'))
 
     @app.template_filter('wa_number')
     def wa_number_filter(phone: str) -> str:

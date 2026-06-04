@@ -1,8 +1,9 @@
 """
 Pytest configuration and shared fixtures for Dogboxx test suite.
 
-All tests use an in-memory SQLite database with a fresh schema per test.
-CSRF is disabled in test config. Flask-Limiter is disabled in tests.
+Tests run against PostgreSQL by default (matching CI), or in-memory SQLite
+when USE_SQLITE=1 is set — see TestingConfig in config.py. A fresh schema is
+created per test. CSRF is disabled in test config. Flask-Limiter is disabled.
 """
 import pytest
 from werkzeug.security import generate_password_hash

@@ -100,7 +100,7 @@ class TestSuperAdminToggle:
         assert data['success'] is True
         assert data['is_admin'] is True
         with app.app_context():
-            assert User.query.get(plain_walker.id).is_admin is True
+            assert db.session.get(User, plain_walker.id).is_admin is True
 
     def test_super_admin_can_demote_promoted_walker(self, app, logged_in_super_admin, promoted_admin):
         resp = toggle(logged_in_super_admin, promoted_admin.id)
@@ -109,7 +109,7 @@ class TestSuperAdminToggle:
         assert data['success'] is True
         assert data['is_admin'] is False
         with app.app_context():
-            assert User.query.get(promoted_admin.id).is_admin is False
+            assert db.session.get(User, promoted_admin.id).is_admin is False
 
     def test_promoted_admin_cannot_toggle(self, app, logged_in_promoted_admin, plain_walker):
         resp = toggle(logged_in_promoted_admin, plain_walker.id)
@@ -118,7 +118,7 @@ class TestSuperAdminToggle:
         assert data['success'] is False
         # Target should be unchanged
         with app.app_context():
-            assert User.query.get(plain_walker.id).is_admin is False
+            assert db.session.get(User, plain_walker.id).is_admin is False
 
     def test_plain_walker_cannot_toggle(self, app, logged_in_plain_walker, promoted_admin):
         # Walker has no admin access at all — should be redirected (302) not 403
@@ -139,5 +139,5 @@ class TestSuperAdminToggle:
         data = resp.get_json()
         assert data['success'] is False
         with app.app_context():
-            assert User.query.get(second_owner.id).is_super_admin is True
-            assert User.query.get(second_owner.id).is_admin is True
+            assert db.session.get(User, second_owner.id).is_super_admin is True
+            assert db.session.get(User, second_owner.id).is_admin is True

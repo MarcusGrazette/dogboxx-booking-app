@@ -19,7 +19,7 @@ from werkzeug.security import generate_password_hash
 
 from app import db
 from app.models import (
-    Booking, Client, Dog, DogOwner, ServiceType, User, Walker,
+    Booking, BookingStatusChange, Client, Dog, DogOwner, ServiceType, User, Walker,
     WalkerAdHocAvailability, WalkerSchedule, WalkerUnavailability,
 )
 
@@ -151,6 +151,60 @@ class TestAdHocAvailability:
         resp = _post_assign(client, booking_id, walker_id)
         assert resp.status_code == 200, resp.get_json()
         assert resp.get_json()['success'] is True
+
+
+class TestAssignWalkerActionLog:
+    """Session 1: assignment/unassignment must write a BookingStatusChange row."""
+
+    def test_assign_logs_confirm_with_admin_actor(self, app, client):
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_admin()
+            _, walker = _make_walker()
+            booking = _make_booking(monday, slot='Morning')
+            db.session.add(WalkerSchedule(
+                walker_id=walker.id, day_of_week=0, slot='Morning', active=True,
+            ))
+            db.session.commit()
+            admin_email, admin_id = admin.email, admin.id
+            booking_id, walker_id = booking.id, walker.id
+
+        _login(client, admin_email)
+        resp = _post_assign(client, booking_id, walker_id)
+        assert resp.status_code == 200, resp.get_json()
+
+        with app.app_context():
+            rows = (BookingStatusChange.query
+                    .filter_by(booking_id=booking_id)
+                    .order_by(BookingStatusChange.id).all())
+            assert len(rows) == 1
+            assert rows[0].from_status == 'requested'
+            assert rows[0].to_status == 'confirmed'
+            assert rows[0].changed_by_id == admin_id
+
+    def test_unassign_logs_reset_with_admin_actor(self, app, client):
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_admin()
+            _, walker = _make_walker()
+            booking = _make_booking(monday, slot='Morning')
+            booking.status = 'confirmed'
+            booking.walker_id = walker.id
+            db.session.commit()
+            admin_email, admin_id, booking_id = admin.email, admin.id, booking.id
+
+        _login(client, admin_email)
+        resp = _post_assign(client, booking_id, None)
+        assert resp.status_code == 200
+
+        with app.app_context():
+            rows = (BookingStatusChange.query
+                    .filter_by(booking_id=booking_id)
+                    .order_by(BookingStatusChange.id).all())
+            assert len(rows) == 1
+            assert rows[0].from_status == 'confirmed'
+            assert rows[0].to_status == 'requested'
+            assert rows[0].changed_by_id == admin_id
 
 
 class TestUnavailabilityMessage:

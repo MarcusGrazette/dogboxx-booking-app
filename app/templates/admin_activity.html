@@ -1,7 +1,7 @@
 {% extends "admin_layout.html" %}
 
 {% block page_title %}Activity Feed{% endblock %}
-{% block page_subtitle %}Client bookings and walker availability changes{% endblock %}
+{% block page_subtitle %}Bookings, availability, closures and broadcasts{% endblock %}
 
 {% block main %}
 <div class="row">
@@ -50,6 +50,8 @@
                 <option value="booking">Bookings</option>
                 <option value="cancellation">Cancellations</option>
                 <option value="availability">Availability changes</option>
+                <option value="closure">Closures</option>
+                <option value="broadcast">Broadcasts</option>
               </select>
             </div>
           </div>
@@ -83,81 +85,125 @@
             </thead>
             <tbody>
               {% for event in events %}
-              <tr class="activity-row align-middle"
+
+              {# ── Shared row macro ────────────────────────────────────────── #}
+              {# Cluster header row gets a toggle; plain rows and child rows don't #}
+              {% macro _actor_avatar(e) %}
+                {% if e.actor_type == 'walker' %}
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 fw-bold"
+                     style="width:32px;height:32px;font-size:0.68rem;
+                            background:rgba(107,33,168,0.1);color:#6b21a8;">{{ e.initials }}</div>
+                {% elif e.actor_type == 'admin' %}
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 fw-bold"
+                     style="width:32px;height:32px;font-size:0.68rem;
+                            background:rgba(253,126,20,0.12);color:#c45c00;">{{ e.initials }}</div>
+                {% else %}
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 fw-bold"
+                     style="width:32px;height:32px;font-size:0.68rem;
+                            background:rgba(13,110,253,0.1);color:#0a58ca;">{{ e.initials }}</div>
+                {% endif %}
+              {% endmacro %}
+              {% macro _actor_badge(e) %}
+                {% if e.actor_type == 'walker' %}
+                <span class="badge fw-normal" style="font-size:0.62rem;background:rgba(107,33,168,0.1);color:#6b21a8;padding:2px 6px;">Walker</span>
+                {% elif e.actor_type == 'admin' %}
+                <span class="badge fw-normal" style="font-size:0.62rem;background:rgba(253,126,20,0.12);color:#c45c00;padding:2px 6px;">Admin</span>
+                {% else %}
+                <span class="badge fw-normal" style="font-size:0.62rem;background:rgba(13,110,253,0.1);color:#0a58ca;padding:2px 6px;">Client</span>
+                {% endif %}
+              {% endmacro %}
+
+              {% if event.is_cluster %}
+              {# ── Cluster header (collapsible) ────────────────────────────── #}
+              <tr class="activity-row cluster-header align-middle"
                   data-actor="{{ event.actor_type }}"
-                  data-activity="{{ event.activity_type }}">
-
-                {# When #}
+                  data-activity="{{ event.activity_type }}"
+                  data-cluster-id="{{ event.batch_id }}">
                 <td class="ps-3 align-middle">
-                  <div class="fw-semibold small text-body">
-                    {{ event.ts.strftime('%a %-d %b') }}
-                  </div>
-                  <div class="text-muted" style="font-size:0.78rem;">
-                    {{ event.ts.strftime('%H:%M') }}
-                  </div>
+                  <div class="fw-semibold small text-body">{{ event.ts.strftime('%a %-d %b') if event.ts else '' }}</div>
+                  <div class="text-muted" style="font-size:0.78rem;">{{ event.ts.strftime('%H:%M') if event.ts else '' }}</div>
                 </td>
-
-                {# Who #}
                 <td class="align-middle">
                   <div class="d-flex align-items-center gap-2">
-                    {# Avatar circle — colour-coded by actor type #}
-                    {% if event.actor_type == 'walker' %}
-                    <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 fw-bold"
-                         style="width:32px;height:32px;font-size:0.68rem;
-                                background:rgba(107,33,168,0.1);color:#6b21a8;">
-                      {{ event.initials }}
-                    </div>
-                    {% elif event.actor_type == 'admin' %}
-                    <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 fw-bold"
-                         style="width:32px;height:32px;font-size:0.68rem;
-                                background:rgba(253,126,20,0.12);color:#c45c00;">
-                      {{ event.initials }}
-                    </div>
-                    {% else %}
-                    <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 fw-bold"
-                         style="width:32px;height:32px;font-size:0.68rem;
-                                background:rgba(13,110,253,0.1);color:#0a58ca;">
-                      {{ event.initials }}
-                    </div>
-                    {% endif %}
-
+                    {{ _actor_avatar(event) }}
                     <div>
-                      <a href="{{ event.link }}"
-                         class="fw-semibold small text-body text-decoration-none hover-link">
-                        {{ event.actor_name }}
-                      </a>
-                      <div>
-                        {% if event.actor_type == 'walker' %}
-                        <span class="badge fw-normal"
-                              style="font-size:0.62rem;background:rgba(107,33,168,0.1);color:#6b21a8;padding:2px 6px;">
-                          Walker
-                        </span>
-                        {% elif event.actor_type == 'admin' %}
-                        <span class="badge fw-normal"
-                              style="font-size:0.62rem;background:rgba(253,126,20,0.12);color:#c45c00;padding:2px 6px;">
-                          Admin
-                        </span>
-                        {% else %}
-                        <span class="badge fw-normal"
-                              style="font-size:0.62rem;background:rgba(13,110,253,0.1);color:#0a58ca;padding:2px 6px;">
-                          Client
-                        </span>
-                        {% endif %}
-                      </div>
+                      <a href="{{ event.link }}" class="fw-semibold small text-body text-decoration-none hover-link">{{ event.actor_name }}</a>
+                      <div>{{ _actor_badge(event) }}</div>
                     </div>
                   </div>
                 </td>
-
-                {# Activity description #}
                 <td class="align-middle">
                   <div class="d-flex align-items-center gap-2">
-                    <i class="{{ event.icon }} flex-shrink-0"
-                       style="color:{{ event.icon_color }};font-size:0.95rem;"></i>
+                    <i class="{{ event.icon }} flex-shrink-0" style="color:{{ event.icon_color }};font-size:0.95rem;"></i>
                     <span class="small text-body">{{ event.description }}</span>
                   </div>
                 </td>
+                <td class="align-middle pe-3 text-end">
+                  <div class="d-flex align-items-center justify-content-end gap-2">
+                    <span class="badge rounded-pill fw-normal"
+                          style="font-size:0.72rem;padding:4px 10px;
+                                 background:{{ event.badge_bg }};color:{{ event.icon_color }};">
+                      {{ event.badge_label }}
+                    </span>
+                    <button type="button"
+                            class="btn btn-link btn-sm p-0 cluster-toggle text-muted"
+                            data-cluster-id="{{ event.batch_id }}"
+                            title="Show {{ event.cluster_count }} individual events"
+                            style="font-size:0.78rem;white-space:nowrap;">
+                      <i class="bi bi-chevron-down" style="font-size:0.7rem;"></i>
+                      {{ event.cluster_count }}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              {# ── Cluster child rows (hidden by default) ──────────────────── #}
+              {% for child in event.children %}
+              <tr class="cluster-child align-middle"
+                  data-cluster-id="{{ event.batch_id }}"
+                  style="display:none;">
+                <td class="ps-3 align-middle" style="border-left:3px solid {{ event.icon_color }};">
+                  <div class="small text-muted">{{ child.ts.strftime('%H:%M') if child.ts else '' }}</div>
+                </td>
+                <td class="align-middle" colspan="2">
+                  <div class="d-flex align-items-center gap-2 ps-1">
+                    <i class="{{ child.icon }} flex-shrink-0" style="color:{{ child.icon_color }};font-size:0.8rem;opacity:0.7;"></i>
+                    <span class="small text-muted">{{ child.description }}</span>
+                  </div>
+                </td>
+                <td class="align-middle pe-3 text-end">
+                  <span class="badge rounded-pill fw-normal"
+                        style="font-size:0.68rem;padding:3px 8px;opacity:0.75;
+                               background:{{ child.badge_bg }};color:{{ child.icon_color }};">
+                    {{ child.badge_label }}
+                  </span>
+                </td>
+              </tr>
+              {% endfor %}
 
-                {# Type badge #}
+              {% else %}
+              {# ── Plain event row ─────────────────────────────────────────── #}
+              <tr class="activity-row align-middle"
+                  data-actor="{{ event.actor_type }}"
+                  data-activity="{{ event.activity_type }}">
+                <td class="ps-3 align-middle">
+                  <div class="fw-semibold small text-body">{{ event.ts.strftime('%a %-d %b') if event.ts else '' }}</div>
+                  <div class="text-muted" style="font-size:0.78rem;">{{ event.ts.strftime('%H:%M') if event.ts else '' }}</div>
+                </td>
+                <td class="align-middle">
+                  <div class="d-flex align-items-center gap-2">
+                    {{ _actor_avatar(event) }}
+                    <div>
+                      <a href="{{ event.link }}" class="fw-semibold small text-body text-decoration-none hover-link">{{ event.actor_name }}</a>
+                      <div>{{ _actor_badge(event) }}</div>
+                    </div>
+                  </div>
+                </td>
+                <td class="align-middle">
+                  <div class="d-flex align-items-center gap-2">
+                    <i class="{{ event.icon }} flex-shrink-0" style="color:{{ event.icon_color }};font-size:0.95rem;"></i>
+                    <span class="small text-body">{{ event.description }}</span>
+                  </div>
+                </td>
                 <td class="align-middle pe-3 text-end">
                   <span class="badge rounded-pill fw-normal"
                         style="font-size:0.72rem;padding:4px 10px;
@@ -165,8 +211,9 @@
                     {{ event.badge_label }}
                   </span>
                 </td>
-
               </tr>
+              {% endif %}
+
               {% endfor %}
 
               {# No-results row (shown by JS when filters eliminate all rows) #}
@@ -214,10 +261,11 @@
 <style>
   .hover-link:hover { color: #E02FAC !important; }
   .activity-row { transition: background 0.1s; }
+  .cluster-child td { background: rgba(0,0,0,0.018); }
 </style>
 <script nonce="{{ csp_nonce }}">
 (function () {
-  const PAGE_SIZE = 20;
+  const PAGE_SIZE = 50;
 
   const actorSel   = document.getElementById('actor-filter');
   const typeSel    = document.getElementById('type-filter');
@@ -231,6 +279,19 @@
   const pageLabel  = document.getElementById('activity-page-label');
 
   let currentPage = 1;
+
+  // ── Cluster expand/collapse ──────────────────────────────────────────────
+  document.querySelectorAll('.cluster-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const cid      = btn.dataset.clusterId;
+      const children = document.querySelectorAll('tr.cluster-child[data-cluster-id="' + cid + '"]');
+      const icon     = btn.querySelector('i');
+      const expanded = btn.dataset.expanded === '1';
+      children.forEach(function (tr) { tr.style.display = expanded ? 'none' : ''; });
+      if (icon) icon.className = expanded ? 'bi bi-chevron-down' : 'bi bi-chevron-up';
+      btn.dataset.expanded = expanded ? '0' : '1';
+    });
+  });
 
   function filteredRows() {
     const actor = actorSel ? actorSel.value : 'all';
@@ -247,8 +308,16 @@
     if (currentPage > totalPages) currentPage = totalPages;
     if (currentPage < 1) currentPage = 1;
 
-    // Hide everything first, then reveal this page's slice
+    // Hide everything first (rows + any open cluster children), then reveal this page's slice
     rows.forEach(function (r) { r.style.display = 'none'; });
+    document.querySelectorAll('tr.cluster-child').forEach(function (r) { r.style.display = 'none'; });
+    // Re-close any expanded toggles to keep state consistent with what's visible
+    document.querySelectorAll('.cluster-toggle[data-expanded="1"]').forEach(function (btn) {
+      btn.dataset.expanded = '0';
+      const icon = btn.querySelector('i');
+      if (icon) icon.className = 'bi bi-chevron-down';
+    });
+
     const start = (currentPage - 1) * PAGE_SIZE;
     const end   = start + PAGE_SIZE;
     filtered.slice(start, end).forEach(function (r) { r.style.display = ''; });

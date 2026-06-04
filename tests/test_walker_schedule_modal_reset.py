@@ -20,8 +20,8 @@ from werkzeug.security import generate_password_hash
 
 from app import db
 from app.models import (
-    Booking, Client, Dog, DogOwner, Notification, ServiceType,
-    User, Walker, WalkerSchedule,
+    Booking, BookingStatusChange, Client, Dog, DogOwner, Notification,
+    ServiceType, User, Walker, WalkerSchedule,
 )
 
 
@@ -153,7 +153,7 @@ class TestScheduleModalResetsAffectedBookings:
                 client_u.id, dog.id, st.id, walker.id, monday, 'Morning',
             )
             db.session.commit()
-            admin_email = admin.email
+            admin_email, admin_id = admin.email, admin.id
             walker_id, booking_id, client_user_id = walker.id, booking.id, client_u.id
 
         _login(client, admin_email)
@@ -170,13 +170,19 @@ class TestScheduleModalResetsAffectedBookings:
             assert b.walker_id is None, "walker_id should be cleared"
             assert b.status == 'requested', "status should be reset to requested"
 
+            # Session 1: the reset writes a BSC row attributed to the admin.
+            rows = BookingStatusChange.query.filter_by(booking_id=booking_id).all()
+            assert len(rows) == 1
+            assert rows[0].from_status == 'confirmed'
+            assert rows[0].to_status == 'requested'
+            assert rows[0].changed_by_id == admin_id
+
             notifs = Notification.query.filter_by(recipient_id=client_user_id).all()
             assert len(notifs) == 1
             n = notifs[0]
             assert n.notification_type == 'system'
-            assert n.title == "Status change - 1 booking moved to 'requested'"
-            assert 'walker availability change' in n.body
-            assert "notifications as the bookings are updated" in n.body
+            assert "Buddy's" in n.title and "needs a new walker" in n.title
+            assert "No action needed" in n.body
 
     def test_kept_combo_leaves_booking_assigned(self, app, client):
         """A schedule POST that doesn't remove the booking's (weekday, slot)
@@ -287,5 +293,16 @@ class TestScheduleModalResetsAffectedBookings:
             b_notifs = Notification.query.filter_by(recipient_id=b_id).all()
             assert len(a_notifs) == 1
             assert len(b_notifs) == 1
-            assert "2 bookings" in a_notifs[0].title
-            assert "1 booking moved" in b_notifs[0].title
+            # Client A has 2 bookings across 2 dogs → grouped "2 of your walks…"
+            assert "2 of your walks" in a_notifs[0].title
+            # Client B has 1 booking → single-item "BetaOne's … needs a new walker"
+            assert "BetaOne's" in b_notifs[0].title and "needs a new walker" in b_notifs[0].title
+
+            # Session 1: all 3 resets share one batch_id so the feed can cluster
+            # them, and each is a distinct confirmed→requested BSC row.
+            rows = BookingStatusChange.query.all()
+            assert len(rows) == 3
+            assert all(r.from_status == 'confirmed' and r.to_status == 'requested'
+                       for r in rows)
+            batch_ids = {r.batch_id for r in rows}
+            assert len(batch_ids) == 1 and None not in batch_ids

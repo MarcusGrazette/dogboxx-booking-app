@@ -386,7 +386,17 @@ class BookingStatusChange(db.Model):
     to_status = db.Column(db.String(20), nullable=False)
     changed_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     notes = db.Column(db.Text, nullable=True)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    # Structured slot-change fields — set on slot-override re-confirms so the
+    # activity feed can detect moves without parsing the free-text notes string.
+    old_slot = db.Column(db.String(32), nullable=True)
+    new_slot = db.Column(db.String(32), nullable=True)
+    # Correlates rows produced by one bulk action so the activity feed can
+    # collapse them into a single expandable cluster. NULL for single-row
+    # transitions. uuid4().hex generated once per bulk action, stamped on
+    # every row it produces.
+    batch_id = db.Column(db.String(36), nullable=True, index=True)
+    # Indexed: the activity feed filters this source by created_at month range (F4).
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     booking = db.relationship('Booking', back_populates='status_history')
     changed_by = db.relationship('User')
@@ -399,6 +409,7 @@ class BookingStatusChange(db.Model):
             'to_status': self.to_status,
             'changed_by_id': self.changed_by_id,
             'notes': self.notes,
+            'batch_id': self.batch_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -415,9 +426,12 @@ class WalkerUnavailability(db.Model):
     date = db.Column(db.Date, nullable=False)
     slot = db.Column(db.Enum('Morning', 'Afternoon', name='schedule_slot', create_type=False), nullable=False)
     reason = db.Column(db.String(200), nullable=True)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    # Indexed: the activity feed filters this source by created_at month range (F4).
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
 
     walker = db.relationship('Walker', backref='unavailabilities')
+    created_by = db.relationship('User', foreign_keys=[created_by_id])
 
     def to_dict(self):
         return {
@@ -441,9 +455,12 @@ class WalkerAdHocAvailability(db.Model):
     date = db.Column(db.Date, nullable=False)
     slot = db.Column(db.Enum('Morning', 'Afternoon', name='schedule_slot', create_type=False), nullable=False)
     reason = db.Column(db.String(200), nullable=True)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    # Indexed: the activity feed filters this source by created_at month range (F4).
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
 
     walker = db.relationship('Walker', backref='adhoc_availabilities')
+    created_by = db.relationship('User', foreign_keys=[created_by_id])
 
     def to_dict(self):
         return {
@@ -465,8 +482,9 @@ class Notification(db.Model):
     sender_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # None = system
 
     # Type drives icon/colour in UI. Keep as string for flexibility.
-    # Expected values: booking_confirmed, booking_cancelled, booking_requested,
-    #                  walker_assigned, dental_confirmed, dental_available, system
+    # Expected values (see NOTIFICATION_META in app/utils/notifications.py):
+    #   booking_confirmed, booking_cancelled, booking_requested, same_day_request,
+    #   walker_assigned, walker_availability, system
     notification_type = db.Column(db.String(50), nullable=False, index=True)
 
     title = db.Column(db.String(200), nullable=False)
@@ -561,32 +579,6 @@ class PushSubscription(db.Model):
     user = db.relationship('User', backref=db.backref('push_subscriptions', lazy=True))
 
 
-class WalkEvent(db.Model):
-    """Tracks pickup/dropoff events during walks."""
-    __tablename__ = 'walk_events'
-
-    id = db.Column(db.Integer, primary_key=True)
-    booking_id = db.Column(db.Integer, db.ForeignKey('bookings.id'), nullable=False)
-    event_type = db.Column(db.Enum('en_route', 'picked_up', 'dropped_off',
-                                    name='walk_event_type'), nullable=False)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-    latitude = db.Column(db.Float, nullable=True)
-    longitude = db.Column(db.Float, nullable=True)
-
-    booking = db.relationship('Booking', backref=db.backref('walk_events', lazy=True,
-                                                             order_by='WalkEvent.created_at'))
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'booking_id': self.booking_id,
-            'event_type': self.event_type,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'latitude': self.latitude,
-            'longitude': self.longitude,
-        }
-
-
 class Closure(db.Model):
     """A date on which DogBoxx is closed. New bookings are rejected and existing
     active bookings are cancelled (with notifications) when a closure is created."""
@@ -596,7 +588,8 @@ class Closure(db.Model):
     date = db.Column(db.Date, nullable=False, unique=True, index=True)
     reason = db.Column(db.String(200), nullable=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    # Indexed: the activity feed filters this source by created_at month range (F4).
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     created_by = db.relationship('User', foreign_keys=[created_by_id])
 

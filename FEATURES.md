@@ -37,12 +37,16 @@
 | 21 | P1 | M | ✅ | **Walker management** | Create walkers. Set/edit default schedule. Mark unavailability. |
 | 22 | P2 | S | ✅ | **Admin is also a walker** | is_admin flag on User. Admin can be a walker. "My Pickup List" in admin sidebar. |
 | 23 | P2 | M | ✅ | **Admin dashboard stats** | Stat cards (pending, clients, dogs, walkers), 4-week booking chart by slot+status, walker availability grid. Revenue on /admin/revenue. |
-| 24 | P3 | L | 🔲 | **Dental cleans service type** | Admin: manage available date+time slots. Client: book from available slots. Stubbed in nav. |
+| 24 | P3 | L | 🔲 | **Dental cleans service type** | Admin: manage available date+time slots. Client: book from available slots. Nav stub removed — add back when built. Premature `dental_confirmed`/`dental_available` notification types were removed (2026-05-29) — re-add when built. |
 | 25 | P3 | L | ❌ | **Invoicing (standalone)** | Superseded by #26. |
 | 26 | P2 | L | ✅ | **Invoicing view (admin)** | /admin/invoicing: monthly summary per client. /admin/invoicing/<id>: line items + weekly breakdown. Billable cancels (<5 days notice), double-slot discount, drop-in pricing. PricingConfig history. |
 | 27 | P2 | L | ✅ | **Multiple clients per dog** | dog_owners join table with primary/secondary roles. Admin join/revoke modal. Secondary owners can book and view shared dogs. |
 | 29 | P2 | L | ✅ | **Drop-in service type** | Client books AM/PM drop-in visits. Admin drop-in board (assign walkers, confirm/cancel, reorder). Walker pickup list includes drop-ins. Invoicing tracks drop-ins separately at price_per_drop_in. does_drop_ins flag on walkers. |
 | 28 | P3 | M | ✅ | **CSV client/dog import** | Upload CSV matching the create-client form fields. Bulk create client + dog records. Validation with error report on bad rows. No need to handle joined accounts — those are done manually post-import. |
+| 35 | P2 | M | ✅ | **Admin bulk booking operations** | Bulk-cancel upcoming bookings for a dog from `/admin/dogs` view (with preview modal showing dates). Recurring create on admin's behalf from the same view. Day-of-week filter on pause-walks. |
+| 36 | P2 | M | ✅ | **Closures** | Admin marks a date as closed — auto-cancels active bookings with client notifications. Prevents new bookings on closed dates. Preview endpoint before confirming. |
+| 37 | P3 | S | ✅ | **Daily walker messages** | Admin-authored announcements shown to walkers on the pickup list for a given date. Auto-purge of old messages. |
+| 38 | P2 | L | ✅ | **Admin broadcasts** | One-shot message to all clients booked on a chosen date + slot scope (all / morning / afternoon). Bell + email delivery. Recipients resolved at send time from confirmed bookings (primary + secondary co-owners). Broadcast bar shown on assignment board. Audit rows kept. PRs #99–102. |
 
 ## Client
 
@@ -70,6 +74,9 @@
 | 43 | P1 | S | ✅ | **Notify client: booking cancelled** | Triggered when admin cancels a booking. |
 | 44 | P1 | S | ✅ | **Notify walker: assigned to booking** | Triggered when admin assigns a walker. |
 | 45 | P1 | S | ✅ | **Notification audit trail (admin)** | Admin can see notification history per client on their detail page. |
+| 46 | P1 | L | ✅ | **Notification system overhaul** | `BookingStatusChange` append-only audit log at every status transition (chokepoint in `app/utils/booking_status.py`). `NotificationBatch` + `summarise()` for grouped bulk notifications. Caps: DB=100, page=50, bell=5. `batch_id` correlates rows from one bulk action. PRs #114–121. |
+| 47 | P2 | L | ✅ | **Admin activity feed** | `/admin/activity` rebuilt from `BookingStatusChange` log — slot moves, booking-reset events, bulk-action clustering. Collapsible batch groups. PR #118 (Session 4). |
+| 48 | P3 | L | ✅ | **Web Push / PWA push notifications** | VAPID-signed push via `pywebpush`. iOS PWA service worker (`app/static/js/sw.js`). `PushSubscription` model stores endpoints per user/device. Bell notification triggers push on unread. |
 
 ## Infrastructure & Quality
 
@@ -79,9 +86,10 @@
 | 51 | P1 | M | ✅ | **Security hardening** | CSRF, rate limiting, CSP headers, secure cookies, UUID file uploads, session hardening. |
 | 52 | P1 | S | ✅ | **DB indexes** | Indexes on date, walker_id, user_id, dog_id, status for query performance. |
 | 53 | P1 | M | ✅ | **Git branching** | `develop` for ongoing work, `main` for production. PRs required to merge to main. |
-| 54 | P1 | L | ✅ | **Unit test suite** | 140 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing. All passing, no deprecation warnings. |
+| 54 | P1 | L | ✅ | **Unit test suite** | 295 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing, activity feed, broadcasts, closures, walker schedule, bulk-cancel. All passing on Postgres CI. |
 | 55 | P2 | M | ✅ | **Password reset flow** | Email-based token reset via Resend. noreply@dogboxx.org verified. RESEND_API_KEY + APP_BASE_URL needed in prod env. |
 | 56 | P3 | S | ✅ | **CI/CD pipeline** | GitHub Actions (test.yml): runs pytest on push to main/develop and all PRs. All runs green. |
+| 57 | P3 | M | ✅ | **PWA service worker** | iOS home-screen install + Android PWA support. Pre-cached assets, pull-to-refresh (shared IIFE in both layouts), standalone-mode detection (`navigator.standalone \|\| display-mode:standalone`). |
 
 ---
 
@@ -91,7 +99,7 @@
 |---|---|
 | Firebase Auth migration | Overkill for current scale. Flask-Login is sufficient. Revisit post-launch. |
 | Public client self-registration | Business prefers admin-created accounts (vets clients first). Register route still exists but not promoted. |
-| Walker pickup status tracking (en_route / picked_up / dropped_off) | WalkEvent model exists in docs plan. Deprioritised — pickup list is the priority. |
+| Walker pickup status tracking (en_route / picked_up / dropped_off) | Anticipatory `WalkEvent` model/table was never wired up (no writes, no recording UI) and has been **removed** (migration `b40f4de664d4`, 2026-05-29). Rebuild the table fresh in the same PR as the feature if/when prioritised — pickup list remains the priority. |
 
 ---
 

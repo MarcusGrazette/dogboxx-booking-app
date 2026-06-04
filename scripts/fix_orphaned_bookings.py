@@ -29,6 +29,7 @@ no-op.
 """
 import argparse
 import sys
+import uuid
 from collections import defaultdict
 from datetime import date as _date
 from pathlib import Path
@@ -42,7 +43,8 @@ from sqlalchemy import text
 # Flask app context — gives us db.session, create_notification, and the
 # after_commit hooks that fire SSE / Web Push to clients.
 from app import create_app, db
-from app.models import Booking
+from app.models import Booking, User
+from app.utils.booking_status import transition_booking
 from app.utils.notifications import create_notification
 
 
@@ -141,12 +143,20 @@ def main():
         # ── Mutate ──────────────────────────────────────────────────────
         print('\nApplying reset…')
         today = _date.today()
+        # changed_by_id is NOT NULL — attribute resets to the super-admin.
+        actor = User.query.filter_by(is_super_admin=True).first()
+        if not actor:
+            actor = User.query.filter_by(is_admin=True).first()
+        if not actor:
+            print('ERROR: no admin user found — cannot write BSC rows.')
+            return 1
         bookings = (
             Booking.query
             .filter(Booking.id.in_(booking_ids))
             .all()
         )
         actually_changed = 0
+        batch_id = uuid.uuid4().hex
         for b in bookings:
             # Guard against TOCTOU — only reset if still confirmed + future
             # + still assigned. Anything that has shifted underneath us
@@ -154,8 +164,8 @@ def main():
             if (b.status == 'confirmed'
                     and b.walker_id is not None
                     and b.date >= today):
-                b.walker_id = None
-                b.status = 'requested'
+                transition_booking(b, 'requested', actor_id=actor.id,
+                                   walker_id=None, batch_id=batch_id)
                 actually_changed += 1
 
         for client_user_id, n in per_client.items():

@@ -1191,3 +1191,11 @@ class TestSameDayBooking:
                 notification_type='same_day_request',
             ).first()
             assert n is not None
+            # F3 regression: the admin must NOT also get a grouped
+            # booking_requested for the same action (that double-notified).
+            assert Notification.query.filter_by(
+                recipient_id=admin_id,
+                notification_type='booking_requested',
+            ).count() == 0
+            # Exactly one admin notification for the whole same-day book-both.
+            assert Notification.query.filter_by(recipient_id=admin_id).count() == 1

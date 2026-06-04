@@ -13,6 +13,7 @@ from sqlalchemy import text
 from app import db
 from app.models import (
     User, Walker, WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability,
+    Booking, Dog, DogOwner, Client, ServiceType, Notification,
 )
 
 
@@ -281,7 +282,7 @@ class TestScheduleChangesBatchDelete:
         assert resp.get_json()['deleted'] == 0
         with app.app_context():
             # Row still there
-            assert WalkerUnavailability.query.get(other_id) is not None
+            assert db.session.get(WalkerUnavailability, other_id) is not None
 
 
 # ---------------------------------------------------------------------------
@@ -359,3 +360,149 @@ class TestScheduleChangeGrouping:
         assert len(groups) == 2
         assert groups[0]['start_date'] == mon
         assert groups[1]['start_date'] == thu
+
+
+# ---------------------------------------------------------------------------
+# Session 3: client booking_reset notifications on reset paths (§7.1)
+# ---------------------------------------------------------------------------
+
+def _make_client_with_dog(email):
+    """Create a client user + Client profile + Dog + DogOwner. Returns (user, dog)."""
+    from werkzeug.security import generate_password_hash
+    u = User(firstname='Client', lastname='Test', email=email, role='client',
+             hashed_password=generate_password_hash('Testpass1!'))
+    db.session.add(u); db.session.flush()
+    db.session.add(Client(user_id=u.id, onboarding_completed=True)); db.session.flush()
+    dog = Dog(name='Rover', breed='Mixed'); db.session.add(dog); db.session.flush()
+    db.session.add(DogOwner(dog_id=dog.id, user_id=u.id, role='primary'))
+    db.session.commit()
+    return u, dog
+
+
+def _make_service():
+    st = ServiceType(name='Group Walk', slug='group-walk',
+                     capacity_model='walker_assigned', slot_type='morning_afternoon',
+                     requires_walker=True, default_max_capacity=6, active=True)
+    db.session.add(st); db.session.commit()
+    return st
+
+
+def _confirmed_booking(user_id, dog_id, service_type_id, walker_id, date, slot='Morning'):
+    b = Booking(user_id=user_id, dog_id=dog_id, service_type_id=service_type_id,
+                date=date, slot=slot, status='confirmed', walker_id=walker_id)
+    db.session.add(b); db.session.commit()
+    return b
+
+
+class TestClientResetNotifications:
+    """Walker self-service unavailability resets must notify affected clients (§7.1)."""
+
+    def test_single_unavailability_notifies_client(self, app, client):
+        """POST /walker/unavailability with a slot that has a confirmed booking
+        → the booking owner gets exactly one booking_reset notification."""
+        monday = _next_weekday(0)
+        with app.app_context():
+            walker_u, walker = _make_walker(
+                email='walker_notif@test.com',
+                schedule_days=[(0, 'Morning')],
+            )
+            client_u, dog = _make_client_with_dog('client_notif@test.com')
+            st = _make_service()
+            _confirmed_booking(client_u.id, dog.id, st.id, walker.id, monday)
+            walker_email = walker_u.email
+            client_uid = client_u.id
+
+        _login(client, walker_email)
+        resp = client.post('/walker/unavailability', json={
+            'date': monday.isoformat(),
+            'slot': 'Morning',
+        })
+        assert resp.status_code == 201
+
+        with app.app_context():
+            notifs = Notification.query.filter_by(recipient_id=client_uid).all()
+            assert len(notifs) == 1
+            n = notifs[0]
+            assert n.notification_type == 'system'
+            assert 'needs a new walker' in n.title
+            assert 'No action needed' in n.body
+
+    def test_batch_unavailable_notifies_client(self, app, client):
+        """POST /walker/schedule-changes/batch type=unavailable with affected
+        confirmed bookings → the booking owner gets exactly one grouped booking_reset."""
+        monday = _next_weekday(0)
+        tuesday = monday + datetime.timedelta(days=1)  # always after monday
+        with app.app_context():
+            walker_u, walker = _make_walker(
+                email='walker_batch_notif@test.com',
+                schedule_days=[(0, 'Morning'), (1, 'Morning')],
+            )
+            client_u, dog = _make_client_with_dog('client_batch_notif@test.com')
+            st = _make_service()
+            # Two confirmed bookings across two days — both reset by the batch.
+            _confirmed_booking(client_u.id, dog.id, st.id, walker.id, monday)
+            _confirmed_booking(client_u.id, dog.id, st.id, walker.id, tuesday, 'Morning')
+            walker_email = walker_u.email
+            client_uid = client_u.id
+
+        _login(client, walker_email)
+        resp = client.post('/walker/schedule-changes/batch', json={
+            'start_date': monday.isoformat(),
+            'end_date':   tuesday.isoformat(),
+            'slots':      ['Morning'],
+            'type':       'unavailable',
+        })
+        assert resp.get_json()['success'] is True
+
+        with app.app_context():
+            notifs = Notification.query.filter_by(recipient_id=client_uid).all()
+            # Two bookings → one grouped notification.
+            assert len(notifs) == 1
+            n = notifs[0]
+            assert n.notification_type == 'system'
+            assert '2 of your walks' in n.title
+            assert 'No action needed' in n.body
+
+
+class TestRemoveWalkerRoleResetNotification:
+    """Removing a walker's role unassigns their confirmed walks — the affected
+    client must get a booking_reset, same as deactivate_walker (F1 / §7.2)."""
+
+    def test_remove_walker_role_notifies_affected_client(self, app, client):
+        monday = _next_weekday(0)
+        with app.app_context():
+            # Admin who performs the action.
+            admin = User(firstname='Admin', lastname='Boss', email='admin_rwr@test.com',
+                         role='walker', is_admin=True, active=True,
+                         hashed_password=generate_password_hash('Testpass1!'))
+            db.session.add(admin); db.session.commit()
+            admin_email = admin.email
+
+            # Dual-role walker (must have a Client record for the role removal).
+            walker_u, walker = _make_walker(email='walker_rwr@test.com',
+                                            schedule_days=[(0, 'Morning')])
+            db.session.add(Client(user_id=walker_u.id, onboarding_completed=True))
+            db.session.commit()
+            walker_user_id = walker_u.id
+
+            # A separate client whose confirmed walk is assigned to that walker.
+            client_u, dog = _make_client_with_dog('client_rwr@test.com')
+            st = _make_service()
+            _confirmed_booking(client_u.id, dog.id, st.id, walker.id, monday)
+            client_uid = client_u.id
+            dog_id = dog.id
+
+        _login(client, admin_email)
+        resp = client.post(f'/admin/walkers/{walker_user_id}/remove-walker-role')
+        assert resp.get_json()['success'] is True
+
+        with app.app_context():
+            # Booking reset to pending + unassigned.
+            b = Booking.query.filter_by(dog_id=dog_id).first()
+            assert b.status == 'requested'
+            assert b.walker_id is None
+            # Client told exactly once, with the reset wording.
+            notifs = Notification.query.filter_by(recipient_id=client_uid).all()
+            assert len(notifs) == 1
+            assert notifs[0].notification_type == 'system'
+            assert 'needs a new walker' in notifs[0].title

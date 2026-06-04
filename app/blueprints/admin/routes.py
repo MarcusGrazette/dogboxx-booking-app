@@ -11,7 +11,7 @@ from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError
-from app.models import User, Booking, Walker, Dog, Client, WalkerSchedule, DogOwner, WalkerUnavailability, WalkerAdHocAvailability, ServiceType, Notification, Closure, Broadcast
+from app.models import User, Booking, BookingStatusChange, Walker, Dog, Client, WalkerSchedule, DogOwner, WalkerUnavailability, WalkerAdHocAvailability, ServiceType, Notification, Closure, Broadcast
 from app import db
 from app.capacity import get_max_per_walker, get_walker_slot_count, get_drop_in_capacity, auto_assign_walker, get_available_walkers
 from app.utils.db_error_handler import handle_db_errors
@@ -24,10 +24,14 @@ import secrets
 import logging
 import traceback
 import json
+import uuid
 
 from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
-from app.utils.notifications import create_notification
+from app.utils.notifications import create_notification, NotificationBatch
+from app.utils.booking_status import (
+    transition_booking, record_booking_created, bulk_transition,
+)
 from app.capacity import check_availability, acquire_booking_lock
 
 
@@ -1196,8 +1200,8 @@ def assign_walker():
 
         # If walker_id is None, this is an unassignment operation
         if walker_id is None:
-            booking.walker_id = None
-            booking.status = "requested"
+            transition_booking(booking, 'requested', actor_id=current_user.id,
+                               walker_id=None)
             db.session.commit()
             
             return jsonify(
@@ -1277,9 +1281,17 @@ def assign_walker():
                     message=f"{booking.dog.name} already has an active {slot.lower()} booking on this date"
                 ), 409
 
-        # Update walker assignment and slot
-        booking.walker_id = walker.id
-        booking.status = 'confirmed'
+        # Update walker assignment and slot. transition_booking sets status,
+        # confirmed_at, walker_id and logs the BSC row (actor = the admin).
+        # On a slot override, record the move in the BSC notes (F6) so the
+        # activity feed can tell a slot change apart from a plain re-confirm
+        # (otherwise both look like a confirmed→confirmed row with no detail).
+        slot_was_changed = bool(slot_override and slot and old_slot and old_slot != slot)
+        bsc_notes = f"slot {old_slot} → {slot}" if slot_was_changed else None
+        transition_booking(booking, 'confirmed', actor_id=current_user.id,
+                           walker_id=walker.id, notes=bsc_notes,
+                           old_slot=old_slot if slot_was_changed else None,
+                           new_slot=slot if slot_was_changed else None)
         if slot:
             booking.slot = slot
 
@@ -1290,7 +1302,7 @@ def assign_walker():
         walker_first = walker.user.firstname if walker.user else None
 
         # Send slot-change notification if the slot was overridden
-        if slot_override and old_slot and slot and old_slot != slot:
+        if slot_was_changed:
             create_notification(
                 recipient_id=booking.user_id,
                 notification_type='system',
@@ -1300,7 +1312,6 @@ def assign_walker():
                 sender_id=current_user.id,
             )
 
-        slot_was_changed = slot_override and old_slot and slot and old_slot != slot
         if not slot_was_changed:
             create_notification(
                 recipient_id=booking.user_id,
@@ -1363,10 +1374,9 @@ def decline_booking(booking_id):
         if booking.status not in Booking.PENDING_STATUSES:
             return jsonify(success=False, message="Only pending or waitlisted bookings can be declined"), 400
 
-        booking.status = 'rejected'
-        booking.cancelled_at = datetime.now(timezone.utc)
-        booking.cancelled_by = 'admin'
-        db.session.commit()
+        # transition_booking sets status, cancelled_at and logs the BSC row.
+        transition_booking(booking, 'rejected', actor_id=current_user.id,
+                           cancelled_by='admin')
 
         service_label = 'drop-in' if (booking.service_type and booking.service_type.slug == ServiceType.DROP_IN) else 'walk'
         dog_name = booking.dog.name if booking.dog else 'your dog'
@@ -1381,6 +1391,7 @@ def decline_booking(booking_id):
             sender_id=current_user.id,
         )
 
+        db.session.commit()
         return jsonify(success=True)
     except Exception as e:
         db.session.rollback()
@@ -1491,8 +1502,14 @@ def _get_slot_color(slot):
 @login_required
 @admin_required
 def activity_feed():
-    """Admin activity feed — all client booking and walker availability events, filtered by month."""
+    """Admin activity feed — rebuilt from the action log (§9.6, Session 4).
+
+    Sources: BookingStatusChange (every booking transition), WalkerUnavailability,
+    WalkerAdHocAvailability, Closure, Broadcast. Actor attribution read from each
+    row's actor FK — never inferred from booking ownership (P2).
+    """
     from datetime import date as date_type
+    from sqlalchemy import func
 
     # ── Month selection ────────────────────────────────────────────────────────
     month_str = request.args.get('month', '')
@@ -1519,140 +1536,331 @@ def activity_feed():
         'requested':   ('Requested',   'bi-calendar-plus-fill',  '#b02280', 'rgba(224,47,172,0.11)'),
         'waitlisted':  ('Waitlisted',  'bi-hourglass-split',     '#8a6500', 'rgba(255,193,7,0.18)'),
         'cancelled':   ('Cancelled',   'bi-x-circle-fill',       '#bb2d3b', 'rgba(220,53,69,0.11)'),
+        'rejected':    ('Declined',    'bi-x-circle-fill',       '#bb2d3b', 'rgba(220,53,69,0.11)'),
         'unavailable': ('Unavailable', 'bi-calendar-x-fill',     '#c45c00', 'rgba(253,126,20,0.11)'),
         'available':   ('Available',   'bi-calendar-check-fill', '#13877c', 'rgba(20,184,166,0.11)'),
+        'closure':     ('Closed',      'bi-shop-window',         '#bb2d3b', 'rgba(220,53,69,0.11)'),
+        'broadcast':   ('Broadcast',   'bi-megaphone-fill',      '#0d6efd', 'rgba(13,110,253,0.11)'),
     }
 
-    def _make_event(ts, actor_type, actor_name, actor_id, description, badge, activity_type, link):
+    def _actor_type(user):
+        if user.is_admin:
+            return 'admin'
+        if user.role == 'walker':
+            return 'walker'
+        return 'client'
+
+    def _make_event(ts, actor_type, actor_name, actor_id, description, badge, activity_type, link,
+                    batch_id=None, booking_date=None, dog_name_raw=None, svc_label_raw=None,
+                    booking_id=None):
         parts = actor_name.split()
         initials = (parts[0][0] + (parts[-1][0] if len(parts) > 1 else '')).upper() if parts else '?'
         label, icon, icon_color, badge_bg = BADGE_META.get(badge, ('', 'bi-circle', '#666', 'rgba(0,0,0,0.06)'))
         return dict(ts=ts, actor_type=actor_type, actor_name=actor_name, actor_id=actor_id,
                     description=description, badge=badge, activity_type=activity_type, link=link,
-                    initials=initials, badge_label=label, icon=icon, icon_color=icon_color, badge_bg=badge_bg)
+                    initials=initials, badge_label=label, icon=icon, icon_color=icon_color, badge_bg=badge_bg,
+                    batch_id=batch_id, booking_date=booking_date,
+                    dog_name_raw=dog_name_raw, svc_label_raw=svc_label_raw,
+                    booking_id=booking_id, is_cluster=False)
+
+    def _cluster_events(event_list):
+        """Group BSC events sharing a batch_id into collapsible clusters (D4).
+        Non-batch events and single-row batches pass through unchanged."""
+        from collections import defaultdict, Counter
+        # Sort first so clusters appear at the position of their latest child.
+        event_list.sort(key=lambda e: e['ts'] if e['ts'] else datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+
+        # Collect all children per batch_id and track first-seen position.
+        batch_children = defaultdict(list)
+        seen = set()
+        ordered_batches = []
+        result = []
+
+        for e in event_list:
+            bid = e.get('batch_id')
+            if bid:
+                batch_children[bid].append(e)
+                if bid not in seen:
+                    seen.add(bid)
+                    ordered_batches.append(bid)
+            else:
+                result.append(e)
+
+        batch_events = []
+        for bid in ordered_batches:
+            children = batch_children[bid]
+            if len(children) == 1:
+                batch_events.append(children[0])
+            else:
+                batch_events.append(_make_cluster(bid, children))
+
+        # Merge non-batch and batch events, re-sort
+        combined = result + batch_events
+        combined.sort(key=lambda e: e['ts'] if e['ts'] else datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+        return combined
+
+    def _make_cluster(bid, children):
+        """Build a single cluster-row dict from N children sharing a batch_id."""
+        from collections import Counter, defaultdict
+        ts          = max((c['ts'] for c in children if c['ts']), default=None)
+        actor_type  = children[0]['actor_type']
+        actor_name  = children[0]['actor_name']
+        actor_id    = children[0]['actor_id']
+        initials    = children[0]['initials']
+        activity_type = children[0]['activity_type']
+        link        = children[0]['link']
+
+        # Deduplicate by booking_id: for a booking that transitions
+        # requested→confirmed, two BSC rows share the same batch_id.
+        # Keep only the latest-ts row per booking so the count and badge
+        # reflect the final/terminal state rather than counting each
+        # transition separately.
+        by_booking = defaultdict(list)
+        for c in children:
+            bid_key = c.get('booking_id')
+            if bid_key is not None:
+                by_booking[bid_key].append(c)
+        if by_booking:
+            deduped = [max(rows, key=lambda r: r['ts'] or datetime.min.replace(tzinfo=timezone.utc))
+                       for rows in by_booking.values()]
+            deduped.extend(c for c in children if c.get('booking_id') is None)
+        else:
+            deduped = children
+
+        # Dominant badge = most common final status across unique bookings
+        badge = Counter(c['badge'] for c in deduped).most_common(1)[0][0]
+        label, icon, icon_color, badge_bg = BADGE_META.get(badge, ('', 'bi-circle', '#666', 'rgba(0,0,0,0.06)'))
+
+        # Build summary description from structured fields
+        dog_names = sorted({c['dog_name_raw'] for c in deduped if c.get('dog_name_raw')})
+        dates     = [c['booking_date'] for c in deduped if c.get('booking_date')]
+        svcs      = {c.get('svc_label_raw', 'walk') for c in deduped}
+        svc       = svcs.pop() if len(svcs) == 1 else 'walk'
+        n         = len(deduped)
+        plural    = 's' if n != 1 else ''
+
+        if dates:
+            lo, hi = min(dates), max(dates)
+            if lo == hi:
+                span = lo.strftime('%a %-d %b')
+            elif (lo.month, lo.year) == (hi.month, hi.year):
+                span = f"{lo.strftime('%a %-d')} – {hi.strftime('%a %-d %b')}"
+            else:
+                span = f"{lo.strftime('%a %-d %b')} – {hi.strftime('%a %-d %b')}"
+        else:
+            span = None
+
+        verb_map = {
+            'confirmed': 'confirmed', 'cancelled': 'cancelled',
+            'rejected': 'declined',   'requested': 'requested',
+            'waitlisted': 'waitlisted',
+        }
+        verb     = verb_map.get(badge, badge)
+        dog_pfx  = f"{dog_names[0]}'s " if len(dog_names) == 1 else ''
+        desc     = f"{dog_pfx}{n} {svc}{plural} {verb}"
+        if span:
+            desc += f" ({span})"
+        if len(dog_names) > 1:
+            desc += f" · {', '.join(dog_names)}"
+
+        return dict(
+            ts=ts, actor_type=actor_type, actor_name=actor_name, actor_id=actor_id,
+            description=desc, badge=badge, activity_type=activity_type, link=link,
+            initials=initials, badge_label=label, icon=icon, icon_color=icon_color, badge_bg=badge_bg,
+            batch_id=bid, booking_date=None, dog_name_raw=None, svc_label_raw=None,
+            is_cluster=True, cluster_count=n, children=children,
+        )
 
     events = []
 
-    # ── New bookings created this month (non-cancelled) ───────────────────────
-    for b in (Booking.query
-              .options(joinedload(Booking.user), joinedload(Booking.dog),
-                       joinedload(Booking.service_type), joinedload(Booking.created_by))
-              .filter(Booking.created_at >= dt_start, Booking.created_at < dt_end,
-                      ~Booking.status.in_(['cancelled', 'rejected']))
-              .all()):
-        if not b.user or not b.dog or not b.created_at:
-            continue
-        walk_date = b.date.strftime('%a %-d %b') if b.date else '?'
-        svc_label = 'drop-in' if (b.service_type and b.service_type.slug == ServiceType.DROP_IN) else 'walk'
-        if b.status == 'confirmed':
-            badge, verb = 'confirmed', 'Booked'
-        elif b.status == 'waitlisted':
-            badge, verb = 'waitlisted', 'Waitlisted for'
-        else:
-            badge, verb = 'requested', 'Requested'
-        # Admin-initiated booking: render with the admin as actor and surface
-        # the client name in the description. Falls back to client actor when
-        # created_by_id is null (legacy rows + all client-route bookings).
-        admin_creator = b.created_by if (b.created_by_id and b.created_by and b.created_by.is_admin) else None
-        if admin_creator:
-            events.append(_make_event(
-                ts=b.created_at, actor_type='admin',
-                actor_name=admin_creator.full_name, actor_id=admin_creator.id,
-                description=(f"{verb} {b.dog.name}'s {b.slot.lower()} {svc_label} "
-                             f"on {walk_date} for {b.user.full_name}"),
-                badge=badge, activity_type='booking',
-                link=url_for('admin.client_detail', client_id=b.user_id),
-            ))
-        else:
-            events.append(_make_event(
-                ts=b.created_at, actor_type='client', actor_name=b.user.full_name,
-                actor_id=b.user_id,
-                description=f"{verb} {b.dog.name}'s {b.slot.lower()} {svc_label} on {walk_date}",
-                badge=badge, activity_type='booking',
-                link=url_for('admin.client_detail', client_id=b.user_id),
-            ))
+    # ── BookingStatusChange — one event per transition (P2: actor from log) ───
+    bsc_rows = (
+        BookingStatusChange.query
+        .options(
+            joinedload(BookingStatusChange.booking)
+                .joinedload(Booking.dog),
+            joinedload(BookingStatusChange.booking)
+                .joinedload(Booking.service_type),
+            joinedload(BookingStatusChange.booking)
+                .joinedload(Booking.user),
+            joinedload(BookingStatusChange.changed_by),
+        )
+        .filter(BookingStatusChange.created_at >= dt_start,
+                BookingStatusChange.created_at < dt_end)
+        .all()
+    )
 
-    # ── Cancellations this month ───────────────────────────────────────────────
-    for b in (Booking.query
-              .options(joinedload(Booking.user), joinedload(Booking.dog), joinedload(Booking.service_type))
-              .filter(Booking.status.in_(['cancelled', 'rejected']),
-                      Booking.cancelled_at >= dt_start, Booking.cancelled_at < dt_end)
-              .all()):
-        if not b.user or not b.dog or not b.cancelled_at:
+    # Suppress the creation-as-requested row for any booking that was
+    # immediately auto-confirmed in the same batch. Same batch_id means
+    # same request — a booking requested then confirmed across two separate
+    # admin actions has a different batch_id and keeps both rows visible.
+    _immediate_confirms = {
+        (bsc.booking_id, bsc.batch_id)
+        for bsc in bsc_rows
+        if bsc.to_status == 'confirmed' and bsc.batch_id
+    }
+
+    for bsc in bsc_rows:
+        if (bsc.from_status is None and bsc.to_status == 'requested'
+                and bsc.batch_id
+                and (bsc.booking_id, bsc.batch_id) in _immediate_confirms):
             continue
-        walk_date = b.date.strftime('%a %-d %b') if b.date else '?'
+        b = bsc.booking
+        actor = bsc.changed_by
+        if not b or not actor or not b.dog:
+            continue
         svc_label = 'drop-in' if (b.service_type and b.service_type.slug == ServiceType.DROP_IN) else 'walk'
-        desc = f"Cancelled {b.dog.name}'s {b.slot.lower()} {svc_label} on {walk_date}"
-        if b.cancelled_by == 'admin':
-            desc += ' (by admin)'
+        walk_date = b.date.strftime('%a %-d %b') if b.date else '?'
+        dog = b.dog.name
+        slot = b.slot.lower() if b.slot else ''
+        atype = _actor_type(actor)
+        client_link = url_for('admin.client_detail', client_id=b.user_id)
+
+        ts = bsc.to_status
+        if ts == 'confirmed':
+            # A slot-override re-confirm has old_slot/new_slot set (F6) — show
+            # it as a move rather than an indistinguishable re-confirm.
+            if bsc.old_slot is not None:
+                desc = f"Moved {dog}'s {svc_label} on {walk_date} to {slot}"
+            else:
+                desc = f"Confirmed {dog}'s {slot} {svc_label} on {walk_date}"
+            if b.user and atype == 'admin':
+                desc += f" for {b.user.full_name}"
+            badge, activity_type = 'confirmed', 'booking'
+        elif ts in ('cancelled', 'rejected'):
+            verb = 'Declined' if ts == 'rejected' else 'Cancelled'
+            desc = f"{verb} {dog}'s {slot} {svc_label} on {walk_date}"
+            if b.user and atype == 'admin':
+                desc += f" ({b.user.full_name})"
+            badge, activity_type = ts, 'cancellation'
+        elif ts == 'waitlisted':
+            desc = f"Waitlisted {dog}'s {slot} {svc_label} on {walk_date}"
+            if b.user and atype == 'admin':
+                desc += f" for {b.user.full_name}"
+            badge, activity_type = 'waitlisted', 'booking'
+        else:  # requested
+            if bsc.from_status is None:
+                desc = f"Requested {dog}'s {slot} {svc_label} on {walk_date}"
+                if b.user and atype == 'admin':
+                    desc += f" for {b.user.full_name}"
+            else:
+                desc = f"Reset {dog}'s {slot} {svc_label} on {walk_date} to pending"
+            badge, activity_type = 'requested', 'booking'
+
         events.append(_make_event(
-            ts=b.cancelled_at, actor_type='client', actor_name=b.user.full_name,
-            actor_id=b.user_id, description=desc, badge='cancelled', activity_type='cancellation',
-            link=url_for('admin.client_detail', client_id=b.user_id),
+            ts=bsc.created_at, actor_type=atype,
+            actor_name=actor.full_name, actor_id=actor.id,
+            description=desc, badge=badge, activity_type=activity_type,
+            link=client_link,
+            batch_id=bsc.batch_id, booking_date=b.date,
+            dog_name_raw=b.dog.name, svc_label_raw=svc_label,
+            booking_id=b.id,
         ))
 
-    # ── Walker unavailabilities created this month ─────────────────────────────
+    # ── Walker unavailabilities ────────────────────────────────────────────────
     for u in (WalkerUnavailability.query
+              .options(joinedload(WalkerUnavailability.walker).joinedload(Walker.user),
+                       joinedload(WalkerUnavailability.created_by))
               .filter(WalkerUnavailability.created_at >= dt_start,
                       WalkerUnavailability.created_at < dt_end)
               .all()):
         if not u.walker or not u.walker.user or not u.created_at:
             continue
-        avail_date = u.date.strftime('%a %-d %b') if u.date else '?'
-        n_unassigned = Booking.query.filter_by(date=u.date, slot=u.slot,
-                                              walker_id=None, status='requested').count()
-        desc = f"Marked unavailable — {u.slot} on {avail_date}"
-        if n_unassigned:
-            desc += f' · {n_unassigned} booking{"s" if n_unassigned != 1 else ""} need reassigning'
+        # Actor: admin who added it, or the walker themselves
+        if u.created_by_id and u.created_by:
+            actor = u.created_by
         else:
-            n_active = Booking.query.filter(
-                Booking.date == u.date, Booking.slot == u.slot,
-                Booking.status.in_(['confirmed', 'requested', 'waitlisted']),
-            ).count()
-            if n_active:
-                desc += ' · all bookings reassigned'
+            actor = u.walker.user
+        avail_date = u.date.strftime('%a %-d %b') if u.date else '?'
         events.append(_make_event(
-            ts=u.created_at, actor_type='walker', actor_name=u.walker.user.full_name,
-            actor_id=u.walker.user_id,
-            description=desc,
+            ts=u.created_at, actor_type=_actor_type(actor),
+            actor_name=actor.full_name, actor_id=actor.id,
+            description=f"Marked {u.walker.user.full_name} unavailable — {u.slot} on {avail_date}",
             badge='unavailable', activity_type='availability',
             link=url_for('admin.walkers'),
         ))
 
-    # ── Walker adhoc availabilities created this month ─────────────────────────
+    # ── Walker adhoc availabilities ────────────────────────────────────────────
     for a in (WalkerAdHocAvailability.query
+              .options(joinedload(WalkerAdHocAvailability.walker).joinedload(Walker.user),
+                       joinedload(WalkerAdHocAvailability.created_by))
               .filter(WalkerAdHocAvailability.created_at >= dt_start,
                       WalkerAdHocAvailability.created_at < dt_end)
               .all()):
         if not a.walker or not a.walker.user or not a.created_at:
             continue
+        if a.created_by_id and a.created_by:
+            actor = a.created_by
+        else:
+            actor = a.walker.user
         avail_date = a.date.strftime('%a %-d %b') if a.date else '?'
         events.append(_make_event(
-            ts=a.created_at, actor_type='walker', actor_name=a.walker.user.full_name,
-            actor_id=a.walker.user_id,
-            description=f"Added {a.slot.lower()} availability on {avail_date}",
+            ts=a.created_at, actor_type=_actor_type(actor),
+            actor_name=actor.full_name, actor_id=actor.id,
+            description=f"Added {a.slot.lower()} availability for {a.walker.user.full_name} on {avail_date}",
             badge='available', activity_type='availability',
             link=url_for('admin.walkers'),
         ))
 
-    events.sort(key=lambda e: e['ts'] if e['ts'] else datetime.min, reverse=True)
+    # ── Closures ──────────────────────────────────────────────────────────────
+    for c in (Closure.query
+              .options(joinedload(Closure.created_by))
+              .filter(Closure.created_at >= dt_start,
+                      Closure.created_at < dt_end)
+              .all()):
+        if not c.created_at:
+            continue
+        actor = c.created_by
+        if not actor:
+            continue
+        close_date = c.date.strftime('%a %-d %b') if c.date else '?'
+        desc = f"DogBoxx closed on {close_date}"
+        if c.reason:
+            desc += f" — {c.reason}"
+        events.append(_make_event(
+            ts=c.created_at, actor_type=_actor_type(actor),
+            actor_name=actor.full_name, actor_id=actor.id,
+            description=desc, badge='closure', activity_type='closure',
+            link=url_for('admin.closures'),
+        ))
 
-    # Month dropdown — from current month back to the earliest activity in the DB.
-    from sqlalchemy import func
-    earliest = db.session.query(func.min(Booking.created_at)).scalar()
-    for ts in (
-        db.session.query(func.min(Booking.cancelled_at)).scalar(),
+    # ── Broadcasts ────────────────────────────────────────────────────────────
+    for br in (Broadcast.query
+               .options(joinedload(Broadcast.sender))
+               .filter(Broadcast.sent_at >= dt_start,
+                       Broadcast.sent_at < dt_end)
+               .all()):
+        if not br.sender:
+            continue
+        scope_date = br.scope_date.strftime('%a %-d %b') if br.scope_date else '?'
+        scope_label = {'all': 'all-day', 'morning': 'morning', 'afternoon': 'afternoon'}.get(
+            br.scope_slot, br.scope_slot)
+        desc = (f"Broadcast to {br.recipient_count} client{'s' if br.recipient_count != 1 else ''} "
+                f'on {scope_date} ({scope_label}) — "{br.subject}"')
+        events.append(_make_event(
+            ts=br.sent_at, actor_type=_actor_type(br.sender),
+            actor_name=br.sender.full_name, actor_id=br.sender_id,
+            description=desc, badge='broadcast', activity_type='broadcast',
+            link=url_for('admin.broadcasts'),
+        ))
+
+    events = _cluster_events(events)
+
+    # Month dropdown — earliest event across all log sources
+    candidates = [
+        db.session.query(func.min(BookingStatusChange.created_at)).scalar(),
         db.session.query(func.min(WalkerUnavailability.created_at)).scalar(),
         db.session.query(func.min(WalkerAdHocAvailability.created_at)).scalar(),
-    ):
+        db.session.query(func.min(Closure.created_at)).scalar(),
+        db.session.query(func.min(Broadcast.sent_at)).scalar(),
+    ]
+    earliest = None
+    for ts in candidates:
         if ts and (earliest is None or ts < earliest):
             earliest = ts
 
     today = date_type.today()
-    if earliest:
-        oldest = date_type(earliest.year, earliest.month, 1)
-    else:
-        oldest = date_type(today.year, today.month, 1)
+    oldest = date_type(earliest.year, earliest.month, 1) if earliest else date_type(today.year, today.month, 1)
 
     month_options = []
     y, m = today.year, today.month
@@ -2432,12 +2640,28 @@ def remove_walker_role(walker_user_id):
     from datetime import date as _date
     today = _date.today()
 
-    # Reassign future confirmed bookings so they stay on the board
-    Booking.query.filter(
+    # Reassign future confirmed bookings so they stay on the board. Fetch the
+    # rows (not a bulk .update()) so each transition is logged via bulk_transition
+    # with a shared batch_id. Actor = the admin removing the role.
+    affected = Booking.query.filter(
         Booking.walker_id == user.walker.id,
         Booking.date >= today,
         Booking.status == 'confirmed',
-    ).update({'walker_id': None, 'status': 'requested'}, synchronize_session=False)
+    ).all()
+    bulk_transition(affected, 'requested', actor_id=current_user.id,
+                    walker_id=None, batch_id=uuid.uuid4().hex)
+
+    # Notify each affected client (§7.2): one grouped booking_reset per user.
+    # Removing the walker role unassigns their confirmed walks just like
+    # deactivate_walker — the client must be told their booking reverted to
+    # pending, not left to discover it silently.
+    if affected:
+        client_batch = NotificationBatch(actor_id=current_user.id)
+        for b in affected:
+            client_batch.add(b.user_id, 'booking_reset',
+                             dog_name=b.dog.name if b.dog else 'Unknown', slot=b.slot, date=b.date,
+                             svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
+        client_batch.flush()
 
     # Deactivate schedule so they no longer appear on future capacity
     WalkerSchedule.query.filter_by(walker_id=user.walker.id).update(
@@ -2519,14 +2743,27 @@ def deactivate_walker(walker_id):
 
         user.active = False
 
-        # Return future confirmed bookings to pending so they stay visible on the board
+        # Return future confirmed bookings to pending so they stay visible on the
+        # board. Fetch the rows (not a bulk .update()) so each transition is
+        # logged via bulk_transition. Actor = the admin deactivating the walker.
         from datetime import date as _date
         today = _date.today()
-        Booking.query.filter(
+        affected = Booking.query.filter(
             Booking.walker_id == user.walker.id,
             Booking.date >= today,
             Booking.status == 'confirmed',
-        ).update({'walker_id': None, 'status': 'requested'}, synchronize_session=False)
+        ).all()
+        bulk_transition(affected, 'requested', actor_id=current_user.id,
+                        walker_id=None, batch_id=uuid.uuid4().hex)
+
+        # Notify each affected client (§7.2): one grouped booking_reset per user.
+        if affected:
+            client_batch = NotificationBatch(actor_id=current_user.id)
+            for b in affected:
+                client_batch.add(b.user_id, 'booking_reset',
+                                 dog_name=b.dog.name if b.dog else 'Unknown', slot=b.slot, date=b.date,
+                                 svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
+            client_batch.flush()
 
         # Deactivate schedule rows so the walker no longer appears on future board dates
         WalkerSchedule.query.filter_by(walker_id=user.walker.id).update(
@@ -2646,7 +2883,7 @@ def walker_schedule(walker_id):
 @admin_required
 def walker_schedule_json(walker_id):
     """JSON read/write endpoint for the schedule modal on /admin/walkers."""
-    walker = Walker.query.get_or_404(walker_id)
+    walker = db.get_or_404(Walker, walker_id)
 
     if request.method == 'GET':
         schedules = WalkerSchedule.query.filter_by(walker_id=walker_id, active=True).all()
@@ -2680,7 +2917,7 @@ def walker_schedule_json(walker_id):
         # Confirmed future bookings on the now-removed (weekday, slot) combos
         # are no longer guaranteed — reset them to 'requested' (walker_id=None)
         # so they surface in the pending column on the board for reassignment,
-        # and notify each affected client once with their per-client count.
+        # and notify each affected client with a grouped booking_reset (§7.1).
         affected_count = 0
         if removed:
             from datetime import date as _date
@@ -2694,28 +2931,18 @@ def walker_schedule_json(walker_id):
                 )
                 .all()
             )
-            per_client = {}
+            # Shared batch_id so the feed can cluster this schedule edit's resets.
+            batch_id = uuid.uuid4().hex
+            client_batch = NotificationBatch(actor_id=current_user.id)
             for b in future_confirmed:
                 if (b.date.weekday(), b.slot) in removed:
-                    b.walker_id = None
-                    b.status = 'requested'
-                    per_client[b.user_id] = per_client.get(b.user_id, 0) + 1
+                    transition_booking(b, 'requested', actor_id=current_user.id,
+                                       walker_id=None, batch_id=batch_id)
+                    client_batch.add(b.user_id, 'booking_reset',
+                                     dog_name=b.dog.name if b.dog else 'Unknown', slot=b.slot, date=b.date,
+                                     svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
                     affected_count += 1
-
-            for client_user_id, n in per_client.items():
-                noun = 'booking' if n == 1 else 'bookings'
-                create_notification(
-                    recipient_id=client_user_id,
-                    notification_type='system',
-                    title=f"Status change - {n} {noun} moved to 'requested'",
-                    body=(
-                        "A walker availability change means we need to reassign "
-                        "your bookings. No need to do anything, you'll get "
-                        "notifications as the bookings are updated."
-                    ),
-                    link='/',
-                    sender_id=current_user.id,
-                )
+            client_batch.flush()
 
         db.session.commit()
 
@@ -2746,7 +2973,7 @@ def admin_api_schedule_changes():
     except (ValueError, TypeError):
         return "walker_id required", 400
 
-    walker = Walker.query.get_or_404(wid)
+    walker = db.get_or_404(Walker, wid)
     today = date.today()
 
     unavailabilities = WalkerUnavailability.query.filter(
@@ -2845,7 +3072,7 @@ def admin_add_adhoc(walker_id):
     """Admin: add an ad hoc available slot for any walker."""
     from datetime import date
 
-    walker = Walker.query.get_or_404(walker_id)
+    walker = db.get_or_404(Walker, walker_id)
 
     data = request.get_json(silent=True)
     if not data:
@@ -2895,7 +3122,7 @@ def admin_delete_adhoc(walker_id, adhoc_id):
 @admin_required
 def admin_add_unavailability(walker_id):
     """Admin: add an unavailability slot for any walker."""
-    walker = Walker.query.get_or_404(walker_id)
+    walker = db.get_or_404(Walker, walker_id)
 
     data = request.get_json(silent=True)
     if not data:
@@ -2916,7 +3143,8 @@ def admin_add_unavailability(walker_id):
     if WalkerUnavailability.query.filter_by(walker_id=walker.id, date=unavail_date, slot=slot).first():
         return jsonify(success=False, message="Already marked as unavailable for this date/slot"), 400
 
-    unavail = WalkerUnavailability(walker_id=walker.id, date=unavail_date, slot=slot, reason=reason)
+    unavail = WalkerUnavailability(walker_id=walker.id, date=unavail_date, slot=slot,
+                                   reason=reason, created_by_id=current_user.id)
     db.session.add(unavail)
 
     # Any confirmed bookings this walker held for this date/slot are no longer
@@ -2924,9 +3152,19 @@ def admin_add_unavailability(walker_id):
     affected = Booking.query.filter_by(
         walker_id=walker.id, date=unavail_date, slot=slot, status='confirmed',
     ).all()
-    for b in affected:
-        b.walker_id = None
-        b.status = 'requested'
+    # Reset to requested (walker unassigned), logging a BSC row per booking.
+    # Actor = the admin marking the walker unavailable.
+    bulk_transition(affected, 'requested', actor_id=current_user.id,
+                    walker_id=None, batch_id=uuid.uuid4().hex)
+
+    # Notify each affected client (§7.2): one grouped booking_reset per user.
+    if affected:
+        client_batch = NotificationBatch(actor_id=current_user.id)
+        for b in affected:
+            client_batch.add(b.user_id, 'booking_reset',
+                             dog_name=b.dog.name, slot=b.slot, date=b.date,
+                             svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
+        client_batch.flush()
 
     db.session.commit()
 
@@ -3108,6 +3346,9 @@ def book_for_dog():
         service_label = service.name.lower()
 
         bookings_created = []
+        # Shared batch_id so the feed can cluster a single admin booking action
+        # (e.g. 'Both' slots) — NOTIFICATIONS.md §9.2, D4.
+        batch_id = uuid.uuid4().hex
         for s in slots_to_book:
             acquire_booking_lock(service.slug, booking_date, s)
             available, can_waitlist, capacity_msg = check_availability(
@@ -3116,16 +3357,19 @@ def book_for_dog():
             if not available and not can_waitlist:
                 return jsonify(success=False, message=capacity_msg), 400
 
+            # Resolved initial status: waitlisted only if the slot is full,
+            # otherwise requested. A successful auto-assign then confirms it.
             booking = Booking(
                 user_id=user_id,
                 dog_id=dog_id,
                 service_type_id=service.id,
                 date=booking_date,
                 slot=s,
-                status='waitlisted',
+                status='waitlisted' if not available else 'requested',
                 created_by_id=current_user.id,
             )
             db.session.add(booking)
+            record_booking_created(booking, actor_id=current_user.id, batch_id=batch_id)
 
             # Drop-ins are never auto-assigned — they land as requested
             # (or waitlisted) for an admin to confirm manually, matching the
@@ -3133,61 +3377,49 @@ def book_for_dog():
             if available and not is_drop_in:
                 walker = auto_assign_walker(booking_date, s)
                 if walker:
-                    booking.walker_id = walker.id
-                    booking.status = 'confirmed'
-                    booking.confirmed_at = datetime.now(timezone.utc)
+                    transition_booking(booking, 'confirmed', actor_id=current_user.id,
+                                       walker_id=walker.id, batch_id=batch_id)
                     booking.pickup_order = get_walker_slot_count(walker.id, booking_date, s)
-                else:
-                    booking.status = 'requested'
-            elif available:
-                booking.status = 'requested'
 
             bookings_created.append(booking)
 
         db.session.flush()  # populate booking.ids before notifications
 
-        date_str_fmt        = booking_date.strftime('%a %-d %b')
-        walker_date_str_fmt = booking_date.strftime('%-d %b %Y')
-        admin_first         = current_user.firstname or 'Admin'
-        admin_books_self    = (current_user.id == int(user_id))
-        is_past             = booking_date < date_type.today()
-        # Use 'walk' / 'drop-in' in client-facing notifications — matches the
-        # canonical svc_label pattern used in client/routes.py. service.name
-        # ("Group Walk" / "Drop In") is admin-facing only.
-        svc_label = 'drop-in' if is_drop_in else 'walk'
+        date_str_fmt     = booking_date.strftime('%a %-d %b')
+        admin_first      = current_user.firstname or 'Admin'
+        admin_books_self = (current_user.id == int(user_id))
+        is_past          = booking_date < date_type.today()
+        # 'walk' / 'drop-in' is the canonical client- AND walker-facing label
+        # (§7.7). service.name ("Group Walk" / "Drop In") stays admin-facing
+        # (the JSON response message below).
+        svc_label    = 'drop-in' if is_drop_in else 'walk'
+        client_actor = None if admin_books_self else admin_first
+        # Grouped notifications (§9.3/§9.4): AM+PM of one booking action collapse
+        # into a single bell entry per recipient + status.
+        batch = NotificationBatch(actor_id=current_user.id)
         for b in bookings_created:
+            walker_first = b.walker.user.firstname if b.walker and b.walker.user else None
             if b.status == 'confirmed':
-                walker_first = b.walker.user.firstname if b.walker and b.walker.user else None
-                if admin_books_self:
-                    # Admin happens to own this dog — match the client flow's wording
-                    client_title = f"{dog.name}'s {b.slot.lower()} {svc_label} on {date_str_fmt} has been confirmed"
-                    client_body  = f'Booked with {walker_first}.' if walker_first else 'Walker assigned.'
-                else:
-                    client_title = f"{admin_first} booked a {b.slot.lower()} {svc_label} for {dog.name} on your behalf"
-                    if walker_first:
-                        client_body = f"Booked on {date_str_fmt} with {walker_first}."
-                    else:
-                        client_body = f"Booked on {date_str_fmt}."
-                create_notification(
-                    recipient_id=user_id,
-                    notification_type='booking_confirmed',
-                    title=client_title,
-                    body=client_body,
-                    link='/',
-                    sender_id=current_user.id,
-                )
-                # Skip walker notification for past dates — the walk already
-                # happened (or didn't); pinging the walker about it is noise.
-                if b.walker.user_id != current_user.id and not is_past:
-                    create_notification(
-                        recipient_id=b.walker.user_id,
-                        notification_type='walker_assigned',
-                        title=f'You have been assigned a {service_label} on {walker_date_str_fmt}',
-                        body=f'{dog.name} — {b.slot}',
-                        link=f'/walker/pickups?date={booking_date.isoformat()}',
-                        sender_id=current_user.id,
-                    )
+                batch.add(user_id, 'booking_confirmed', actor_first=client_actor,
+                          dog_name=dog.name, slot=b.slot, date=booking_date,
+                          svc_label=svc_label, walker_name=walker_first)
+                # Skip the walker ping for past dates — the walk already happened
+                # (or didn't); pinging the walker about it is noise.
+                if b.walker and b.walker.user_id != current_user.id and not is_past:
+                    batch.add(b.walker.user_id, 'walker_assigned',
+                              dog_name=dog.name, slot=b.slot, date=booking_date,
+                              svc_label=svc_label)
+            elif b.status == 'waitlisted':
+                # §7.3: admin-made pending bookings now reach the client.
+                batch.add(user_id, 'booking_waitlisted', actor_first=client_actor,
+                          dog_name=dog.name, slot=b.slot, date=booking_date,
+                          svc_label=svc_label)
+            else:
+                batch.add(user_id, 'booking_requested', actor_first=client_actor,
+                          dog_name=dog.name, slot=b.slot, date=booking_date,
+                          svc_label=svc_label)
 
+        batch.flush()
         db.session.commit()
 
         if len(bookings_created) == 1:
@@ -3285,7 +3517,15 @@ def recurring_for_dog():
 
         active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
         confirmed = requested = waitlisted = skipped = 0
-        notifications = []
+        # One batch_id ties together every booking in this recurring series so
+        # the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
+        batch_id = uuid.uuid4().hex
+        # Grouped notifications (§9.3/§9.4): one bell entry per (recipient, kind)
+        # instead of one per booking. Admin acting on behalf → actor-prefixed
+        # wording, unless the admin happens to own this dog.
+        batch = NotificationBatch(actor_id=current_user.id)
+        admin_first  = current_user.firstname or 'Admin'
+        client_actor = None if current_user.id == int(user_id) else admin_first
 
         for d, slot in target_pairs:
             existing = Booking.query.filter(
@@ -3313,56 +3553,49 @@ def recurring_for_dog():
                 skipped += 1
                 continue
 
+            # Resolved initial status: waitlisted only if the slot is full,
+            # otherwise requested. A successful auto-assign then confirms it.
             booking = Booking(
                 user_id=user_id,
                 dog_id=dog_id,
                 service_type_id=default_service.id,
                 date=d,
                 slot=slot,
-                status='waitlisted',
+                status='waitlisted' if not available else 'requested',
                 created_by_id=current_user.id,
             )
             db.session.add(booking)
+            record_booking_created(booking, actor_id=current_user.id, batch_id=batch_id)
 
+            walker = None
             if available:
                 walker = auto_assign_walker(d, slot)
                 if walker:
-                    booking.walker_id = walker.id
-                    booking.status = 'confirmed'
-                    booking.confirmed_at = datetime.now(timezone.utc)
+                    transition_booking(booking, 'confirmed', actor_id=current_user.id,
+                                       walker_id=walker.id, batch_id=batch_id)
                     booking.pickup_order = get_walker_slot_count(walker.id, d, slot)
-                else:
-                    booking.status = 'requested'
 
+            # Notify the client on every outcome — confirmed, requested AND
+            # waitlisted (§7.3: admin-made pending bookings used to be silent).
             if booking.status == 'confirmed':
                 confirmed += 1
-                client_date_fmt = d.strftime('%a %-d %b')
-                walker_date_fmt = d.strftime('%-d %b %Y')
                 walker_first = walker.user.firstname if walker.user else None
-                client_body = f'Booked with {walker_first}.' if walker_first else 'Walker assigned.'
-                notifications.append((user_id, 'booking_confirmed',
-                                       f"{dog.name}'s {slot.lower()} walk on {client_date_fmt} has been confirmed",
-                                       client_body, booking))
+                batch.add(user_id, 'booking_confirmed', actor_first=client_actor,
+                          dog_name=dog.name, slot=slot, date=d, walker_name=walker_first)
                 if walker.user_id != current_user.id:
-                    notifications.append((walker.user_id, 'walker_assigned',
-                                           f'You have been assigned a walk on {walker_date_fmt}',
-                                           f'{dog.name} — {slot}', booking))
+                    batch.add(walker.user_id, 'walker_assigned',
+                              dog_name=dog.name, slot=slot, date=d)
             elif booking.status == 'waitlisted':
                 waitlisted += 1
+                batch.add(user_id, 'booking_waitlisted', actor_first=client_actor,
+                          dog_name=dog.name, slot=slot, date=d)
             else:
                 requested += 1
+                batch.add(user_id, 'booking_requested', actor_first=client_actor,
+                          dog_name=dog.name, slot=slot, date=d)
 
-        db.session.flush()  # populate booking.id values before notifications
-        for recipient_id, ntype, title, body, bk in notifications:
-            create_notification(
-                recipient_id=recipient_id,
-                notification_type=ntype,
-                title=title,
-                body=body,
-                link='/' if ntype == 'booking_confirmed' else f'/walker/pickups?date={bk.date.isoformat()}',
-                sender_id=current_user.id,
-            )
-
+        db.session.flush()  # persist bookings before emitting notifications
+        batch.flush()
         db.session.commit()
         return jsonify(success=True, confirmed=confirmed, requested=requested, waitlisted=waitlisted, skipped=skipped)
 
@@ -3545,44 +3778,41 @@ def dog_bulk_cancel(dog_id):
     if not bookings:
         return jsonify(success=True, cancelled_count=0)
 
-    now = datetime.now(timezone.utc)
     n = len(bookings)
-    start_fmt = start.strftime('%-d %b')
-    end_fmt   = end.strftime('%-d %b')
-    slot_label = slot_filter[0].lower() + ' ' if len(slot_filter) == 1 else ''
 
-    # Day-of-week label: only include when filter is a strict subset (1–4 of
-    # the 5 weekdays). All-5 selected = same effective filter as no days at all.
-    DOW_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
-    DOW_ABBR  = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
-    if 0 < len(day_filter) < 5:
-        sorted_days = sorted(day_filter)
-        if len(sorted_days) == 1:
-            day_label = DOW_NAMES[sorted_days[0]] + ' '
-        else:
-            day_label = '/'.join(DOW_ABBR[d] for d in sorted_days) + ' '
-    else:
-        day_label = ''
-
+    # Capture walker IDs before bulk_transition clears them (§7.4).
+    # Maps walker.user_id → list of (slot, date, svc_label) for notifications.
+    walker_payloads = {}
     for b in bookings:
-        b.status       = 'cancelled'
-        b.cancelled_at = now
-        b.cancelled_by = 'admin'
-        b.walker_id    = None
+        if b.walker_id and b.walker and b.walker.user_id:
+            wuid = b.walker.user_id
+            if wuid != current_user.id:
+                b_svc = 'drop-in' if b.service_type and b.service_type.slug == ServiceType.DROP_IN else 'walk'
+                walker_payloads.setdefault(wuid, []).append(
+                    dict(dog_name=dog.name, slot=b.slot, date=b.date, svc_label=b_svc)
+                )
 
-    # Notify dog owners (excluding admins)
+    # One batch_id ties together every cancellation in this bulk-cancel action
+    # so the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
+    bulk_transition(bookings, 'cancelled', actor_id=current_user.id,
+                    walker_id=None, cancelled_by='admin', batch_id=uuid.uuid4().hex)
+
+    # Notify dog owners (excluding admins) and assigned walkers (§7.4) —
+    # one grouped notice each.
+    batch = NotificationBatch(actor_id=current_user.id)
     owners = DogOwner.query.filter_by(dog_id=dog_id).all()
     for o in owners:
         owner_user = db.session.get(User, o.user_id)
         if owner_user and not owner_user.is_admin:
-            create_notification(
-                recipient_id      = owner_user.id,
-                notification_type = 'booking_cancelled',
-                title             = f"{dog.name}'s {day_label}{slot_label}walks have been cancelled {start_fmt}–{end_fmt}",
-                body              = f"{n} booking{'s' if n != 1 else ''} cancelled.",
-                link              = '/',
-                sender_id         = current_user.id,
-            )
+            for b in bookings:
+                b_svc = ('drop-in' if b.service_type
+                         and b.service_type.slug == ServiceType.DROP_IN else 'walk')
+                batch.add(owner_user.id, 'booking_cancelled',
+                          dog_name=dog.name, slot=b.slot, date=b.date, svc_label=b_svc)
+    for wuid, payloads in walker_payloads.items():
+        for p in payloads:
+            batch.add(wuid, 'booking_cancelled', **p)
+    batch.flush()
 
     try:
         db.session.commit()
@@ -3662,30 +3892,64 @@ def add_closure():
         bookings = Booking.query.filter(
             Booking.date == closure_date,
             Booking.status.in_(active_statuses)
+        ).options(
+            joinedload(Booking.dog),
+            joinedload(Booking.service_type),
+            joinedload(Booking.walker),
         ).all()
 
-        now = datetime.now(timezone.utc)
-        date_fmt  = closure_date.strftime('%a %-d %b')
+        # One batch_id ties together every cancellation caused by this closure
+        # so the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
+        batch_id  = uuid.uuid4().hex
         body_text = "DogBoxx is closed" + (f" — {reason}." if reason else ".")
+
+        # Batch-fetch co-owners to avoid N+1 (one DogOwner query per booking).
+        dog_ids = [b.dog_id for b in bookings if b.dog_id]
+        if dog_ids:
+            ownerships = DogOwner.query.filter(DogOwner.dog_id.in_(dog_ids)).all()
+            co_users = {u.id: u for u in User.query.filter(
+                User.id.in_({o.user_id for o in ownerships})).all()}
+            owners_by_dog = {}
+            for o in ownerships:
+                owners_by_dog.setdefault(o.dog_id, []).append(o)
+        else:
+            owners_by_dog, co_users = {}, {}
+
+        # Grouped per recipient (§9.3/§9.4, §7.4): primary owner, co-owners,
+        # and assigned walker each get one consolidated notice.
+        batch = NotificationBatch(actor_id=current_user.id)
         for booking in bookings:
-            booking.status = 'cancelled'
-            booking.cancelled_at = now
-            booking.cancelled_by = 'admin'
-            dog_name = booking.dog.name if booking.dog else 'Your dog'
-            service_label = (
+            # Closure cancel intentionally leaves walker_id set (unlike client
+            # cancellations) — preserve that by not passing walker_id.
+            transition_booking(booking, 'cancelled', actor_id=current_user.id,
+                               cancelled_by='admin', batch_id=batch_id)
+            svc_label = (
                 'drop-in'
                 if booking.service_type and booking.service_type.slug == ServiceType.DROP_IN
                 else 'walk'
             )
-            create_notification(
-                recipient_id=booking.user_id,
-                notification_type='booking_cancelled',
-                title=f"{dog_name}'s {booking.slot.lower()} {service_label} on {date_fmt} has been cancelled",
-                body=body_text,
-                link='/',
-                sender_id=current_user.id,
-            )
+            dog_name = booking.dog.name if booking.dog else 'Your dog'
+            payload  = dict(dog_name=dog_name, slot=booking.slot,
+                            date=closure_date, svc_label=svc_label, reason=body_text)
 
+            # Primary owner
+            batch.add(booking.user_id, 'booking_cancelled', **payload)
+
+            # Co-owners (§7.4): other non-admin users who share this dog
+            for o in owners_by_dog.get(booking.dog_id, []):
+                if o.user_id == booking.user_id:
+                    continue
+                co_user = co_users.get(o.user_id)
+                if co_user and not co_user.is_admin:
+                    batch.add(co_user.id, 'booking_cancelled', **payload)
+
+            # Assigned walker (§7.4): skip if unset or if it's the acting admin
+            if booking.walker_id and booking.walker:
+                walker_uid = booking.walker.user_id
+                if walker_uid and walker_uid != current_user.id:
+                    batch.add(walker_uid, 'booking_cancelled', **payload)
+
+        batch.flush()
         db.session.commit()
         return jsonify(success=True, cancelled_count=len(bookings))
 
@@ -4654,7 +4918,7 @@ def daily_messages():
 @admin_required
 def delete_daily_message(message_id):
     from app.models import DailyMessage
-    msg = DailyMessage.query.get_or_404(message_id)
+    msg = db.get_or_404(DailyMessage, message_id)
     db.session.delete(msg)
     db.session.commit()
     flash("Message deleted.", "success")

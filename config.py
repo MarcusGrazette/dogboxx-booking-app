@@ -6,6 +6,9 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+    # Business owner first name — used in same-day confirmation messages.
+    OWNER_FIRSTNAME = os.environ.get('OWNER_FIRSTNAME', 'Lydia')
+
     # Web Push (VAPID)
     VAPID_PRIVATE_KEY   = os.environ.get('VAPID_PRIVATE_KEY', '')
     VAPID_PUBLIC_KEY    = os.environ.get('VAPID_PUBLIC_KEY', '')
@@ -85,12 +88,30 @@ class DevelopmentConfig(Config):
 class TestingConfig(Config):
     """Testing configuration.
 
-    Uses TEST_DATABASE_URL when set (PostgreSQL in CI), otherwise falls back
-    to in-memory SQLite for fast local test runs.
+    Defaults to PostgreSQL so local test runs match CI and production. This
+    is the only place where `flask db check` (model↔migration drift), PG enum
+    constraints, native enum-type comparisons, and FK-needs-commit semantics
+    are meaningfully enforced — SQLite silently hides all of these.
+
+    DB URL resolution (evaluated at import time; .env is already loaded by
+    the time create_app imports this, so TEST_DATABASE_URL can live in .env):
+      USE_SQLITE=1            -> in-memory SQLite (fast escape hatch for the
+                                 tight local loop; will NOT catch the bugs above)
+      TEST_DATABASE_URL set   -> that URL (CI sets this; locally, point it at a
+                                 dogboxx_test DB on your existing dev Postgres)
+      otherwise               -> the credentials CI uses. Locally this just
+                                 fails to authenticate rather than touching the
+                                 dev DB — set TEST_DATABASE_URL to run on Postgres.
     """
     TESTING = True
     DEBUG = True
-    SQLALCHEMY_DATABASE_URI = os.environ.get('TEST_DATABASE_URL', 'sqlite:///:memory:')
+    if os.environ.get('USE_SQLITE') == '1':
+        SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
+    else:
+        SQLALCHEMY_DATABASE_URI = os.environ.get(
+            'TEST_DATABASE_URL',
+            'postgresql://dogboxx:dogboxx@localhost:5432/dogboxx_test',
+        )
     WTF_CSRF_ENABLED = False
     RATELIMIT_ENABLED = False
 
