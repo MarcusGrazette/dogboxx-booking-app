@@ -15,6 +15,7 @@ DogBoxx is a booking management platform for a real small dog walking business (
 - **`develop`** — active development. All work goes here or in a feature branch off here.
 - **Feature branches** — create `feature/<name>` off `develop`, PR back to `develop`.
 - **Deploy** — merge `develop` → `main` via GitHub PR. Railway auto-deploys on merge to `main`.
+- **Hotfix / targeted deploy** — when a small isolated fix needs to ship ahead of larger in-progress `develop` work: (1) commit to `develop` first, (2) create `hotfix/<name>` off `origin/main`, (3) cherry-pick the commit, (4) PR `hotfix/<name>` → `main`. When `develop` eventually merges, git sees those lines already match `main` and skips them cleanly. Always commit to `develop` first — it is the source of truth.
 
 Always check out `develop` before starting new work.
 
