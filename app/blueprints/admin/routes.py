@@ -3490,7 +3490,7 @@ def dog_cancel_preview(dog_id):
         success=True,
         count=len(bookings),
         bookings=[{
-            'date': b.date.strftime('%-d %b %Y'),
+            'date': b.date.isoformat(),
             'slot': b.slot,
             'status': b.status,
         } for b in bookings],
