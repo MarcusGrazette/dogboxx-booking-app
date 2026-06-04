@@ -538,7 +538,7 @@ def schedule_changes_batch():
 
     # Admins may pass walker_id to act on behalf of any walker.
     if current_user.is_admin and data.get('walker_id'):
-        walker = Walker.query.get_or_404(int(data['walker_id']))
+        walker = db.get_or_404(Walker, int(data['walker_id']))
     else:
         walker = Walker.query.filter_by(user_id=current_user.id).first()
         if not walker:
@@ -725,7 +725,7 @@ def schedule_changes_batch_delete():
 
     # Admins may pass walker_id to act on behalf of any walker.
     if current_user.is_admin and data.get('walker_id'):
-        walker = Walker.query.get_or_404(int(data['walker_id']))
+        walker = db.get_or_404(Walker, int(data['walker_id']))
     else:
         walker = Walker.query.filter_by(user_id=current_user.id).first()
         if not walker:

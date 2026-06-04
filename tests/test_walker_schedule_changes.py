@@ -282,7 +282,7 @@ class TestScheduleChangesBatchDelete:
         assert resp.get_json()['deleted'] == 0
         with app.app_context():
             # Row still there
-            assert WalkerUnavailability.query.get(other_id) is not None
+            assert db.session.get(WalkerUnavailability, other_id) is not None
 
 
 # ---------------------------------------------------------------------------

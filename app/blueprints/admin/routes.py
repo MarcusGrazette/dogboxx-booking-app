@@ -2883,7 +2883,7 @@ def walker_schedule(walker_id):
 @admin_required
 def walker_schedule_json(walker_id):
     """JSON read/write endpoint for the schedule modal on /admin/walkers."""
-    walker = Walker.query.get_or_404(walker_id)
+    walker = db.get_or_404(Walker, walker_id)
 
     if request.method == 'GET':
         schedules = WalkerSchedule.query.filter_by(walker_id=walker_id, active=True).all()
@@ -2973,7 +2973,7 @@ def admin_api_schedule_changes():
     except (ValueError, TypeError):
         return "walker_id required", 400
 
-    walker = Walker.query.get_or_404(wid)
+    walker = db.get_or_404(Walker, wid)
     today = date.today()
 
     unavailabilities = WalkerUnavailability.query.filter(
@@ -3072,7 +3072,7 @@ def admin_add_adhoc(walker_id):
     """Admin: add an ad hoc available slot for any walker."""
     from datetime import date
 
-    walker = Walker.query.get_or_404(walker_id)
+    walker = db.get_or_404(Walker, walker_id)
 
     data = request.get_json(silent=True)
     if not data:
@@ -3122,7 +3122,7 @@ def admin_delete_adhoc(walker_id, adhoc_id):
 @admin_required
 def admin_add_unavailability(walker_id):
     """Admin: add an unavailability slot for any walker."""
-    walker = Walker.query.get_or_404(walker_id)
+    walker = db.get_or_404(Walker, walker_id)
 
     data = request.get_json(silent=True)
     if not data:
@@ -4918,7 +4918,7 @@ def daily_messages():
 @admin_required
 def delete_daily_message(message_id):
     from app.models import DailyMessage
-    msg = DailyMessage.query.get_or_404(message_id)
+    msg = db.get_or_404(DailyMessage, message_id)
     db.session.delete(msg)
     db.session.commit()
     flash("Message deleted.", "success")

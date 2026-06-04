@@ -209,7 +209,7 @@ def seed_bookings(bookings_data, users, dogs, walkers):
         # Find primary owner via DogOwner join table
         dog_owner = DogOwner.query.filter_by(dog_id=dog.id, role='primary').first()
         if dog_owner:
-            owner = User.query.get(dog_owner.user_id)
+            owner = db.session.get(User, dog_owner.user_id)
             if owner:
                 dog_map[f"{dog.name.lower()}_{owner.email}"] = dog
 
