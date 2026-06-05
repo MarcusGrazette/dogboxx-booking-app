@@ -24,46 +24,6 @@ class LoginForm(FlaskForm):
     remember_me = BooleanField('Remember Me', default=True)
     submit = SubmitField('Log In')
 
-class RegisterForm(FlaskForm):
-    firstname = StringField(
-        'First Name',
-        validators=[
-            DataRequired(message="First name is required"),
-            Length(min=2, max=80, message="First name must be between 2 and 80 characters")
-        ]
-    )
-    lastname = StringField(
-        'Last Name',
-        validators=[
-            DataRequired(message="Last name is required"),
-            Length(min=2, max=80, message="Last name must be between 2 and 80 characters")
-        ]
-    )
-    email = StringField(
-        'Email',
-        validators=[
-            DataRequired(message="Email is required"),
-            Email(message="Invalid email address"),
-            Length(max=120)
-        ]
-    )
-    password = PasswordField(
-        'Password',
-        validators=[
-            DataRequired(message="Password is required"),
-            Length(min=8, message="Password must be at least 8 characters long"),
-            wtforms_password_validator
-        ]
-    )
-    confirmation = PasswordField(
-        'Confirm Password',
-        validators=[
-            DataRequired(message="Password confirmation is required"),
-            EqualTo('password', message="Passwords must match")
-        ]
-    )
-    submit = SubmitField('Create Account')
-
 class OnboardingForm(FlaskForm):
     address_line_1 = StringField(
         'Address Line 1',
