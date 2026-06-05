@@ -1,7 +1,7 @@
 from flask import Flask, request, redirect, render_template, g
 from flask_session import Session
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager
+from flask_login import LoginManager, current_user
 from flask_migrate import Migrate
 from dotenv import load_dotenv
 import os
@@ -19,7 +19,19 @@ db = SQLAlchemy()
 migrate = Migrate()
 login_manager = LoginManager()
 csrf = CSRFProtect()
-limiter = Limiter(key_func=get_remote_address)
+# The global RATELIMIT_DEFAULT ("50 per hour" etc.) exists to slow down
+# anonymous abuse of public endpoints (login, password reset — which also carry
+# their own explicit @limiter.limit decorators). It must NOT throttle signed-in
+# users: the admin dashboard alone fires several XHR/fetch calls per interaction
+# (month-data, day-detail, board-data, chart-data, pending-counts), so a working
+# admin blows through a per-IP hourly default in minutes — after which an AJAX
+# POST like /admin/assign_walker gets a 429 whose HTML body breaks the client's
+# res.json(). Exempting authenticated users from the *default* limits leaves all
+# explicit per-route decorators intact (this flag only affects the defaults).
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits_exempt_when=lambda: current_user.is_authenticated,
+)
 
 def _home_url_for(user):
     """Return the most appropriate home URL for the given user."""
@@ -279,6 +291,23 @@ def create_app(config_name=None):
 
     @app.errorhandler(429)
     def ratelimit_handler(e):
+        # API/fetch callers expect JSON — returning the HTML error page makes
+        # their res.json() throw "unexpected token '<'" and surfaces a cryptic
+        # toast instead of a usable message. Detect non-navigation requests the
+        # same way the CSRF handler and the role decorators do (is_json / XHR),
+        # plus an Accept-header check to catch fetch() GETs that send Accept: */*.
+        from flask import jsonify
+        accepts = request.headers.get('Accept') or ''
+        wants_json = (
+            request.is_json
+            or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            or 'text/html' not in accepts
+        )
+        if wants_json:
+            return jsonify(
+                success=False,
+                message="You're doing that too quickly — please wait a moment and try again.",
+            ), 429
         return render_template('error.html',
                               error_code=429,
                               error_message="Too many attempts. Please try again later.",
