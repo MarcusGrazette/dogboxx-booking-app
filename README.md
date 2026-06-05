@@ -92,14 +92,45 @@ Required variables:
 
 For SQLite (quick local start), omit `DATABASE_URL` — it defaults to `sqlite:///app.db`.
 
-### 3. Initialise the database
+### 3. Set up PostgreSQL
+
+Production and CI run on PostgreSQL 16 — match it locally for full fidelity (SQLite hides a class of enum/FK bugs; see [Running Tests](#running-tests)). To skip Postgres entirely for a quick look, omit `DATABASE_URL` and jump to step 4 — the app falls back to `sqlite:///app.db`.
+
+Full from-scratch sequence on a fresh box:
 
 ```bash
-flask db upgrade        # runs all migrations
+# Debian/Ubuntu — install and start Postgres 16
+sudo apt install -y postgresql postgresql-client libpq-dev
+sudo systemctl enable --now postgresql        # starts now + on every boot
+
+# macOS (Homebrew) equivalent:
+#   brew install postgresql@16 && brew services start postgresql@16
+
+# Create the dogboxx role and both databases, run as the postgres superuser.
+# (Homebrew uses trust auth as your macOS user — you can skip createuser/ALTER ROLE
+#  and just `createdb dogboxx` / `createdb dogboxx_test`.)
+sudo -u postgres createuser dogboxx
+sudo -u postgres psql -c "ALTER ROLE dogboxx WITH PASSWORD 'choose-a-dev-password';"
+sudo -u postgres createdb -O dogboxx dogboxx          # dev database
+sudo -u postgres createdb -O dogboxx dogboxx_test     # test database (used by pytest)
+```
+
+Then point `.env` at it (the test DB is wired up here too so plain `pytest` finds it):
+
+```bash
+# .env
+DATABASE_URL=postgresql://dogboxx:choose-a-dev-password@localhost:5432/dogboxx
+TEST_DATABASE_URL=postgresql://dogboxx:choose-a-dev-password@localhost:5432/dogboxx_test
+```
+
+### 4. Initialise the database
+
+```bash
+flask db upgrade        # runs all migrations against DATABASE_URL
 python seed.py          # seeds test data (see Test Accounts below)
 ```
 
-### 4. Run the development server
+### 5. Run the development server
 
 ```bash
 # In a tmux session or background terminal:
