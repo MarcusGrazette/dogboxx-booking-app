@@ -52,7 +52,7 @@
 
 | # | Priority | Effort | Status | Feature | Notes |
 |---|----------|--------|--------|---------|-------|
-| 30 | P1 | M | ✅ | **Client onboarding** | Address (with Google Places autocomplete), pickup instructions, dog profile. |
+| 30 | P1 | M | ✅ | **Client onboarding** | Manual address entry + optional Google Maps pin URL (Places autocomplete removed), pickup instructions, dog profile. |
 | 31 | P1 | M | ✅ | **Client profile edit** | Edit address, notification prefs, dog details + photo. |
 | 32 | P2 | M | ✅ | **Monthly walk summary** | Client-facing summary of walks taken and any outstanding items. |
 | 34 | P3 | M | ✅ | **Multi-dog support (admin)** | Admin can add a second (or subsequent) primary dog to a client via modal on the client detail page. Data model and booking flow already supported multiple dogs. Client self-service out of scope. |
@@ -98,7 +98,7 @@
 | Feature | Reason |
 |---|---|
 | Firebase Auth migration | Overkill for current scale. Flask-Login is sufficient. Revisit post-launch. |
-| Public client self-registration | Business prefers admin-created accounts (vets clients first). Register route still exists but not promoted. |
+| Public client self-registration | Business prefers admin-created accounts (vets clients first). Register route + `RegisterForm` + `register.html` removed entirely in PR #124 (2026-06-05); `/onboard` remains as the post-creation detail-completion flow. |
 | Walker pickup status tracking (en_route / picked_up / dropped_off) | Anticipatory `WalkEvent` model/table was never wired up (no writes, no recording UI) and has been **removed** (migration `b40f4de664d4`, 2026-05-29). Rebuild the table fresh in the same PR as the feature if/when prioritised — pickup list remains the priority. |
 
 ---
