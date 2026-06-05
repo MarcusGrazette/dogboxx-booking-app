@@ -1,8 +1,9 @@
 """
 Authentication routes.
 
-This module defines routes for user authentication, including login, registration,
-and logout functionality.
+This module defines routes for user authentication, including login, logout,
+password change, and password reset. Public self-service registration was
+removed — clients are created by an admin.
 """
 
 from flask import request, redirect, render_template, flash, url_for, current_app, session
@@ -12,7 +13,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from app.models import User, Client
 from app import db, limiter
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
-from app.forms import LoginForm, RegisterForm, PasswordChangeForm
+from app.forms import LoginForm, PasswordChangeForm
 import hashlib
 import logging
 import traceback
@@ -64,13 +65,6 @@ def login():
         return _redirect_by_role(user)
 
     return render_template("login.html", form=form)
-
-
-@auth_bp.route("/register", methods=["GET", "POST"])
-def register():
-    """Public registration is disabled. Clients are created by admin."""
-    from flask import abort
-    abort(404)
 
 
 @auth_bp.route("/logout", methods=["POST"])
