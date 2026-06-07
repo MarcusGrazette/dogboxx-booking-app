@@ -15,3 +15,4 @@ app/static/uploads/profiles/*.jpg
 app/static/uploads/profiles/*.png
 .DS_Store
 .claude/
+CLAUDE.md
