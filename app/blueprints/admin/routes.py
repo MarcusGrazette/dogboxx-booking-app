@@ -3199,7 +3199,8 @@ def dogs():
         .add_columns(User.id.label('owner_user_id'),
                      User.firstname.label('owner_firstname'),
                      User.lastname.label('owner_lastname'),
-                     User.email.label('owner_email'))
+                     User.email.label('owner_email'),
+                     User.profile_pic.label('owner_pic'))
         .order_by(Dog.name)
         .all()
     )
@@ -3209,6 +3210,7 @@ def dogs():
             'owner_user_id': row[1],
             'owner_name': f"{row[2]} {row[3]}",
             'owner_email': row[4],
+            'owner_pic': row[5],
         }
         for row in rows
     ]
