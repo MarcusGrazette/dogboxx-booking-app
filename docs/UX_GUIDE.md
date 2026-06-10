@@ -57,12 +57,19 @@ before showing the confirm modal).
 | Concept | UI label | Notes |
 |---|---|---|
 | Group Walk service | **Walk** | DB enum/slug stays `group-walk`; map slug→label in the template only. |
-| Pausing a dog's walks | **Pause** | The "pause walks" feature uses *pause* everywhere in the UI (title, button "Pause N walks", summaries) even though it cancels the bookings in the DB. |
+| Cancelling a range of a dog's walks (**admin**) | **Cancel** + `bi-x-square` icon | Admin is literally cancelling bookings — use *cancel* throughout the admin modal (title, button "Cancel N walks", preview, summary) with the `x-square` icon. Lives in `admin_dogs.html` bulk-cancel modal. |
+| Pausing walks (**client**) | **Pause** + `bi-pause-circle-fill` icon | Same underlying action (bookings are cancelled) but the client's mental model is pausing for a holiday, so client-facing copy uses *pause* throughout (`index.html`, `help.html`). |
 | Brand name | **DogBoxx** | Capital D, capital B. Never "Dogboxx" / "DogBox". |
 
-**Rule:** a feature's verb must be consistent across its title, buttons, preview
-text, and success summary. Mixed wording (a "Pause" title with a "Cancel" button)
-is the exact drift this guide exists to prevent.
+**Rules:**
+- A feature's verb must be consistent across its title, buttons, preview text,
+  and success summary. Mixed wording (a "Pause" title with a "Cancel" button) is
+  the exact drift this guide exists to prevent.
+- **Wording can differ by audience for the same underlying action** when the
+  mental models genuinely differ — admin "Cancel" vs client "Pause" is the
+  canonical example. Keep each surface internally consistent; don't bleed one
+  audience's verb into the other. (Internal route/function names like
+  `pause_walks` are not user-facing and need not change.)
 
 ---
 
