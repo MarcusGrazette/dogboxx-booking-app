@@ -154,9 +154,17 @@
                     <select class="form-select" id="modal-service-type">
                         {% for st in service_types %}
                         <option value="{{ st.id }}" data-slug="{{ st.slug }}"
-                                {% if st.slug == 'group-walk' %}selected{% endif %}>{{ st.name }}</option>
+                                {% if st.slug == 'group-walk' %}selected{% endif %}>{% if st.slug == 'group-walk' %}Walk{% else %}{{ st.name }}{% endif %}</option>
                         {% endfor %}
                     </select>
+                </div>
+
+                <!-- Recurring toggle (walks only) -->
+                <div class="form-check form-switch mb-3" id="modal-recur-row">
+                    <input class="form-check-input" type="checkbox" id="modal-recur-toggle">
+                    <label class="form-check-label small fw-semibold" for="modal-recur-toggle">
+                        Recurring booking
+                    </label>
                 </div>
 
                 <!-- Slot (single booking only) -->
@@ -174,14 +182,6 @@
                 <div class="mb-3" id="single-date-group">
                     <label class="form-label fw-semibold">Date</label>
                     <input type="date" class="form-control" id="modal-date">
-                </div>
-
-                <!-- Recurring toggle (walks only) -->
-                <div class="form-check form-switch mb-2" id="modal-recur-row">
-                    <input class="form-check-input" type="checkbox" id="modal-recur-toggle">
-                    <label class="form-check-label small fw-semibold" for="modal-recur-toggle">
-                        Recurring booking
-                    </label>
                 </div>
 
                 <!-- Recurring panel -->
@@ -226,6 +226,20 @@
         </div>
     </div>
 </div>
+<!-- ─── Booking Confirmed Modal ──────────────────────────────────────────── -->
+<div class="modal fade" id="bookingConfirmedModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content border-0 shadow text-center">
+            <div class="modal-body py-4 px-4">
+                <i class="bi bi-check-circle-fill text-success d-block mb-3" style="font-size:3.5rem; line-height:1;"></i>
+                <h5 class="fw-bold mb-2">Confirmed</h5>
+                <p class="text-muted small mb-3" id="confirm-summary"></p>
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Done</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ─── Edit Dog Modal ───────────────────────────────────────────────────── -->
 <div class="modal fade" id="editDogModal" tabindex="-1" aria-labelledby="editDogModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
@@ -523,6 +537,33 @@ document.addEventListener('DOMContentLoaded', function () {
     const submitBtn       = document.getElementById('modal-submit-btn');
     const resultDiv       = document.getElementById('modal-result');
     const recurCount      = document.getElementById('recurring-count');
+    const confirmModal    = new bootstrap.Modal(document.getElementById('bookingConfirmedModal'));
+    const confirmSummary  = document.getElementById('confirm-summary');
+    let   confirmTimer    = null;
+
+    // ── Confirmation pop-over ───────────────────────────────────────────────
+    // On success we dismiss the booking modal, pop a small green-check confirm
+    // modal with a summary, then auto-close it after a short delay. A manual
+    // "Done" button is the fallback; dismissing it early clears the timer.
+    function fmtBookingDate(iso) {
+        const d = new Date(iso + 'T00:00:00');
+        return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+    }
+    // srcModal/srcEl let this be reused by any modal (book + pause-walks).
+    function showConfirmed(summary, srcModal, srcEl) {
+        confirmSummary.textContent = summary;
+        // Wait for the source modal to fully close before stacking the confirm
+        // modal — avoids Bootstrap backdrop/scroll-lock conflicts.
+        srcEl.addEventListener('hidden.bs.modal', function handler() {
+            srcEl.removeEventListener('hidden.bs.modal', handler);
+            confirmModal.show();
+            clearTimeout(confirmTimer);
+            confirmTimer = setTimeout(() => confirmModal.hide(), 2500);
+        });
+        srcModal.hide();
+    }
+    document.getElementById('bookingConfirmedModal')
+        .addEventListener('hidden.bs.modal', () => clearTimeout(confirmTimer));
 
     // Adjust modal affordances for the selected service. Drop-ins don't
     // support "Both" slots (server-side rejected) and aren't available as
@@ -684,13 +725,16 @@ document.addEventListener('DOMContentLoaded', function () {
             })
             .then(r => r.json())
             .then(data => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request booking';
                 if (data.success) {
-                    showResult('success', `✓ ${data.message}`);
+                    const serviceLabel = serviceSel.options[serviceSel.selectedIndex].text;
+                    const slotLabel = slot === 'Both' ? 'AM + PM' : slot;
+                    showConfirmed(`${serviceLabel} for ${modalDogName.textContent} — ${fmtBookingDate(date)}, ${slotLabel}`,
+                                  modal, document.getElementById('bookingModal'));
                 } else {
                     showResult('danger', data.message || 'Something went wrong');
                 }
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request booking';
             })
             .catch(() => {
                 showResult('danger', 'Network error — please try again.');
@@ -737,18 +781,19 @@ document.addEventListener('DOMContentLoaded', function () {
             })
             .then(r => r.json())
             .then(data => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request recurring walks';
                 if (data.success) {
                     const parts = [];
                     if (data.confirmed)  parts.push(`${data.confirmed} confirmed`);
                     if (data.requested)  parts.push(`${data.requested} requested`);
                     if (data.waitlisted) parts.push(`${data.waitlisted} waitlisted`);
                     if (data.skipped)    parts.push(`${data.skipped} skipped`);
-                    showResult('success', `✓ Done — ${parts.join(', ')}.`);
+                    showConfirmed(`Recurring walks for ${modalDogName.textContent} — ${parts.join(', ')}.`,
+                                  modal, document.getElementById('bookingModal'));
                 } else {
                     showResult('danger', data.message || 'Something went wrong');
                 }
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request recurring walks';
             })
             .catch(() => {
                 showResult('danger', 'Network error — please try again.');
@@ -1080,10 +1125,19 @@ document.addEventListener('DOMContentLoaded', function () {
     const bcLoading     = document.getElementById('bc-loading');
     const bcPreviewRes  = document.getElementById('bc-preview-results');
     const bcConfirmBtn  = document.getElementById('bc-confirm-btn');
-    const bcConfirmLbl  = document.getElementById('bc-confirm-label');
+    let   bcConfirmLbl  = document.getElementById('bc-confirm-label');
 
     let bcActiveDogId   = null;
     let bcPreviewCount  = 0;
+
+    // Restore the confirm button to its idle markup and re-acquire the label
+    // node. Setting innerHTML (for the "Cancelling…" spinner) destroys the
+    // original #bc-confirm-label span, so the cached reference goes stale —
+    // resetting here keeps it valid for the next preview/cancel cycle.
+    function resetBcConfirmBtn() {
+        bcConfirmBtn.innerHTML = '<i class="bi bi-pause-circle me-1"></i><span id="bc-confirm-label">Cancel walks</span>';
+        bcConfirmLbl = document.getElementById('bc-confirm-label');
+    }
 
     // Returns array — empty for "Both" (server treats missing/empty as all slots).
     function bcSelectedSlots() {
@@ -1107,11 +1161,21 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('bc-slot-both').checked = true;
             document.querySelectorAll('.bc-day').forEach(el => { el.checked = true; });
             bcPreviewRes.innerHTML = '';
+            resetBcConfirmBtn();
             bcConfirmBtn.style.display = 'none';
             bcConfirmBtn.disabled = true;
             bcPreviewCount = 0;
             bcModal.show();
         });
+    });
+
+    // Auto-fill end date to start + 1 year (mirrors the booking modal).
+    bcStart.addEventListener('change', function () {
+        if (!this.value) return;
+        const d = new Date(this.value + 'T00:00:00');
+        d.setFullYear(d.getFullYear() + 1);
+        bcEnd.value = d.toISOString().slice(0, 10);
+        bcEnd.min   = this.value;
     });
 
     function formatBcDate(iso) {
@@ -1192,18 +1256,18 @@ document.addEventListener('DOMContentLoaded', function () {
         .then(data => {
             if (data.success) {
                 const n = data.cancelled_count;
-                bcPreviewRes.innerHTML = `<div class="alert alert-success py-2"><i class="bi bi-check-circle me-1"></i>${n} booking${n !== 1 ? 's' : ''} cancelled.</div>`;
-                bcConfirmBtn.style.display = 'none';
+                showConfirmed(`${n} walk${n !== 1 ? 's' : ''} cancelled for ${bcDogName.textContent}.`,
+                              bcModal, document.getElementById('bulkCancelModal'));
             } else {
                 bcPreviewRes.innerHTML = `<div class="alert alert-danger py-2">${data.message || 'Something went wrong'}</div>`;
                 bcConfirmBtn.disabled = false;
-                bcConfirmBtn.innerHTML = '<i class="bi bi-pause-circle me-1"></i><span id="bc-confirm-label">Cancel walks</span>';
+                resetBcConfirmBtn();
             }
         })
         .catch(() => {
             bcPreviewRes.innerHTML = '<div class="alert alert-danger py-2">Network error — please try again.</div>';
             bcConfirmBtn.disabled = false;
-            bcConfirmBtn.innerHTML = '<i class="bi bi-pause-circle me-1"></i><span id="bc-confirm-label">Cancel walks</span>';
+            resetBcConfirmBtn();
         });
     });
 });
