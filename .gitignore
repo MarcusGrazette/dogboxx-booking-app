@@ -14,4 +14,5 @@ app/static/uploads/dogs/*.png
 app/static/uploads/profiles/*.jpg
 app/static/uploads/profiles/*.png
 .DS_Store
-.claude/scheduled_tasks.lock
+.claude/
+CLAUDE.md

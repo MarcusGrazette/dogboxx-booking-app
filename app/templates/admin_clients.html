@@ -1,19 +1,16 @@
 {% extends "admin_layout.html" %}
 
-{% block title %}Admin - Manage Clients{% endblock %}
+{% block title %}Admin - Clients{% endblock %}
 
-{% block page_title %}Manage Clients{% endblock %}
+{% block page_title %}Clients{% endblock %}
 {% block page_subtitle %}All registered clients{% endblock %}
 
 {% block page_actions %}
     <a href="{{ url_for('admin.index') }}" class="btn btn-outline-secondary me-2">
-        <i class="bi bi-arrow-left"></i> Back to Admin
-    </a>
-    <a href="{{ url_for('admin.csv_import') }}" class="btn btn-outline-secondary me-2">
-        <i class="bi bi-upload me-1"></i>Import CSV
+        <i class="bi bi-arrow-left"></i> Back
     </a>
     <a href="{{ url_for('admin.new_client') }}" class="btn btn-primary">
-        <i class="bi bi-plus"></i> Add New Client
+        <i class="bi bi-plus"></i> New
     </a>
 {% endblock %}
 
@@ -22,20 +19,20 @@
     <div class="card mb-4">
         <div class="card-body py-2">
             <div class="row g-2 align-items-center">
-                <div class="col-auto">
+                <div class="col">
                     <div class="input-group">
                         <span class="input-group-text"><i class="bi bi-search"></i></span>
                         <input type="text" id="client-search" class="form-control"
                                placeholder="Filter by name or email…"
-                               autocomplete="off" style="min-width:260px;">
+                               autocomplete="off">
                         <button class="btn btn-outline-secondary" id="client-search-clear"
                                 style="display:none;" type="button">
                             <i class="bi bi-x-lg"></i>
                         </button>
                     </div>
                 </div>
-                <div class="col-auto ms-auto text-muted small pt-1">
-                    <span id="client-count">{{ clients | length }}</span> client{{ 's' if clients | length != 1 else '' }}
+                <div class="col-auto text-muted small pt-1">
+                    <span id="client-count">{{ clients | length }}</span> <span id="client-count-label">client{{ 's' if clients | length != 1 else '' }}</span>
                 </div>
             </div>
         </div>
@@ -47,8 +44,8 @@
                     <thead class="table-light">
                         <tr>
                             <th class="ps-3">Name</th>
-                            <th>Email</th>
-                            <th>Created</th>
+                            <th class="d-none d-md-table-cell">Email</th>
+                            <th class="d-none d-md-table-cell">Created</th>
                             <th class="text-end pe-3">Actions</th>
                         </tr>
                     </thead>
@@ -79,8 +76,8 @@
                                     {% endif %}
                                 </div>
                             </td>
-                            <td class="align-middle text-muted small">{{ client.email }}</td>
-                            <td class="align-middle text-muted small">{{ client.created_at.strftime('%d %b %Y') if client.created_at else '—' }}</td>
+                            <td class="align-middle text-muted small d-none d-md-table-cell">{{ client.email }}</td>
+                            <td class="align-middle text-muted small d-none d-md-table-cell">{{ client.created_at.strftime('%d %b %Y') if client.created_at else '—' }}</td>
                             <td class="text-end pe-3 align-middle" onclick="event.stopPropagation()">
                                 <a href="{{ url_for('admin.edit_client', client_id=client.id) }}"
                                    class="btn btn-sm btn-outline-secondary me-1">
@@ -143,11 +140,14 @@
         </div>
     </div>
 </div>
+
+{% include 'partials/success_modal.html' %}
 {% endblock %}
 
 {% block scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/admin-toggle-status.js') }}"></script>
+<script src="{{ url_for('static', filename='js/success-modal.js') }}"></script>
 <script nonce="{{ csp_nonce }}">
 // ── Activate / deactivate confirmation modal ────────────────────────────────
 const toggleModal    = new bootstrap.Modal(document.getElementById('toggleModal'));
@@ -157,10 +157,12 @@ const toggleConfirm  = document.getElementById('toggle-confirm-btn');
 
 let pendingId     = null;
 let pendingAction = null;
+let pendingName   = null;
 
 function confirmToggle(clientId, action, name) {
     pendingId     = clientId;
     pendingAction = action;
+    pendingName   = name;
     const isDeactivate = action === 'deactivate';
     toggleTitle.textContent   = isDeactivate ? 'Deactivate client' : 'Activate client';
     toggleBody.textContent    = isDeactivate
@@ -174,8 +176,30 @@ function confirmToggle(clientId, action, name) {
 }
 
 toggleConfirm.addEventListener('click', function () {
-    toggleModal.hide();
-    toggleStatus('clients', pendingId, pendingAction);
+    const id = pendingId, action = pendingAction, name = pendingName;
+    const original = toggleConfirm.innerHTML;
+    toggleConfirm.disabled = true;
+    toggleConfirm.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Working…';
+
+    toggleStatusRequest('clients', id, action)
+        .then(data => {
+            toggleConfirm.disabled = false;
+            toggleConfirm.innerHTML = original;
+            if (data.success) {
+                const verb = action === 'deactivate' ? 'deactivated' : 'activated';
+                // Reload on close so the row's status badge + buttons refresh.
+                showConfirmed(`${name} ${verb}.`,
+                              toggleModal, document.getElementById('toggleModal'),
+                              () => location.reload());
+            } else {
+                alert('Error: ' + (data.message || 'Something went wrong'));
+            }
+        })
+        .catch(() => {
+            toggleConfirm.disabled = false;
+            toggleConfirm.innerHTML = original;
+            alert('An error occurred. Please try again.');
+        });
 });
 
 // ── Row click → client detail ───────────────────────────────────────────────
@@ -190,6 +214,7 @@ document.querySelectorAll('tr.client-row').forEach(row => {
     const searchInput  = document.getElementById('client-search');
     const searchClear  = document.getElementById('client-search-clear');
     const countEl      = document.getElementById('client-count');
+    const countLabel   = document.getElementById('client-count-label');
     const noResultsRow = document.getElementById('no-results-row');
     const allRows      = document.querySelectorAll('tbody tr[data-search]');
 
@@ -205,6 +230,7 @@ document.querySelectorAll('tr.client-row').forEach(row => {
             if (match) visible++;
         });
         if (countEl) countEl.textContent = visible;
+        if (countLabel) countLabel.textContent = visible === 1 ? 'client' : 'clients';
         if (noResultsRow) noResultsRow.style.display = (visible === 0 && q) ? '' : 'none';
     }
 

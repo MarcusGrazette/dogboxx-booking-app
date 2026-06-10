@@ -7,7 +7,7 @@
 
 {% block page_actions %}
     <a href="{{ url_for('admin.index') }}" class="btn btn-outline-secondary">
-        <i class="bi bi-arrow-left"></i> Back to Admin
+        <i class="bi bi-arrow-left"></i> Back
     </a>
 {% endblock %}
 
@@ -37,18 +37,18 @@
 <div class="card mb-4">
     <div class="card-body py-2">
         <div class="row g-2 align-items-center">
-            <div class="col-auto">
+            <div class="col">
                 <div class="input-group">
                     <span class="input-group-text"><i class="bi bi-search"></i></span>
                     <input type="text" id="dog-search" class="form-control" placeholder="Filter by name, breed or owner…"
-                           autocomplete="off" style="min-width:260px;">
+                           autocomplete="off">
                     <button class="btn btn-outline-secondary" id="dog-search-clear" style="display:none;" type="button">
                         <i class="bi bi-x-lg"></i>
                     </button>
                 </div>
             </div>
-            <div class="col-auto ms-auto text-muted small pt-1">
-                <span id="dog-count">{{ dogs_data | length }}</span> dog{{ 's' if dogs_data | length != 1 else '' }}
+            <div class="col-auto text-muted small pt-1">
+                <span id="dog-count">{{ dogs_data | length }}</span> <span id="dog-count-label">dog{{ 's' if dogs_data | length != 1 else '' }}</span>
             </div>
         </div>
     </div>
@@ -62,8 +62,7 @@
                 <thead class="table-light">
                     <tr>
                         <th class="ps-3">Dog</th>
-                        <th>Breed</th>
-                        <th>Owner</th>
+                        <th class="d-none d-md-table-cell">Owner</th>
                         <th class="text-end pe-3">Actions</th>
                     </tr>
                 </thead>
@@ -80,22 +79,24 @@
                                  style="width:32px;height:32px;object-fit:cover;">
                             {{ row.dog.name }}
                         </td>
-                        <td class="align-middle text-muted">{{ row.dog.breed or '—' }}</td>
-                        <td class="align-middle">{{ row.owner_name }}</td>
+                        <td class="align-middle d-none d-md-table-cell">
+                            <div class="d-flex align-items-center gap-2">
+                                {% if row.owner_pic %}
+                                <img src="{{ url_for('static', filename='uploads/profiles/' ~ row.owner_pic) }}"
+                                     class="rounded-circle flex-shrink-0"
+                                     width="32" height="32" style="object-fit:cover;"
+                                     alt="{{ row.owner_name }}">
+                                {% else %}
+                                <div class="rounded-circle bg-light d-flex align-items-center justify-content-center flex-shrink-0"
+                                     style="width:32px;height:32px;">
+                                    <i class="bi bi-person-fill text-muted" style="font-size:0.9rem;"></i>
+                                </div>
+                                {% endif %}
+                                {{ row.owner_name }}
+                            </div>
+                        </td>
                         <td class="text-end pe-3 align-middle" onclick="event.stopPropagation()">
-                            <div class="d-flex flex-wrap gap-1 justify-content-end">
-                            <button class="btn btn-sm btn-outline-secondary edit-dog-btn"
-                                    data-dog-id="{{ row.dog.id }}"
-                                    data-dog-name="{{ row.dog.name }}"
-                                    data-dog-breed="{{ row.dog.breed or '' }}"
-                                    data-dog-gender="{{ row.dog.gender or '' }}"
-                                    data-dog-dob="{{ row.dog.date_of_birth.isoformat() if row.dog.date_of_birth else '' }}"
-                                    data-dog-allergies="{{ row.dog.allergies or '' }}"
-                                    data-dog-pickup="{{ row.dog.pickup_instructions or '' }}"
-                                    data-dog-whatsapp="{{ row.dog.whatsapp_group_url or '' }}"
-                                    data-dog-hold-key="{{ 'true' if row.dog.hold_key else 'false' }}">
-                                <i class="bi bi-pencil me-1"></i>Edit
-                            </button>
+                            <div class="d-flex gap-1 justify-content-end">
                             <button class="btn btn-sm btn-primary book-btn"
                                     data-dog-id="{{ row.dog.id }}"
                                     data-dog-name="{{ row.dog.name }}"
@@ -103,22 +104,17 @@
                                     data-owner-name="{{ row.owner_name }}">
                                 <i class="bi bi-calendar-plus me-1"></i>Book
                             </button>
-                            <button class="btn btn-sm btn-outline-secondary bookings-btn"
-                                    data-dog-id="{{ row.dog.id }}"
-                                    data-dog-name="{{ row.dog.name }}">
-                                <i class="bi bi-calendar3 me-1"></i>View Upcoming
-                            </button>
                             <button class="btn btn-sm btn-outline-danger cancel-range-btn"
                                     data-dog-id="{{ row.dog.id }}"
                                     data-dog-name="{{ row.dog.name }}">
-                                <i class="bi bi-pause-circle me-1"></i>Pause Walks
+                                <i class="bi bi-x-square me-1"></i>Cancel
                             </button>
                             </div>
                         </td>
                     </tr>
                     {% endfor %}
                     <tr id="no-results-row" style="display:none;">
-                        <td colspan="4" class="text-center text-muted py-4">
+                        <td colspan="3" class="text-center text-muted py-4">
                             <i class="bi bi-search me-2"></i>No dogs match your filter.
                         </td>
                     </tr>
@@ -158,9 +154,17 @@
                     <select class="form-select" id="modal-service-type">
                         {% for st in service_types %}
                         <option value="{{ st.id }}" data-slug="{{ st.slug }}"
-                                {% if st.slug == 'group-walk' %}selected{% endif %}>{{ st.name }}</option>
+                                {% if st.slug == 'group-walk' %}selected{% endif %}>{% if st.slug == 'group-walk' %}Walk{% else %}{{ st.name }}{% endif %}</option>
                         {% endfor %}
                     </select>
+                </div>
+
+                <!-- Recurring toggle (walks only) -->
+                <div class="form-check form-switch mb-3" id="modal-recur-row">
+                    <input class="form-check-input" type="checkbox" id="modal-recur-toggle">
+                    <label class="form-check-label small fw-semibold" for="modal-recur-toggle">
+                        Recurring booking
+                    </label>
                 </div>
 
                 <!-- Slot (single booking only) -->
@@ -178,14 +182,6 @@
                 <div class="mb-3" id="single-date-group">
                     <label class="form-label fw-semibold">Date</label>
                     <input type="date" class="form-control" id="modal-date">
-                </div>
-
-                <!-- Recurring toggle (walks only) -->
-                <div class="form-check form-switch mb-2" id="modal-recur-row">
-                    <input class="form-check-input" type="checkbox" id="modal-recur-toggle">
-                    <label class="form-check-label small fw-semibold" for="modal-recur-toggle">
-                        Recurring booking
-                    </label>
                 </div>
 
                 <!-- Recurring panel -->
@@ -230,6 +226,8 @@
         </div>
     </div>
 </div>
+{% include 'partials/success_modal.html' %}
+
 <!-- ─── Edit Dog Modal ───────────────────────────────────────────────────── -->
 <div class="modal fade" id="editDogModal" tabindex="-1" aria-labelledby="editDogModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
@@ -383,13 +381,11 @@
                         data-view-modal="dog-view-{{ dog.id }}">
                     <i class="bi bi-pencil me-1"></i>Edit
                 </button>
-                <button type="button" class="btn btn-primary view-book-btn"
+                <button type="button" class="btn btn-outline-secondary view-bookings-btn"
                         data-dog-id="{{ dog.id }}"
                         data-dog-name="{{ dog.name }}"
-                        data-user-id="{{ row.owner_user_id }}"
-                        data-owner-name="{{ row.owner_name }}"
                         data-view-modal="dog-view-{{ dog.id }}">
-                    <i class="bi bi-calendar-plus me-1"></i>Book
+                    <i class="bi bi-calendar3 me-1"></i>View Upcoming
                 </button>
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
             </div>
@@ -448,8 +444,8 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="bulkCancelModalLabel">
-                    <i class="bi bi-pause-circle me-2 text-danger"></i>
-                    Pause walks for <span id="bc-dog-name"></span>
+                    <i class="bi bi-x-square me-2 text-danger"></i>
+                    Cancel walks for <span id="bc-dog-name"></span>
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
@@ -498,8 +494,8 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-danger fw-semibold" id="bc-confirm-btn" style="display:none;" disabled>
-                    <i class="bi bi-pause-circle me-1"></i><span id="bc-confirm-label">Cancel walks</span>
+                <button type="button" class="btn btn-danger fw-semibold" id="bc-confirm-btn" disabled>
+                    <i class="bi bi-x-square me-1"></i><span id="bc-confirm-label">Cancel walks</span>
                 </button>
             </div>
         </div>
@@ -509,6 +505,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/success-modal.js') }}"></script>
 <script nonce="{{ csp_nonce }}">
 document.addEventListener('DOMContentLoaded', function () {
 
@@ -529,6 +526,13 @@ document.addEventListener('DOMContentLoaded', function () {
     const submitBtn       = document.getElementById('modal-submit-btn');
     const resultDiv       = document.getElementById('modal-result');
     const recurCount      = document.getElementById('recurring-count');
+
+    // Success pop-over (showConfirmed) is provided by success-modal.js +
+    // partials/success_modal.html. See docs/UX_GUIDE.md §1.
+    function fmtBookingDate(iso) {
+        const d = new Date(iso + 'T00:00:00');
+        return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+    }
 
     // Adjust modal affordances for the selected service. Drop-ins don't
     // support "Both" slots (server-side rejected) and aren't available as
@@ -690,13 +694,16 @@ document.addEventListener('DOMContentLoaded', function () {
             })
             .then(r => r.json())
             .then(data => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request booking';
                 if (data.success) {
-                    showResult('success', `✓ ${data.message}`);
+                    const serviceLabel = serviceSel.options[serviceSel.selectedIndex].text;
+                    const slotLabel = slot === 'Both' ? 'AM + PM' : slot;
+                    showConfirmed(`${serviceLabel} for ${modalDogName.textContent} — ${fmtBookingDate(date)}, ${slotLabel}`,
+                                  modal, document.getElementById('bookingModal'));
                 } else {
                     showResult('danger', data.message || 'Something went wrong');
                 }
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request booking';
             })
             .catch(() => {
                 showResult('danger', 'Network error — please try again.');
@@ -743,18 +750,19 @@ document.addEventListener('DOMContentLoaded', function () {
             })
             .then(r => r.json())
             .then(data => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request recurring walks';
                 if (data.success) {
                     const parts = [];
                     if (data.confirmed)  parts.push(`${data.confirmed} confirmed`);
                     if (data.requested)  parts.push(`${data.requested} requested`);
                     if (data.waitlisted) parts.push(`${data.waitlisted} waitlisted`);
                     if (data.skipped)    parts.push(`${data.skipped} skipped`);
-                    showResult('success', `✓ Done — ${parts.join(', ')}.`);
+                    showConfirmed(`Recurring walks for ${modalDogName.textContent} — ${parts.join(', ')}.`,
+                                  modal, document.getElementById('bookingModal'));
                 } else {
                     showResult('danger', data.message || 'Something went wrong');
                 }
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request recurring walks';
             })
             .catch(() => {
                 showResult('danger', 'Network error — please try again.');
@@ -902,6 +910,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const searchInput   = document.getElementById('dog-search');
     const searchClear   = document.getElementById('dog-search-clear');
     const countEl       = document.getElementById('dog-count');
+    const countLabel    = document.getElementById('dog-count-label');
     const noResultsRow  = document.getElementById('no-results-row');
     const allRows       = document.querySelectorAll('tbody tr[data-search]');
 
@@ -915,6 +924,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (match) visible++;
         });
         if (countEl) countEl.textContent = visible;
+        if (countLabel) countLabel.textContent = visible === 1 ? 'dog' : 'dogs';
         if (noResultsRow) noResultsRow.style.display = (visible === 0 && q) ? '' : 'none';
     }
 
@@ -927,12 +937,12 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // ── View modal → Edit / Book transition ────────────────────────────────
-    // Clicking Edit or Book inside the dog-info modal: close it first, then open
-    // the target modal once the fade-out completes (hidden.bs.modal).
+    // ── View modal → Edit / View Upcoming transition ───────────────────────
+    // Close the view modal first, then open the target modal once the
+    // fade-out completes (hidden.bs.modal).
     var pendingViewAction = null;
 
-    document.querySelectorAll('.view-edit-btn, .view-book-btn').forEach(function (btn) {
+    document.querySelectorAll('.view-edit-btn, .view-bookings-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var viewEl   = document.getElementById(this.dataset.viewModal);
             var viewInst = bootstrap.Modal.getInstance(viewEl);
@@ -957,28 +967,13 @@ document.addEventListener('DOMContentLoaded', function () {
                     editSubmitBtn.innerHTML  = '<i class="bi bi-check-lg me-1"></i>Save changes';
                     editModal.show();
                 } else {
-                    activeDogId  = d.dogId;
-                    activeUserId = d.userId;
-                    modalDogName.textContent          = d.dogName;
-                    modalOwner.textContent            = d.ownerName;
-                    for (const opt of serviceSel.options) {
-                        if (opt.dataset.slug === 'group-walk') { serviceSel.value = opt.value; break; }
-                    }
-                    slotSel.value                     = '';
-                    dateInput.value                   = '';
-                    startInput.value                  = '';
-                    endInput.value                    = '';
-                    recurToggle.checked               = false;
-                    recurPanel.style.display          = 'none';
-                    singleGroup.style.display         = 'block';
-                    singleSlotGroup.style.display     = 'block';
-                    recurPanel.querySelectorAll('select[data-day]').forEach(s => s.value = '');
-                    recurCount.style.display          = 'none';
-                    resultDiv.style.display           = 'none';
-                    submitBtn.disabled                = false;
-                    submitBtn.innerHTML               = '<i class="bi bi-check-lg me-1"></i>Request booking';
-                    syncServiceUI();
-                    modal.show();
+                    dbActiveDogId        = d.dogId;
+                    dbDogName.textContent = d.dogName;
+                    dbFromDate.value     = new Date().toISOString().slice(0, 10);
+                    dbResults.innerHTML  = '';
+                    dbPagination.style.display = 'none';
+                    dbModal.show();
+                    dbLoad(1);
                 }
             };
 
@@ -1099,10 +1094,19 @@ document.addEventListener('DOMContentLoaded', function () {
     const bcLoading     = document.getElementById('bc-loading');
     const bcPreviewRes  = document.getElementById('bc-preview-results');
     const bcConfirmBtn  = document.getElementById('bc-confirm-btn');
-    const bcConfirmLbl  = document.getElementById('bc-confirm-label');
+    let   bcConfirmLbl  = document.getElementById('bc-confirm-label');
 
     let bcActiveDogId   = null;
     let bcPreviewCount  = 0;
+
+    // Restore the confirm button to its idle markup and re-acquire the label
+    // node. Setting innerHTML (for the "Cancelling…" spinner) destroys the
+    // original #bc-confirm-label span, so the cached reference goes stale —
+    // resetting here keeps it valid for the next preview/cancel cycle.
+    function resetBcConfirmBtn() {
+        bcConfirmBtn.innerHTML = '<i class="bi bi-x-square me-1"></i><span id="bc-confirm-label">Cancel walks</span>';
+        bcConfirmLbl = document.getElementById('bc-confirm-label');
+    }
 
     // Returns array — empty for "Both" (server treats missing/empty as all slots).
     function bcSelectedSlots() {
@@ -1126,11 +1130,20 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('bc-slot-both').checked = true;
             document.querySelectorAll('.bc-day').forEach(el => { el.checked = true; });
             bcPreviewRes.innerHTML = '';
-            bcConfirmBtn.style.display = 'none';
-            bcConfirmBtn.disabled = true;
+            resetBcConfirmBtn();
+            bcConfirmBtn.disabled = true;   // always visible, enabled only after a preview
             bcPreviewCount = 0;
             bcModal.show();
         });
+    });
+
+    // Auto-fill end date to start + 1 year (mirrors the booking modal).
+    bcStart.addEventListener('change', function () {
+        if (!this.value) return;
+        const d = new Date(this.value + 'T00:00:00');
+        d.setFullYear(d.getFullYear() + 1);
+        bcEnd.value = d.toISOString().slice(0, 10);
+        bcEnd.min   = this.value;
     });
 
     function formatBcDate(iso) {
@@ -1151,7 +1164,6 @@ document.addEventListener('DOMContentLoaded', function () {
         bcSelectedDays().forEach(d => params.append('days', d));
         bcLoading.style.display = '';
         bcPreviewRes.innerHTML  = '';
-        bcConfirmBtn.style.display = 'none';
         bcConfirmBtn.disabled = true;
 
         fetch(`/admin/dogs/${bcActiveDogId}/cancel-preview?${params}`, {
@@ -1169,7 +1181,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 bcPreviewRes.innerHTML = '<p class="text-muted small mb-0">No active bookings found in that date range.</p>';
                 return;
             }
-            let html = `<p class="fw-semibold mb-2 text-danger"><i class="bi bi-exclamation-triangle me-1"></i>${data.count} booking${data.count !== 1 ? 's' : ''} will be cancelled:</p>`;
+            let html = `<p class="fw-semibold mb-2 text-danger"><i class="bi bi-exclamation-triangle me-1"></i>${data.count} walk${data.count !== 1 ? 's' : ''} will be cancelled:</p>`;
             html += '<table class="table table-sm mb-0"><thead class="table-light"><tr>'
                   + '<th>Date</th><th>Slot</th><th>Status</th></tr></thead><tbody>';
             data.bookings.forEach(b => {
@@ -1183,7 +1195,6 @@ document.addEventListener('DOMContentLoaded', function () {
             html += '</tbody></table>';
             bcPreviewRes.innerHTML = html;
             bcConfirmLbl.textContent = `Cancel ${data.count} walk${data.count !== 1 ? 's' : ''}`;
-            bcConfirmBtn.style.display = '';
             bcConfirmBtn.disabled = false;
         })
         .catch(() => {
@@ -1211,18 +1222,18 @@ document.addEventListener('DOMContentLoaded', function () {
         .then(data => {
             if (data.success) {
                 const n = data.cancelled_count;
-                bcPreviewRes.innerHTML = `<div class="alert alert-success py-2"><i class="bi bi-check-circle me-1"></i>${n} booking${n !== 1 ? 's' : ''} cancelled.</div>`;
-                bcConfirmBtn.style.display = 'none';
+                showConfirmed(`${n} walk${n !== 1 ? 's' : ''} cancelled for ${bcDogName.textContent}.`,
+                              bcModal, document.getElementById('bulkCancelModal'));
             } else {
                 bcPreviewRes.innerHTML = `<div class="alert alert-danger py-2">${data.message || 'Something went wrong'}</div>`;
                 bcConfirmBtn.disabled = false;
-                bcConfirmBtn.innerHTML = '<i class="bi bi-pause-circle me-1"></i><span id="bc-confirm-label">Cancel walks</span>';
+                resetBcConfirmBtn();
             }
         })
         .catch(() => {
             bcPreviewRes.innerHTML = '<div class="alert alert-danger py-2">Network error — please try again.</div>';
             bcConfirmBtn.disabled = false;
-            bcConfirmBtn.innerHTML = '<i class="bi bi-pause-circle me-1"></i><span id="bc-confirm-label">Cancel walks</span>';
+            resetBcConfirmBtn();
         });
     });
 });

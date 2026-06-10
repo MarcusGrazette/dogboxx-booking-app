@@ -51,7 +51,7 @@ def login():
 
         # Check if user account is active
         if not user.is_active():
-            flash("Your account has been deactivated. Please contact support.", "error")
+            flash("Your account has been deactivated. Please contact DogBoxx.", "error")
             return render_template("login.html", form=form)
 
         # Rotate the session ID before associating the session with this user.

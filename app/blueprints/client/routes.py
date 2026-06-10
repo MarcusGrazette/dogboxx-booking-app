@@ -94,7 +94,7 @@ def report_bug():
     """
 
     ok = send_email(
-        to="lydia@dogboxx.org",
+        to=current_app.config['BUG_REPORTS_EMAIL'],
         subject=f"Bug report from {user.firstname} {user.lastname or ''}".strip(),
         html=html,
     )

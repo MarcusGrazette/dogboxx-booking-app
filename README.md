@@ -6,7 +6,7 @@ A booking management platform for a small dog walking business. Built with Flask
 
 - **Backend:** Python 3.12, Flask, SQLAlchemy, Flask-Migrate (Alembic), Flask-Login, Flask-WTF
 - **Database:** PostgreSQL (SQLite supported for local dev)
-- **Frontend:** Jinja2 templates, Bootstrap 5, AdminLTE 3 (admin panel), Bootstrap Icons
+- **Frontend:** Jinja2 templates, Bootstrap 5, Bootstrap Icons
 - **Auth:** Flask-Login with CSRF protection and rate limiting via Flask-Limiter
 - **File uploads:** UUID-named uploads with server-side image validation
 
@@ -18,6 +18,7 @@ A booking management platform for a small dog walking business. Built with Flask
 - Drop-in visits — bookable separately from group walks
 - Booking dashboard with status tracking (requested → confirmed / waitlisted)
 - In-app notification bell for booking confirmations, cancellations, and walker assignments
+- Web Push notifications on iOS and Android when installed as a PWA
 - Profile and dog profile editing (photo upload, per-dog pickup instructions)
 - Multi-dog support — dog selector on booking form; all dogs shown on profile
 - Monthly walk summary with booking history
@@ -32,6 +33,9 @@ A booking management platform for a small dog walking business. Built with Flask
 - **Invoicing** — monthly summary per client with line items, weekly breakdown, configurable pricing (walk, drop-in, double-slot discount, weekly discount)
 - **Newsletter** — WYSIWYG editor with merge tags, recipient sidebar, test send, one-click unsubscribe
 - **Daily messages** — admin posts announcements visible to walkers on their pickup list
+- **Broadcasts** — one-shot message to all clients booked on a chosen date/slot, delivered via bell and/or email
+- **Closures** — mark dates as closed; cancels existing bookings and blocks new ones with notifications
+- **Activity feed** — append-only audit log of all booking status changes, with bulk action grouping
 - Notification audit trail per client
 - Admin is also a walker — "My Pickup List" in the sidebar
 
@@ -49,8 +53,9 @@ A booking management platform for a small dog walking business. Built with Flask
 
 ### Notifications
 - Persistent bell notification system (admin + client)
-- Triggered on: booking requested, confirmed, cancelled, walker assigned
+- Triggered on: booking requested, confirmed, cancelled, walker assigned, walker reset
 - Read/unread state with timestamps
+- Web Push delivery to installed PWA devices (iOS + Android) via VAPID
 
 ---
 
@@ -92,14 +97,45 @@ Required variables:
 
 For SQLite (quick local start), omit `DATABASE_URL` — it defaults to `sqlite:///app.db`.
 
-### 3. Initialise the database
+### 3. Set up PostgreSQL
+
+Production and CI run on PostgreSQL 16 — match it locally for full fidelity (SQLite hides a class of enum/FK bugs; see [Running Tests](#running-tests)). To skip Postgres entirely for a quick look, omit `DATABASE_URL` and jump to step 4 — the app falls back to `sqlite:///app.db`.
+
+Full from-scratch sequence on a fresh box:
 
 ```bash
-flask db upgrade        # runs all migrations
+# Debian/Ubuntu — install and start Postgres 16
+sudo apt install -y postgresql postgresql-client libpq-dev
+sudo systemctl enable --now postgresql        # starts now + on every boot
+
+# macOS (Homebrew) equivalent:
+#   brew install postgresql@16 && brew services start postgresql@16
+
+# Create the dogboxx role and both databases, run as the postgres superuser.
+# (Homebrew uses trust auth as your macOS user — you can skip createuser/ALTER ROLE
+#  and just `createdb dogboxx` / `createdb dogboxx_test`.)
+sudo -u postgres createuser dogboxx
+sudo -u postgres psql -c "ALTER ROLE dogboxx WITH PASSWORD 'choose-a-dev-password';"
+sudo -u postgres createdb -O dogboxx dogboxx          # dev database
+sudo -u postgres createdb -O dogboxx dogboxx_test     # test database (used by pytest)
+```
+
+Then point `.env` at it (the test DB is wired up here too so plain `pytest` finds it):
+
+```bash
+# .env
+DATABASE_URL=postgresql://dogboxx:choose-a-dev-password@localhost:5432/dogboxx
+TEST_DATABASE_URL=postgresql://dogboxx:choose-a-dev-password@localhost:5432/dogboxx_test
+```
+
+### 4. Initialise the database
+
+```bash
+flask db upgrade        # runs all migrations against DATABASE_URL
 python seed.py          # seeds test data (see Test Accounts below)
 ```
 
-### 4. Run the development server
+### 5. Run the development server
 
 ```bash
 # In a tmux session or background terminal:
@@ -122,13 +158,12 @@ The seed also creates ~13 client accounts with dogs. See `seed.py` for the full 
 
 ### Demo data
 
-To populate 3 weeks of realistic bookings (including waitlisted slots for demo purposes):
+Two demo seed scripts add realistic booking data for presentations:
 
 ```bash
-python seed_demo_bookings.py
+python seed_may_demo.py   # ~10 walks/slot/weekday across two weeks, ±2 randomised, 3–5 drop-ins/day
+python seed_june_demo.py  # mix of normal and at-capacity days to demonstrate the waitlist
 ```
-
-This adds walker unavailability on specific days to reduce capacity and trigger the waitlist, then seeds requested/confirmed/waitlisted bookings across all 3 weeks.
 
 ---
 
@@ -207,7 +242,8 @@ config.py           Development / Testing / Production config classes
 migrations/         Alembic migration files
 scripts/start.sh    Production startup (volume symlink, migrations, gunicorn)
 seed.py             Base seed data (users, dogs, walkers, schedules)
-seed_demo_bookings.py  Demo booking data for presentations
+seed_may_demo.py    Demo bookings — walks + drop-ins across two weekday weeks
+seed_june_demo.py   Demo bookings — mix of normal and at-capacity days for waitlist demo
 ```
 
 ---
@@ -226,8 +262,12 @@ seed_demo_bookings.py  Demo booking data for presentations
 | `WalkerSchedule` | Walker's default weekly availability (day_of_week + slot) |
 | `WalkerUnavailability` | Date-specific exceptions to a walker's schedule |
 | `WalkerAdHocAvailability` | One-off available days outside a walker's default schedule |
+| `BookingStatusChange` | Append-only audit log of every booking status transition |
 | `PricingConfig` | Pricing history — walk, drop-in, double-slot discount, weekly discount |
 | `DailyMessage` | Admin announcements shown to walkers on the pickup list |
+| `Closure` | Business closure dates — cancels existing bookings and blocks new ones |
+| `Broadcast` | Admin one-shot messages to clients booked on a given date/slot |
+| `PushSubscription` | Web Push endpoints per user/device for PWA notifications |
 | `Notification` | In-app notification records (recipient, type, read state) |
 
 ### Booking statuses
