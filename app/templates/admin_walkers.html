@@ -187,7 +187,7 @@
                                 {% endif %}
                                 {% else %}
                                 <button class="btn btn-sm btn-outline-success"
-                                        onclick="toggleWalkerStatus({{ walker.id }}, 'activate')"
+                                        onclick="confirmWalkerToggle({{ walker.id }}, 'activate', '{{ walker.full_name | e }}')"
                                         title="Activate">
                                     <i class="bi bi-check-circle"></i>
                                 </button>
@@ -269,7 +269,7 @@
     </div>
 </div>
 
-<!-- ─── Deactivate confirmation modal ────────────────────────────────────── -->
+<!-- ─── Activate / Deactivate confirmation modal ─────────────────────────── -->
 <div class="modal fade" id="walkerToggleModal" tabindex="-1" aria-labelledby="walkerToggleModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-sm">
         <div class="modal-content">
@@ -302,15 +302,15 @@
         </div>
     </div>
 </div>
+
+{% include 'partials/success_modal.html' %}
 {% endblock %}
 
 {% block scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/admin-toggle-status.js') }}"></script>
+<script src="{{ url_for('static', filename='js/success-modal.js') }}"></script>
 <script nonce="{{ csp_nonce }}">
-function toggleWalkerStatus(walkerId, action) {
-    return toggleStatus('walkers', walkerId, action);
-}
 
 document.querySelectorAll('.drop-in-toggle').forEach(function(toggle) {
     toggle.addEventListener('change', function() {
@@ -410,10 +410,12 @@ var walkerToggleBody       = document.getElementById('walker-toggle-modal-body')
 var walkerToggleConfirmBtn = document.getElementById('walker-toggle-confirm-btn');
 var pendingToggleId        = null;
 var pendingToggleAction    = null;
+var pendingToggleName      = null;
 
 function confirmWalkerToggle(walkerId, action, name) {
     pendingToggleId     = walkerId;
     pendingToggleAction = action;
+    pendingToggleName   = name;
     var isDeactivate    = action === 'deactivate';
     walkerToggleTitle.textContent      = isDeactivate ? 'Deactivate walker' : 'Activate walker';
     walkerToggleBody.textContent       = isDeactivate
@@ -427,8 +429,30 @@ function confirmWalkerToggle(walkerId, action, name) {
 }
 
 walkerToggleConfirmBtn.addEventListener('click', function () {
-    walkerToggleModal.hide();
-    toggleWalkerStatus(pendingToggleId, pendingToggleAction);
+    var id = pendingToggleId, action = pendingToggleAction, name = pendingToggleName;
+    var original = walkerToggleConfirmBtn.innerHTML;
+    walkerToggleConfirmBtn.disabled = true;
+    walkerToggleConfirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Working…';
+
+    toggleStatusRequest('walkers', id, action)
+        .then(function (data) {
+            walkerToggleConfirmBtn.disabled = false;
+            walkerToggleConfirmBtn.innerHTML = original;
+            if (data.success) {
+                var verb = action === 'deactivate' ? 'deactivated' : 'activated';
+                // Reload on close so the row's status + action buttons refresh.
+                showConfirmed(name + ' ' + verb + '.',
+                              walkerToggleModal, document.getElementById('walkerToggleModal'),
+                              function () { location.reload(); });
+            } else {
+                alert('Error: ' + (data.message || 'Something went wrong'));
+            }
+        })
+        .catch(function () {
+            walkerToggleConfirmBtn.disabled = false;
+            walkerToggleConfirmBtn.innerHTML = original;
+            alert('An error occurred. Please try again.');
+        });
 });
 
 // ── Schedule modal ──────────────────────────────────────────────────────────

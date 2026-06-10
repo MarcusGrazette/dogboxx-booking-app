@@ -1,14 +1,13 @@
 /**
  * Toggle active/deactive status for any admin-managed entity.
+ *
+ * Fetch-only: POSTs the toggle and resolves with the parsed JSON. Does not
+ * reload or alert — callers chain their own success UX (the shared success
+ * modal — see docs/UX_GUIDE.md §1). Rejects on network error.
+ *
  * @param {string} entityType - e.g. 'clients' or 'walkers'
  * @param {number} entityId - the record ID
  * @param {string} action - 'activate' or 'deactivate'
- */
-
-/**
- * Fetch-only variant: POSTs the toggle and resolves with the parsed JSON.
- * Does not reload or alert — lets callers chain their own success UX (e.g. the
- * shared success modal). Rejects on network error.
  */
 async function toggleStatusRequest(entityType, entityId, action) {
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
@@ -21,23 +20,4 @@ async function toggleStatusRequest(entityType, entityId, action) {
         credentials: 'same-origin'
     });
     return response.json();
-}
-
-/**
- * Convenience wrapper: toggle then reload on success, alert on failure.
- * Used by pages that don't show their own success feedback.
- */
-async function toggleStatus(entityType, entityId, action) {
-    try {
-        const data = await toggleStatusRequest(entityType, entityId, action);
-
-        if (data.success) {
-            location.reload();
-        } else {
-            alert('Error: ' + data.message);
-        }
-    } catch (error) {
-        console.error('Error:', error);
-        alert('An error occurred. Please try again.');
-    }
 }

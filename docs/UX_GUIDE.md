@@ -85,7 +85,7 @@ need a refresh (e.g. `/admin/dogs` book/cancel) omit it.
 
 - Stacked success modal — `app/templates/partials/success_modal.html` +
   `app/static/js/success-modal.js` (`showConfirmed`). Consumers: `admin_dogs.html`
-  (book/cancel), `admin_clients.html` (deactivate/activate).
+  (book/cancel), `admin_clients.html` + `admin_walkers.html` (deactivate/activate).
 - Always-visible-but-disabled action button — bulk-cancel modal, `admin_dogs.html`
 - Spinner-safe button reset (`resetBcConfirmBtn`) — same file
 - Fetch-only toggle + own success UX — `toggleStatusRequest()` in
