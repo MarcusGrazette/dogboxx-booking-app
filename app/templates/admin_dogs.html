@@ -226,19 +226,7 @@
         </div>
     </div>
 </div>
-<!-- ─── Booking Confirmed Modal ──────────────────────────────────────────── -->
-<div class="modal fade" id="bookingConfirmedModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content border-0 shadow text-center">
-            <div class="modal-body py-4 px-4">
-                <i class="bi bi-check-circle-fill text-success d-block mb-3" style="font-size:3.5rem; line-height:1;"></i>
-                <h5 class="fw-bold mb-2">Success</h5>
-                <p class="text-muted small mb-3" id="confirm-summary"></p>
-                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Done</button>
-            </div>
-        </div>
-    </div>
-</div>
+{% include 'partials/success_modal.html' %}
 
 <!-- ─── Edit Dog Modal ───────────────────────────────────────────────────── -->
 <div class="modal fade" id="editDogModal" tabindex="-1" aria-labelledby="editDogModalLabel" aria-hidden="true">
@@ -517,6 +505,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/success-modal.js') }}"></script>
 <script nonce="{{ csp_nonce }}">
 document.addEventListener('DOMContentLoaded', function () {
 
@@ -537,33 +526,13 @@ document.addEventListener('DOMContentLoaded', function () {
     const submitBtn       = document.getElementById('modal-submit-btn');
     const resultDiv       = document.getElementById('modal-result');
     const recurCount      = document.getElementById('recurring-count');
-    const confirmModal    = new bootstrap.Modal(document.getElementById('bookingConfirmedModal'));
-    const confirmSummary  = document.getElementById('confirm-summary');
-    let   confirmTimer    = null;
 
-    // ── Confirmation pop-over ───────────────────────────────────────────────
-    // On success we dismiss the booking modal, pop a small green-check confirm
-    // modal with a summary, then auto-close it after a short delay. A manual
-    // "Done" button is the fallback; dismissing it early clears the timer.
+    // Success pop-over (showConfirmed) is provided by success-modal.js +
+    // partials/success_modal.html. See docs/UX_GUIDE.md §1.
     function fmtBookingDate(iso) {
         const d = new Date(iso + 'T00:00:00');
         return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
     }
-    // srcModal/srcEl let this be reused by any modal (book + bulk-cancel).
-    function showConfirmed(summary, srcModal, srcEl) {
-        confirmSummary.textContent = summary;
-        // Wait for the source modal to fully close before stacking the confirm
-        // modal — avoids Bootstrap backdrop/scroll-lock conflicts.
-        srcEl.addEventListener('hidden.bs.modal', function handler() {
-            srcEl.removeEventListener('hidden.bs.modal', handler);
-            confirmModal.show();
-            clearTimeout(confirmTimer);
-            confirmTimer = setTimeout(() => confirmModal.hide(), 2500);
-        });
-        srcModal.hide();
-    }
-    document.getElementById('bookingConfirmedModal')
-        .addEventListener('hidden.bs.modal', () => clearTimeout(confirmTimer));
 
     // Adjust modal affordances for the selected service. Drop-ins don't
     // support "Both" slots (server-side rejected) and aren't available as

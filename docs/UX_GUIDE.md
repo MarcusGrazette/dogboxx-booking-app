@@ -22,11 +22,19 @@ inline alert and the form open.
 - **Auto-closes after 2.5s**, with a "Done" button as the manual fallback
 - Timer is cleared on manual dismiss so it can't fire on an already-closed modal
 
-Reference implementation: `#bookingConfirmedModal` + `showConfirmed(summary,
-srcModal, srcEl)` in `app/templates/admin_dogs.html`. The helper is modal-agnostic
-— pass the source modal instance and element so it stacks correctly without
-backdrop/scroll-lock conflicts (it waits for the source modal's `hidden.bs.modal`
-before showing the confirm modal).
+Reference implementation (**shared** — reuse it, don't re-create):
+- Markup: `{% include 'partials/success_modal.html' %}` (the `#successModal`)
+- JS: `app/static/js/success-modal.js` exposes
+  `showConfirmed(summary, srcModal, srcEl[, onClose])`
+
+Include the partial once on the page and load `success-modal.js`. The helper is
+modal-agnostic — pass the source modal instance and its element so it stacks
+correctly without backdrop/scroll-lock conflicts (it waits for the source modal's
+`hidden.bs.modal` before showing the success modal). The optional **`onClose`**
+callback fires once when the success modal closes (covers both auto-close and
+manual "Done") — use it for flows that must `location.reload()` afterwards (e.g.
+`/admin/clients` deactivate, where the row needs refreshing). Flows that don't
+need a refresh (e.g. `/admin/dogs` book/cancel) omit it.
 
 **Errors** do *not* use the confirm modal — they render inline (red
 `alert alert-danger`) and keep the source modal open so the user can retry.
@@ -75,6 +83,10 @@ before showing the confirm modal).
 
 ## 4. Where the reference patterns live
 
-- Stacked confirm modal + `showConfirmed()` — `app/templates/admin_dogs.html`
-- Always-visible-but-disabled action button — pause-walks modal, same file
+- Stacked success modal — `app/templates/partials/success_modal.html` +
+  `app/static/js/success-modal.js` (`showConfirmed`). Consumers: `admin_dogs.html`
+  (book/cancel), `admin_clients.html` (deactivate/activate).
+- Always-visible-but-disabled action button — bulk-cancel modal, `admin_dogs.html`
 - Spinner-safe button reset (`resetBcConfirmBtn`) — same file
+- Fetch-only toggle + own success UX — `toggleStatusRequest()` in
+  `app/static/js/admin-toggle-status.js`

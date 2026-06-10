@@ -140,11 +140,14 @@
         </div>
     </div>
 </div>
+
+{% include 'partials/success_modal.html' %}
 {% endblock %}
 
 {% block scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/admin-toggle-status.js') }}"></script>
+<script src="{{ url_for('static', filename='js/success-modal.js') }}"></script>
 <script nonce="{{ csp_nonce }}">
 // ── Activate / deactivate confirmation modal ────────────────────────────────
 const toggleModal    = new bootstrap.Modal(document.getElementById('toggleModal'));
@@ -154,10 +157,12 @@ const toggleConfirm  = document.getElementById('toggle-confirm-btn');
 
 let pendingId     = null;
 let pendingAction = null;
+let pendingName   = null;
 
 function confirmToggle(clientId, action, name) {
     pendingId     = clientId;
     pendingAction = action;
+    pendingName   = name;
     const isDeactivate = action === 'deactivate';
     toggleTitle.textContent   = isDeactivate ? 'Deactivate client' : 'Activate client';
     toggleBody.textContent    = isDeactivate
@@ -171,8 +176,30 @@ function confirmToggle(clientId, action, name) {
 }
 
 toggleConfirm.addEventListener('click', function () {
-    toggleModal.hide();
-    toggleStatus('clients', pendingId, pendingAction);
+    const id = pendingId, action = pendingAction, name = pendingName;
+    const original = toggleConfirm.innerHTML;
+    toggleConfirm.disabled = true;
+    toggleConfirm.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Working…';
+
+    toggleStatusRequest('clients', id, action)
+        .then(data => {
+            toggleConfirm.disabled = false;
+            toggleConfirm.innerHTML = original;
+            if (data.success) {
+                const verb = action === 'deactivate' ? 'deactivated' : 'activated';
+                // Reload on close so the row's status badge + buttons refresh.
+                showConfirmed(`${name} ${verb}.`,
+                              toggleModal, document.getElementById('toggleModal'),
+                              () => location.reload());
+            } else {
+                alert('Error: ' + (data.message || 'Something went wrong'));
+            }
+        })
+        .catch(() => {
+            toggleConfirm.disabled = false;
+            toggleConfirm.innerHTML = original;
+            alert('An error occurred. Please try again.');
+        });
 });
 
 // ── Row click → client detail ───────────────────────────────────────────────
