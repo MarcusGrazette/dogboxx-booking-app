@@ -232,7 +232,7 @@
         <div class="modal-content border-0 shadow text-center">
             <div class="modal-body py-4 px-4">
                 <i class="bi bi-check-circle-fill text-success d-block mb-3" style="font-size:3.5rem; line-height:1;"></i>
-                <h5 class="fw-bold mb-2">Confirmed</h5>
+                <h5 class="fw-bold mb-2">Success</h5>
                 <p class="text-muted small mb-3" id="confirm-summary"></p>
                 <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Done</button>
             </div>
@@ -472,7 +472,7 @@
                         <input type="date" class="form-control form-control-sm" id="bc-end">
                     </div>
                 </div>
-                <label class="form-label small fw-semibold mb-1 d-block">Select a slot to cancel</label>
+                <label class="form-label small fw-semibold mb-1 d-block">Select a slot to pause</label>
                 <div class="btn-group btn-group-sm w-100 mb-3" role="group" aria-label="Slots to cancel">
                     <input type="radio" class="btn-check" name="bc-slot" id="bc-slot-morning" value="Morning" autocomplete="off">
                     <label class="btn btn-outline-secondary" for="bc-slot-morning">
@@ -487,7 +487,7 @@
                         <i class="bi bi-layers-fill me-1"></i>Both
                     </label>
                 </div>
-                <label class="form-label small fw-semibold mb-1 d-block">Cancel walks on the ticked days</label>
+                <label class="form-label small fw-semibold mb-1 d-block">Pause walks on the ticked days</label>
                 <div class="d-flex gap-3 mb-3">
                     {% for n, lbl in [(0,'Mon'),(1,'Tue'),(2,'Wed'),(3,'Thu'),(4,'Fri')] %}
                     <div class="form-check">
@@ -506,8 +506,8 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-danger fw-semibold" id="bc-confirm-btn" style="display:none;" disabled>
-                    <i class="bi bi-pause-circle me-1"></i><span id="bc-confirm-label">Cancel walks</span>
+                <button type="button" class="btn btn-danger fw-semibold" id="bc-confirm-btn" disabled>
+                    <i class="bi bi-pause-circle me-1"></i><span id="bc-confirm-label">Pause walks</span>
                 </button>
             </div>
         </div>
@@ -1135,7 +1135,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // original #bc-confirm-label span, so the cached reference goes stale —
     // resetting here keeps it valid for the next preview/cancel cycle.
     function resetBcConfirmBtn() {
-        bcConfirmBtn.innerHTML = '<i class="bi bi-pause-circle me-1"></i><span id="bc-confirm-label">Cancel walks</span>';
+        bcConfirmBtn.innerHTML = '<i class="bi bi-pause-circle me-1"></i><span id="bc-confirm-label">Pause walks</span>';
         bcConfirmLbl = document.getElementById('bc-confirm-label');
     }
 
@@ -1162,8 +1162,7 @@ document.addEventListener('DOMContentLoaded', function () {
             document.querySelectorAll('.bc-day').forEach(el => { el.checked = true; });
             bcPreviewRes.innerHTML = '';
             resetBcConfirmBtn();
-            bcConfirmBtn.style.display = 'none';
-            bcConfirmBtn.disabled = true;
+            bcConfirmBtn.disabled = true;   // always visible, enabled only after a preview
             bcPreviewCount = 0;
             bcModal.show();
         });
@@ -1196,7 +1195,6 @@ document.addEventListener('DOMContentLoaded', function () {
         bcSelectedDays().forEach(d => params.append('days', d));
         bcLoading.style.display = '';
         bcPreviewRes.innerHTML  = '';
-        bcConfirmBtn.style.display = 'none';
         bcConfirmBtn.disabled = true;
 
         fetch(`/admin/dogs/${bcActiveDogId}/cancel-preview?${params}`, {
@@ -1214,7 +1212,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 bcPreviewRes.innerHTML = '<p class="text-muted small mb-0">No active bookings found in that date range.</p>';
                 return;
             }
-            let html = `<p class="fw-semibold mb-2 text-danger"><i class="bi bi-exclamation-triangle me-1"></i>${data.count} booking${data.count !== 1 ? 's' : ''} will be cancelled:</p>`;
+            let html = `<p class="fw-semibold mb-2 text-danger"><i class="bi bi-exclamation-triangle me-1"></i>${data.count} walk${data.count !== 1 ? 's' : ''} will be paused:</p>`;
             html += '<table class="table table-sm mb-0"><thead class="table-light"><tr>'
                   + '<th>Date</th><th>Slot</th><th>Status</th></tr></thead><tbody>';
             data.bookings.forEach(b => {
@@ -1227,8 +1225,7 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             html += '</tbody></table>';
             bcPreviewRes.innerHTML = html;
-            bcConfirmLbl.textContent = `Cancel ${data.count} walk${data.count !== 1 ? 's' : ''}`;
-            bcConfirmBtn.style.display = '';
+            bcConfirmLbl.textContent = `Pause ${data.count} walk${data.count !== 1 ? 's' : ''}`;
             bcConfirmBtn.disabled = false;
         })
         .catch(() => {
@@ -1256,7 +1253,7 @@ document.addEventListener('DOMContentLoaded', function () {
         .then(data => {
             if (data.success) {
                 const n = data.cancelled_count;
-                showConfirmed(`${n} walk${n !== 1 ? 's' : ''} cancelled for ${bcDogName.textContent}.`,
+                showConfirmed(`${n} walk${n !== 1 ? 's' : ''} paused for ${bcDogName.textContent}.`,
                               bcModal, document.getElementById('bulkCancelModal'));
             } else {
                 bcPreviewRes.innerHTML = `<div class="alert alert-danger py-2">${data.message || 'Something went wrong'}</div>`;
