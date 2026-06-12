@@ -295,6 +295,82 @@ class TestMarkRead:
 
 
 # ---------------------------------------------------------------------------
+# T5d2 — /notifications/unread-count (badge reconciliation endpoint)
+# ---------------------------------------------------------------------------
+
+class TestUnreadCountEndpoint:
+    """The bell fetches this on PWA foreground to reconcile the DOM badge
+    and the home-screen app badge against server truth."""
+
+    def test_returns_unread_count(self, app, client):
+        with app.app_context():
+            user = make_user('unread_ep@test.com')
+            make_client_profile(user.id)
+            db.session.commit()
+            user_id = user.id
+
+            for i in range(3):
+                create_notification(
+                    recipient_id=user_id,
+                    notification_type='system',
+                    title=f'Unread {i}',
+                )
+            # One read notification — must not be counted
+            read_notif = create_notification(
+                recipient_id=user_id,
+                notification_type='system',
+                title='Already read',
+            )
+            db.session.commit()
+            mark_read(read_notif.id, user_id)
+
+        login(client, 'unread_ep@test.com')
+        res = client.get('/notifications/unread-count')
+        assert res.status_code == 200
+        assert res.get_json() == {'count': 3}
+
+    def test_zero_when_all_read(self, app, client):
+        with app.app_context():
+            user = make_user('unread_ep_zero@test.com')
+            make_client_profile(user.id)
+            db.session.commit()
+            user_id = user.id
+            create_notification(
+                recipient_id=user_id,
+                notification_type='system',
+                title='Soon read',
+            )
+            db.session.commit()
+            mark_all_read(user_id)
+
+        login(client, 'unread_ep_zero@test.com')
+        res = client.get('/notifications/unread-count')
+        assert res.status_code == 200
+        assert res.get_json() == {'count': 0}
+
+    def test_requires_login(self, client):
+        res = client.get('/notifications/unread-count')
+        # Anonymous users are redirected to login, never given a count
+        assert res.status_code == 302
+
+    def test_counts_are_per_user(self, app, client):
+        with app.app_context():
+            u1 = make_user('unread_ep_u1@test.com')
+            make_client_profile(u1.id)
+            u2 = make_user('unread_ep_u2@test.com')
+            make_client_profile(u2.id)
+            db.session.commit()
+            create_notification(recipient_id=u1.id, notification_type='system', title='For u1')
+            create_notification(recipient_id=u2.id, notification_type='system', title='For u2 a')
+            create_notification(recipient_id=u2.id, notification_type='system', title='For u2 b')
+            db.session.commit()
+
+        login(client, 'unread_ep_u1@test.com')
+        res = client.get('/notifications/unread-count')
+        assert res.get_json() == {'count': 1}
+
+
+# ---------------------------------------------------------------------------
 # T5e — Notifications triggered via booking flow (integration)
 # ---------------------------------------------------------------------------
 
