@@ -1014,6 +1014,15 @@ document.addEventListener('DOMContentLoaded', function () {
         modified:   'bg-info text-dark',
     };
 
+    // Service shown as an icon (matches admin_invoicing_detail.html):
+    // walk = person-walking (green), drop-in = house-door (blue). Title gives
+    // the full name for hover/accessibility; unknown services fall back to text.
+    function serviceIcon(slug, name) {
+        if (slug === 'group-walk') return `<i class="bi bi-person-walking text-success fs-6" title="Walk"></i>`;
+        if (slug === 'drop-in')    return `<i class="bi bi-house-door text-primary fs-6" title="Drop-in"></i>`;
+        return `<span class="text-muted small">${name || ''}</span>`;
+    }
+
     function dbLoad(page) {
         dbCurrentPage = page;
         const fromVal = dbFromDate.value;
@@ -1042,12 +1051,13 @@ document.addEventListener('DOMContentLoaded', function () {
                      + '<th>Date</th><th>Slot</th><th>Status</th><th>Service</th><th>Walker</th>'
                      + '</tr></thead><tbody>';
             data.bookings.forEach(b => {
-                const badgeCls = STATUS_BADGE[b.status] || 'bg-secondary';
+                const badgeCls   = STATUS_BADGE[b.status] || 'bg-secondary';
+                const statusInit = b.status.charAt(0).toUpperCase();
                 html += `<tr>
                     <td class="align-middle">${b.date}</td>
                     <td class="align-middle">${b.slot}</td>
-                    <td class="align-middle"><span class="badge ${badgeCls}">${b.status}</span></td>
-                    <td class="align-middle text-muted small">${b.service}</td>
+                    <td class="align-middle"><span class="badge ${badgeCls}" title="${b.status}">${statusInit}</span></td>
+                    <td class="align-middle">${serviceIcon(b.service_slug, b.service)}</td>
                     <td class="align-middle text-muted small">${b.walker || '—'}</td>
                 </tr>`;
             });

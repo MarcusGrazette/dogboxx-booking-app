@@ -69,6 +69,19 @@ need a refresh (e.g. `/admin/dogs` book/cancel) omit it.
 | Pausing walks (**client**) | **Pause** + `bi-pause-circle-fill` icon | Same underlying action (bookings are cancelled) but the client's mental model is pausing for a holiday, so client-facing copy uses *pause* throughout (`index.html`, `help.html`). |
 | Brand name | **DogBoxx** | Capital D, capital B. Never "Dogboxx" / "DogBox". |
 
+### Service iconography
+
+When a service type is shown as an icon (compact tables), use the established
+pairing — add a `title` with the full name for hover/accessibility:
+
+| Service | Icon | Colour |
+|---|---|---|
+| Walk (`group-walk`) | `bi-person-walking` | `text-success` (green) |
+| Drop-in (`drop-in`) | `bi-house-door` | `text-primary` (blue) |
+
+Reference: `admin_invoicing_detail.html` and the upcoming-bookings table in
+`admin_dogs.html` (`serviceIcon()`).
+
 **Rules:**
 - A feature's verb must be consistent across its title, buttons, preview text,
   and success summary. Mixed wording (a "Pause" title with a "Cancel" button) is

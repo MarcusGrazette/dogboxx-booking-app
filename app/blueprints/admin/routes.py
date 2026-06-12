@@ -3647,11 +3647,13 @@ def dog_upcoming_bookings(dog_id):
         if b.walker and b.walker.user:
             walker_name = b.walker.user.firstname
         rows.append({
-            'date': b.date.strftime('%-d %b %Y'),
+            # "Thu, 5 Jun" — matches the cancel modal's formatBcDate output.
+            'date': b.date.strftime('%a, %-d %b'),
             'slot': b.slot,
             'status': b.status,
             'walker': walker_name,
             'service': b.service_type.name if b.service_type else '',
+            'service_slug': b.service_type.slug if b.service_type else '',
         })
 
     return jsonify(
