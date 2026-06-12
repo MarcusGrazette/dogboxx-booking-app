@@ -45,6 +45,16 @@ def index():
                            notification_meta=get_meta)
 
 
+@notifications_bp.route('/unread-count')
+@login_required
+def unread_count():
+    """AJAX: current unread count — used by the bell to reconcile the DOM
+    badge and the PWA home-screen app badge when the app returns to the
+    foreground (SSE events fired while iOS suspends the page are lost)."""
+    from app.utils.notifications import get_unread_count
+    return jsonify({'count': get_unread_count(current_user.id)})
+
+
 @notifications_bp.route('/<int:notification_id>/read', methods=['POST'])
 @login_required
 def mark_one_read(notification_id):

@@ -170,9 +170,14 @@
             const id = this.dataset.notifId;
             if (!id) return;
             const wasUnread = item.classList.contains('notif-dropdown-unread');
-            // Clear local highlight immediately for instant feedback.
-            // Badge decrement is handled by the SSE read_one event to avoid double-counting.
-            if (wasUnread) clearUnreadItem(item);
+            // Clear highlight + decrement locally for instant feedback. The SSE
+            // read_one echo skips items whose highlight is already cleared, so
+            // this never double-counts — and the badge still updates if the SSE
+            // event is lost (worker restart, iOS backgrounding the EventSource).
+            if (wasUnread) {
+                clearUnreadItem(item);
+                decrementBadge(1);
+            }
             fetch('/notifications/' + id + '/read', {
                 method: 'POST',
                 headers: {
@@ -209,28 +214,28 @@
         if (dot) dot.remove();
     }
 
+    // Single writer for the badge count — keeps the DOM pill, the
+    // mark-all-read button, and the home-screen app badge in lockstep.
+    function applyBadgeCount(next) {
+        const badge = document.getElementById('notif-badge');
+        if (!badge) return;
+        badge.textContent = next > 99 ? '99+' : String(next);
+        badge.classList.toggle('d-none', next <= 0);
+        const btn = document.getElementById('mark-all-read-btn');
+        if (btn) btn.classList.toggle('d-none', next <= 0);
+        syncAppBadge(next);
+    }
+
     function decrementBadge(n) {
         const badge = document.getElementById('notif-badge');
         if (!badge) return;
-        const next = Math.max(0, (parseInt(badge.textContent) || 0) - n);
-        badge.textContent = next > 99 ? '99+' : String(next);
-        if (next <= 0) {
-            badge.classList.add('d-none');
-            const btn = document.getElementById('mark-all-read-btn');
-            if (btn) btn.classList.add('d-none');
-        }
-        syncAppBadge(next);
+        applyBadgeCount(Math.max(0, (parseInt(badge.textContent) || 0) - n));
     }
 
     function incrementBadge(n) {
         const badge = document.getElementById('notif-badge');
         if (!badge) return;
-        const next = (parseInt(badge.textContent) || 0) + n;
-        badge.textContent = next > 99 ? '99+' : next;
-        badge.classList.remove('d-none');
-        const btn = document.getElementById('mark-all-read-btn');
-        if (btn) btn.classList.remove('d-none');
-        syncAppBadge(next);
+        applyBadgeCount((parseInt(badge.textContent) || 0) + n);
     }
 
     function applyReadAll() {
@@ -240,11 +245,7 @@
         document.querySelectorAll('#notification-bell .rounded-circle').forEach(function(el) {
             el.remove();
         });
-        const badge = document.getElementById('notif-badge');
-        if (badge) { badge.textContent = '0'; badge.classList.add('d-none'); }
-        const btn = document.getElementById('mark-all-read-btn');
-        if (btn) btn.classList.add('d-none');
-        syncAppBadge(0);
+        applyBadgeCount(0);
     }
 
     // ── SSE: real-time updates ────────────────────────────────────────────
@@ -265,11 +266,17 @@
             prependNotification(d);
         });
 
-        // A read event from another surface
+        // A read event from another surface (also echoes back to this one)
         evtSource.addEventListener('read_one', function(e) {
             const d = JSON.parse(e.data);
             const item = document.querySelector('.notif-item[data-notif-id="' + d.id + '"]');
-            if (item) { clearUnreadItem(item); decrementBadge(1); }
+            // Highlight already cleared → this surface's own click handler
+            // handled it locally; skip to avoid double-decrementing.
+            if (item && !item.classList.contains('notif-dropdown-unread')) return;
+            if (item) clearUnreadItem(item);
+            // The server only emits read_one for genuinely-unread notifications,
+            // so decrement even when the item isn't in this dropdown's top 5.
+            decrementBadge(1);
         });
 
         // Mark-all-read from another surface
@@ -336,6 +343,26 @@
     }
 
     connectSSE();
+
+    // ── Badge reconciliation ─────────────────────────────────────────────────
+    //
+    // The home-screen app badge is otherwise event-driven (push sets it, reads
+    // decrement it). Any missed event — push received while the PWA was closed
+    // then read on another device, SSE events lost while iOS suspends the
+    // page's EventSource — leaves it stale indefinitely. Reconcile to server
+    // truth at the two points where staleness becomes visible:
+    //   1. every page load (count is already server-rendered into the bell)
+    //   2. the PWA returning to the foreground (refetch — DOM may be stale too)
+    syncAppBadge({{ unread_notification_count | int }});
+
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState !== 'visible') return;
+        fetch('/notifications/unread-count', {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function (res) { return res.ok ? res.json() : null; })
+          .then(function (d) { if (d) applyBadgeCount(d.count); })
+          .catch(function () {});
+    });
 
     // ── Web Push registration ────────────────────────────────────────────────
     //
