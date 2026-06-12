@@ -3636,6 +3636,13 @@ def dog_upcoming_bookings(dog_id):
         .order_by(Booking.date, Booking.slot)
     )
 
+    # Optional service-type filter by slug (e.g. 'group-walk' / 'drop-in').
+    service = request.args.get('service', '')
+    if service:
+        st = ServiceType.query.filter_by(slug=service).first()
+        if st:
+            query = query.filter(Booking.service_type_id == st.id)
+
     total = query.count()
     total_pages = max(1, (total + per_page - 1) // per_page)
     page = min(page, total_pages)

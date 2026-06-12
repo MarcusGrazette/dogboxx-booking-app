@@ -99,7 +99,24 @@ walker name sits beside it), leave them default grey. Reference:
 
 ---
 
-## 4. Where the reference patterns live
+## 4. List filters
+
+For filterable lists (modals/tables):
+
+- **Filter immediately on change** — no explicit "Filter"/"Apply" button. Reload
+  on the input's `change` event; changing any filter resets to page 1.
+- **Show active filters as removable pills** — render a pill per active filter
+  (`From {date} ✕`, `Walk ✕`) with an `✕` that clears just that one. The pill row
+  is a render of current control state; hide it when nothing is active.
+- **Open unfiltered** — default controls to their cleared state (empty date / All)
+  so the list opens showing everything, and pills appear only once narrowed.
+
+Reference: the upcoming-bookings modal in `admin_dogs.html` (`dbRenderPills`,
+`dbLoad`, and the `[data-clear]` delegation).
+
+---
+
+## 5. Where the reference patterns live
 
 - Stacked success modal — `app/templates/partials/success_modal.html` +
   `app/static/js/success-modal.js` (`showConfirmed`). Consumers: `admin_dogs.html`
