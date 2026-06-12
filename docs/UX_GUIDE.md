@@ -72,15 +72,20 @@ need a refresh (e.g. `/admin/dogs` book/cancel) omit it.
 ### Service iconography
 
 When a service type is shown as an icon (compact tables), use the established
-pairing — add a `title` with the full name for hover/accessibility:
+icon pairing — add a `title` with the full name for hover/accessibility:
 
-| Service | Icon | Colour |
-|---|---|---|
-| Walk (`group-walk`) | `bi-person-walking` | `text-success` (green) |
-| Drop-in (`drop-in`) | `bi-house-door` | `text-primary` (blue) |
+| Service | Icon |
+|---|---|
+| Walk (`group-walk`) | `bi-person-walking` |
+| Drop-in (`drop-in`) | `bi-house-door` |
 
-Reference: `admin_invoicing_detail.html` and the upcoming-bookings table in
-`admin_dogs.html` (`serviceIcon()`).
+**Colour is contextual, not part of the convention.** Colour the icons only
+when the colour itself carries meaning — `admin_invoicing_detail.html` uses
+green (`text-success`) / blue (`text-primary`) as decorative emphasis on its
+own. Where the icon merely labels a row that already carries the meaning
+elsewhere (e.g. the upcoming-bookings table in `admin_dogs.html`, where the
+walker name sits beside it), leave them default grey. Reference:
+`serviceIcon()` in `admin_dogs.html`.
 
 **Rules:**
 - A feature's verb must be consistent across its title, buttons, preview text,

@@ -1014,12 +1014,13 @@ document.addEventListener('DOMContentLoaded', function () {
         modified:   'bg-info text-dark',
     };
 
-    // Service shown as an icon (matches admin_invoicing_detail.html):
-    // walk = person-walking (green), drop-in = house-door (blue). Title gives
-    // the full name for hover/accessibility; unknown services fall back to text.
+    // Service shown as an icon: walk = person-walking, drop-in = house-door.
+    // Default (grey) colour — it sits next to the walker name and only denotes
+    // service type, so colour would convey no extra meaning. Title gives the
+    // full name for hover/accessibility; unknown services fall back to text.
     function serviceIcon(slug, name) {
-        if (slug === 'group-walk') return `<i class="bi bi-person-walking text-success fs-6" title="Walk"></i>`;
-        if (slug === 'drop-in')    return `<i class="bi bi-house-door text-primary fs-6" title="Drop-in"></i>`;
+        if (slug === 'group-walk') return `<i class="bi bi-person-walking fs-6" title="Walk"></i>`;
+        if (slug === 'drop-in')    return `<i class="bi bi-house-door fs-6" title="Drop-in"></i>`;
         return `<span class="text-muted small">${name || ''}</span>`;
     }
 
@@ -1048,7 +1049,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
             let html = '<table class="table table-sm mb-0"><thead class="table-light"><tr>'
-                     + '<th>Date</th><th>Slot</th><th>Status</th><th>Service</th><th>Walker</th>'
+                     + '<th>Date</th><th>Slot</th><th>Status</th><th>Service</th>'
                      + '</tr></thead><tbody>';
             data.bookings.forEach(b => {
                 const badgeCls   = STATUS_BADGE[b.status] || 'bg-secondary';
@@ -1057,8 +1058,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     <td class="align-middle">${b.date}</td>
                     <td class="align-middle">${b.slot}</td>
                     <td class="align-middle"><span class="badge ${badgeCls}" title="${b.status}">${statusInit}</span></td>
-                    <td class="align-middle">${serviceIcon(b.service_slug, b.service)}</td>
-                    <td class="align-middle text-muted small">${b.walker || '—'}</td>
+                    <td class="align-middle text-muted small">${serviceIcon(b.service_slug, b.service)} ${b.walker || '—'}</td>
                 </tr>`;
             });
             html += '</tbody></table>';
