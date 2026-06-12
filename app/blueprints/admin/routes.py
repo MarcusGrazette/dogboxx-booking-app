@@ -3721,6 +3721,10 @@ def dog_cancel_preview(dog_id):
     if day_filter:
         bookings = [b for b in bookings if b.date.weekday() in day_filter]
 
+    # The preview only needs to confirm the admin picked the right dates/days —
+    # the range can span hundreds of walks, so cap the serialised list at 10.
+    # `count` stays the true total (the UI shows "… preview of the first 10").
+    PREVIEW_CAP = 10
     return jsonify(
         success=True,
         count=len(bookings),
@@ -3728,7 +3732,7 @@ def dog_cancel_preview(dog_id):
             'date': b.date.isoformat(),
             'slot': b.slot,
             'status': b.status,
-        } for b in bookings],
+        } for b in bookings[:PREVIEW_CAP]],
     )
 
 
