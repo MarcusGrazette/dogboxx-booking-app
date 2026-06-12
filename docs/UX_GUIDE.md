@@ -107,7 +107,14 @@ For filterable lists (modals/tables):
   on the input's `change` event; changing any filter resets to page 1.
 - **Show active filters as removable pills** — render a pill per active filter
   (`From {date} ✕`, `Walk ✕`) with an `✕` that clears just that one. The pill row
-  is a render of current control state; hide it when nothing is active.
+  is a render of current control state; hide it when nothing is active. Style:
+  brand pink (`background:#fce8f6; color:#E02FAC; border-radius:2rem`), mirroring
+  the client-facing date pill — see `dbPill()` in `admin_dogs.html`.
+- **Don't tear the list down on reload** — keep the existing rows mounted and
+  dim them (`opacity:0.4`) while the next page/filter loads; only show the full
+  spinner on the first load. Blanking to a spinner collapses the body, and a
+  `modal-dialog-centered` modal then re-centres on the height change — which
+  reads as a jarring full refresh.
 - **Open unfiltered** — default controls to their cleared state (empty date / All)
   so the list opens showing everything, and pills appear only once narrowed.
 

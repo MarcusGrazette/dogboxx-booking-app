@@ -1030,23 +1030,36 @@ document.addEventListener('DOMContentLoaded', function () {
         return `<span class="text-muted small">${name || ''}</span>`;
     }
 
-    // Service slug → short label for the active-filter pill.
+    // Service slug → short label + pill icon for the active-filter pill.
     const DB_SERVICE_LABEL = { 'group-walk': 'Walk', 'drop-in': 'Drop-in' };
+    const DB_SERVICE_ICON  = {
+        'group-walk': '<i class="bi bi-person-walking"></i>',
+        'drop-in':    '<i class="bi bi-house-door"></i>',
+    };
+
+    // A brand-pink filter pill — mirrors the client-facing date pill styling.
+    function dbPill(iconHtml, label, clearKey) {
+        return `<span class="d-inline-flex align-items-center gap-2 px-3 py-2 fw-semibold"`
+            + ` style="background:#fce8f6;color:#E02FAC;border-radius:2rem;font-size:0.82rem;">`
+            + iconHtml
+            + `<span>${label}</span>`
+            + `<button type="button" class="btn p-0 border-0 lh-1 ms-1" data-clear="${clearKey}"`
+            + ` style="background:none;color:#E02FAC;" aria-label="Clear filter">`
+            + `<i class="bi bi-x-lg" style="font-size:0.75rem;"></i></button>`
+            + `</span>`;
+    }
 
     // Rebuild the active-filter pill row from the current control values.
-    // Each pill carries a data-clear hook handled by delegation below.
+    // Each pill's ✕ carries a data-clear hook handled by delegation below.
     function dbRenderPills() {
         const pills = [];
         if (dbFromDate.value) {
-            pills.push(`<span class="badge rounded-pill bg-light text-dark border d-inline-flex align-items-center gap-1">`
-                + `From ${formatBcDate(dbFromDate.value)}`
-                + `<i class="bi bi-x-lg" role="button" aria-label="Clear date filter" data-clear="date" style="cursor:pointer;"></i></span>`);
+            pills.push(dbPill('<i class="bi bi-calendar3"></i>',
+                              `From ${formatBcDate(dbFromDate.value)}`, 'date'));
         }
         if (dbService.value !== 'all') {
-            const label = DB_SERVICE_LABEL[dbService.value] || dbService.value;
-            pills.push(`<span class="badge rounded-pill bg-light text-dark border d-inline-flex align-items-center gap-1">`
-                + `${label}`
-                + `<i class="bi bi-x-lg" role="button" aria-label="Clear service filter" data-clear="service" style="cursor:pointer;"></i></span>`);
+            pills.push(dbPill(DB_SERVICE_ICON[dbService.value] || '',
+                              DB_SERVICE_LABEL[dbService.value] || dbService.value, 'service'));
         }
         dbPills.innerHTML = pills.join('');
         dbPills.style.display = pills.length ? 'flex' : 'none';
@@ -1054,15 +1067,24 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function dbLoad(page) {
         dbCurrentPage = page;
-        const fromVal = dbFromDate.value;
         const params  = new URLSearchParams({ page });
-        if (fromVal) params.set('from', fromVal);
+        if (dbFromDate.value) params.set('from', dbFromDate.value);
         if (dbService.value !== 'all') params.set('service', dbService.value);
         dbRenderPills();
 
-        dbLoading.style.display = '';
-        dbResults.innerHTML     = '';
-        dbPagination.style.display = 'none';
+        // First load shows the spinner; subsequent filter/page loads keep the
+        // existing table mounted and just dim it, so the modal height stays
+        // stable (a centered modal re-centres on height change — that jump is
+        // what read as a jarring refresh).
+        const firstLoad = !dbResults.querySelector('table');
+        if (firstLoad) {
+            dbLoading.style.display = '';
+            dbResults.innerHTML = '';
+            dbPagination.style.display = 'none';
+        } else {
+            dbResults.style.opacity = '0.4';
+            dbResults.style.pointerEvents = 'none';
+        }
 
         fetch(`/admin/dogs/${dbActiveDogId}/upcoming-bookings?${params}`, {
             headers: { 'X-CSRFToken': getCsrf() },
@@ -1070,6 +1092,9 @@ document.addEventListener('DOMContentLoaded', function () {
         .then(r => r.json())
         .then(data => {
             dbLoading.style.display = 'none';
+            dbResults.style.opacity = '';
+            dbResults.style.pointerEvents = '';
+            dbPagination.style.display = 'none';
             if (!data.success) {
                 dbResults.innerHTML = `<div class="alert alert-danger py-2">${data.message || 'Error loading bookings'}</div>`;
                 return;
@@ -1103,6 +1128,9 @@ document.addEventListener('DOMContentLoaded', function () {
         })
         .catch(() => {
             dbLoading.style.display = 'none';
+            dbResults.style.opacity = '';
+            dbResults.style.pointerEvents = '';
+            dbPagination.style.display = 'none';
             dbResults.innerHTML = '<div class="alert alert-danger py-2">Network error — please try again.</div>';
         });
     }
