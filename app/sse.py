@@ -73,16 +73,24 @@ def _listen_loop(url):
 
     Outer loop reconnects if Redis restarts; events fired while disconnected
     are lost (pub/sub has no replay) — the bell's reconciliation covers that.
+
+    Uses get_message(timeout) polling rather than listen() because gunicorn's
+    gevent worker applies hub-level timeouts to blocking socket.recv() calls,
+    causing listen() to raise TimeoutError when the channel is idle.
+    get_message with an explicit timeout yields to the gevent hub on each call
+    and never raises on an idle channel.
     """
     import redis as redis_lib
     while True:
         try:
-            client = redis_lib.Redis.from_url(url)
-            pubsub = client.pubsub(ignore_subscribe_messages=True)
+            client = redis_lib.Redis.from_url(url, socket_timeout=None)
+            pubsub = client.pubsub()
             pubsub.psubscribe(_CHANNEL_PREFIX + '*')
             log.info('SSE: Redis listener subscribed to %s*', _CHANNEL_PREFIX)
-            for message in pubsub.listen():
-                _handle_pubsub_message(message)
+            while True:
+                message = pubsub.get_message(ignore_subscribe_messages=True, timeout=5.0)
+                if message:
+                    _handle_pubsub_message(message)
         except Exception as e:
             log.warning('SSE: Redis listener error (%s) — reconnecting in 2s', e)
             time.sleep(2)
