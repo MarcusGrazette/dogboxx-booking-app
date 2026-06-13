@@ -76,7 +76,7 @@
 | 45 | P1 | S | ✅ | **Notification audit trail (admin)** | Admin can see notification history per client on their detail page. |
 | 46 | P1 | L | ✅ | **Notification system overhaul** | `BookingStatusChange` append-only audit log at every status transition (chokepoint in `app/utils/booking_status.py`). `NotificationBatch` + `summarise()` for grouped bulk notifications. Caps: DB=100, page=50, bell=5. `batch_id` correlates rows from one bulk action. PRs #114–121. |
 | 47 | P2 | L | ✅ | **Admin activity feed** | `/admin/activity` rebuilt from `BookingStatusChange` log — slot moves, booking-reset events, bulk-action clustering. Collapsible batch groups. PR #118 (Session 4). |
-| 48 | P3 | L | ✅ | **Web Push / PWA push notifications** | VAPID-signed push via `pywebpush`. iOS PWA service worker (`app/static/js/sw.js`). `PushSubscription` model stores endpoints per user/device. Bell notification triggers push on unread. |
+| 48 | P3 | L | ✅ | **Web Push / PWA push notifications** | VAPID-signed push via `pywebpush`. iOS PWA service worker (`app/static/js/sw.js`). `PushSubscription` model stores endpoints per user/device. Bell notification triggers push on unread. Home-screen badge reconciled to server truth on every page load + `visibilitychange` (PRs #128/#129). SSE uses Redis pub/sub when `REDIS_URL` is set so cross-worker events don't drop. |
 
 ## Infrastructure & Quality
 
@@ -86,7 +86,7 @@
 | 51 | P1 | M | ✅ | **Security hardening** | CSRF, rate limiting, CSP headers, secure cookies, UUID file uploads, session hardening. |
 | 52 | P1 | S | ✅ | **DB indexes** | Indexes on date, walker_id, user_id, dog_id, status for query performance. |
 | 53 | P1 | M | ✅ | **Git branching** | `develop` for ongoing work, `main` for production. PRs required to merge to main. |
-| 54 | P1 | L | ✅ | **Unit test suite** | 295 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing, activity feed, broadcasts, closures, walker schedule, bulk-cancel. All passing on Postgres CI. |
+| 54 | P1 | L | ✅ | **Unit test suite** | 337 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing, activity feed, broadcasts, closures, walker schedule, bulk-cancel, SSE transport. All passing on Postgres CI. |
 | 55 | P2 | M | ✅ | **Password reset flow** | Email-based token reset via Resend. noreply@dogboxx.org verified. RESEND_API_KEY + APP_BASE_URL needed in prod env. |
 | 56 | P3 | S | ✅ | **CI/CD pipeline** | GitHub Actions (test.yml): runs pytest on push to main/develop and all PRs. All runs green. |
 | 57 | P3 | M | ✅ | **PWA service worker** | iOS home-screen install + Android PWA support. Pre-cached assets, pull-to-refresh (shared IIFE in both layouts), standalone-mode detection (`navigator.standalone \|\| display-mode:standalone`). |
