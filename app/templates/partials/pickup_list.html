@@ -28,9 +28,6 @@
                                  class="rounded-circle" width="64" height="64" style="object-fit:cover;"
                                  alt="{{ b.dog.name if b.dog else 'Dog' }}"
                                  onerror="this.onerror=null; this.src='/static/uploads/dogs/default-dog.png'">
-                            <span class="position-absolute bottom-0 end-0 rounded-circle d-flex align-items-center justify-content-center pickup-order-badge">
-                                {{ b.pickup_order if b.pickup_order else '—' }}
-                            </span>
                         </div>
                         {% if client and client.maps_url %}
                         <a href="{{ client.maps_url }}" target="_blank" rel="noopener"

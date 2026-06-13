@@ -499,17 +499,6 @@ footer {
 .slot-dot-drop-in       { background: #7c3aed; }
 
 /* ── Walker: pickup order badge ────────────────────────────── */
-.pickup-order-badge {
-  width: 22px;
-  height: 22px;
-  font-size: 0.68rem;
-  font-weight: 800;
-  background: #E02FAC;
-  color: #fff;
-  border: 2px solid #fff;
-  box-shadow: 0 1px 4px rgba(224,47,172,0.35);
-}
-
 /* ── Walker: date summary bar ──────────────────────────────── */
 .date-summary-bar {
   display: flex;
