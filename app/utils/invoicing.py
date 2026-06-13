@@ -17,6 +17,32 @@ def _cancellation_notice_days(booking):
         return 5
 
 
+def is_late_cancellation(booking, ref_date):
+    """True if cancelling `booking` on `ref_date` falls inside its notice window.
+
+    Used by admin cancel routes to decide whether to surface the late-fee
+    checkbox; mirrors the day-count the invoice uses (`cancelled_at.date()`).
+    """
+    return (booking.date - ref_date).days < _cancellation_notice_days(booking)
+
+
+def is_billable_cancellation(booking):
+    """Whether a cancelled booking should appear on the invoice.
+
+    Explicit admin choice (`bill_cancellation` True/False) always wins. Otherwise
+    fall back to the legacy default policy — bill iff the client cancelled inside
+    the notice window. Keeping the default branch unchanged means already-issued
+    invoices (legacy rows where bill_cancellation is NULL) never shift.
+    """
+    if booking.status != 'cancelled' or booking.cancelled_at is None:
+        return False
+    if booking.bill_cancellation is not None:
+        return booking.bill_cancellation
+    return (booking.cancelled_by != 'admin'
+            and (booking.date - booking.cancelled_at.date()).days
+                < _cancellation_notice_days(booking))
+
+
 def invoice_for_client(user_id, month_start, month_end, all_configs):
     """Return invoice data dict for a single client in the given month.
 
@@ -59,15 +85,11 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
     )
 
     confirmed = [b for b in bookings if b.status in ('confirmed', 'completed')]
-    # Admin-cancelled bookings (including those auto-cancelled by a closure) are
-    # never billed — the short-notice policy only applies to client cancellations.
-    late_cancels = [
-        b for b in bookings
-        if b.status == 'cancelled'
-        and b.cancelled_at is not None
-        and b.cancelled_by != 'admin'
-        and (b.date - b.cancelled_at.date()).days < _cancellation_notice_days(b)
-    ]
+    # A cancelled booking is billed when is_billable_cancellation() says so:
+    # an explicit admin bill/waive choice wins, otherwise the legacy default
+    # (client-initiated late cancels only — closures and admin cancels stay free
+    # unless the admin opted to bill at cancel time).
+    late_cancels = [b for b in bookings if is_billable_cancellation(b)]
     all_billable = confirmed + late_cancels
 
     def is_drop_in(b):

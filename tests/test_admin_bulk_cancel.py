@@ -261,3 +261,49 @@ class TestBulkCancelWalkerNotification:
         assert n.notification_type == 'booking_cancelled'
         # Grouped: "Buddy's 2 walks cancelled (Mon … – Wed …)"
         assert '2 walks cancelled' in n.title
+
+
+class TestBulkCancelLateFeeBilling:
+    """Admin bulk-cancel: bookings inside the notice window bill by default
+    (bill_cancellation=True) unless waived; bookings outside it stay None."""
+
+    def test_late_bookings_bill_by_default(self, client_user, dog, service_type,
+                                           admin_user, logged_in_admin):
+        # Both dates within the 5-day notice window → late.
+        d1 = datetime.date.today() + datetime.timedelta(days=1)
+        d2 = datetime.date.today() + datetime.timedelta(days=2)
+        ids = _seed_bookings(client_user, dog, service_type, [d1, d2])
+        resp = logged_in_admin.post(
+            f'/admin/dogs/{dog.id}/bulk-cancel',
+            data=json.dumps({'start': d1.isoformat(), 'end': d2.isoformat()}),
+            content_type='application/json',
+        )
+        assert resp.status_code == 200
+        for bid in ids:
+            assert db.session.get(Booking, bid).bill_cancellation is True
+
+    def test_waive_late_fee_sets_false(self, client_user, dog, service_type,
+                                       admin_user, logged_in_admin):
+        d1 = datetime.date.today() + datetime.timedelta(days=1)
+        ids = _seed_bookings(client_user, dog, service_type, [d1])
+        resp = logged_in_admin.post(
+            f'/admin/dogs/{dog.id}/bulk-cancel',
+            data=json.dumps({'start': d1.isoformat(), 'end': d1.isoformat(),
+                             'waive_late_fee': True}),
+            content_type='application/json',
+        )
+        assert resp.status_code == 200
+        assert db.session.get(Booking, ids[0]).bill_cancellation is False
+
+    def test_non_late_bookings_left_none(self, client_user, dog, service_type,
+                                         admin_user, logged_in_admin):
+        # Outside the 5-day window → not late → no explicit billing flag.
+        far = datetime.date.today() + datetime.timedelta(days=20)
+        ids = _seed_bookings(client_user, dog, service_type, [far])
+        resp = logged_in_admin.post(
+            f'/admin/dogs/{dog.id}/bulk-cancel',
+            data=json.dumps({'start': far.isoformat(), 'end': far.isoformat()}),
+            content_type='application/json',
+        )
+        assert resp.status_code == 200
+        assert db.session.get(Booking, ids[0]).bill_cancellation is None
