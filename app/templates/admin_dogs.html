@@ -406,17 +406,22 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <div class="row g-2 align-items-end mb-3">
+                <div class="row g-2 align-items-end mb-2">
                     <div class="col-auto">
                         <label class="form-label small fw-semibold mb-1">From</label>
                         <input type="date" class="form-control form-control-sm" id="db-from-date">
                     </div>
                     <div class="col-auto">
-                        <button type="button" class="btn btn-sm btn-outline-primary" id="db-filter-btn">
-                            <i class="bi bi-funnel me-1"></i>Filter
-                        </button>
+                        <label class="form-label small fw-semibold mb-1">Service</label>
+                        <select class="form-select form-select-sm" id="db-service">
+                            <option value="all">All</option>
+                            <option value="group-walk">Walk</option>
+                            <option value="drop-in">Drop-in</option>
+                        </select>
                     </div>
                 </div>
+                <!-- Active-filter pills (rendered from JS) -->
+                <div id="db-pills" class="d-flex flex-wrap gap-2 mb-3" style="display:none;"></div>
                 <div id="db-loading" class="text-center py-3" style="display:none;">
                     <span class="spinner-border spinner-border-sm me-2"></span>Loading…
                 </div>
@@ -996,7 +1001,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const dbModal      = new bootstrap.Modal(document.getElementById('dogBookingsModal'));
     const dbDogName    = document.getElementById('db-dog-name');
     const dbFromDate   = document.getElementById('db-from-date');
-    const dbFilterBtn  = document.getElementById('db-filter-btn');
+    const dbService    = document.getElementById('db-service');
+    const dbPills      = document.getElementById('db-pills');
     const dbLoading    = document.getElementById('db-loading');
     const dbResults    = document.getElementById('db-results');
     const dbPagination = document.getElementById('db-pagination');
@@ -1014,15 +1020,71 @@ document.addEventListener('DOMContentLoaded', function () {
         modified:   'bg-info text-dark',
     };
 
+    // Service shown as an icon: walk = person-walking, drop-in = house-door.
+    // Default (grey) colour — it sits next to the walker name and only denotes
+    // service type, so colour would convey no extra meaning. Title gives the
+    // full name for hover/accessibility; unknown services fall back to text.
+    function serviceIcon(slug, name) {
+        if (slug === 'group-walk') return `<i class="bi bi-person-walking fs-6" title="Walk"></i>`;
+        if (slug === 'drop-in')    return `<i class="bi bi-house-door fs-6" title="Drop-in"></i>`;
+        return `<span class="text-muted small">${name || ''}</span>`;
+    }
+
+    // Service slug → short label + pill icon for the active-filter pill.
+    const DB_SERVICE_LABEL = { 'group-walk': 'Walk', 'drop-in': 'Drop-in' };
+    const DB_SERVICE_ICON  = {
+        'group-walk': '<i class="bi bi-person-walking"></i>',
+        'drop-in':    '<i class="bi bi-house-door"></i>',
+    };
+
+    // A brand-pink filter pill — mirrors the client-facing date pill styling.
+    function dbPill(iconHtml, label, clearKey) {
+        return `<span class="d-inline-flex align-items-center gap-2 px-3 py-2 fw-semibold"`
+            + ` style="background:#fce8f6;color:#E02FAC;border-radius:2rem;font-size:0.82rem;">`
+            + iconHtml
+            + `<span>${label}</span>`
+            + `<button type="button" class="btn p-0 border-0 lh-1 ms-1" data-clear="${clearKey}"`
+            + ` style="background:none;color:#E02FAC;" aria-label="Clear filter">`
+            + `<i class="bi bi-x-lg" style="font-size:0.75rem;"></i></button>`
+            + `</span>`;
+    }
+
+    // Rebuild the active-filter pill row from the current control values.
+    // Each pill's ✕ carries a data-clear hook handled by delegation below.
+    function dbRenderPills() {
+        const pills = [];
+        if (dbFromDate.value) {
+            pills.push(dbPill('<i class="bi bi-calendar3"></i>',
+                              `From ${formatBcDate(dbFromDate.value)}`, 'date'));
+        }
+        if (dbService.value !== 'all') {
+            pills.push(dbPill(DB_SERVICE_ICON[dbService.value] || '',
+                              DB_SERVICE_LABEL[dbService.value] || dbService.value, 'service'));
+        }
+        dbPills.innerHTML = pills.join('');
+        dbPills.style.display = pills.length ? 'flex' : 'none';
+    }
+
     function dbLoad(page) {
         dbCurrentPage = page;
-        const fromVal = dbFromDate.value;
         const params  = new URLSearchParams({ page });
-        if (fromVal) params.set('from', fromVal);
+        if (dbFromDate.value) params.set('from', dbFromDate.value);
+        if (dbService.value !== 'all') params.set('service', dbService.value);
+        dbRenderPills();
 
-        dbLoading.style.display = '';
-        dbResults.innerHTML     = '';
-        dbPagination.style.display = 'none';
+        // First load shows the spinner; subsequent filter/page loads keep the
+        // existing table mounted and just dim it, so the modal height stays
+        // stable (a centered modal re-centres on height change — that jump is
+        // what read as a jarring refresh).
+        const firstLoad = !dbResults.querySelector('table');
+        if (firstLoad) {
+            dbLoading.style.display = '';
+            dbResults.innerHTML = '';
+            dbPagination.style.display = 'none';
+        } else {
+            dbResults.style.opacity = '0.4';
+            dbResults.style.pointerEvents = 'none';
+        }
 
         fetch(`/admin/dogs/${dbActiveDogId}/upcoming-bookings?${params}`, {
             headers: { 'X-CSRFToken': getCsrf() },
@@ -1030,6 +1092,9 @@ document.addEventListener('DOMContentLoaded', function () {
         .then(r => r.json())
         .then(data => {
             dbLoading.style.display = 'none';
+            dbResults.style.opacity = '';
+            dbResults.style.pointerEvents = '';
+            dbPagination.style.display = 'none';
             if (!data.success) {
                 dbResults.innerHTML = `<div class="alert alert-danger py-2">${data.message || 'Error loading bookings'}</div>`;
                 return;
@@ -1039,16 +1104,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
             let html = '<table class="table table-sm mb-0"><thead class="table-light"><tr>'
-                     + '<th>Date</th><th>Slot</th><th>Status</th><th>Service</th><th>Walker</th>'
+                     + '<th>Date</th><th>Slot</th><th>Status</th><th>Service</th>'
                      + '</tr></thead><tbody>';
             data.bookings.forEach(b => {
-                const badgeCls = STATUS_BADGE[b.status] || 'bg-secondary';
+                const badgeCls   = STATUS_BADGE[b.status] || 'bg-secondary';
+                const statusInit = b.status.charAt(0).toUpperCase();
                 html += `<tr>
                     <td class="align-middle">${b.date}</td>
                     <td class="align-middle">${b.slot}</td>
-                    <td class="align-middle"><span class="badge ${badgeCls}">${b.status}</span></td>
-                    <td class="align-middle text-muted small">${b.service}</td>
-                    <td class="align-middle text-muted small">${b.walker || '—'}</td>
+                    <td class="align-middle"><span class="badge ${badgeCls}" title="${b.status}">${statusInit}</span></td>
+                    <td class="align-middle text-muted small">${serviceIcon(b.service_slug, b.service)} ${b.walker || '—'}</td>
                 </tr>`;
             });
             html += '</tbody></table>';
@@ -1063,6 +1128,9 @@ document.addEventListener('DOMContentLoaded', function () {
         })
         .catch(() => {
             dbLoading.style.display = 'none';
+            dbResults.style.opacity = '';
+            dbResults.style.pointerEvents = '';
+            dbPagination.style.display = 'none';
             dbResults.innerHTML = '<div class="alert alert-danger py-2">Network error — please try again.</div>';
         });
     }
@@ -1071,8 +1139,10 @@ document.addEventListener('DOMContentLoaded', function () {
         btn.addEventListener('click', function () {
             dbActiveDogId = this.dataset.dogId;
             dbDogName.textContent = this.dataset.dogName;
-            const today = new Date().toISOString().slice(0, 10);
-            dbFromDate.value = today;
+            // Open unfiltered — empty date (server defaults to today = all
+            // upcoming) and All services. Pills appear only once narrowed.
+            dbFromDate.value = '';
+            dbService.value  = 'all';
             dbResults.innerHTML = '';
             dbPagination.style.display = 'none';
             dbModal.show();
@@ -1080,10 +1150,20 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    dbFilterBtn.addEventListener('click', () => dbLoad(1));
-    dbFromDate.addEventListener('keydown', e => { if (e.key === 'Enter') dbLoad(1); });
+    // Filter immediately on change — no explicit Filter button.
+    dbFromDate.addEventListener('change', () => dbLoad(1));
+    dbService.addEventListener('change', () => dbLoad(1));
     dbPrevBtn.addEventListener('click', () => dbLoad(dbCurrentPage - 1));
     dbNextBtn.addEventListener('click', () => dbLoad(dbCurrentPage + 1));
+
+    // Clear a single filter via its pill ✕ (event delegation).
+    dbPills.addEventListener('click', e => {
+        const x = e.target.closest('[data-clear]');
+        if (!x) return;
+        if (x.dataset.clear === 'date')    dbFromDate.value = '';
+        if (x.dataset.clear === 'service') dbService.value  = 'all';
+        dbLoad(1);
+    });
 
     // ── Bulk cancel modal ───────────────────────────────────────────────────
     const bcModal       = new bootstrap.Modal(document.getElementById('bulkCancelModal'));
@@ -1181,7 +1261,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 bcPreviewRes.innerHTML = '<p class="text-muted small mb-0">No active bookings found in that date range.</p>';
                 return;
             }
-            let html = `<p class="fw-semibold mb-2 text-danger"><i class="bi bi-exclamation-triangle me-1"></i>${data.count} walk${data.count !== 1 ? 's' : ''} will be cancelled:</p>`;
+            // The payload is capped server-side; if more walks are in scope than
+            // we received, flag that this is a preview of the first N shown.
+            const previewNote = data.count > data.bookings.length
+                ? `, here is a preview of the first ${data.bookings.length}`
+                : '';
+            let html = `<p class="fw-semibold mb-2 text-danger"><i class="bi bi-exclamation-triangle me-1"></i>${data.count} walk${data.count !== 1 ? 's' : ''} will be cancelled${previewNote}:</p>`;
             html += '<table class="table table-sm mb-0"><thead class="table-light"><tr>'
                   + '<th>Date</th><th>Slot</th><th>Status</th></tr></thead><tbody>';
             data.bookings.forEach(b => {

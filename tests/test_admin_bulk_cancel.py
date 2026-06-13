@@ -124,6 +124,22 @@ class TestCancelPreviewDayFilter:
         assert data['count'] == 1
         assert data['bookings'][0]['slot'] == 'Morning'
 
+    def test_preview_caps_serialised_list_at_ten(self, client_user, dog, service_type,
+                                                 logged_in_admin):
+        """count is the true total; the bookings list is capped at 10."""
+        start_date = datetime.date.today() + datetime.timedelta(days=1)
+        dates = [start_date + datetime.timedelta(days=i) for i in range(12)]
+        _seed_bookings(client_user, dog, service_type, dates)
+
+        resp = logged_in_admin.get(
+            f'/admin/dogs/{dog.id}/cancel-preview'
+            f'?start={dates[0].isoformat()}&end={dates[-1].isoformat()}'
+        )
+        data = resp.get_json()
+        assert resp.status_code == 200, data
+        assert data['count'] == 12          # true total, uncapped
+        assert len(data['bookings']) == 10  # serialised list capped
+
 
 class TestBulkCancelDayFilter:
     """POST /admin/dogs/<id>/bulk-cancel with the day filter."""

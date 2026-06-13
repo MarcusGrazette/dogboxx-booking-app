@@ -62,6 +62,12 @@ class Config:
     RATELIMIT_STRATEGY = "fixed-window"  # Options: fixed-window, moving-window
     RATELIMIT_HEADERS_ENABLED = True     # Add headers to responses
 
+    # SSE cross-worker transport (app/sse.py). When set, notification events
+    # are routed through Redis pub/sub so they reach SSE connections held by
+    # *other* gunicorn workers. Unset → in-memory fan-out (single process
+    # only — fine for flask run, silently lossy under --workers > 1).
+    SSE_REDIS_URL = os.environ.get('REDIS_URL')
+
 
 class DevelopmentConfig(Config):
     """Development configuration."""
@@ -115,6 +121,7 @@ class TestingConfig(Config):
         )
     WTF_CSRF_ENABLED = False
     RATELIMIT_ENABLED = False
+    SSE_REDIS_URL = None  # tests always use the in-memory SSE fan-out
 
     # No HTTPS enforcement in testing
     SESSION_COOKIE_SECURE = False

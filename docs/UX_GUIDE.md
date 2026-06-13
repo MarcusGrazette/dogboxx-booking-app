@@ -69,6 +69,24 @@ need a refresh (e.g. `/admin/dogs` book/cancel) omit it.
 | Pausing walks (**client**) | **Pause** + `bi-pause-circle-fill` icon | Same underlying action (bookings are cancelled) but the client's mental model is pausing for a holiday, so client-facing copy uses *pause* throughout (`index.html`, `help.html`). |
 | Brand name | **DogBoxx** | Capital D, capital B. Never "Dogboxx" / "DogBox". |
 
+### Service iconography
+
+When a service type is shown as an icon (compact tables), use the established
+icon pairing — add a `title` with the full name for hover/accessibility:
+
+| Service | Icon |
+|---|---|
+| Walk (`group-walk`) | `bi-person-walking` |
+| Drop-in (`drop-in`) | `bi-house-door` |
+
+**Colour is contextual, not part of the convention.** Colour the icons only
+when the colour itself carries meaning — `admin_invoicing_detail.html` uses
+green (`text-success`) / blue (`text-primary`) as decorative emphasis on its
+own. Where the icon merely labels a row that already carries the meaning
+elsewhere (e.g. the upcoming-bookings table in `admin_dogs.html`, where the
+walker name sits beside it), leave them default grey. Reference:
+`serviceIcon()` in `admin_dogs.html`.
+
 **Rules:**
 - A feature's verb must be consistent across its title, buttons, preview text,
   and success summary. Mixed wording (a "Pause" title with a "Cancel" button) is
@@ -81,7 +99,31 @@ need a refresh (e.g. `/admin/dogs` book/cancel) omit it.
 
 ---
 
-## 4. Where the reference patterns live
+## 4. List filters
+
+For filterable lists (modals/tables):
+
+- **Filter immediately on change** — no explicit "Filter"/"Apply" button. Reload
+  on the input's `change` event; changing any filter resets to page 1.
+- **Show active filters as removable pills** — render a pill per active filter
+  (`From {date} ✕`, `Walk ✕`) with an `✕` that clears just that one. The pill row
+  is a render of current control state; hide it when nothing is active. Style:
+  brand pink (`background:#fce8f6; color:#E02FAC; border-radius:2rem`), mirroring
+  the client-facing date pill — see `dbPill()` in `admin_dogs.html`.
+- **Don't tear the list down on reload** — keep the existing rows mounted and
+  dim them (`opacity:0.4`) while the next page/filter loads; only show the full
+  spinner on the first load. Blanking to a spinner collapses the body, and a
+  `modal-dialog-centered` modal then re-centres on the height change — which
+  reads as a jarring full refresh.
+- **Open unfiltered** — default controls to their cleared state (empty date / All)
+  so the list opens showing everything, and pills appear only once narrowed.
+
+Reference: the upcoming-bookings modal in `admin_dogs.html` (`dbRenderPills`,
+`dbLoad`, and the `[data-clear]` delegation).
+
+---
+
+## 5. Where the reference patterns live
 
 - Stacked success modal — `app/templates/partials/success_modal.html` +
   `app/static/js/success-modal.js` (`showConfirmed`). Consumers: `admin_dogs.html`

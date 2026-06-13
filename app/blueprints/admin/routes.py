@@ -3636,6 +3636,13 @@ def dog_upcoming_bookings(dog_id):
         .order_by(Booking.date, Booking.slot)
     )
 
+    # Optional service-type filter by slug (e.g. 'group-walk' / 'drop-in').
+    service = request.args.get('service', '')
+    if service:
+        st = ServiceType.query.filter_by(slug=service).first()
+        if st:
+            query = query.filter(Booking.service_type_id == st.id)
+
     total = query.count()
     total_pages = max(1, (total + per_page - 1) // per_page)
     page = min(page, total_pages)
@@ -3647,11 +3654,13 @@ def dog_upcoming_bookings(dog_id):
         if b.walker and b.walker.user:
             walker_name = b.walker.user.firstname
         rows.append({
-            'date': b.date.strftime('%-d %b %Y'),
+            # "Thu, 5 Jun" — matches the cancel modal's formatBcDate output.
+            'date': b.date.strftime('%a, %-d %b'),
             'slot': b.slot,
             'status': b.status,
             'walker': walker_name,
             'service': b.service_type.name if b.service_type else '',
+            'service_slug': b.service_type.slug if b.service_type else '',
         })
 
     return jsonify(
@@ -3721,6 +3730,10 @@ def dog_cancel_preview(dog_id):
     if day_filter:
         bookings = [b for b in bookings if b.date.weekday() in day_filter]
 
+    # The preview only needs to confirm the admin picked the right dates/days —
+    # the range can span hundreds of walks, so cap the serialised list at 10.
+    # `count` stays the true total (the UI shows "… preview of the first 10").
+    PREVIEW_CAP = 10
     return jsonify(
         success=True,
         count=len(bookings),
@@ -3728,7 +3741,7 @@ def dog_cancel_preview(dog_id):
             'date': b.date.isoformat(),
             'slot': b.slot,
             'status': b.status,
-        } for b in bookings],
+        } for b in bookings[:PREVIEW_CAP]],
     )
 
 
