@@ -25,15 +25,17 @@ _UNSET = object()
 
 def transition_booking(booking, to_status, *, actor_id, notes=None,
                        walker_id=_UNSET, cancelled_by=_UNSET, batch_id=None,
-                       old_slot=None, new_slot=None):
+                       old_slot=None, new_slot=None, bill_cancellation=_UNSET):
     """Mutate a booking's status and append a BookingStatusChange row.
 
     Sets confirmed_at / cancelled_at as implied by to_status. cancelled_by is
     not derivable from the status alone (it records client vs admin), so pass it
     explicitly on cancel/reject paths that need it. If walker_id is passed,
-    updates it (None to unassign). Pass old_slot/new_slot on slot-override
-    re-confirms so the activity feed can detect moves structurally. Returns the
-    BSC row. Caller still commits.
+    updates it (None to unassign). Pass bill_cancellation (True=bill /
+    False=waive / None=default policy) on admin cancel paths to override the
+    late-cancel billing default — see app/utils/invoicing.py. Pass old_slot/
+    new_slot on slot-override re-confirms so the activity feed can detect moves
+    structurally. Returns the BSC row. Caller still commits.
     """
     from_status = booking.status
     now = datetime.now(timezone.utc)
@@ -45,6 +47,8 @@ def transition_booking(booking, to_status, *, actor_id, notes=None,
         booking.cancelled_at = now
     if cancelled_by is not _UNSET:
         booking.cancelled_by = cancelled_by
+    if bill_cancellation is not _UNSET:
+        booking.bill_cancellation = bill_cancellation
     if walker_id is not _UNSET:
         booking.walker_id = walker_id
 
@@ -81,7 +85,8 @@ def record_booking_created(booking, *, actor_id, batch_id=None):
 
 
 def bulk_transition(bookings, to_status, *, actor_id, notes=None,
-                    walker_id=_UNSET, cancelled_by=_UNSET, batch_id=None):
+                    walker_id=_UNSET, cancelled_by=_UNSET, batch_id=None,
+                    bill_cancellation=_UNSET):
     """Transition many bookings, one BSC row each.
 
     Replaces the raw bulk `.update()` calls so each affected row is logged.
@@ -92,6 +97,7 @@ def bulk_transition(bookings, to_status, *, actor_id, notes=None,
         transition_booking(
             b, to_status, actor_id=actor_id, notes=notes,
             walker_id=walker_id, cancelled_by=cancelled_by, batch_id=batch_id,
+            bill_cancellation=bill_cancellation,
         )
         for b in bookings
     ]

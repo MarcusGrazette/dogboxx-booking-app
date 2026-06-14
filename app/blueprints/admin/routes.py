@@ -18,6 +18,7 @@ from app.utils.db_error_handler import handle_db_errors
 from app.forms import ClientCreateForm, WalkerCreateForm, WalkerScheduleForm
 from app.utils.uploads import process_dog_photo
 from app.utils.invoicing import invoice_for_client as _invoice_for_client
+from app.utils.invoicing import is_late_cancellation
 from datetime import datetime, timezone, timedelta
 from werkzeug.security import generate_password_hash
 import secrets
@@ -3714,6 +3715,7 @@ def dog_cancel_preview(dog_id):
 
     q = (
         Booking.query
+        .options(joinedload(Booking.service_type))
         .filter(
             Booking.dog_id == dog_id,
             Booking.date >= start,
@@ -3730,6 +3732,11 @@ def dog_cancel_preview(dog_id):
     if day_filter:
         bookings = [b for b in bookings if b.date.weekday() in day_filter]
 
+    # How many fall inside the notice window — these bill by default unless the
+    # admin waives. The UI uses late_count to show/hide the late-fee checkbox.
+    today = datetime.now(timezone.utc).date()
+    late_count = sum(1 for b in bookings if is_late_cancellation(b, today))
+
     # The preview only needs to confirm the admin picked the right dates/days —
     # the range can span hundreds of walks, so cap the serialised list at 10.
     # `count` stays the true total (the UI shows "… preview of the first 10").
@@ -3737,10 +3744,12 @@ def dog_cancel_preview(dog_id):
     return jsonify(
         success=True,
         count=len(bookings),
+        late_count=late_count,
         bookings=[{
             'date': b.date.isoformat(),
             'slot': b.slot,
             'status': b.status,
+            'late': is_late_cancellation(b, today),
         } for b in bookings[:PREVIEW_CAP]],
     )
 
@@ -3809,8 +3818,23 @@ def dog_bulk_cancel(dog_id):
 
     # One batch_id ties together every cancellation in this bulk-cancel action
     # so the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
-    bulk_transition(bookings, 'cancelled', actor_id=current_user.id,
-                    walker_id=None, cancelled_by='admin', batch_id=uuid.uuid4().hex)
+    batch_id = uuid.uuid4().hex
+    # Late-cancel billing (admin): bookings inside the notice window bill by
+    # default unless `waive_late_fee` is set; bookings outside the window are
+    # never late so leave bill_cancellation=None. Set the flag only on the late
+    # subset — an explicit True on a non-late row would wrongly bill it.
+    today = datetime.now(timezone.utc).date()
+    waive = bool(data.get('waive_late_fee'))
+    late, not_late = [], []
+    for b in bookings:
+        (late if is_late_cancellation(b, today) else not_late).append(b)
+    if late:
+        bulk_transition(late, 'cancelled', actor_id=current_user.id,
+                        walker_id=None, cancelled_by='admin', batch_id=batch_id,
+                        bill_cancellation=(not waive))
+    if not_late:
+        bulk_transition(not_late, 'cancelled', actor_id=current_user.id,
+                        walker_id=None, cancelled_by='admin', batch_id=batch_id)
 
     # Notify dog owners (excluding admins) and assigned walkers (§7.4) —
     # one grouped notice each.

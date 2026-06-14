@@ -220,7 +220,7 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
                 <button type="button" class="btn btn-primary" id="modal-submit-btn">
-                    <i class="bi bi-check-lg me-1"></i>Request booking
+                    <i class="bi bi-calendar-plus me-1"></i>Book
                 </button>
             </div>
         </div>
@@ -445,7 +445,7 @@
 
 <!-- ─── Bulk Cancel Modal ─────────────────────────────────────────────────── -->
 <div class="modal fade" id="bulkCancelModal" tabindex="-1" aria-labelledby="bulkCancelModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="bulkCancelModalLabel">
@@ -455,16 +455,12 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <div class="row g-3 mb-3">
-                    <div class="col-6">
-                        <label class="form-label small fw-semibold">Start date</label>
-                        <input type="date" class="form-control form-control-sm" id="bc-start">
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label small fw-semibold">End date</label>
-                        <input type="date" class="form-control form-control-sm" id="bc-end">
-                    </div>
+                <!-- Date (one-off by default; becomes the start date when recurring) -->
+                <div class="mb-3" id="bc-date-group">
+                    <label class="form-label small fw-semibold" id="bc-date-label">Date</label>
+                    <input type="date" class="form-control form-control-sm" id="bc-start">
                 </div>
+
                 <label class="form-label small fw-semibold mb-1 d-block">Select a slot to cancel</label>
                 <div class="btn-group btn-group-sm w-100 mb-3" role="group" aria-label="Slots to cancel">
                     <input type="radio" class="btn-check" name="bc-slot" id="bc-slot-morning" value="Morning" autocomplete="off">
@@ -480,15 +476,30 @@
                         <i class="bi bi-layers-fill me-1"></i>Both
                     </label>
                 </div>
-                <label class="form-label small fw-semibold mb-1 d-block">Cancel walks on the ticked days</label>
-                <div class="d-flex gap-3 mb-3">
-                    {% for n, lbl in [(0,'Mon'),(1,'Tue'),(2,'Wed'),(3,'Thu'),(4,'Fri')] %}
-                    <div class="form-check">
-                        <input class="form-check-input bc-day" type="checkbox" id="bc-day-{{ n }}" value="{{ n }}" checked>
-                        <label class="form-check-label" for="bc-day-{{ n }}">{{ lbl }}</label>
-                    </div>
-                    {% endfor %}
+
+                <!-- Recurring toggle (mirrors the book modal) -->
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="bc-recur-toggle">
+                    <label class="form-check-label small fw-semibold" for="bc-recur-toggle">
+                        Recurring cancellation
+                    </label>
                 </div>
+
+                <!-- Recurring panel: end date + day checkboxes -->
+                <div id="bc-recurring-panel" class="mb-3" style="display:none;">
+                    <label class="form-label small fw-semibold">End date</label>
+                    <input type="date" class="form-control form-control-sm mb-3" id="bc-end">
+                    <label class="form-label small fw-semibold mb-1 d-block">Cancel walks on the ticked days</label>
+                    <div class="d-flex gap-3">
+                        {% for n, lbl in [(0,'Mon'),(1,'Tue'),(2,'Wed'),(3,'Thu'),(4,'Fri')] %}
+                        <div class="form-check">
+                            <input class="form-check-input bc-day" type="checkbox" id="bc-day-{{ n }}" value="{{ n }}" checked>
+                            <label class="form-check-label" for="bc-day-{{ n }}">{{ lbl }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
                 <button type="button" class="btn btn-sm btn-outline-secondary" id="bc-preview-btn">
                     <i class="bi bi-eye me-1"></i>Preview affected walks
                 </button>
@@ -496,6 +507,14 @@
                     <span class="spinner-border spinner-border-sm me-2"></span>Loading…
                 </div>
                 <div id="bc-preview-results" class="mt-3"></div>
+                <div id="bc-billing-section" class="alert alert-warning py-2 mt-3 mb-0" style="display:none;">
+                    <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox" id="bc-waive-fee">
+                        <label class="form-check-label small" for="bc-waive-fee">
+                            <span id="bc-billing-text"></span>
+                        </label>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
@@ -557,14 +576,14 @@ document.addEventListener('DOMContentLoaded', function () {
             recurPanel.style.display   = 'none';
             singleGroup.style.display     = 'block';
             singleSlotGroup.style.display = 'block';
-            submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request booking';
+            submitBtn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i>Book';
         } else {
             slotBothOpt.hidden   = false;
             slotBothOpt.disabled = false;
             recurRow.style.display = '';
             submitBtn.innerHTML = recurToggle.checked
                 ? '<i class="bi bi-check-lg me-1"></i>Request recurring walks'
-                : '<i class="bi bi-check-lg me-1"></i>Request booking';
+                : '<i class="bi bi-calendar-plus me-1"></i>Book';
         }
     }
     serviceSel.addEventListener('change', syncServiceUI);
@@ -603,7 +622,7 @@ document.addEventListener('DOMContentLoaded', function () {
             recurCount.style.display = 'none';
             resultDiv.style.display = 'none';
             submitBtn.disabled = false;
-            submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request booking';
+            submitBtn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i>Book';
             syncServiceUI();
 
             modal.show();
@@ -623,7 +642,7 @@ document.addEventListener('DOMContentLoaded', function () {
             singleSlotGroup.style.display = 'block';
             recurPanel.style.display      = 'none';
             recurCount.style.display      = 'none';
-            submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request booking';
+            submitBtn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i>Book';
         }
     });
 
@@ -700,7 +719,7 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(r => r.json())
             .then(data => {
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request booking';
+                submitBtn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i>Book';
                 if (data.success) {
                     const serviceLabel = serviceSel.options[serviceSel.selectedIndex].text;
                     const slotLabel = slot === 'Both' ? 'AM + PM' : slot;
@@ -713,7 +732,7 @@ document.addEventListener('DOMContentLoaded', function () {
             .catch(() => {
                 showResult('danger', 'Network error — please try again.');
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request booking';
+                submitBtn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i>Book';
             });
 
         } else {
@@ -1175,9 +1194,57 @@ document.addEventListener('DOMContentLoaded', function () {
     const bcPreviewRes  = document.getElementById('bc-preview-results');
     const bcConfirmBtn  = document.getElementById('bc-confirm-btn');
     let   bcConfirmLbl  = document.getElementById('bc-confirm-label');
+    const bcBilling     = document.getElementById('bc-billing-section');
+    const bcBillingText = document.getElementById('bc-billing-text');
+    const bcWaiveFee    = document.getElementById('bc-waive-fee');
+    const bcRecurToggle = document.getElementById('bc-recur-toggle');
+    const bcRecurPanel  = document.getElementById('bc-recurring-panel');
+    const bcDateLabel   = document.getElementById('bc-date-label');
 
     let bcActiveDogId   = null;
     let bcPreviewCount  = 0;
+
+    // Recurring off → cancel a single walk on bc-start (end = start, no day
+    // filter). Recurring on → range from bc-start to bc-end on the ticked days.
+    // Mirrors the book modal's one-off vs recurring split.
+    function bcIsRecurring() { return bcRecurToggle.checked; }
+    function bcEffectiveRange() {
+        if (bcIsRecurring()) {
+            return { start: bcStart.value, end: bcEnd.value, days: bcSelectedDays() };
+        }
+        return { start: bcStart.value, end: bcStart.value, days: [] };
+    }
+
+    // Show/hide the end-date + day checkboxes and relabel the date field so the
+    // single date reads as the range start when recurring.
+    function bcSyncRecurUI() {
+        const on = bcIsRecurring();
+        bcRecurPanel.style.display = on ? '' : 'none';
+        bcDateLabel.textContent = on ? 'Start date' : 'Date';
+    }
+    bcRecurToggle.addEventListener('change', function () {
+        bcSyncRecurUI();
+        // Switching to recurring with a date already chosen: seed the end date
+        // (start + 1 year) so the range is valid without an extra click.
+        if (bcIsRecurring() && bcStart.value && !bcEnd.value) {
+            const d = new Date(bcStart.value + 'T00:00:00');
+            d.setFullYear(d.getFullYear() + 1);
+            bcEnd.value = d.toISOString().slice(0, 10);
+            bcEnd.min   = bcStart.value;
+        }
+        // A range/day change invalidates a prior preview — force a re-preview.
+        bcConfirmBtn.disabled = true;
+        bcPreviewRes.innerHTML = '';
+        resetBcBilling();
+    });
+
+    // Hide + reset the late-fee notice. Called when (re)opening the modal and
+    // whenever a fresh preview is requested so a stale late-count can't leak
+    // into the next cancel.
+    function resetBcBilling() {
+        bcBilling.style.display = 'none';
+        bcWaiveFee.checked = false;
+    }
 
     // Restore the confirm button to its idle markup and re-acquire the label
     // node. Setting innerHTML (for the "Cancelling…" spinner) destroys the
@@ -1209,17 +1276,21 @@ document.addEventListener('DOMContentLoaded', function () {
             bcEnd.value   = '';
             document.getElementById('bc-slot-both').checked = true;
             document.querySelectorAll('.bc-day').forEach(el => { el.checked = true; });
+            bcRecurToggle.checked = false;
+            bcSyncRecurUI();
             bcPreviewRes.innerHTML = '';
             resetBcConfirmBtn();
+            resetBcBilling();
             bcConfirmBtn.disabled = true;   // always visible, enabled only after a preview
             bcPreviewCount = 0;
             bcModal.show();
         });
     });
 
-    // Auto-fill end date to start + 1 year (mirrors the booking modal).
+    // When recurring, auto-fill end date to start + 1 year (mirrors the booking
+    // modal). In one-off mode there is no end field to fill.
     bcStart.addEventListener('change', function () {
-        if (!this.value) return;
+        if (!this.value || !bcIsRecurring()) return;
         const d = new Date(this.value + 'T00:00:00');
         d.setFullYear(d.getFullYear() + 1);
         bcEnd.value = d.toISOString().slice(0, 10);
@@ -1235,16 +1306,22 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     bcPreviewBtn.addEventListener('click', function () {
-        if (!bcStart.value || !bcEnd.value) {
-            bcPreviewRes.innerHTML = '<div class="alert alert-warning py-2">Please enter both a start and end date.</div>';
+        if (!bcStart.value) {
+            bcPreviewRes.innerHTML = '<div class="alert alert-warning py-2">Please pick a date.</div>';
             return;
         }
-        const params = new URLSearchParams({ start: bcStart.value, end: bcEnd.value });
+        if (bcIsRecurring() && !bcEnd.value) {
+            bcPreviewRes.innerHTML = '<div class="alert alert-warning py-2">Please enter an end date.</div>';
+            return;
+        }
+        const range  = bcEffectiveRange();
+        const params = new URLSearchParams({ start: range.start, end: range.end });
         bcSelectedSlots().forEach(s => params.append('slots', s));
-        bcSelectedDays().forEach(d => params.append('days', d));
+        range.days.forEach(d => params.append('days', d));
         bcLoading.style.display = '';
         bcPreviewRes.innerHTML  = '';
         bcConfirmBtn.disabled = true;
+        resetBcBilling();
 
         fetch(`/admin/dogs/${bcActiveDogId}/cancel-preview?${params}`, {
             headers: { 'X-CSRFToken': getCsrf() },
@@ -1281,6 +1358,16 @@ document.addEventListener('DOMContentLoaded', function () {
             bcPreviewRes.innerHTML = html;
             bcConfirmLbl.textContent = `Cancel ${data.count} walk${data.count !== 1 ? 's' : ''}`;
             bcConfirmBtn.disabled = false;
+
+            // Late-cancel billing: walks inside the notice window bill the client
+            // by default. Offer a waive checkbox only when some are late.
+            if (data.late_count > 0) {
+                const n = data.late_count;
+                bcBillingText.textContent =
+                    `${n} of these ${n === 1 ? 'is' : 'are'} within the late-cancellation window `
+                    + `and will be billed. Tick to waive the late fee for ${n === 1 ? 'it' : 'them'}.`;
+                bcBilling.style.display = '';
+            }
         })
         .catch(() => {
             bcLoading.style.display = 'none';
@@ -1289,18 +1376,21 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     bcConfirmBtn.addEventListener('click', function () {
-        if (!bcActiveDogId || !bcStart.value || !bcEnd.value) return;
+        if (!bcActiveDogId || !bcStart.value) return;
+        if (bcIsRecurring() && !bcEnd.value) return;
         bcConfirmBtn.disabled = true;
         bcConfirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Cancelling…';
 
+        const range = bcEffectiveRange();
         fetch(`/admin/dogs/${bcActiveDogId}/bulk-cancel`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
             body: JSON.stringify({
-                start: bcStart.value,
-                end: bcEnd.value,
+                start: range.start,
+                end: range.end,
                 slots: bcSelectedSlots(),
-                days: bcSelectedDays(),
+                days: range.days,
+                waive_late_fee: bcWaiveFee.checked,
             }),
         })
         .then(r => r.json())

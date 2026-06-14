@@ -58,6 +58,16 @@ need a refresh (e.g. `/admin/dogs` book/cancel) omit it.
   markup (and re-acquire the reference) on modal-open and on error. See
   `resetBcConfirmBtn()` in `admin_dogs.html`.
 
+### Modal width
+
+- **Keep modal widths consistent.** Use the default Bootstrap `.modal-dialog`
+  width (no `modal-sm`/`modal-lg`/`modal-xl` size modifier) — i.e. the width of
+  the **book** modal (`#bookingModal` in `admin_dogs.html`). Sibling modals that
+  the user moves between (book ↔ cancel on `/admin/dogs`) looked mismatched when
+  one was `modal-lg`; aligning them on the book modal's width removed the jump.
+- Only deviate when content genuinely demands it (e.g. a wide table), and prefer
+  scrolling/responsive content over widening the dialog.
+
 ---
 
 ## 3. Wording
