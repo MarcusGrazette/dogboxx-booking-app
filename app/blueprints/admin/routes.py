@@ -1745,7 +1745,7 @@ def activity_feed():
                 if b.user and atype == 'admin':
                     desc += f" for {b.user.full_name}"
             else:
-                desc = f"Reset {dog}'s {slot} {svc_label} on {walk_date} to pending"
+                desc = f"Reset {dog}'s {slot} {svc_label} on {walk_date} to requested"
             badge, activity_type = 'requested', 'booking'
 
         events.append(_make_event(
