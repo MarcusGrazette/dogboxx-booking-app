@@ -39,7 +39,7 @@
 | 23 | P2 | M | ✅ | **Admin dashboard stats** | Stat cards (pending, clients, dogs, walkers), 4-week booking chart by slot+status, walker availability grid. Revenue on /admin/revenue. |
 | 24 | P3 | L | 🔲 | **Dental cleans service type** | Admin: manage available date+time slots. Client: book from available slots. Nav stub removed — add back when built. Premature `dental_confirmed`/`dental_available` notification types were removed (2026-05-29) — re-add when built. |
 | 25 | P3 | L | ❌ | **Invoicing (standalone)** | Superseded by #26. |
-| 26 | P2 | L | ✅ | **Invoicing view (admin)** | /admin/invoicing: monthly summary per client. /admin/invoicing/<id>: line items + weekly breakdown. Billable cancels (<5 days notice), double-slot discount, drop-in pricing. PricingConfig history. |
+| 26 | P2 | L | ✅ | **Invoicing view (admin)** | /admin/invoicing: monthly summary per client. /admin/invoicing/<id>: line items + weekly breakdown. Billable cancels (<5 days notice), double-slot discount, drop-in pricing. PricingConfig history. Admin late-cancel billing override (PR #134): `Booking.bill_cancellation` (bill/waive/default) — admin cancels inside the notice window bill by default, waivable per-cancellation from the `/admin/dogs` cancel modal. |
 | 27 | P2 | L | ✅ | **Multiple clients per dog** | dog_owners join table with primary/secondary roles. Admin join/revoke modal. Secondary owners can book and view shared dogs. |
 | 29 | P2 | L | ✅ | **Drop-in service type** | Client books AM/PM drop-in visits. Admin drop-in board (assign walkers, confirm/cancel, reorder). Walker pickup list includes drop-ins. Invoicing tracks drop-ins separately at price_per_drop_in. does_drop_ins flag on walkers. |
 | 28 | P3 | M | ✅ | **CSV client/dog import** | Upload CSV matching the create-client form fields. Bulk create client + dog records. Validation with error report on bad rows. No need to handle joined accounts — those are done manually post-import. |
@@ -86,7 +86,7 @@
 | 51 | P1 | M | ✅ | **Security hardening** | CSRF, rate limiting, CSP headers, secure cookies, UUID file uploads, session hardening. |
 | 52 | P1 | S | ✅ | **DB indexes** | Indexes on date, walker_id, user_id, dog_id, status for query performance. |
 | 53 | P1 | M | ✅ | **Git branching** | `develop` for ongoing work, `main` for production. PRs required to merge to main. |
-| 54 | P1 | L | ✅ | **Unit test suite** | 337 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing, activity feed, broadcasts, closures, walker schedule, bulk-cancel, SSE transport. All passing on Postgres CI. |
+| 54 | P1 | L | ✅ | **Unit test suite** | 347 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing, activity feed, broadcasts, closures, walker schedule, bulk-cancel, SSE transport. All passing on Postgres CI. |
 | 55 | P2 | M | ✅ | **Password reset flow** | Email-based token reset via Resend. noreply@dogboxx.org verified. RESEND_API_KEY + APP_BASE_URL needed in prod env. |
 | 56 | P3 | S | ✅ | **CI/CD pipeline** | GitHub Actions (test.yml): runs pytest on push to main/develop and all PRs. All runs green. |
 | 57 | P3 | M | ✅ | **PWA service worker** | iOS home-screen install + Android PWA support. Pre-cached assets, pull-to-refresh (shared IIFE in both layouts), standalone-mode detection (`navigator.standalone \|\| display-mode:standalone`). |
