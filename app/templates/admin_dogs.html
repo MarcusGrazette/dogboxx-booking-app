@@ -450,11 +450,24 @@
             <div class="modal-header">
                 <h5 class="modal-title" id="bulkCancelModalLabel">
                     <i class="bi bi-x-square me-2 text-danger"></i>
-                    Cancel walks for <span id="bc-dog-name"></span>
+                    Cancel <span id="bc-cancel-noun">bookings</span> for <span id="bc-dog-name"></span>
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
+                <!-- Service filter (mirrors the book modal's service select) -->
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Service</label>
+                    <select class="form-select form-select-sm" id="bc-service">
+                        <option value="all" selected>All services</option>
+                        {% for st in service_types %}
+                        {% if st.slug != 'day-care' %}
+                        <option value="{{ st.slug }}">{% if st.slug == 'group-walk' %}Walk{% else %}{{ st.name }}{% endif %}</option>
+                        {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+
                 <!-- Date (one-off by default; becomes the start date when recurring) -->
                 <div class="mb-3" id="bc-date-group">
                     <label class="form-label small fw-semibold" id="bc-date-label">Date</label>
@@ -489,7 +502,7 @@
                 <div id="bc-recurring-panel" class="mb-3" style="display:none;">
                     <label class="form-label small fw-semibold">End date</label>
                     <input type="date" class="form-control form-control-sm mb-3" id="bc-end">
-                    <label class="form-label small fw-semibold mb-1 d-block">Cancel walks on the ticked days</label>
+                    <label class="form-label small fw-semibold mb-1 d-block">Cancel <span id="bc-day-noun">bookings</span> on the ticked days</label>
                     <div class="d-flex gap-3">
                         {% for n, lbl in [(0,'Mon'),(1,'Tue'),(2,'Wed'),(3,'Thu'),(4,'Fri')] %}
                         <div class="form-check">
@@ -501,7 +514,7 @@
                 </div>
 
                 <button type="button" class="btn btn-sm btn-outline-secondary" id="bc-preview-btn">
-                    <i class="bi bi-eye me-1"></i>Preview affected walks
+                    <i class="bi bi-eye me-1"></i>Preview affected <span id="bc-preview-noun">bookings</span>
                 </button>
                 <div id="bc-loading" class="text-center py-3 mt-2" style="display:none;">
                     <span class="spinner-border spinner-border-sm me-2"></span>Loading…
@@ -519,7 +532,7 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
                 <button type="button" class="btn btn-danger fw-semibold" id="bc-confirm-btn" disabled>
-                    <i class="bi bi-x-square me-1"></i><span id="bc-confirm-label">Cancel walks</span>
+                    <i class="bi bi-x-square me-1"></i><span id="bc-confirm-label">Cancel bookings</span>
                 </button>
             </div>
         </div>
@@ -1200,9 +1213,41 @@ document.addEventListener('DOMContentLoaded', function () {
     const bcRecurToggle = document.getElementById('bc-recur-toggle');
     const bcRecurPanel  = document.getElementById('bc-recurring-panel');
     const bcDateLabel   = document.getElementById('bc-date-label');
+    const bcService     = document.getElementById('bc-service');
+    const bcCancelNoun  = document.getElementById('bc-cancel-noun');
+    const bcDayNoun     = document.getElementById('bc-day-noun');
+    const bcPreviewNoun = document.getElementById('bc-preview-noun');
 
     let bcActiveDogId   = null;
     let bcPreviewCount  = 0;
+
+    // Service-aware noun for the title, button, preview and success text.
+    // 'all' (and any future/unknown service) falls back to "booking(s)".
+    function bcNounParts() {
+        if (bcService.value === 'group-walk') return ['walk', 'walks'];
+        if (bcService.value === 'drop-in')    return ['drop-in', 'drop-ins'];
+        return ['booking', 'bookings'];
+    }
+    function bcNoun(count) {
+        const [singular, plural] = bcNounParts();
+        return count === 1 ? singular : plural;
+    }
+
+    // Relabel the title + day-filter noun to match the selected service, and
+    // invalidate any prior preview (the scope changed, so the shown count is
+    // stale until the admin previews again).
+    function bcSyncServiceUI() {
+        const plural = bcNounParts()[1];
+        bcCancelNoun.textContent  = plural;
+        bcDayNoun.textContent     = plural;
+        bcPreviewNoun.textContent = plural;
+        bcConfirmBtn.disabled  = true;
+        bcPreviewRes.innerHTML = '';
+        bcPreviewCount = 0;
+        resetBcBilling();
+        resetBcConfirmBtn();
+    }
+    bcService.addEventListener('change', bcSyncServiceUI);
 
     // Recurring off → cancel a single walk on bc-start (end = start, no day
     // filter). Recurring on → range from bc-start to bc-end on the ticked days.
@@ -1251,7 +1296,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // original #bc-confirm-label span, so the cached reference goes stale —
     // resetting here keeps it valid for the next preview/cancel cycle.
     function resetBcConfirmBtn() {
-        bcConfirmBtn.innerHTML = '<i class="bi bi-x-square me-1"></i><span id="bc-confirm-label">Cancel walks</span>';
+        bcConfirmBtn.innerHTML = '<i class="bi bi-x-square me-1"></i><span id="bc-confirm-label">Cancel ' + bcNounParts()[1] + '</span>';
         bcConfirmLbl = document.getElementById('bc-confirm-label');
     }
 
@@ -1274,15 +1319,13 @@ document.addEventListener('DOMContentLoaded', function () {
             bcDogName.textContent = this.dataset.dogName;
             bcStart.value = '';
             bcEnd.value   = '';
+            bcService.value = 'all';
             document.getElementById('bc-slot-both').checked = true;
             document.querySelectorAll('.bc-day').forEach(el => { el.checked = true; });
             bcRecurToggle.checked = false;
             bcSyncRecurUI();
-            bcPreviewRes.innerHTML = '';
-            resetBcConfirmBtn();
-            resetBcBilling();
+            bcSyncServiceUI();              // sets nouns + clears any prior preview
             bcConfirmBtn.disabled = true;   // always visible, enabled only after a preview
-            bcPreviewCount = 0;
             bcModal.show();
         });
     });
@@ -1318,6 +1361,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const params = new URLSearchParams({ start: range.start, end: range.end });
         bcSelectedSlots().forEach(s => params.append('slots', s));
         range.days.forEach(d => params.append('days', d));
+        params.set('service', bcService.value);
         bcLoading.style.display = '';
         bcPreviewRes.innerHTML  = '';
         bcConfirmBtn.disabled = true;
@@ -1335,15 +1379,15 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             bcPreviewCount = data.count;
             if (data.count === 0) {
-                bcPreviewRes.innerHTML = '<p class="text-muted small mb-0">No active bookings found in that date range.</p>';
+                bcPreviewRes.innerHTML = `<p class="text-muted small mb-0">No active ${bcNounParts()[1]} found in that date range.</p>`;
                 return;
             }
-            // The payload is capped server-side; if more walks are in scope than
-            // we received, flag that this is a preview of the first N shown.
+            // The payload is capped server-side; if more in scope than we
+            // received, flag that this is a preview of the first N shown.
             const previewNote = data.count > data.bookings.length
                 ? `, here is a preview of the first ${data.bookings.length}`
                 : '';
-            let html = `<p class="fw-semibold mb-2 text-danger"><i class="bi bi-exclamation-triangle me-1"></i>${data.count} walk${data.count !== 1 ? 's' : ''} will be cancelled${previewNote}:</p>`;
+            let html = `<p class="fw-semibold mb-2 text-danger"><i class="bi bi-exclamation-triangle me-1"></i>${data.count} ${bcNoun(data.count)} will be cancelled${previewNote}:</p>`;
             html += '<table class="table table-sm mb-0"><thead class="table-light"><tr>'
                   + '<th>Date</th><th>Slot</th><th>Status</th></tr></thead><tbody>';
             data.bookings.forEach(b => {
@@ -1356,7 +1400,7 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             html += '</tbody></table>';
             bcPreviewRes.innerHTML = html;
-            bcConfirmLbl.textContent = `Cancel ${data.count} walk${data.count !== 1 ? 's' : ''}`;
+            bcConfirmLbl.textContent = `Cancel ${data.count} ${bcNoun(data.count)}`;
             bcConfirmBtn.disabled = false;
 
             // Late-cancel billing: walks inside the notice window bill the client
@@ -1390,6 +1434,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 end: range.end,
                 slots: bcSelectedSlots(),
                 days: range.days,
+                service: bcService.value,
                 waive_late_fee: bcWaiveFee.checked,
             }),
         })
@@ -1397,7 +1442,7 @@ document.addEventListener('DOMContentLoaded', function () {
         .then(data => {
             if (data.success) {
                 const n = data.cancelled_count;
-                showConfirmed(`${n} walk${n !== 1 ? 's' : ''} cancelled for ${bcDogName.textContent}.`,
+                showConfirmed(`${n} ${bcNoun(n)} cancelled for ${bcDogName.textContent}.`,
                               bcModal, document.getElementById('bulkCancelModal'));
             } else {
                 bcPreviewRes.innerHTML = `<div class="alert alert-danger py-2">${data.message || 'Something went wrong'}</div>`;

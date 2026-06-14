@@ -3712,6 +3712,8 @@ def dog_cancel_preview(dog_id):
     slot_filter = [s for s in request.args.getlist('slots') if s in ('Morning', 'Afternoon')]
     # Optional day-of-week filter — empty set = no filter (matches slot semantic).
     day_filter = _parse_day_filter(request.args.getlist('days'))
+    # Optional service filter — 'all' (or missing) = every service type.
+    service_filter = request.args.get('service', 'all')
 
     q = (
         Booking.query
@@ -3725,6 +3727,8 @@ def dog_cancel_preview(dog_id):
     )
     if len(slot_filter) == 1:
         q = q.filter(Booking.slot == slot_filter[0])
+    if service_filter and service_filter != 'all':
+        q = q.join(ServiceType).filter(ServiceType.slug == service_filter)
     bookings = q.order_by(Booking.date, Booking.slot).all()
 
     # Filter weekdays in Python — avoids the Postgres DOW-offset gotcha
@@ -3781,6 +3785,10 @@ def dog_bulk_cancel(dog_id):
     slot_filter = [s for s in slots_raw if s in ('Morning', 'Afternoon')]
     # Optional day-of-week filter — empty set = no filter (matches slot semantic).
     day_filter = _parse_day_filter(data.get('days') or [])
+    # Optional service filter — 'all' (or missing) = every service type. Must
+    # match the preview's filter exactly so the count the admin saw is the
+    # count cancelled.
+    service_filter = data.get('service', 'all')
 
     q = (
         Booking.query
@@ -3793,6 +3801,8 @@ def dog_bulk_cancel(dog_id):
     )
     if len(slot_filter) == 1:
         q = q.filter(Booking.slot == slot_filter[0])
+    if service_filter and service_filter != 'all':
+        q = q.join(ServiceType).filter(ServiceType.slug == service_filter)
     bookings = q.order_by(Booking.date).all()
 
     # Filter weekdays in Python (see preview route for rationale).

@@ -17,7 +17,23 @@ import json
 from werkzeug.security import generate_password_hash
 
 from app import db
-from app.models import Booking, BookingStatusChange, Walker, WalkerSchedule, Notification
+from app.models import Booking, BookingStatusChange, Walker, WalkerSchedule, Notification, ServiceType
+
+
+def _make_drop_in_service():
+    """A Drop In ServiceType, committed alongside the flushed fixture graph."""
+    st = ServiceType(
+        name='Drop In',
+        slug='drop-in',
+        capacity_model='facility_capacity',
+        slot_type='morning_afternoon',
+        requires_walker=False,
+        default_max_capacity=10,
+        active=True,
+    )
+    db.session.add(st)
+    db.session.commit()
+    return st
 
 
 def _next_weekday(target_dow, after=None):
@@ -307,3 +323,88 @@ class TestBulkCancelLateFeeBilling:
         )
         assert resp.status_code == 200
         assert db.session.get(Booking, ids[0]).bill_cancellation is None
+
+
+class TestCancelServiceFilter:
+    """The service dropdown narrows the cancel to one service type; 'all' (or a
+    missing param) keeps the prior every-service behaviour."""
+
+    def _seed_walk_and_dropin(self, user, dog, walk_service):
+        """A walk (Morning) and a drop-in (Afternoon) on the same near date.
+        Different slots dodge the partial unique index on (dog, date, slot)."""
+        drop_in = _make_drop_in_service()
+        day = datetime.date.today() + datetime.timedelta(days=10)
+        walk = Booking(user_id=user.id, dog_id=dog.id,
+                       service_type_id=walk_service.id, date=day,
+                       slot='Morning', status='requested')
+        di = Booking(user_id=user.id, dog_id=dog.id,
+                     service_type_id=drop_in.id, date=day,
+                     slot='Afternoon', status='requested')
+        db.session.add_all([walk, di])
+        db.session.commit()
+        return day, walk.id, di.id
+
+    def test_preview_filters_to_walks_only(self, client_user, dog, service_type,
+                                           logged_in_admin):
+        day, walk_id, di_id = self._seed_walk_and_dropin(client_user, dog, service_type)
+        d = day.isoformat()
+        resp = logged_in_admin.get(
+            f'/admin/dogs/{dog.id}/cancel-preview'
+            f'?start={d}&end={d}&service=group-walk'
+        )
+        data = resp.get_json()
+        assert resp.status_code == 200, data
+        assert data['count'] == 1
+
+    def test_preview_filters_to_drop_ins_only(self, client_user, dog, service_type,
+                                              logged_in_admin):
+        day, walk_id, di_id = self._seed_walk_and_dropin(client_user, dog, service_type)
+        d = day.isoformat()
+        resp = logged_in_admin.get(
+            f'/admin/dogs/{dog.id}/cancel-preview'
+            f'?start={d}&end={d}&service=drop-in'
+        )
+        data = resp.get_json()
+        assert resp.status_code == 200, data
+        assert data['count'] == 1
+
+    def test_preview_all_includes_both(self, client_user, dog, service_type,
+                                       logged_in_admin):
+        day, walk_id, di_id = self._seed_walk_and_dropin(client_user, dog, service_type)
+        d = day.isoformat()
+        # Explicit 'all' and a missing param must behave identically.
+        for qs in (f'?start={d}&end={d}&service=all', f'?start={d}&end={d}'):
+            resp = logged_in_admin.get(f'/admin/dogs/{dog.id}/cancel-preview{qs}')
+            data = resp.get_json()
+            assert resp.status_code == 200, data
+            assert data['count'] == 2
+
+    def test_bulk_cancel_drop_in_leaves_walk(self, client_user, dog, service_type,
+                                             logged_in_admin):
+        day, walk_id, di_id = self._seed_walk_and_dropin(client_user, dog, service_type)
+        d = day.isoformat()
+        resp = logged_in_admin.post(
+            f'/admin/dogs/{dog.id}/bulk-cancel',
+            data=json.dumps({'start': d, 'end': d, 'service': 'drop-in'}),
+            content_type='application/json',
+        )
+        data = resp.get_json()
+        assert resp.status_code == 200, data
+        assert data['cancelled_count'] == 1
+        assert db.session.get(Booking, di_id).status == 'cancelled'
+        assert db.session.get(Booking, walk_id).status == 'requested'
+
+    def test_bulk_cancel_all_cancels_both(self, client_user, dog, service_type,
+                                          logged_in_admin):
+        day, walk_id, di_id = self._seed_walk_and_dropin(client_user, dog, service_type)
+        d = day.isoformat()
+        resp = logged_in_admin.post(
+            f'/admin/dogs/{dog.id}/bulk-cancel',
+            data=json.dumps({'start': d, 'end': d, 'service': 'all'}),
+            content_type='application/json',
+        )
+        data = resp.get_json()
+        assert resp.status_code == 200, data
+        assert data['cancelled_count'] == 2
+        assert db.session.get(Booking, di_id).status == 'cancelled'
+        assert db.session.get(Booking, walk_id).status == 'cancelled'
