@@ -371,6 +371,117 @@ class TestUnreadCountEndpoint:
 
 
 # ---------------------------------------------------------------------------
+# T5d3 — /notifications/recent (list + count reconciliation endpoint)
+# ---------------------------------------------------------------------------
+
+class TestRecentEndpoint:
+    """The bell fetches this on PWA foreground to reconcile BOTH the badge
+    count and the dropdown list against server truth (SSE list prepends fired
+    while iOS suspends the EventSource are otherwise lost until a reload)."""
+
+    def test_returns_count_and_items(self, app, client):
+        with app.app_context():
+            user = make_user('recent_ep@test.com')
+            make_client_profile(user.id)
+            db.session.commit()
+            user_id = user.id
+            for i in range(3):
+                create_notification(
+                    recipient_id=user_id,
+                    notification_type='system',
+                    title=f'Recent {i}',
+                )
+            db.session.commit()
+
+        login(client, 'recent_ep@test.com')
+        res = client.get('/notifications/recent')
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data['count'] == 3
+        assert len(data['notifications']) == 3
+        # Newest first, and each item carries the fields the bell JS renders.
+        first = data['notifications'][0]
+        assert first['title'] == 'Recent 2'
+        assert set(first) >= {'id', 'title', 'body', 'link', 'icon', 'colour',
+                              'created_at', 'is_unread'}
+        assert first['is_unread'] is True
+        assert first['created_at'].endswith('Z')
+
+    def test_is_unread_reflects_read_state(self, app, client):
+        with app.app_context():
+            user = make_user('recent_ep_read@test.com')
+            make_client_profile(user.id)
+            db.session.commit()
+            user_id = user.id
+            n = create_notification(
+                recipient_id=user_id,
+                notification_type='system',
+                title='Will be read',
+            )
+            db.session.commit()
+            mark_read(n.id, user_id)
+
+        login(client, 'recent_ep_read@test.com')
+        res = client.get('/notifications/recent')
+        data = res.get_json()
+        assert data['count'] == 0
+        assert len(data['notifications']) == 1
+        assert data['notifications'][0]['is_unread'] is False
+
+    def test_empty_when_no_notifications(self, app, client):
+        with app.app_context():
+            user = make_user('recent_ep_empty@test.com')
+            make_client_profile(user.id)
+            db.session.commit()
+
+        login(client, 'recent_ep_empty@test.com')
+        res = client.get('/notifications/recent')
+        data = res.get_json()
+        assert data == {'count': 0, 'notifications': []}
+
+    def test_capped_at_bell_limit(self, app, client):
+        from app.utils.notifications import NOTIF_BELL_CAP
+        with app.app_context():
+            user = make_user('recent_ep_cap@test.com')
+            make_client_profile(user.id)
+            db.session.commit()
+            user_id = user.id
+            for i in range(NOTIF_BELL_CAP + 4):
+                create_notification(
+                    recipient_id=user_id,
+                    notification_type='system',
+                    title=f'Cap {i}',
+                )
+            db.session.commit()
+
+        login(client, 'recent_ep_cap@test.com')
+        res = client.get('/notifications/recent')
+        data = res.get_json()
+        assert len(data['notifications']) == NOTIF_BELL_CAP
+        assert data['count'] == NOTIF_BELL_CAP + 4
+
+    def test_requires_login(self, client):
+        res = client.get('/notifications/recent')
+        assert res.status_code == 302
+
+    def test_per_user_isolation(self, app, client):
+        with app.app_context():
+            u1 = make_user('recent_ep_u1@test.com')
+            make_client_profile(u1.id)
+            u2 = make_user('recent_ep_u2@test.com')
+            make_client_profile(u2.id)
+            db.session.commit()
+            create_notification(recipient_id=u1.id, notification_type='system', title='For u1')
+            create_notification(recipient_id=u2.id, notification_type='system', title='For u2')
+            db.session.commit()
+
+        login(client, 'recent_ep_u1@test.com')
+        data = client.get('/notifications/recent').get_json()
+        assert data['count'] == 1
+        assert [n['title'] for n in data['notifications']] == ['For u1']
+
+
+# ---------------------------------------------------------------------------
 # T5e — Notifications triggered via booking flow (integration)
 # ---------------------------------------------------------------------------
 

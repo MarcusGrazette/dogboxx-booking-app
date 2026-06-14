@@ -55,6 +55,44 @@ def unread_count():
     return jsonify({'count': get_unread_count(current_user.id)})
 
 
+@notifications_bp.route('/recent')
+@login_required
+def recent():
+    """AJAX: the navbar bell's unread count + top-N notification rows.
+
+    Companion to /unread-count: the badge has a server-truth reconciliation
+    path (page load + visibilitychange) but the dropdown LIST previously did
+    not — it was only built by the server on page render and by live SSE
+    prepends. Any notification arriving while the page's EventSource is
+    suspended (iOS backgrounding the PWA, lost SSE event) updated the badge on
+    the next foreground reconcile but never entered the list, leaving it stale
+    until a full reload. The bell now refetches this on visibilitychange to
+    rebuild the list alongside the badge.
+
+    Item shape matches the SSE 'notification' event so the client renders
+    live-pushed and reconciled rows through one code path.
+    """
+    from app.utils.notifications import get_unread_count, get_recent
+    notifs = get_recent(current_user.id)
+    items = []
+    for n in notifs:
+        icon, colour = get_meta(n.notification_type)
+        items.append({
+            'id': n.id,
+            'title': n.title,
+            'body': n.body or '',
+            'link': n.link or '',
+            'icon': icon,
+            'colour': colour,
+            'created_at': n.created_at.strftime('%Y-%m-%dT%H:%M:%S') + 'Z',
+            'is_unread': n.is_unread,
+        })
+    return jsonify({
+        'count': get_unread_count(current_user.id),
+        'notifications': items,
+    })
+
+
 @notifications_bp.route('/<int:notification_id>/read', methods=['POST'])
 @login_required
 def mark_one_read(notification_id):
