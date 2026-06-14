@@ -582,7 +582,7 @@ document.addEventListener('DOMContentLoaded', function () {
             slotBothOpt.disabled = false;
             recurRow.style.display = '';
             submitBtn.innerHTML = recurToggle.checked
-                ? '<i class="bi bi-check-lg me-1"></i>Book Recurring'
+                ? '<i class="bi bi-calendar-plus me-1"></i>Book Recurring'
                 : '<i class="bi bi-calendar-plus me-1"></i>Book';
         }
     }
@@ -635,7 +635,7 @@ document.addEventListener('DOMContentLoaded', function () {
             singleGroup.style.display     = 'none';
             singleSlotGroup.style.display = 'none';
             recurPanel.style.display      = 'block';
-            submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Book Recurring';
+            submitBtn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i>Book Recurring';
             updateCount();
         } else {
             singleGroup.style.display     = 'block';
@@ -775,7 +775,7 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(r => r.json())
             .then(data => {
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Book Recurring';
+                submitBtn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i>Book Recurring';
                 if (data.success) {
                     const parts = [];
                     if (data.confirmed)  parts.push(`${data.confirmed} confirmed`);
@@ -791,7 +791,7 @@ document.addEventListener('DOMContentLoaded', function () {
             .catch(() => {
                 showResult('danger', 'Network error — please try again.');
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Book Recurring';
+                submitBtn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i>Book Recurring';
             });
         }
     });
