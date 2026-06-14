@@ -178,7 +178,7 @@
 
             const header = document.createElement('div');
             header.className = 'board-col-header pending-header';
-            header.innerHTML = `<span><i class="bi bi-hourglass me-1"></i>Pending</span>
+            header.innerHTML = `<span><i class="bi bi-hourglass me-1"></i>Requested</span>
                                 <span class="badge bg-white text-dark">${state.pending.length}</span>`;
             col.appendChild(header);
 

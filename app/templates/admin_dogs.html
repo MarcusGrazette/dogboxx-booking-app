@@ -220,7 +220,7 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
                 <button type="button" class="btn btn-primary" id="modal-submit-btn">
-                    <i class="bi bi-check-lg me-1"></i>Request booking
+                    <i class="bi bi-calendar-plus me-1"></i>Book
                 </button>
             </div>
         </div>
@@ -445,26 +445,35 @@
 
 <!-- ─── Bulk Cancel Modal ─────────────────────────────────────────────────── -->
 <div class="modal fade" id="bulkCancelModal" tabindex="-1" aria-labelledby="bulkCancelModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="bulkCancelModalLabel">
                     <i class="bi bi-x-square me-2 text-danger"></i>
-                    Cancel walks for <span id="bc-dog-name"></span>
+                    Cancel <span id="bc-cancel-noun">bookings</span> for <span id="bc-dog-name"></span>
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <div class="row g-3 mb-3">
-                    <div class="col-6">
-                        <label class="form-label small fw-semibold">Start date</label>
-                        <input type="date" class="form-control form-control-sm" id="bc-start">
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label small fw-semibold">End date</label>
-                        <input type="date" class="form-control form-control-sm" id="bc-end">
-                    </div>
+                <!-- Service filter (mirrors the book modal's service select) -->
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Service</label>
+                    <select class="form-select form-select-sm" id="bc-service">
+                        <option value="all" selected>All services</option>
+                        {% for st in service_types %}
+                        {% if st.slug != 'day-care' %}
+                        <option value="{{ st.slug }}">{% if st.slug == 'group-walk' %}Walk{% else %}{{ st.name }}{% endif %}</option>
+                        {% endif %}
+                        {% endfor %}
+                    </select>
                 </div>
+
+                <!-- Date (one-off by default; becomes the start date when recurring) -->
+                <div class="mb-3" id="bc-date-group">
+                    <label class="form-label small fw-semibold" id="bc-date-label">Date</label>
+                    <input type="date" class="form-control form-control-sm" id="bc-start">
+                </div>
+
                 <label class="form-label small fw-semibold mb-1 d-block">Select a slot to cancel</label>
                 <div class="btn-group btn-group-sm w-100 mb-3" role="group" aria-label="Slots to cancel">
                     <input type="radio" class="btn-check" name="bc-slot" id="bc-slot-morning" value="Morning" autocomplete="off">
@@ -480,27 +489,50 @@
                         <i class="bi bi-layers-fill me-1"></i>Both
                     </label>
                 </div>
-                <label class="form-label small fw-semibold mb-1 d-block">Cancel walks on the ticked days</label>
-                <div class="d-flex gap-3 mb-3">
-                    {% for n, lbl in [(0,'Mon'),(1,'Tue'),(2,'Wed'),(3,'Thu'),(4,'Fri')] %}
-                    <div class="form-check">
-                        <input class="form-check-input bc-day" type="checkbox" id="bc-day-{{ n }}" value="{{ n }}" checked>
-                        <label class="form-check-label" for="bc-day-{{ n }}">{{ lbl }}</label>
-                    </div>
-                    {% endfor %}
+
+                <!-- Recurring toggle (mirrors the book modal) -->
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="bc-recur-toggle">
+                    <label class="form-check-label small fw-semibold" for="bc-recur-toggle">
+                        Recurring cancellation
+                    </label>
                 </div>
+
+                <!-- Recurring panel: end date + day checkboxes -->
+                <div id="bc-recurring-panel" class="mb-3" style="display:none;">
+                    <label class="form-label small fw-semibold">End date</label>
+                    <input type="date" class="form-control form-control-sm mb-3" id="bc-end">
+                    <label class="form-label small fw-semibold mb-1 d-block">Cancel <span id="bc-day-noun">bookings</span> on the ticked days</label>
+                    <div class="d-flex gap-3">
+                        {% for n, lbl in [(0,'Mon'),(1,'Tue'),(2,'Wed'),(3,'Thu'),(4,'Fri')] %}
+                        <div class="form-check">
+                            <input class="form-check-input bc-day" type="checkbox" id="bc-day-{{ n }}" value="{{ n }}" checked>
+                            <label class="form-check-label" for="bc-day-{{ n }}">{{ lbl }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
                 <button type="button" class="btn btn-sm btn-outline-secondary" id="bc-preview-btn">
-                    <i class="bi bi-eye me-1"></i>Preview affected walks
+                    <i class="bi bi-eye me-1"></i>Preview affected <span id="bc-preview-noun">bookings</span>
                 </button>
                 <div id="bc-loading" class="text-center py-3 mt-2" style="display:none;">
                     <span class="spinner-border spinner-border-sm me-2"></span>Loading…
                 </div>
                 <div id="bc-preview-results" class="mt-3"></div>
+                <div id="bc-billing-section" class="alert alert-warning py-2 mt-3 mb-0" style="display:none;">
+                    <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox" id="bc-waive-fee">
+                        <label class="form-check-label small" for="bc-waive-fee">
+                            <span id="bc-billing-text"></span>
+                        </label>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
                 <button type="button" class="btn btn-danger fw-semibold" id="bc-confirm-btn" disabled>
-                    <i class="bi bi-x-square me-1"></i><span id="bc-confirm-label">Cancel walks</span>
+                    <i class="bi bi-x-square me-1"></i><span id="bc-confirm-label">Cancel bookings</span>
                 </button>
             </div>
         </div>
@@ -557,14 +589,14 @@ document.addEventListener('DOMContentLoaded', function () {
             recurPanel.style.display   = 'none';
             singleGroup.style.display     = 'block';
             singleSlotGroup.style.display = 'block';
-            submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request booking';
+            submitBtn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i>Book';
         } else {
             slotBothOpt.hidden   = false;
             slotBothOpt.disabled = false;
             recurRow.style.display = '';
             submitBtn.innerHTML = recurToggle.checked
-                ? '<i class="bi bi-check-lg me-1"></i>Request recurring walks'
-                : '<i class="bi bi-check-lg me-1"></i>Request booking';
+                ? '<i class="bi bi-calendar-plus me-1"></i>Book Recurring'
+                : '<i class="bi bi-calendar-plus me-1"></i>Book';
         }
     }
     serviceSel.addEventListener('change', syncServiceUI);
@@ -603,7 +635,7 @@ document.addEventListener('DOMContentLoaded', function () {
             recurCount.style.display = 'none';
             resultDiv.style.display = 'none';
             submitBtn.disabled = false;
-            submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request booking';
+            submitBtn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i>Book';
             syncServiceUI();
 
             modal.show();
@@ -616,14 +648,14 @@ document.addEventListener('DOMContentLoaded', function () {
             singleGroup.style.display     = 'none';
             singleSlotGroup.style.display = 'none';
             recurPanel.style.display      = 'block';
-            submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request recurring walks';
+            submitBtn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i>Book Recurring';
             updateCount();
         } else {
             singleGroup.style.display     = 'block';
             singleSlotGroup.style.display = 'block';
             recurPanel.style.display      = 'none';
             recurCount.style.display      = 'none';
-            submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request booking';
+            submitBtn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i>Book';
         }
     });
 
@@ -700,7 +732,7 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(r => r.json())
             .then(data => {
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request booking';
+                submitBtn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i>Book';
                 if (data.success) {
                     const serviceLabel = serviceSel.options[serviceSel.selectedIndex].text;
                     const slotLabel = slot === 'Both' ? 'AM + PM' : slot;
@@ -713,7 +745,7 @@ document.addEventListener('DOMContentLoaded', function () {
             .catch(() => {
                 showResult('danger', 'Network error — please try again.');
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request booking';
+                submitBtn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i>Book';
             });
 
         } else {
@@ -756,7 +788,7 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(r => r.json())
             .then(data => {
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request recurring walks';
+                submitBtn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i>Book Recurring';
                 if (data.success) {
                     const parts = [];
                     if (data.confirmed)  parts.push(`${data.confirmed} confirmed`);
@@ -772,7 +804,7 @@ document.addEventListener('DOMContentLoaded', function () {
             .catch(() => {
                 showResult('danger', 'Network error — please try again.');
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request recurring walks';
+                submitBtn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i>Book Recurring';
             });
         }
     });
@@ -1175,16 +1207,96 @@ document.addEventListener('DOMContentLoaded', function () {
     const bcPreviewRes  = document.getElementById('bc-preview-results');
     const bcConfirmBtn  = document.getElementById('bc-confirm-btn');
     let   bcConfirmLbl  = document.getElementById('bc-confirm-label');
+    const bcBilling     = document.getElementById('bc-billing-section');
+    const bcBillingText = document.getElementById('bc-billing-text');
+    const bcWaiveFee    = document.getElementById('bc-waive-fee');
+    const bcRecurToggle = document.getElementById('bc-recur-toggle');
+    const bcRecurPanel  = document.getElementById('bc-recurring-panel');
+    const bcDateLabel   = document.getElementById('bc-date-label');
+    const bcService     = document.getElementById('bc-service');
+    const bcCancelNoun  = document.getElementById('bc-cancel-noun');
+    const bcDayNoun     = document.getElementById('bc-day-noun');
+    const bcPreviewNoun = document.getElementById('bc-preview-noun');
 
     let bcActiveDogId   = null;
     let bcPreviewCount  = 0;
+
+    // Service-aware noun for the title, button, preview and success text.
+    // 'all' (and any future/unknown service) falls back to "booking(s)".
+    function bcNounParts() {
+        if (bcService.value === 'group-walk') return ['walk', 'walks'];
+        if (bcService.value === 'drop-in')    return ['drop-in', 'drop-ins'];
+        return ['booking', 'bookings'];
+    }
+    function bcNoun(count) {
+        const [singular, plural] = bcNounParts();
+        return count === 1 ? singular : plural;
+    }
+
+    // Relabel the title + day-filter noun to match the selected service, and
+    // invalidate any prior preview (the scope changed, so the shown count is
+    // stale until the admin previews again).
+    function bcSyncServiceUI() {
+        const plural = bcNounParts()[1];
+        bcCancelNoun.textContent  = plural;
+        bcDayNoun.textContent     = plural;
+        bcPreviewNoun.textContent = plural;
+        bcConfirmBtn.disabled  = true;
+        bcPreviewRes.innerHTML = '';
+        bcPreviewCount = 0;
+        resetBcBilling();
+        resetBcConfirmBtn();
+    }
+    bcService.addEventListener('change', bcSyncServiceUI);
+
+    // Recurring off → cancel a single walk on bc-start (end = start, no day
+    // filter). Recurring on → range from bc-start to bc-end on the ticked days.
+    // Mirrors the book modal's one-off vs recurring split.
+    function bcIsRecurring() { return bcRecurToggle.checked; }
+    function bcEffectiveRange() {
+        if (bcIsRecurring()) {
+            return { start: bcStart.value, end: bcEnd.value, days: bcSelectedDays() };
+        }
+        return { start: bcStart.value, end: bcStart.value, days: [] };
+    }
+
+    // Show/hide the end-date + day checkboxes and relabel the date field so the
+    // single date reads as the range start when recurring.
+    function bcSyncRecurUI() {
+        const on = bcIsRecurring();
+        bcRecurPanel.style.display = on ? '' : 'none';
+        bcDateLabel.textContent = on ? 'Start date' : 'Date';
+    }
+    bcRecurToggle.addEventListener('change', function () {
+        bcSyncRecurUI();
+        // Switching to recurring with a date already chosen: seed the end date
+        // (start + 1 year) so the range is valid without an extra click.
+        if (bcIsRecurring() && bcStart.value && !bcEnd.value) {
+            const d = new Date(bcStart.value + 'T00:00:00');
+            d.setFullYear(d.getFullYear() + 1);
+            bcEnd.value = d.toISOString().slice(0, 10);
+            bcEnd.min   = bcStart.value;
+        }
+        // A range/day change invalidates a prior preview — force a re-preview.
+        bcConfirmBtn.disabled = true;
+        bcPreviewRes.innerHTML = '';
+        resetBcBilling();
+    });
+
+    // Hide + reset the late-fee notice. Called when (re)opening the modal and
+    // whenever a fresh preview is requested so a stale late-count can't leak
+    // into the next cancel.
+    function resetBcBilling() {
+        bcBilling.style.display = 'none';
+        bcWaiveFee.checked = false;
+    }
 
     // Restore the confirm button to its idle markup and re-acquire the label
     // node. Setting innerHTML (for the "Cancelling…" spinner) destroys the
     // original #bc-confirm-label span, so the cached reference goes stale —
     // resetting here keeps it valid for the next preview/cancel cycle.
     function resetBcConfirmBtn() {
-        bcConfirmBtn.innerHTML = '<i class="bi bi-x-square me-1"></i><span id="bc-confirm-label">Cancel walks</span>';
+        bcConfirmBtn.innerHTML = '<i class="bi bi-x-square me-1"></i><span id="bc-confirm-label">Cancel ' + bcNounParts()[1] + '</span>';
         bcConfirmLbl = document.getElementById('bc-confirm-label');
     }
 
@@ -1207,19 +1319,21 @@ document.addEventListener('DOMContentLoaded', function () {
             bcDogName.textContent = this.dataset.dogName;
             bcStart.value = '';
             bcEnd.value   = '';
+            bcService.value = 'all';
             document.getElementById('bc-slot-both').checked = true;
             document.querySelectorAll('.bc-day').forEach(el => { el.checked = true; });
-            bcPreviewRes.innerHTML = '';
-            resetBcConfirmBtn();
+            bcRecurToggle.checked = false;
+            bcSyncRecurUI();
+            bcSyncServiceUI();              // sets nouns + clears any prior preview
             bcConfirmBtn.disabled = true;   // always visible, enabled only after a preview
-            bcPreviewCount = 0;
             bcModal.show();
         });
     });
 
-    // Auto-fill end date to start + 1 year (mirrors the booking modal).
+    // When recurring, auto-fill end date to start + 1 year (mirrors the booking
+    // modal). In one-off mode there is no end field to fill.
     bcStart.addEventListener('change', function () {
-        if (!this.value) return;
+        if (!this.value || !bcIsRecurring()) return;
         const d = new Date(this.value + 'T00:00:00');
         d.setFullYear(d.getFullYear() + 1);
         bcEnd.value = d.toISOString().slice(0, 10);
@@ -1235,16 +1349,23 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     bcPreviewBtn.addEventListener('click', function () {
-        if (!bcStart.value || !bcEnd.value) {
-            bcPreviewRes.innerHTML = '<div class="alert alert-warning py-2">Please enter both a start and end date.</div>';
+        if (!bcStart.value) {
+            bcPreviewRes.innerHTML = '<div class="alert alert-warning py-2">Please pick a date.</div>';
             return;
         }
-        const params = new URLSearchParams({ start: bcStart.value, end: bcEnd.value });
+        if (bcIsRecurring() && !bcEnd.value) {
+            bcPreviewRes.innerHTML = '<div class="alert alert-warning py-2">Please enter an end date.</div>';
+            return;
+        }
+        const range  = bcEffectiveRange();
+        const params = new URLSearchParams({ start: range.start, end: range.end });
         bcSelectedSlots().forEach(s => params.append('slots', s));
-        bcSelectedDays().forEach(d => params.append('days', d));
+        range.days.forEach(d => params.append('days', d));
+        params.set('service', bcService.value);
         bcLoading.style.display = '';
         bcPreviewRes.innerHTML  = '';
         bcConfirmBtn.disabled = true;
+        resetBcBilling();
 
         fetch(`/admin/dogs/${bcActiveDogId}/cancel-preview?${params}`, {
             headers: { 'X-CSRFToken': getCsrf() },
@@ -1258,15 +1379,15 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             bcPreviewCount = data.count;
             if (data.count === 0) {
-                bcPreviewRes.innerHTML = '<p class="text-muted small mb-0">No active bookings found in that date range.</p>';
+                bcPreviewRes.innerHTML = `<p class="text-muted small mb-0">No active ${bcNounParts()[1]} found in that date range.</p>`;
                 return;
             }
-            // The payload is capped server-side; if more walks are in scope than
-            // we received, flag that this is a preview of the first N shown.
+            // The payload is capped server-side; if more in scope than we
+            // received, flag that this is a preview of the first N shown.
             const previewNote = data.count > data.bookings.length
                 ? `, here is a preview of the first ${data.bookings.length}`
                 : '';
-            let html = `<p class="fw-semibold mb-2 text-danger"><i class="bi bi-exclamation-triangle me-1"></i>${data.count} walk${data.count !== 1 ? 's' : ''} will be cancelled${previewNote}:</p>`;
+            let html = `<p class="fw-semibold mb-2 text-danger"><i class="bi bi-exclamation-triangle me-1"></i>${data.count} ${bcNoun(data.count)} will be cancelled${previewNote}:</p>`;
             html += '<table class="table table-sm mb-0"><thead class="table-light"><tr>'
                   + '<th>Date</th><th>Slot</th><th>Status</th></tr></thead><tbody>';
             data.bookings.forEach(b => {
@@ -1279,8 +1400,18 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             html += '</tbody></table>';
             bcPreviewRes.innerHTML = html;
-            bcConfirmLbl.textContent = `Cancel ${data.count} walk${data.count !== 1 ? 's' : ''}`;
+            bcConfirmLbl.textContent = `Cancel ${data.count} ${bcNoun(data.count)}`;
             bcConfirmBtn.disabled = false;
+
+            // Late-cancel billing: walks inside the notice window bill the client
+            // by default. Offer a waive checkbox only when some are late.
+            if (data.late_count > 0) {
+                const n = data.late_count;
+                bcBillingText.textContent =
+                    `${n} of these ${n === 1 ? 'is' : 'are'} within the late-cancellation window `
+                    + `and will be billed. Tick to waive the late fee for ${n === 1 ? 'it' : 'them'}.`;
+                bcBilling.style.display = '';
+            }
         })
         .catch(() => {
             bcLoading.style.display = 'none';
@@ -1289,25 +1420,29 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     bcConfirmBtn.addEventListener('click', function () {
-        if (!bcActiveDogId || !bcStart.value || !bcEnd.value) return;
+        if (!bcActiveDogId || !bcStart.value) return;
+        if (bcIsRecurring() && !bcEnd.value) return;
         bcConfirmBtn.disabled = true;
         bcConfirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Cancelling…';
 
+        const range = bcEffectiveRange();
         fetch(`/admin/dogs/${bcActiveDogId}/bulk-cancel`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
             body: JSON.stringify({
-                start: bcStart.value,
-                end: bcEnd.value,
+                start: range.start,
+                end: range.end,
                 slots: bcSelectedSlots(),
-                days: bcSelectedDays(),
+                days: range.days,
+                service: bcService.value,
+                waive_late_fee: bcWaiveFee.checked,
             }),
         })
         .then(r => r.json())
         .then(data => {
             if (data.success) {
                 const n = data.cancelled_count;
-                showConfirmed(`${n} walk${n !== 1 ? 's' : ''} cancelled for ${bcDogName.textContent}.`,
+                showConfirmed(`${n} ${bcNoun(n)} cancelled for ${bcDogName.textContent}.`,
                               bcModal, document.getElementById('bulkCancelModal'));
             } else {
                 bcPreviewRes.innerHTML = `<div class="alert alert-danger py-2">${data.message || 'Something went wrong'}</div>`;

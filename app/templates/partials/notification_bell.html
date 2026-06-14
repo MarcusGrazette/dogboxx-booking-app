@@ -66,14 +66,14 @@
         </a>
         {% endfor %}
         {% else %}
-        <div class="text-center py-4 text-muted small">
+        <div class="notif-empty text-center py-4 text-muted small">
             <i class="bi bi-bell-slash d-block mb-1" style="font-size:1.5rem; opacity:0.3;"></i>
             No notifications yet
         </div>
         {% endif %}
 
         {# Footer #}
-        <div class="px-3 py-2 text-center" style="border-top:1px solid #e8e0e6; background:#fafafa;">
+        <div class="notif-footer px-3 py-2 text-center" style="border-top:1px solid #e8e0e6; background:#fafafa;">
             <a href="{{ url_for('notifications.index') }}"
                class="small text-decoration-none fw-semibold" style="color:#E02FAC;">
                 View all notifications →
@@ -291,18 +291,14 @@
         };
     }
 
-    // Prepend a new notification row into the dropdown
-    function prependNotification(d) {
-        const panel = document.querySelector('.notif-dropdown-panel');
-        if (!panel) return;
-
-        // Remove the "no notifications yet" placeholder if present
-        const empty = panel.querySelector('.text-center.py-4');
-        if (empty) empty.remove();
-
+    // Build one notification row <a>. Shared by the live SSE prepend and the
+    // visibilitychange list-reconcile so both render identically. `d.is_unread`
+    // controls the highlight + unread dot (SSE arrivals are always unread).
+    function buildNotifItem(d) {
         const item = document.createElement('a');
         item.href = d.link || '/notifications/';
-        item.className = 'd-flex align-items-start gap-2 px-3 py-2 text-decoration-none notif-item notif-dropdown-unread';
+        item.className = 'd-flex align-items-start gap-2 px-3 py-2 text-decoration-none notif-item'
+            + (d.is_unread ? ' notif-dropdown-unread' : '');
         item.dataset.notifId = d.id;
         item.style.cssText = 'border-bottom:1px solid #f0e8ee; color:#1B1B1B;';
         item.innerHTML =
@@ -316,15 +312,28 @@
                     formatRelTime(d.created_at) +
                 '</div>' +
             '</div>' +
-            '<div class="flex-shrink-0 mt-2">' +
-                '<span class="rounded-circle d-inline-block" style="width:8px;height:8px;background:#E02FAC;"></span>' +
-            '</div>';
-
+            (d.is_unread ?
+                '<div class="flex-shrink-0 mt-2">' +
+                    '<span class="rounded-circle d-inline-block" style="width:8px;height:8px;background:#E02FAC;"></span>' +
+                '</div>' : '');
         bindReadOnClick(item);
+        return item;
+    }
+
+    // Prepend a new (always-unread) notification row into the dropdown
+    function prependNotification(d) {
+        const panel = document.querySelector('.notif-dropdown-panel');
+        if (!panel) return;
+
+        // Remove the "no notifications yet" placeholder if present
+        const empty = panel.querySelector('.notif-empty');
+        if (empty) empty.remove();
+
+        const item = buildNotifItem(Object.assign({ is_unread: true }, d));
 
         // Insert before the first existing notif-item (or before the footer)
         const firstItem = panel.querySelector('.notif-item');
-        const footer = panel.querySelector('.px-3.py-2.text-center');
+        const footer = panel.querySelector('.notif-footer');
         if (firstItem) {
             panel.insertBefore(item, firstItem);
         } else if (footer) {
@@ -332,6 +341,33 @@
         } else {
             panel.appendChild(item);
         }
+    }
+
+    // Replace the whole dropdown list with a server-fetched set of rows.
+    // Used by the visibilitychange reconcile so the list self-heals after the
+    // EventSource was suspended (mirrors the badge's reconciliation).
+    function renderNotificationList(items) {
+        const panel = document.querySelector('.notif-dropdown-panel');
+        if (!panel) return;
+
+        panel.querySelectorAll('.notif-item').forEach(function (el) { el.remove(); });
+        const oldEmpty = panel.querySelector('.notif-empty');
+        if (oldEmpty) oldEmpty.remove();
+
+        const footer = panel.querySelector('.notif-footer');
+
+        if (!items || !items.length) {
+            const ph = document.createElement('div');
+            ph.className = 'notif-empty text-center py-4 text-muted small';
+            ph.innerHTML = '<i class="bi bi-bell-slash d-block mb-1" style="font-size:1.5rem; opacity:0.3;"></i>No notifications yet';
+            if (footer) panel.insertBefore(ph, footer); else panel.appendChild(ph);
+            return;
+        }
+
+        items.forEach(function (d) {
+            const item = buildNotifItem(d);
+            if (footer) panel.insertBefore(item, footer); else panel.appendChild(item);
+        });
     }
 
     function escHtml(str) {
@@ -346,21 +382,26 @@
 
     // ── Badge reconciliation ─────────────────────────────────────────────────
     //
-    // The home-screen app badge is otherwise event-driven (push sets it, reads
-    // decrement it). Any missed event — push received while the PWA was closed
-    // then read on another device, SSE events lost while iOS suspends the
-    // page's EventSource — leaves it stale indefinitely. Reconcile to server
-    // truth at the two points where staleness becomes visible:
-    //   1. every page load (count is already server-rendered into the bell)
-    //   2. the PWA returning to the foreground (refetch — DOM may be stale too)
+    // The badge and the dropdown list are both event-driven (push/SSE set the
+    // badge, SSE prepends list rows). Any missed event — push received while
+    // the PWA was closed then read on another device, SSE events lost while
+    // iOS suspends the page's EventSource — leaves them stale indefinitely.
+    // Reconcile both to server truth at the two points where staleness shows:
+    //   1. every page load (count + list are already server-rendered)
+    //   2. the PWA returning to the foreground (refetch /recent — gives the
+    //      count AND the top-N rows in one round-trip)
     syncAppBadge({{ unread_notification_count | int }});
 
     document.addEventListener('visibilitychange', function () {
         if (document.visibilityState !== 'visible') return;
-        fetch('/notifications/unread-count', {
+        fetch('/notifications/recent', {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         }).then(function (res) { return res.ok ? res.json() : null; })
-          .then(function (d) { if (d) applyBadgeCount(d.count); })
+          .then(function (d) {
+              if (!d) return;
+              applyBadgeCount(d.count);
+              renderNotificationList(d.notifications);
+          })
           .catch(function () {});
     });
 

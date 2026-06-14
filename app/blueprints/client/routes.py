@@ -25,7 +25,9 @@ from app.blueprints.client import client_bp
 from app.utils.notifications import create_notification, NotificationBatch
 from app.utils.booking_status import (
     transition_booking, record_booking_created, bulk_transition,
+    _UNSET as _UNSET_BILL,
 )
+from app.utils.invoicing import is_late_cancellation
 from app.utils.decorators import has_client_access
 
 
@@ -1724,12 +1726,25 @@ def cancel_booking():
         # Capture the assigned walker's user_id before clearing the FK below —
         # we notify them at the end so they know the walk is off their schedule.
         prior_walker_user_id = booking.walker.user_id if booking.walker else None
+
+        # Late-cancel billing override (admin cancels only). When an admin cancels
+        # a booking inside the notice window, bill by default and let them waive
+        # via `waive_late_fee` — see app/utils/invoicing.py. Client cancels leave
+        # bill_cancellation=None so the default policy applies (unchanged).
+        bill_cancellation = _UNSET_BILL
+        if is_admin_cancel:
+            today = datetime.now(timezone.utc).date()
+            if is_late_cancellation(booking, today):
+                form = request.form if request.form else (request.get_json(silent=True) or {})
+                waive = str(form.get('waive_late_fee', '')).lower() in ('1', 'true', 'on', 'yes')
+                bill_cancellation = not waive
+
         # transition_booking sets status, cancelled_at and logs the BSC row.
         # cancelled_by records who cancelled (admin acting on a client's booking
         # vs the client/owner themselves); walker_id=None unassigns.
         transition_booking(booking, 'cancelled', actor_id=current_user.id,
                             cancelled_by='admin' if is_admin_cancel else 'client',
-                            walker_id=None)
+                            walker_id=None, bill_cancellation=bill_cancellation)
         # Do NOT commit here — notifications are added below and everything
         # commits atomically at the end. An early commit would make the
         # cancellation irreversible if the notification step later raises.

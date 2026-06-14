@@ -57,6 +57,25 @@ need a refresh (e.g. `/admin/dogs` book/cancel) omit it.
   remember it destroys any inner `<span>` you cached a reference to — reset the
   markup (and re-acquire the reference) on modal-open and on error. See
   `resetBcConfirmBtn()` in `admin_dogs.html`.
+- **When one modal switches modes (e.g. single ↔ recurring via a toggle), keep
+  the action button's icon and verb consistent across both states** — change
+  only the noun. The `/admin/dogs` book modal uses `bi-calendar-plus` + "Book"
+  for both: **Book** (single) and **Book Recurring** (toggle on), not a
+  different icon or a switch to "Request". A mode toggle changes *what* you're
+  booking, not *that* you're booking, so the button shouldn't look like a
+  different action. Watch for the label being set in several places (modal-open
+  reset, toggle handler, AJAX-completion resets) — update **all** of them or the
+  button reverts to a stale icon/verb after one of those transitions.
+
+### Modal width
+
+- **Keep modal widths consistent.** Use the default Bootstrap `.modal-dialog`
+  width (no `modal-sm`/`modal-lg`/`modal-xl` size modifier) — i.e. the width of
+  the **book** modal (`#bookingModal` in `admin_dogs.html`). Sibling modals that
+  the user moves between (book ↔ cancel on `/admin/dogs`) looked mismatched when
+  one was `modal-lg`; aligning them on the book modal's width removed the jump.
+- Only deviate when content genuinely demands it (e.g. a wide table), and prefer
+  scrolling/responsive content over widening the dialog.
 
 ---
 

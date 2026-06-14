@@ -337,6 +337,12 @@ class Booking(db.Model):
     confirmed_at = db.Column(db.DateTime, nullable=True)
     cancelled_at = db.Column(db.DateTime, nullable=True)
     cancelled_by = db.Column(db.Enum('client', 'admin', name='cancelled_by_type'), nullable=True)
+    # Explicit late-cancel billing override (see app/utils/invoicing.py). NULL =
+    # "use default policy" (every legacy row + all client/closure cancels): bill a
+    # cancel iff it was client-initiated AND inside the notice window. True/False =
+    # an admin made an explicit per-cancellation choice at cancel time (bill / waive).
+    # Set only via transition_booking; never written directly.
+    bill_cancellation = db.Column(db.Boolean, nullable=True)
     # NULL = client booked it themselves (default for legacy rows and all client-route
     # bookings). Non-null + that user is_admin = admin-initiated booking.
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
@@ -372,6 +378,7 @@ class Booking(db.Model):
             'confirmed_at': self.confirmed_at.isoformat() if self.confirmed_at else None,
             'cancelled_at': self.cancelled_at.isoformat() if self.cancelled_at else None,
             'cancelled_by': self.cancelled_by,
+            'bill_cancellation': self.bill_cancellation,
             'created_by_id': self.created_by_id,
         }
 

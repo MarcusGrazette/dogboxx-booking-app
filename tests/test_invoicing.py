@@ -140,13 +140,14 @@ def make_drop_in_service():
 
 
 def add_booking(user, dog, service, date, slot, status='confirmed',
-                cancelled_at=None, cancelled_by=None):
+                cancelled_at=None, cancelled_by=None, bill_cancellation=None):
     b = Booking(
         user_id=user.id, dog_id=dog.id,
         service_type_id=service.id,
         date=date, slot=slot, status=status,
         cancelled_at=cancelled_at,
         cancelled_by=cancelled_by,
+        bill_cancellation=bill_cancellation,
     )
     db.session.add(b)
     db.session.flush()
@@ -411,6 +412,57 @@ class TestInvoiceForClient:
             inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
             assert inv['total_cancels'] == 1
             assert inv['subtotal'] == WALK_PRICE
+
+    def test_admin_cancel_with_bill_flag_is_billable(self, app):
+        """Admin cancel where the admin chose to bill (bill_cancellation=True) → charged."""
+        with app.app_context():
+            u, dog = make_client_with_dog('inv_admin_bill@test.com')
+            st = make_walk_service()
+            make_pricing_config()
+            cancelled_at = datetime.datetime.combine(
+                MON_1 - datetime.timedelta(days=2), datetime.time.min
+            )
+            add_booking(u, dog, st, MON_1, 'Morning',
+                        status='cancelled', cancelled_at=cancelled_at,
+                        cancelled_by='admin', bill_cancellation=True)
+            db.session.commit()
+            inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
+            assert inv['total_cancels'] == 1
+            assert inv['subtotal'] == WALK_PRICE
+
+    def test_admin_cancel_waived_not_billable(self, app):
+        """Admin cancel waived (bill_cancellation=False) → not charged, even inside window."""
+        with app.app_context():
+            u, dog = make_client_with_dog('inv_admin_waive@test.com')
+            st = make_walk_service()
+            make_pricing_config()
+            cancelled_at = datetime.datetime.combine(
+                MON_1 - datetime.timedelta(days=2), datetime.time.min
+            )
+            add_booking(u, dog, st, MON_1, 'Morning',
+                        status='cancelled', cancelled_at=cancelled_at,
+                        cancelled_by='admin', bill_cancellation=False)
+            db.session.commit()
+            inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
+            assert inv['total_cancels'] == 0
+            assert inv['subtotal'] == 0.0
+
+    def test_client_cancel_waived_overrides_default(self, app):
+        """An explicit waive (False) beats the legacy client late-cancel default."""
+        with app.app_context():
+            u, dog = make_client_with_dog('inv_client_waive@test.com')
+            st = make_walk_service()
+            make_pricing_config()
+            cancelled_at = datetime.datetime.combine(
+                MON_1 - datetime.timedelta(days=2), datetime.time.min
+            )
+            add_booking(u, dog, st, MON_1, 'Morning',
+                        status='cancelled', cancelled_at=cancelled_at,
+                        cancelled_by='client', bill_cancellation=False)
+            db.session.commit()
+            inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
+            assert inv['total_cancels'] == 0
+            assert inv['subtotal'] == 0.0
 
     def test_multiple_walks_across_weeks(self, app):
         with app.app_context():
