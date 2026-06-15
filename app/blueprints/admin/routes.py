@@ -662,6 +662,7 @@ def _revenue_for_range(start, end):
     """
     from datetime import timedelta
     from app.models import PricingConfig, Booking, ServiceType
+    from app.utils.pricing import config_for_date
 
     all_configs = (
         PricingConfig.query
@@ -669,12 +670,6 @@ def _revenue_for_range(start, end):
         .order_by(PricingConfig.effective_from.desc())
         .all()
     )
-
-    def config_for(d):
-        for c in all_configs:
-            if c.effective_from <= d:
-                return c
-        return None
 
     # Group walk bookings: (date, dog_id, slot)
     walk_rows = (
@@ -722,7 +717,7 @@ def _revenue_for_range(start, end):
         doubles    = sum(1 for slots in dog_slots.values()
                          if 'Morning' in slots and 'Afternoon' in slots)
         drop_ins   = day_drop_ins.get(d, 0)
-        cfg = config_for(d)
+        cfg = config_for_date(all_configs, d)
         if cfg:
             price          = float(cfg.price_per_walk)
             drop_in_price  = float(cfg.price_per_drop_in)
@@ -4159,6 +4154,7 @@ def invoicing_detail(client_id):
     month_end   = date(year + (month // 12), (month % 12) + 1, 1)
 
     from app.models import PricingConfig
+    from app.utils.pricing import config_for_date, build_line_items, build_double_slot_discounts
     all_configs = (
         PricingConfig.query
         .filter(PricingConfig.effective_from <= month_end)
@@ -4166,49 +4162,15 @@ def invoicing_detail(client_id):
         .all()
     )
 
-    def config_for(d):
-        for c in all_configs:
-            if c.effective_from <= d:
-                return c
-        return None
-
     inv = _invoice_for_client(client_user.id, month_start, month_end, all_configs)
     if inv is None:
         inv = {'confirmed': [], 'late_cancels': [], 'all_billable': [],
                'total_walks': 0, 'total_drop_ins': 0, 'total_cancels': 0,
                'total_billable': 0, 'doubles': 0, 'subtotal': 0.0}
 
-    # Build line items with unit price (drop-ins priced separately)
-    line_items = []
     late_cancel_ids = {b.id for b in inv['late_cancels']}
-    for b in sorted(inv['all_billable'], key=lambda x: (x.date, x.slot)):
-        cfg = config_for(b.date)
-        is_drop_in_booking = b.service_type and b.service_type.slug == ServiceType.DROP_IN
-        if cfg:
-            unit_price = float(cfg.price_per_drop_in) if is_drop_in_booking else float(cfg.price_per_walk)
-        else:
-            unit_price = 0.0
-        line_items.append({
-            'booking':      b,
-            'unit_price':   unit_price,
-            'is_cancel':    b.id in late_cancel_ids,
-        })
-
-    # Double-slot discount line items (group walks only — drop-ins don't qualify)
-    from collections import defaultdict
-    date_slots = defaultdict(set)
-    for b in inv['all_billable']:
-        if not (b.service_type and b.service_type.slug == ServiceType.DROP_IN):
-            date_slots[b.date].add(b.slot)
-    discount_days = sorted(
-        d for d, slots in date_slots.items()
-        if 'Morning' in slots and 'Afternoon' in slots
-    )
-    discounts = []
-    for d in discount_days:
-        cfg = config_for(d)
-        if cfg and cfg.double_slot_discount:
-            discounts.append({'date': d, 'amount': float(cfg.double_slot_discount)})
+    line_items = build_line_items(inv['all_billable'], late_cancel_ids, all_configs)
+    discounts = build_double_slot_discounts(inv['all_billable'], all_configs)
 
     do = DogOwner.query.filter_by(user_id=client_user.id, role='primary').first()
     dog = db.session.get(Dog, do.dog_id) if do else None
@@ -4228,15 +4190,15 @@ def invoicing_detail(client_id):
         wk_items = [li for li in line_items if wk_start <= li['booking'].date < wk_end]
         wk_discounts = [d for d in discounts if wk_start <= d['date'] < wk_end]
 
-        wk_confirmed  = sum(1 for li in wk_items if not li['is_cancel'] and not (li['booking'].service_type and li['booking'].service_type.slug == ServiceType.DROP_IN))
-        wk_drop_ins   = sum(1 for li in wk_items if not li['is_cancel'] and li['booking'].service_type and li['booking'].service_type.slug == ServiceType.DROP_IN)
+        wk_confirmed  = sum(1 for li in wk_items if not li['is_cancel'] and not li['is_drop_in'])
+        wk_drop_ins   = sum(1 for li in wk_items if not li['is_cancel'] and li['is_drop_in'])
         wk_cancels    = sum(1 for li in wk_items if li['is_cancel'])
         wk_double_discount = sum(d['amount'] for d in wk_discounts)
 
         # Weekly discount: ≥5 confirmed group walks in the week
         wk_weekly_discount = 0.0
         if wk_confirmed >= 5:
-            cfg = config_for(wk_start)
+            cfg = config_for_date(all_configs, wk_start)
             if cfg and cfg.weekly_discount:
                 wk_weekly_discount = round(float(cfg.weekly_discount) * wk_confirmed, 2)
                 weekly_discounts.append({

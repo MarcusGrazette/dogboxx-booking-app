@@ -1181,9 +1181,8 @@ def profile():
 def monthly_summary():
     """Client-facing monthly summary: bookings and estimated charges for a given month."""
     from app.utils.invoicing import invoice_for_client
+    from app.utils.pricing import build_line_items, build_double_slot_discounts
     from app.models import PricingConfig
-    from collections import defaultdict
-    from datetime import timedelta
 
     if not has_client_access(current_user):
         return redirect(url_for('client.index'))
@@ -1211,12 +1210,6 @@ def monthly_summary():
         .all()
     )
 
-    def config_for(d):
-        for c in all_configs:
-            if c.effective_from <= d:
-                return c
-        return None
-
     inv = invoice_for_client(current_user.id, month_start, month_end, all_configs)
     if inv is None:
         inv = {
@@ -1225,32 +1218,9 @@ def monthly_summary():
             'total_billable': 0, 'doubles': 0, 'subtotal': 0.0,
         }
 
-    # Build per-booking line items
     late_cancel_ids = {b.id for b in inv['late_cancels']}
-    line_items = []
-    for b in sorted(inv['all_billable'], key=lambda x: (x.date, x.slot)):
-        cfg = config_for(b.date)
-        is_drop_in = b.service_type and b.service_type.slug == ServiceType.DROP_IN
-        unit_price = 0.0
-        if cfg:
-            unit_price = float(cfg.price_per_drop_in) if is_drop_in else float(cfg.price_per_walk)
-        line_items.append({
-            'booking':    b,
-            'unit_price': unit_price,
-            'is_cancel':  b.id in late_cancel_ids,
-            'is_drop_in': is_drop_in,
-        })
-
-    # Double-slot discount rows (group walks only)
-    date_slots = defaultdict(set)
-    for b in inv['all_billable']:
-        if not (b.service_type and b.service_type.slug == ServiceType.DROP_IN):
-            date_slots[b.date].add(b.slot)
-    discounts = []
-    for d in sorted(d for d, slots in date_slots.items() if 'Morning' in slots and 'Afternoon' in slots):
-        cfg = config_for(d)
-        if cfg and cfg.double_slot_discount:
-            discounts.append({'date': d, 'amount': float(cfg.double_slot_discount)})
+    line_items = build_line_items(inv['all_billable'], late_cancel_ids, all_configs)
+    discounts = build_double_slot_discounts(inv['all_billable'], all_configs)
 
     # Month nav
     if month == 1:

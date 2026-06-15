@@ -6,7 +6,8 @@ client-facing monthly summary page.
 from collections import defaultdict
 from datetime import date as _date
 from sqlalchemy.orm import joinedload
-from app.models import DogOwner, Booking, ServiceType
+from app.models import DogOwner, Booking
+from app.utils.pricing import config_for_date, is_drop_in, unit_price
 
 
 def _cancellation_notice_days(booking):
@@ -58,12 +59,6 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
     Returns None if the user has no primary dog (and therefore no bookings).
     """
 
-    def config_for(d):
-        for c in all_configs:
-            if c.effective_from <= d:
-                return c
-        return None
-
     dog_owner_ids = [
         do.dog_id
         for do in DogOwner.query.filter_by(user_id=user_id, role='primary').all()
@@ -92,9 +87,6 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
     late_cancels = [b for b in bookings if is_billable_cancellation(b)]
     all_billable = confirmed + late_cancels
 
-    def is_drop_in(b):
-        return b.service_type and b.service_type.slug == ServiceType.DROP_IN
-
     # Group walk items keyed by (dog_id, date) so the double-slot discount only
     # fires when the SAME dog is booked AM+PM on the same day. Keying by date
     # alone would over-discount multi-dog households where dog A took the
@@ -110,15 +102,10 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
     # Calculate subtotal
     subtotal = 0.0
     for b in all_billable:
-        cfg = config_for(b.date)
-        if cfg:
-            if is_drop_in(b):
-                subtotal += float(cfg.price_per_drop_in)
-            else:
-                subtotal += float(cfg.price_per_walk)
+        subtotal += unit_price(b, config_for_date(all_configs, b.date))
     for (_dog_id, d), slots in dog_date_slots.items():
         if 'Morning' in slots and 'Afternoon' in slots:
-            cfg = config_for(d)
+            cfg = config_for_date(all_configs, d)
             if cfg:
                 subtotal -= float(cfg.double_slot_discount)
 
@@ -133,7 +120,7 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
     for (iso_year, iso_week), count in week_walks.items():
         if count >= 5:
             rep_date = _date.fromisocalendar(iso_year, iso_week, 1)  # Monday of the week
-            cfg = config_for(rep_date)
+            cfg = config_for_date(all_configs, rep_date)
             if cfg and cfg.weekly_discount:
                 weekly_discount_total += float(cfg.weekly_discount) * count
                 weekly_discount_weeks += 1

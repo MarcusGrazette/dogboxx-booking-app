@@ -87,8 +87,15 @@ Only 1,413 lines of JS sit in `app/static/js/`. Templates carry roughly **4,000+
 
 Ordered so each builds a shared module the next reuses. Each is independently shippable and protected by the existing 358-test suite.
 
-### TICKET 1 — Extract a single pricing module
+### TICKET 1 — Extract a single pricing module ✅ DONE (`feature/pricing-module`)
 *P1 · ~1 day · Medium risk (money path)*
+
+> **Status (2026-06-15):** Implemented. New module `app/utils/pricing.py` holds
+> `config_for_date`, `is_drop_in`, `unit_price`, `build_line_items`,
+> `build_double_slot_discounts`. All 4 `config_for` copies deleted; the line-item
+> + double-slot construction in `invoicing_detail` and `monthly_summary` is now
+> shared. 16 new unit tests in `tests/test_pricing.py`; full suite green on
+> SQLite **and** Postgres (374 passed). Behaviour-preserving — see gotchas below.
 
 **Problem:** Pricing math and the `config_for` lookup are duplicated across `invoicing.py`, `admin/routes.py::_revenue_for_range`, and `client/routes.py::monthly_summary`. They can silently drift.
 
@@ -148,3 +155,47 @@ After Tickets 1–3, sweep remaining duplicated nested functions: `_is_drop_in` 
 Do **Ticket 1 → 2 → 3** in order — each makes the next cleaner (dedupe pricing before splitting the admin file so you move clean code; build the service after the split so it has a tidy home). **Ticket 4** runs in parallel as background frontend work (different files, no conflict). **Ticket 5** is end-of-run cleanup.
 
 None of these change the data model, URL surface, or behavior — all internal restructuring protected by the existing 358-test suite.
+
+---
+
+## Implementation log & architectural gotchas
+
+*Notepad kept as tickets are worked. Capture anything non-obvious that the next
+engineer (or a future refactor) needs to know.*
+
+### Ticket 1 — pricing module (done)
+
+Discovered while reading the three pricing paths to unify them. **Both are
+pre-existing behaviours that the dedup deliberately preserved** — neither was
+"fixed", because each is a money decision for the business owner, not a silent
+code change.
+
+1. **The revenue dashboard omits the weekly discount.** `invoice_for_client`
+   applies the ≥5-walks-per-ISO-week discount; the admin revenue dashboard
+   (`_revenue_for_range`) does **not** — it only applies the double-slot
+   discount, day by day. So for a heavy-use client the revenue dashboard reports
+   *more* than what is actually invoiced. This is a real reporting discrepancy,
+   not a rounding artefact. **Decision needed from the business owner** before
+   "fixing": should the revenue tracker net off weekly discounts? Until then,
+   the shared `unit_price`/`config_for_date` keep the *per-unit* maths identical
+   across both, so they can't drift further — but the aggregate rules still
+   differ by design. (Candidate follow-up ticket if confirmed wrong.)
+
+2. **Double-slot discount is keyed two different ways.** The aggregate
+   `invoice_for_client` subtotal keys the discount by **`(dog_id, date)`** (so a
+   2-dog household where dog A takes AM and dog B takes PM does *not* get a
+   discount). The per-client *display* views (`invoicing_detail`,
+   `monthly_summary`) key by **date alone** — so they would show a discount row
+   that the subtotal didn't apply, for that multi-dog AM/PM case. The extracted
+   `build_double_slot_discounts` reproduces the **date-only** display behaviour
+   (matching what those two views did before), and `invoice_for_client` keeps
+   its `(dog_id, date)` subtotal keying. They reconcile in the common
+   single-dog case; the multi-dog edge case is a latent display/subtotal
+   mismatch that predates this work. Documented in the helper's docstring.
+
+3. **Invariant:** `config_for_date(configs, d)` requires `configs` sorted
+   **descending** by `effective_from`. Every call site already queries it that
+   way; if a new caller passes an unsorted list, the lookup returns the wrong
+   config silently. Kept as a documented precondition (cheap) rather than
+   re-sorting inside the helper on every call (the lists are already sorted at
+   the query).
