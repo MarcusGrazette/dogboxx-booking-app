@@ -16,6 +16,7 @@ from app.utils.pricing import (
     unit_price,
     build_line_items,
     build_double_slot_discounts,
+    weekly_discount_for_walks,
 )
 
 
@@ -126,3 +127,42 @@ class TestDoubleSlotDiscounts:
         am = _booking(1, date(2026, 6, 1), 'Morning')
         pm = _booking(2, date(2026, 6, 1), 'Afternoon')
         assert build_double_slot_discounts([am, pm], configs) == []
+
+
+# ── weekly_discount_for_walks ──────────────────────────────────────────────
+
+def _cfg_weekly(effective_from, weekly):
+    c = _cfg(effective_from)
+    c.weekly_discount = weekly
+    return c
+
+
+class TestWeeklyDiscount:
+    # Mon 2026-06-01 .. Fri 2026-06-05 is one ISO week (5 walks).
+    WEEK = [date(2026, 6, 1), date(2026, 6, 2), date(2026, 6, 3),
+            date(2026, 6, 4), date(2026, 6, 5)]
+
+    def test_five_walks_one_week_qualifies(self):
+        configs = [_cfg_weekly(date(2026, 1, 1), weekly=1.5)]
+        total, weeks = weekly_discount_for_walks(self.WEEK, configs)
+        assert total == 7.5 and weeks == 1   # 1.5 * 5 walks
+
+    def test_four_walks_does_not_qualify(self):
+        configs = [_cfg_weekly(date(2026, 1, 1), weekly=1.5)]
+        total, weeks = weekly_discount_for_walks(self.WEEK[:4], configs)
+        assert total == 0.0 and weeks == 0
+
+    def test_two_qualifying_weeks(self):
+        configs = [_cfg_weekly(date(2026, 1, 1), weekly=1.0)]
+        next_week = [d.replace(day=d.day + 7) for d in self.WEEK]
+        total, weeks = weekly_discount_for_walks(self.WEEK + next_week, configs)
+        assert total == 10.0 and weeks == 2   # 1.0 * 5 * 2 weeks
+
+    def test_zero_when_config_weekly_is_zero(self):
+        configs = [_cfg_weekly(date(2026, 1, 1), weekly=0)]
+        total, weeks = weekly_discount_for_walks(self.WEEK, configs)
+        assert total == 0.0 and weeks == 0
+
+    def test_empty_dates(self):
+        configs = [_cfg_weekly(date(2026, 1, 1), weekly=1.5)]
+        assert weekly_discount_for_walks([], configs) == (0.0, 0)

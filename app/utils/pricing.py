@@ -16,6 +16,7 @@ Pricing rules (unchanged from the original implementations):
 """
 
 from collections import defaultdict
+from datetime import date as _date
 
 from app.models import ServiceType
 
@@ -62,6 +63,40 @@ def build_line_items(all_billable, late_cancel_ids, configs):
             'is_drop_in': is_drop_in(b),
         })
     return line_items
+
+
+def weekly_discount_for_walks(walk_dates, configs):
+    """Weekly ≥5-walk discount for ONE billing group's confirmed group-walk dates.
+
+    A "billing group" is whatever the caller bills as a unit: a single client's
+    household for invoices, or one primary owner's dogs for the revenue rollup.
+    For each ISO week in which the group has ≥5 confirmed group walks, applies
+    ``weekly_discount`` per walk, priced from the config effective on that week's
+    Monday.
+
+    ``walk_dates`` is an iterable of ``date`` (one per confirmed group walk;
+    drop-ins excluded by the caller). Returns ``(total_discount, week_count)``
+    where ``week_count`` is the number of qualifying weeks.
+
+    This is the single source for the weekly rule — both ``invoice_for_client``
+    and the admin revenue dashboard call it, so the two can never disagree on
+    whether a week qualifies or how much it discounts.
+    """
+    week_counts = defaultdict(int)
+    for d in walk_dates:
+        iso_year, iso_week, _ = d.isocalendar()
+        week_counts[(iso_year, iso_week)] += 1
+
+    total = 0.0
+    weeks = 0
+    for (iso_year, iso_week), count in week_counts.items():
+        if count >= 5:
+            monday = _date.fromisocalendar(iso_year, iso_week, 1)
+            cfg = config_for_date(configs, monday)
+            if cfg and cfg.weekly_discount:
+                total += float(cfg.weekly_discount) * count
+                weeks += 1
+    return round(total, 2), weeks
 
 
 def build_double_slot_discounts(all_billable, configs):

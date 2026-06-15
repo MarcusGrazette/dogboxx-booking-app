@@ -4,10 +4,11 @@ client-facing monthly summary page.
 """
 
 from collections import defaultdict
-from datetime import date as _date
 from sqlalchemy.orm import joinedload
 from app.models import DogOwner, Booking
-from app.utils.pricing import config_for_date, is_drop_in, unit_price
+from app.utils.pricing import (
+    config_for_date, is_drop_in, unit_price, weekly_discount_for_walks,
+)
 
 
 def _cancellation_notice_days(booking):
@@ -110,20 +111,9 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
                 subtotal -= float(cfg.double_slot_discount)
 
     # Weekly discount — confirmed group walks only, ≥5 per ISO week
-    week_walks: dict = defaultdict(int)
-    for b in walk_confirmed:
-        iso_year, iso_week, _ = b.date.isocalendar()
-        week_walks[(iso_year, iso_week)] += 1
-
-    weekly_discount_total = 0.0
-    weekly_discount_weeks = 0
-    for (iso_year, iso_week), count in week_walks.items():
-        if count >= 5:
-            rep_date = _date.fromisocalendar(iso_year, iso_week, 1)  # Monday of the week
-            cfg = config_for_date(all_configs, rep_date)
-            if cfg and cfg.weekly_discount:
-                weekly_discount_total += float(cfg.weekly_discount) * count
-                weekly_discount_weeks += 1
+    weekly_discount_total, weekly_discount_weeks = weekly_discount_for_walks(
+        [b.date for b in walk_confirmed], all_configs
+    )
     subtotal -= weekly_discount_total
 
     return {

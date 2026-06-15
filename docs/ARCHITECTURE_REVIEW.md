@@ -170,16 +170,29 @@ pre-existing behaviours that the dedup deliberately preserved** — neither was
 "fixed", because each is a money decision for the business owner, not a silent
 code change.
 
-1. **The revenue dashboard omits the weekly discount.** `invoice_for_client`
-   applies the ≥5-walks-per-ISO-week discount; the admin revenue dashboard
-   (`_revenue_for_range`) does **not** — it only applies the double-slot
-   discount, day by day. So for a heavy-use client the revenue dashboard reports
-   *more* than what is actually invoiced. This is a real reporting discrepancy,
-   not a rounding artefact. **Decision needed from the business owner** before
-   "fixing": should the revenue tracker net off weekly discounts? Until then,
-   the shared `unit_price`/`config_for_date` keep the *per-unit* maths identical
-   across both, so they can't drift further — but the aggregate rules still
-   differ by design. (Candidate follow-up ticket if confirmed wrong.)
+1. **The revenue dashboard omits the weekly discount.** ✅ **RESOLVED
+   (2026-06-15).** `invoice_for_client` applied the ≥5-walks-per-ISO-week
+   discount; the admin revenue dashboard (`_revenue_for_range`) did **not**, so
+   for a heavy-use client the dashboard reported *more* than was actually
+   invoiced. Business owner confirmed revenue should reflect weekly discounts.
+   Fix: the per-week rule is now a single shared function
+   `pricing.weekly_discount_for_walks(walk_dates, configs)` used by **both**
+   `invoice_for_client` and `_revenue_for_range`, so they cannot disagree on
+   whether/how much a week discounts. `_revenue_for_range` now returns
+   `(daily, weekly_discount_total)`; the daily chart bars stay gross (weekly
+   discount is a *weekly* concept, not attributable to one day), and the
+   headline total is netted, with a "after −£X weekly discount" reconciliation
+   line on the revenue stat card so bars + note = total. Weekly grouping is
+   **per billing household** (a dog's primary owner), matching the sum of
+   per-client invoices — verified by `test_invoicing.py::TestRevenueWeeklyDiscount`
+   (incl. a test that two 3-walk households do NOT trigger the discount; the
+   threshold is per-household, not global).
+
+   *Known remaining minor mismatch (not addressed):* `_revenue_for_range`
+   filters `status == 'confirmed'` only, while invoices count
+   `('confirmed', 'completed')`. No effect today — nothing sets `completed`
+   (the `WalkEvent`/completion feature is unbuilt) — but align the filter if
+   completion is ever shipped.
 
 2. **Double-slot discount is keyed two different ways.** The aggregate
    `invoice_for_client` subtotal keys the discount by **`(dog_id, date)`** (so a

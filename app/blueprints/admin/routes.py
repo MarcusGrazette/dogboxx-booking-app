@@ -648,21 +648,30 @@ def board_chart_data():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _revenue_for_range(start, end):
-    """Return a list of daily revenue dicts for start..end (inclusive).
+    """Return ``(daily, weekly_discount_total)`` for start..end (inclusive).
 
-    Each dict: {date, revenue, walks, drop_ins, doubles, price_per_walk,
-                price_per_drop_in, discount}
+    ``daily`` is a list of per-day dicts:
+        {date, revenue, walks, drop_ins, doubles, price_per_walk,
+         price_per_drop_in, discount}
+    where each day's ``revenue`` is gross of the weekly discount (the daily chart
+    bars). ``weekly_discount_total`` is the ≥5-walks-per-week discount summed
+    across households for the whole range — it is a *weekly* concept and so can't
+    be attributed to a single day, hence returned separately. Callers subtract it
+    from the headline total so the dashboard reflects what is actually invoiced.
 
     Logic per day:
-      - Group walks: count confirmed bookings by (dog_id, slot); discount for
-        dogs with BOTH Morning + Afternoon on the same day
-      - Drop-ins: counted separately, priced at price_per_drop_in (no double discount)
-      - revenue = (walks * price_per_walk - doubles * discount) + (drop_ins * price_per_drop_in)
-    Uses the PricingConfig with the highest effective_from <= that day.
+      - Group walks: count confirmed bookings by (dog_id, slot); double-slot
+        discount for dogs with BOTH Morning + Afternoon on the same day
+      - Drop-ins: counted separately, priced at price_per_drop_in (no discount)
+    Weekly discount is computed per billing household (a dog's primary owner) so
+    it matches the sum of per-client invoices. Uses the PricingConfig with the
+    highest effective_from <= the relevant day. Note: like the invoice path's
+    double-slot keying, weekly grouping is by primary owner — see
+    docs/ARCHITECTURE_REVIEW.md for the two-dog-household caveat (out of scope).
     """
     from datetime import timedelta
-    from app.models import PricingConfig, Booking, ServiceType
-    from app.utils.pricing import config_for_date
+    from app.models import PricingConfig, Booking, ServiceType, DogOwner
+    from app.utils.pricing import config_for_date, weekly_discount_for_walks
 
     all_configs = (
         PricingConfig.query
@@ -738,7 +747,29 @@ def _revenue_for_range(start, end):
             'discount':          discount,
         })
         d += timedelta(days=1)
-    return results
+
+    # Weekly ≥5-walk discount — grouped by billing household (a dog's primary
+    # owner) so the rollup equals the sum of per-client invoices. Walks whose dog
+    # has no primary owner are skipped (defensive; shouldn't occur for billable).
+    dog_ids = {r.dog_id for r in walk_rows}
+    primary_owner = dict(
+        db.session.query(DogOwner.dog_id, DogOwner.user_id)
+        .filter(DogOwner.dog_id.in_(dog_ids), DogOwner.role == 'primary')
+        .all()
+    ) if dog_ids else {}
+    walks_by_household = {}
+    for r in walk_rows:
+        uid = primary_owner.get(r.dog_id)
+        if uid is None:
+            continue
+        walks_by_household.setdefault(uid, []).append(r.date)
+
+    weekly_discount_total = round(sum(
+        weekly_discount_for_walks(dates, all_configs)[0]
+        for dates in walks_by_household.values()
+    ), 2)
+
+    return results, weekly_discount_total
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -762,7 +793,8 @@ def revenue():
     import datetime as _dt
     end = end - _dt.timedelta(days=1)
 
-    daily = _revenue_for_range(start, end)
+    daily, weekly_discount = _revenue_for_range(start, end)
+    gross_revenue = sum(r['revenue'] for r in daily)
 
     current_pricing = (
         PricingConfig.query
@@ -783,9 +815,10 @@ def revenue():
         chart_labels=[r['date'].strftime('%-d') for r in daily],
         chart_revenue=[r['revenue'] for r in daily],
         chart_walks=[r['walks'] for r in daily],
-        total_revenue=sum(r['revenue'] for r in daily),
+        total_revenue=round(gross_revenue - weekly_discount, 2),
         total_walks=sum(r['walks'] for r in daily),
         total_doubles=sum(r['doubles'] for r in daily),
+        weekly_discount=weekly_discount,
         current_pricing=current_pricing,
         all_pricing=all_pricing,
     )
@@ -812,7 +845,8 @@ def revenue_data():
              else start.replace(year=start.year + 1, month=1, day=1))
     end = end - _dt.timedelta(days=1)
 
-    daily = _revenue_for_range(start, end)
+    daily, weekly_discount = _revenue_for_range(start, end)
+    gross_revenue = sum(r['revenue'] for r in daily)
 
     from app.models import PricingConfig
     current_pricing = (
@@ -828,9 +862,10 @@ def revenue_data():
         month_label=start.strftime('%B %Y'),
         revenue=[r['revenue'] for r in daily],
         walks=[r['walks'] for r in daily],
-        total_revenue=round(sum(r['revenue'] for r in daily), 2),
+        total_revenue=round(gross_revenue - weekly_discount, 2),
         total_walks=sum(r['walks'] for r in daily),
         total_doubles=sum(r['doubles'] for r in daily),
+        weekly_discount=round(weekly_discount, 2),
         current_pricing=current_pricing.to_dict() if current_pricing else None,
     )
 
