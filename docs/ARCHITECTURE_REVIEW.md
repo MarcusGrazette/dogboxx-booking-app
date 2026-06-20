@@ -108,8 +108,16 @@ Ordered so each builds a shared module the next reuses. Each is independently sh
 
 **Risk note:** This is billing. Do it test-first — add a test asserting the revenue dashboard and the invoice agree *before* refactoring.
 
-### TICKET 2 — Split `admin/routes.py` into a package
+### TICKET 2 — Split `admin/routes.py` into a package ✅ DONE (`feature/pricing-module`)
 *P1 · ~1 day · Low risk (pure move)*
+
+> **Status (2026-06-20):** Implemented. `app/blueprints/admin/routes.py` (4,983 lines) deleted;
+> replaced by `app/blueprints/admin/views/` package with 12 domain modules:
+> `dashboard.py`, `revenue.py`, `board.py`, `activity.py`, `clients.py`, `walkers.py`,
+> `dogs.py`, `closures.py`, `invoicing.py`, `marketing.py`, `csv_import.py`,
+> `daily_messages.py`. `admin_bp` stays in `__init__.py`; each module imports it.
+> Dead `_get_slot_color` dropped. Two test-file imports fixed to use canonical module
+> paths (`app.utils.invoicing`, `app.blueprints.admin.views.revenue`). 382 tests green.
 
 **Problem:** One 4,986-line file holds 11 domains.
 
