@@ -150,6 +150,15 @@ Ordered so each builds a shared module the next reuses. Each is independently sh
 ### TICKET 4 — Extract inline JS, highest-traffic templates first
 *P2 · ongoing · Low risk*
 
+> **Status (2026-06-20, partial):** `index.html` (954 inline lines) and `admin_dogs.html` (915 inline lines)
+> extracted. New static files: `app/static/js/client-home.js` (958 lines) and
+> `app/static/js/admin-dogs.js` (917 lines). Server data handed off via
+> `<script type="application/json" id="page-config">` (10 values for client-home, 2 for admin-dogs).
+> Templates reduced from ~1,500 to ~575 lines each (inline `<script>` gone; modals remain in HTML).
+> Same-origin JS needs no nonce — `'self'` in `script-src` covers it.
+> Remaining templates with notable inline JS: `admin.html` (~497), `notification_bell.html` (~454),
+> `profile.html` (~294).
+
 **Problem:** ~4,000 lines of JS inline in templates — uncached, untested, duplicated.
 
 **Do this (incremental, one template per PR):** Start with `index.html` (~1,000 lines) and `admin_dogs.html` (~916). Move each `<script>` block to `app/static/js/<page>.js`, load via `<script src=...>` with the existing cache-version pattern. Pass server data via `data-` attributes or a single `<script type="application/json">` block, not interpolated JS. Reuse `reusable-calendar.js` etc. instead of re-extracting.
