@@ -705,8 +705,12 @@ def book_both():
     if closed:
         return jsonify({'success': False, 'message': close_msg}), 409
 
-    created = []   # (slot, status, booking_obj)
-    skipped = []   # slot names skipped (duplicate / no walkers)
+    # One batch_id ties together both slots of this book-both action so the
+    # activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
+    batch_id     = uuid.uuid4().hex
+    final_created = []
+    pending_slots = []
+    skipped       = []
 
     for slot in ('Morning', 'Afternoon'):
         # Skip if any active booking already exists for this slot (any service type)
@@ -719,60 +723,28 @@ def book_both():
             skipped.append(slot)
             continue
 
-        acquire_booking_lock(default_service.slug, booking_date, slot)
-        available, can_waitlist, _ = check_availability(default_service, booking_date, slot)
-        if not available and not can_waitlist and not same_day:
+        try:
+            b, auto_confirmed = create_booking(
+                dog=dog, user_id=current_user.id, date=booking_date, slot=slot,
+                service=default_service, actor_id=current_user.id, batch_id=batch_id,
+                same_day=same_day,
+            )
+        except CapacityError:
             skipped.append(slot)
             continue
 
-        if same_day:
-            status = 'requested'
+        final_created.append((slot, b.status, b))
+        if b.status == 'waitlisted' or not auto_confirmed:
+            pending_slots.append((slot, b.status, b))
+            _notify_co_owners_of_booking(b, dog.name, confirmed=False)
         else:
-            status = 'waitlisted' if (not available and can_waitlist) else 'requested'
-        b = Booking(
-            user_id         = current_user.id,
-            dog_id          = dog_id,
-            service_type_id = default_service.id,
-            date            = booking_date,
-            slot            = slot,
-            status          = status,
-        )
-        db.session.add(b)
-        created.append((slot, status, b))
+            _notify_co_owners_of_booking(b, dog.name, confirmed=True)
 
-    if not created:
+    if not final_created:
         db.session.rollback()
         return jsonify({'success': False, 'message': 'No new bookings created — slots may already be booked.'}), 409
 
-    db.session.flush()  # get IDs before notifications
-
-    # One batch_id ties together both slots of this single book-both action so
-    # the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
-    batch_id = uuid.uuid4().hex
-    for _slot, _status, b in created:
-        record_booking_created(b, actor_id=current_user.id, batch_id=batch_id)
-
-    # Auto-assign or notify admins for each booking independently. We pass
-    # notify=False to _maybe_auto_confirm and compose one consolidated
-    # client + admin notification below, so the bell shows a single entry
-    # describing the whole booking action rather than one per slot (and so
-    # the waitlisted slot isn't silently dropped when its sibling confirms).
     date_str_fmt = booking_date.strftime('%a %-d %b')
-    final_created = []
-    pending_slots = []
-    for slot, status, b in created:
-        if status == 'waitlisted':
-            pending_slots.append((slot, status, b))
-            _notify_co_owners_of_booking(b, dog.name, confirmed=False)
-            # Keep waitlisted slots in final_created so the response payload
-            # and the consolidated client notification cover them too.
-            final_created.append((slot, b.status, b))
-        else:
-            auto_confirmed = _maybe_auto_confirm(b, dog, notify=False, same_day=same_day,
-                                                 batch_id=batch_id)
-            final_created.append((slot, b.status, b))
-            if not auto_confirmed:
-                pending_slots.append((slot, status, b))
 
     # Admin notifications. For a same-day request, admins get a single urgent
     # same_day_request notice instead of the grouped booking_requested — emitting
