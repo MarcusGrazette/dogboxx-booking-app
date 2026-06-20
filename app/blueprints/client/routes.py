@@ -1943,7 +1943,6 @@ def recurring_booking():
                     skipped += 1
                     continue
 
-                # Skip if already 2 bookings that day
                 day_count = Booking.query.filter(
                     Booking.dog_id == dog.id,
                     Booking.date == d,
@@ -1953,45 +1952,25 @@ def recurring_booking():
                     skipped += 1
                     continue
 
-                acquire_booking_lock(default_service.slug, d, s)
-                available, can_waitlist, _ = check_availability(default_service, d, s)
-                if not available and not can_waitlist:
+                try:
+                    booking, auto_confirmed = create_booking(
+                        dog=dog, user_id=current_user.id, date=d, slot=s,
+                        service=default_service, actor_id=current_user.id, batch_id=batch_id,
+                        auto_confirm=not is_drop_in,
+                    )
+                except CapacityError:
                     skipped += 1
                     continue
-                status = 'requested' if available else 'waitlisted'
 
-                booking = Booking(
-                    user_id=current_user.id,
-                    dog_id=dog.id,
-                    service_type_id=default_service.id,
-                    date=d,
-                    slot=s,
-                    status=status,
-                )
-                db.session.add(booking)
-                record_booking_created(booking, actor_id=current_user.id, batch_id=batch_id)
-
-                if status == 'waitlisted':
+                if booking.status == 'waitlisted':
                     waitlisted += 1
                     pending_bookings.append(booking)
-                elif not is_drop_in:
-                    # Try to auto-assign a walker, same as single bookings
-                    walker = auto_assign_walker(d, s, service_slug=service_slug)
-                    if walker:
-                        transition_booking(booking, 'confirmed', actor_id=current_user.id,
-                                           walker_id=walker.id, batch_id=batch_id)
-                        booking.pickup_order = get_walker_slot_count(walker.id, d, s, service_slug=service_slug)
-                        confirmed += 1
-                        confirmed_bookings.append(booking)
-                    else:
-                        created += 1
-                        pending_bookings.append(booking)
+                elif auto_confirmed:
+                    confirmed += 1
+                    confirmed_bookings.append(booking)
                 else:
                     created += 1
                     pending_bookings.append(booking)
-
-        # Flush to ensure booking IDs are set before querying walkers below.
-        db.session.flush()
 
         freq_label    = 'daily' if frequency == 'daily' else 'weekly'
         slot_label    = 'AM + PM' if slot == 'Both' else slot
