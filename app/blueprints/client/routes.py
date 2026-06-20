@@ -896,32 +896,22 @@ def book_drop_in():
         svc_label = existing.service_type.name.lower() if existing.service_type else 'booking'
         return jsonify({'success': False, 'message': f'{dog.name} already has a {svc_label} booked for that slot.'}), 409
 
-    acquire_booking_lock(drop_in_service.slug, booking_date, booking_slot)
-    available, can_waitlist, capacity_msg = _check(drop_in_service, booking_date, booking_slot)
     same_day = _is_same_day(booking_date)
     closed, close_msg = is_date_closed(booking_date)
     if closed:
         return jsonify({'success': False, 'message': close_msg}), 409
-    if not available and not can_waitlist and not same_day:
-        return jsonify({'success': False, 'message': capacity_msg}), 409
 
-    if same_day:
-        booking_status = 'requested'
-    else:
-        booking_status = 'waitlisted' if (not available and can_waitlist) else 'requested'
-
-    new_booking = Booking(
-        user_id         = current_user.id,
-        dog_id          = dog_id,
-        service_type_id = drop_in_service.id,
-        date            = booking_date,
-        slot            = booking_slot,
-        status          = booking_status,
-    )
-    db.session.add(new_booking)
-    db.session.flush()
     batch_id = uuid.uuid4().hex
-    record_booking_created(new_booking, actor_id=current_user.id, batch_id=batch_id)
+    try:
+        new_booking, _ = create_booking(
+            dog=dog, user_id=current_user.id, date=booking_date, slot=booking_slot,
+            service=drop_in_service, actor_id=current_user.id, batch_id=batch_id,
+            same_day=same_day, auto_confirm=False,
+        )
+    except CapacityError as e:
+        return jsonify({'success': False, 'message': str(e)}), 409
+
+    booking_status = new_booking.status
     db.session.commit()
 
     # Notify admins and co-owners
