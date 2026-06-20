@@ -375,42 +375,23 @@ def recurring_for_dog():
                 skipped += 1
                 continue
 
-            acquire_booking_lock(default_service.slug, d, slot)
-            available, can_waitlist, _ = check_availability(default_service, d, slot, admin_override=True)
-            if not available and not can_waitlist:
+            try:
+                booking, auto_confirmed = create_booking(
+                    dog=dog, user_id=user_id, date=d, slot=slot,
+                    service=default_service, actor_id=current_user.id, batch_id=batch_id,
+                    admin_override=True, created_by_id=current_user.id,
+                )
+            except CapacityError:
                 skipped += 1
                 continue
 
-            # Resolved initial status: waitlisted only if the slot is full,
-            # otherwise requested. A successful auto-assign then confirms it.
-            booking = Booking(
-                user_id=user_id,
-                dog_id=dog_id,
-                service_type_id=default_service.id,
-                date=d,
-                slot=slot,
-                status='waitlisted' if not available else 'requested',
-                created_by_id=current_user.id,
-            )
-            db.session.add(booking)
-            record_booking_created(booking, actor_id=current_user.id, batch_id=batch_id)
-
-            walker = None
-            if available:
-                walker = auto_assign_walker(d, slot)
-                if walker:
-                    transition_booking(booking, 'confirmed', actor_id=current_user.id,
-                                       walker_id=walker.id, batch_id=batch_id)
-                    booking.pickup_order = get_walker_slot_count(walker.id, d, slot)
-
-            # Notify the client on every outcome — confirmed, requested AND
-            # waitlisted (§7.3: admin-made pending bookings used to be silent).
             if booking.status == 'confirmed':
                 confirmed += 1
-                walker_first = walker.user.firstname if walker.user else None
+                walker = booking.walker
+                walker_first = walker.user.firstname if walker and walker.user else None
                 batch.add(user_id, 'booking_confirmed', actor_first=client_actor,
                           dog_name=dog.name, slot=slot, date=d, walker_name=walker_first)
-                if walker.user_id != current_user.id:
+                if walker and walker.user_id != current_user.id:
                     batch.add(walker.user_id, 'walker_assigned',
                               dog_name=dog.name, slot=slot, date=d)
             elif booking.status == 'waitlisted':
