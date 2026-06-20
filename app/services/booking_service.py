@@ -67,7 +67,8 @@ def create_booking(
     available, can_waitlist, capacity_msg = check_availability(
         service, date, slot, admin_override=admin_override
     )
-    if not available and not can_waitlist:
+    # same_day bookings bypass the no-walkers hard reject — owner assigns manually.
+    if not available and not can_waitlist and not same_day:
         raise CapacityError(capacity_msg)
 
     # same_day bookings always land as 'requested' (no waitlist, manual admin review).

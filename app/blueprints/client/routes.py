@@ -29,6 +29,7 @@ from app.utils.booking_status import (
 )
 from app.utils.invoicing import is_late_cancellation
 from app.utils.decorators import has_client_access
+from app.services.booking_service import create_booking, CapacityError
 
 
 @client_bp.route("/help")
@@ -545,39 +546,28 @@ def book():
     if day_count >= 2:
         return jsonify({'success': False, 'message': 'This dog already has two bookings on that date.'}), 409
 
-    # ── Capacity check + create ───────────────────────────────────────────────
+    # ── Create + auto-assign ─────────────────────────────────────────────────
     try:
-        acquire_booking_lock(default_service.slug, booking_date, booking_slot)
-        available, can_waitlist, capacity_msg = check_availability(default_service, booking_date, booking_slot)
-
         same_day = _is_same_day(booking_date)
         closed, close_msg = is_date_closed(booking_date)
         if closed:
             return jsonify({'success': False, 'message': close_msg}), 409
-        if not same_day and not available and not can_waitlist:
-            return jsonify({'success': False, 'message': capacity_msg}), 409
 
-        if same_day:
-            booking_status = 'requested'
-        else:
-            booking_status = 'waitlisted' if (not available and can_waitlist) else 'requested'
-
-        new_booking = Booking(
-            user_id         = current_user.id,
-            dog_id          = dog_id,
-            service_type_id = default_service.id,
-            date            = booking_date,
-            slot            = booking_slot,
-            status          = booking_status,
-        )
-        db.session.add(new_booking)
-        db.session.flush()  # get ID before notifications
         batch_id = uuid.uuid4().hex
-        record_booking_created(new_booking, actor_id=current_user.id, batch_id=batch_id)
+        try:
+            new_booking, auto_confirmed = create_booking(
+                dog=dog, user_id=current_user.id, date=booking_date, slot=booking_slot,
+                service=default_service, actor_id=current_user.id, batch_id=batch_id,
+                same_day=same_day,
+            )
+        except CapacityError as e:
+            return jsonify({'success': False, 'message': str(e)}), 409
+
+        booking_status = new_booking.status
+        date_str_fmt   = booking_date.strftime('%a %-d %b')
 
         if booking_status == 'waitlisted':
             admins = User.query.filter_by(is_admin=True).all()
-            date_str_fmt = booking_date.strftime('%a %-d %b')
             for admin in admins:
                 create_notification(
                     recipient_id      = admin.id,
@@ -587,8 +577,6 @@ def book():
                     link              = '/admin',
                     sender_id         = current_user.id,
                 )
-            # Client (actor) notification — without this the bell shows nothing
-            # after a waitlist and the client sees only the ephemeral toast.
             create_notification(
                 recipient_id      = current_user.id,
                 notification_type = 'booking_requested',
@@ -597,19 +585,53 @@ def book():
                 link              = '/',
             )
             _notify_co_owners_of_booking(new_booking, dog.name, confirmed=False)
-            db.session.commit()
             message = (f"All slots are full — you've been added to the waitlist "
                        f"for {booking_slot} on {booking_date.strftime('%d %b')}.")
+        elif auto_confirmed:
+            booking_status = 'confirmed'
+            walker = new_booking.walker
+            walker_first = walker.user.firstname if walker and walker.user else None
+            batch = NotificationBatch(actor_id=current_user.id)
+            batch.add(current_user.id, 'booking_confirmed',
+                      dog_name=dog.name, slot=booking_slot, date=booking_date,
+                      walker_name=walker_first, svc_label='walk')
+            for admin in User.query.filter_by(is_admin=True).all():
+                batch.add(admin.id, 'booking_confirmed',
+                          actor_first=current_user.firstname,
+                          link=f'/admin/clients/{current_user.id}',
+                          dog_name=dog.name, slot=booking_slot, date=booking_date,
+                          walker_name=walker_first, svc_label='walk')
+            if walker and walker.user_id != current_user.id:
+                batch.add(walker.user_id, 'walker_assigned',
+                          dog_name=dog.name, slot=booking_slot, date=booking_date,
+                          svc_label='walk')
+            batch.flush()
+            _notify_co_owners_of_booking(new_booking, dog.name, confirmed=True)
+            message = f"Booking confirmed for {booking_slot} on {booking_date.strftime('%d %b')}!"
         else:
-            auto_confirmed = _maybe_auto_confirm(new_booking, dog, same_day=same_day, batch_id=batch_id)
-            db.session.commit()
-            if auto_confirmed:
-                booking_status = 'confirmed'
-                message = f"Booking confirmed for {booking_slot} on {booking_date.strftime('%d %b')}!"
-            elif same_day:
-                message = f"Same-day request submitted — {current_app.config['OWNER_FIRSTNAME']} will confirm shortly."
-            else:
-                message = 'Booking request submitted — we\'ll confirm it shortly.'
+            ntype = 'same_day_request' if same_day else 'booking_requested'
+            title_prefix = 'Same-day request — ' if same_day else ''
+            for admin in User.query.filter_by(is_admin=True).all():
+                create_notification(
+                    recipient_id      = admin.id,
+                    notification_type = ntype,
+                    title             = f"{title_prefix}{current_user.firstname} requested {dog.name}'s {booking_slot.lower()} walk on {date_str_fmt}",
+                    link              = '/admin',
+                    sender_id         = current_user.id,
+                )
+            create_notification(
+                recipient_id      = current_user.id,
+                notification_type = ntype,
+                title             = f"{dog.name}'s {booking_slot.lower()} walk on {date_str_fmt} has been requested",
+                body              = (f"Same-day request — {current_app.config['OWNER_FIRSTNAME']} will confirm shortly."
+                                     if same_day else "We'll confirm shortly."),
+                link              = '/',
+            )
+            _notify_co_owners_of_booking(new_booking, dog.name, confirmed=False)
+            message = (f"Same-day request submitted — {current_app.config['OWNER_FIRSTNAME']} will confirm shortly."
+                       if same_day else "Booking request submitted — we'll confirm it shortly.")
+
+        db.session.commit()
 
         walker_name = None
         if new_booking.walker_id and new_booking.walker:
