@@ -6,6 +6,8 @@
 **Scope:** ~13k lines Python, ~15.5k lines templates, 358 tests passing, CI green.
 **Branch reviewed:** `develop` (in sync with `main`).
 
+**Implementation status (2026-06-20):** All 5 tickets complete on `feature/pricing-module` (14 commits, pushed). Awaiting device test + PR to `develop`. 382 tests green on Postgres.
+
 ---
 
 ## What's already good
