@@ -12,6 +12,7 @@ from app import db
 from app.capacity import get_walker_slot_count, auto_assign_walker, check_availability, acquire_booking_lock
 from app.utils.notifications import NotificationBatch
 from app.utils.booking_status import transition_booking, record_booking_created, bulk_transition
+from app.services.booking_service import create_booking, CapacityError
 from app.utils.invoicing import is_late_cancellation
 
 
@@ -195,36 +196,17 @@ def book_for_dog():
         # (e.g. 'Both' slots) — NOTIFICATIONS.md §9.2, D4.
         batch_id = uuid.uuid4().hex
         for s in slots_to_book:
-            acquire_booking_lock(service.slug, booking_date, s)
-            available, can_waitlist, capacity_msg = check_availability(
-                service, booking_date, s, admin_override=True
-            )
-            if not available and not can_waitlist:
-                return jsonify(success=False, message=capacity_msg), 400
-
-            # Resolved initial status: waitlisted only if the slot is full,
-            # otherwise requested. A successful auto-assign then confirms it.
-            booking = Booking(
-                user_id=user_id,
-                dog_id=dog_id,
-                service_type_id=service.id,
-                date=booking_date,
-                slot=s,
-                status='waitlisted' if not available else 'requested',
-                created_by_id=current_user.id,
-            )
-            db.session.add(booking)
-            record_booking_created(booking, actor_id=current_user.id, batch_id=batch_id)
-
-            # Drop-ins are never auto-assigned — they land as requested
-            # (or waitlisted) for an admin to confirm manually, matching the
-            # public client/book_drop_in flow.
-            if available and not is_drop_in:
-                walker = auto_assign_walker(booking_date, s)
-                if walker:
-                    transition_booking(booking, 'confirmed', actor_id=current_user.id,
-                                       walker_id=walker.id, batch_id=batch_id)
-                    booking.pickup_order = get_walker_slot_count(walker.id, booking_date, s)
+            try:
+                booking, _ = create_booking(
+                    dog=dog, user_id=user_id, date=booking_date, slot=s,
+                    service=service, actor_id=current_user.id, batch_id=batch_id,
+                    admin_override=True, created_by_id=current_user.id,
+                    # Drop-ins are never auto-assigned — land as requested/waitlisted
+                    # for manual admin confirmation, matching client/book_drop_in.
+                    auto_confirm=not is_drop_in,
+                )
+            except CapacityError as e:
+                return jsonify(success=False, message=str(e)), 400
 
             bookings_created.append(booking)
 
