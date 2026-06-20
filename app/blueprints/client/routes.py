@@ -14,7 +14,7 @@ from app import db, limiter
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
 from app.utils.uploads import process_dog_photo, process_cropped_photo
 from app.utils.booking_access import get_accessible_dog_ids, user_can_access_booking
-from app.capacity import check_availability, get_slot_availability_summary, auto_assign_walker, get_walker_slot_count, acquire_booking_lock, is_date_closed
+from app.capacity import check_availability, get_slot_availability_summary, is_date_closed
 from app.forms import OnboardingForm, BookingForm, ProfileForm
 import logging
 import traceback
@@ -24,7 +24,7 @@ from datetime import datetime, timezone, timedelta, date as date_type
 from app.blueprints.client import client_bp
 from app.utils.notifications import create_notification, NotificationBatch
 from app.utils.booking_status import (
-    transition_booking, record_booking_created, bulk_transition,
+    transition_booking, bulk_transition,
     _UNSET as _UNSET_BILL,
 )
 from app.utils.invoicing import is_late_cancellation
@@ -113,88 +113,6 @@ def _is_same_day(booking_date):
     reviews these manually."""
     return booking_date == datetime.now(timezone.utc).date()
 
-
-def _maybe_auto_confirm(booking, dog, service_slug=ServiceType.WALK, notify=True,
-                        same_day=False, batch_id=None):
-    """Try to auto-assign a walker to a newly-created 'requested' booking.
-
-    If a walker with capacity is available, sets the booking to confirmed,
-    assigns the walker, and (if notify=True) notifies the client. Otherwise
-    (if notify=True) notifies admins of the pending request. Must be called
-    before db.session.commit(). Returns True if auto-confirmed, False if
-    left as requested.
-
-    notify=False skips both the client (actor) notification on confirm and
-    the admin notification on no-walker — used by /book_both, which composes
-    a single consolidated notification covering every slot in the request.
-    Co-owner notifications are always written per-slot regardless.
-
-    same_day=True forces the booking to stay 'requested' (no auto-assign)
-    and uses the 'same_day_request' notification type so admins can spot it.
-    """
-    walker = None if same_day else auto_assign_walker(
-        booking.date, booking.slot, service_slug=service_slug
-    )
-    if walker:
-        # transition_booking sets status='confirmed', confirmed_at, walker_id and
-        # logs the requested→confirmed BSC row. Actor is the booking creator.
-        transition_booking(booking, 'confirmed', actor_id=current_user.id,
-                            walker_id=walker.id, batch_id=batch_id)
-        # Set pickup_order to next available position in this walker's slot
-        from app.capacity import get_walker_slot_count
-        booking.pickup_order = get_walker_slot_count(walker.id, booking.date, booking.slot, service_slug=service_slug)
-        if notify:
-            walker_first = walker.user.firstname if walker and walker.user else None
-            svc_label = 'drop-in' if service_slug == ServiceType.DROP_IN else 'walk'
-            batch = NotificationBatch(actor_id=current_user.id)
-            batch.add(booking.user_id, 'booking_confirmed',
-                      dog_name=dog.name, slot=booking.slot, date=booking.date,
-                      walker_name=walker_first, svc_label=svc_label)
-            for admin in User.query.filter_by(is_admin=True).all():
-                batch.add(admin.id, 'booking_confirmed',
-                          actor_first=booking.user.firstname,
-                          link=f'/admin/clients/{booking.user_id}',
-                          dog_name=dog.name, slot=booking.slot, date=booking.date,
-                          walker_name=walker_first, svc_label=svc_label)
-            # Notify the auto-assigned walker (§7.9, D3). Skip if the walker is
-            # the booking user themselves (edge case: owner-walker books own dog).
-            if walker.user_id != booking.user_id:
-                batch.add(walker.user_id, 'walker_assigned',
-                          dog_name=dog.name, slot=booking.slot, date=booking.date,
-                          svc_label=svc_label)
-            batch.flush()
-        _notify_co_owners_of_booking(booking, dog.name, confirmed=True)
-        return True
-    else:
-        if notify:
-            # Notify admins — needs manual assignment
-            admins = User.query.filter_by(is_admin=True).all()
-            date_str = booking.date.strftime('%a %-d %b')
-            ntype = 'same_day_request' if same_day else 'booking_requested'
-            title_prefix = 'Same-day request — ' if same_day else ''
-            for admin in admins:
-                create_notification(
-                    recipient_id=admin.id,
-                    notification_type=ntype,
-                    title=f"{title_prefix}{booking.user.firstname} requested {dog.name}'s {booking.slot.lower()} walk on {date_str}",
-                    link='/admin',
-                    sender_id=booking.user_id,
-                )
-            # Client (actor) notification — without this, a non-auto-confirmed
-            # request leaves the bell silent until an admin acts.
-            create_notification(
-                recipient_id=booking.user_id,
-                notification_type=ntype,
-                title=f"{dog.name}'s {booking.slot.lower()} walk on {date_str} has been requested",
-                body=(
-                    f"Same-day request — {current_app.config['OWNER_FIRSTNAME']} will confirm shortly."
-                    if same_day else
-                    "We'll confirm shortly."
-                ),
-                link='/',
-            )
-        _notify_co_owners_of_booking(booking, dog.name, confirmed=False)
-        return False
 
 
 def _summarise_book_both_for_client(slot_entries, dog_name, booking_date):
@@ -867,8 +785,6 @@ def book_drop_in():
     Accepts JSON: { "date": "YYYY-MM-DD", "slot": "Morning"|"Afternoon" }
     Returns JSON response (success/failure + booking info).
     """
-    from app.capacity import check_availability as _check
-
     data             = request.get_json(silent=True) or {}
     booking_date_str = data.get('date', '').strip()
     booking_slot     = data.get('slot', '').strip()

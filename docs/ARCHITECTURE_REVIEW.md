@@ -127,8 +127,17 @@ Ordered so each builds a shared module the next reuses. Each is independently sh
 
 **Risk note:** Mechanical. Move whole functions; do not refactor logic in the same PR. Land *after* Ticket 1 so moved invoicing/revenue code is already deduped.
 
-### TICKET 3 — Introduce `BookingService.create()`
+### TICKET 3 — Introduce `BookingService.create()` ✅ DONE (`feature/pricing-module`)
 *P2 · ~2 days · Medium risk*
+
+> **Status (2026-06-20):** Implemented. New module `app/services/booking_service.py` exposes
+> `create_booking(*, dog, user_id, date, slot, service, actor_id, batch_id, auto_confirm=True,
+> admin_override=False, same_day=False, created_by_id=None)` and `CapacityError`. All 7 booking
+> creation sites migrated: `client/book`, `book_both`, `book_drop_in`, `book` (index form),
+> `recurring_booking`, `admin/book_for_dog`, `admin/recurring_for_dog`. `_maybe_auto_confirm`
+> deleted (no remaining callers). Notification logic kept in callers — wording/grouping differs
+> too much between client/admin and single/bulk paths to embed in the service without complex
+> parameterisation. Each site migrated in its own commit (sites 1–7); 382 tests green on Postgres.
 
 **Problem:** The lock→create→record→assign→auto-confirm→notify sequence is reimplemented at 7 sites; `_maybe_auto_confirm` is client-only and re-derived in admin.
 
@@ -220,3 +229,24 @@ code change.
    config silently. Kept as a documented precondition (cheap) rather than
    re-sorting inside the helper on every call (the lists are already sorted at
    the query).
+
+### Ticket 3 — BookingService (done)
+
+1. **Notifications kept in callers, not the service.** The ticket spec proposed a
+   `notify=True` parameter. Dropped: client and admin notification wording/grouping
+   differ enough (single vs. bulk, `NotificationBatch` co-owner fan-out, `book_both`
+   consolidated summary) that embedding it in the service would require complex
+   parameterisation for no real benefit. The service handles only DB work
+   (lock → check → create → flush → audit → optional auto-assign); callers retain
+   full control over notifications.
+
+2. **`same_day` bypasses the CapacityError hard-reject.** Same-day bookings can land
+   when there are no walkers and no waitlist — the owner assigns manually. The service
+   raises `CapacityError` only when `not available and not can_waitlist and not
+   same_day`. All call sites that set `same_day=True` (the client's index form and
+   `recurring_booking`) previously had the same inline guard.
+
+3. **`_maybe_auto_confirm` deleted.** It lived only in `client/routes.py` and the
+   admin paths re-derived the same logic. With all 7 sites using the service, no
+   callers remain. Grep confirms `record_booking_created` no longer appears in any
+   route body.

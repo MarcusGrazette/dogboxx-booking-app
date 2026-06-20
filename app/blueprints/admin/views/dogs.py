@@ -9,9 +9,8 @@ from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
 from app.models import User, Booking, Dog, DogOwner, ServiceType
 from app import db
-from app.capacity import get_walker_slot_count, auto_assign_walker, check_availability, acquire_booking_lock
 from app.utils.notifications import NotificationBatch
-from app.utils.booking_status import transition_booking, record_booking_created, bulk_transition
+from app.utils.booking_status import bulk_transition
 from app.services.booking_service import create_booking, CapacityError
 from app.utils.invoicing import is_late_cancellation
 
