@@ -28,7 +28,7 @@ from app.models import (
     User, Client, Dog, DogOwner, Walker, ServiceType,
     Booking, PricingConfig,
 )
-from app.blueprints.admin.routes import _invoice_for_client
+from app.utils.invoicing import invoice_for_client as _invoice_for_client
 
 
 # ---------------------------------------------------------------------------
@@ -601,7 +601,7 @@ class TestInvoiceForClient:
 # Revenue dashboard — weekly discount must be netted off (matches invoices)
 # ---------------------------------------------------------------------------
 
-from app.blueprints.admin.routes import _revenue_for_range
+from app.blueprints.admin.views.revenue import _revenue_for_range
 
 MONTH_END_INCL = datetime.date(2026, 2, 28)   # inclusive end, as the route passes
 
