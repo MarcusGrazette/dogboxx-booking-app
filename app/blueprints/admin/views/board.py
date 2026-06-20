@@ -16,6 +16,23 @@ from app.utils.notifications import create_notification
 from app.utils.booking_status import transition_booking
 
 
+def _booking_dict(b, both_slots_dog_ids=None):
+    d = {
+        'id': b.id,
+        'dog_name': b.dog.name if b.dog else 'Unknown',
+        'dog_pic': b.dog.pic if b.dog and b.dog.pic else None,
+        'owner_name': b.dog.owners_display if b.dog else (b.user.full_name if b.user else ''),
+        'slot': b.slot,
+        'status': b.status,
+        'pickup_order': b.pickup_order,
+        'walker_id': b.walker_id,
+        'has_notes': bool(b.dog and b.dog.pickup_instructions),
+    }
+    if both_slots_dog_ids is not None:
+        d['has_both_slots'] = b.dog_id in both_slots_dog_ids
+    return d
+
+
 @admin_bp.route("/board")
 @login_required
 @admin_required
@@ -137,21 +154,8 @@ def drop_in_board_data(date_str):
         .all()
     ) if all_board_walker_ids else []
 
-    def booking_dict(b):
-        return {
-            'id': b.id,
-            'dog_name': b.dog.name if b.dog else 'Unknown',
-            'dog_pic': b.dog.pic if b.dog and b.dog.pic else None,
-            'owner_name': b.dog.owners_display if b.dog else (b.user.full_name if b.user else ''),
-            'slot': b.slot,
-            'status': b.status,
-            'pickup_order': b.pickup_order,
-            'walker_id': b.walker_id,
-            'has_notes': bool(b.dog and b.dog.pickup_instructions),
-        }
-
-    pending  = [booking_dict(b) for b in all_bookings if b.status in ('requested', 'waitlisted')]
-    assigned = [booking_dict(b) for b in all_bookings if b.walker_id and b.status == 'confirmed']
+    pending  = [_booking_dict(b) for b in all_bookings if b.status in ('requested', 'waitlisted')]
+    assigned = [_booking_dict(b) for b in all_bookings if b.walker_id and b.status == 'confirmed']
 
     slot_order = lambda s: 0 if s == 'Morning' else 1
     walkers_data = [
@@ -246,23 +250,8 @@ def board_data(date_str):
             if 'Morning' in slots and 'Afternoon' in slots
         }
 
-        def booking_dict(b):
-            d = {
-                'id': b.id,
-                'dog_name': b.dog.name if b.dog else 'Unknown',
-                'dog_pic': b.dog.pic if b.dog and b.dog.pic else None,
-                'owner_name': b.dog.owners_display if b.dog else (b.user.full_name if b.user else ''),
-                'slot': b.slot,
-                'status': b.status,
-                'pickup_order': b.pickup_order,
-                'walker_id': b.walker_id,
-                'has_both_slots': b.dog_id in both_slots_dog_ids,
-                'has_notes': bool(b.dog and b.dog.pickup_instructions),
-            }
-            return d
-
-        pending   = [booking_dict(b) for b in all_bookings if b.status in ('requested', 'waitlisted')]
-        assigned  = [booking_dict(b) for b in all_bookings if b.walker_id and b.status == 'confirmed']
+        pending   = [_booking_dict(b, both_slots_dog_ids) for b in all_bookings if b.status in ('requested', 'waitlisted')]
+        assigned  = [_booking_dict(b, both_slots_dog_ids) for b in all_bookings if b.walker_id and b.status == 'confirmed']
 
         slot_order = lambda s: 0 if s == 'Morning' else 1
         walkers_data = [

@@ -167,8 +167,17 @@ Ordered so each builds a shared module the next reuses. Each is independently sh
 
 **Risk note:** Inline JS reads Jinja vars directly today — the `data-`attribute handoff is the only real gotcha. Do one template, verify on the iOS PWA, then proceed.
 
-### TICKET 5 — Dedupe leftover helpers
+### TICKET 5 — Dedupe leftover helpers ✅ DONE (`feature/pricing-module`)
 *P3 · ~2 hrs · Trivial*
+
+> **Status (2026-06-20):** `_is_drop_in` (3× in `walker/routes.py`) replaced with an import of
+> `is_drop_in` from `app.utils.pricing` (already extracted in Ticket 1 — identical function).
+> `booking_dict` (2× in `admin/views/board.py`) extracted to module-level `_booking_dict(b,
+> both_slots_dog_ids=None)`; the `has_both_slots` key is only included when the set is passed.
+> `slot_stats` (2×) and `slot_cnt` (2×) in `dashboard.py` were assessed: `slot_stats` has
+> different signatures and different local variable access in each route — not truly duplicated;
+> `slot_cnt` is a single-line closure over different local dicts — too minor to extract without
+> adding complexity. Both left in place. 382 tests green.
 
 After Tickets 1–3, sweep remaining duplicated nested functions: `_is_drop_in` (3× in `walker/routes.py`), `booking_dict` / `slot_stats` / `slot_cnt` (2× each in admin). Move to a shared `app/utils/` module or the new service.
 
