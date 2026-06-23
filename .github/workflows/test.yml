@@ -67,3 +67,26 @@ jobs:
 
       - name: Run tests
         run: pytest --tb=short -q
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install production dependencies
+        run: pip install -r requirements.txt
+
+      - name: Audit dependencies for known CVEs (non-blocking)
+        # Informational for now: continue-on-error keeps a finding from failing the
+        # workflow while the current backlog is triaged. Remove it (and mark this job a
+        # required check) once the flagged CVEs are resolved. Installs prod requirements
+        # and audits the installed env, so the full prod transitive tree is covered.
+        continue-on-error: true
+        run: |
+          pip install pip-audit
+          pip-audit --progress-spinner=off
