@@ -966,7 +966,7 @@ def profile():
         Booking.date < month_end,
         Booking.status.notin_(['cancelled', 'rejected'])
     ).all()
-    confirmed_this_month = sum(1 for b in month_bookings if b.status in ('confirmed', 'completed'))
+    confirmed_this_month = sum(1 for b in month_bookings if b.status == 'confirmed')
     pending_this_month = sum(1 for b in month_bookings if b.status in ('requested', 'waitlisted'))
 
     next_booking = Booking.query.filter(
@@ -975,17 +975,11 @@ def profile():
         Booking.status == 'confirmed'
     ).order_by(Booking.date).first()
 
-    total_completed = Booking.query.filter(
-        Booking.dog_id.in_(accessible_dog_ids),
-        Booking.status == 'completed'
-    ).count()
-
     booking_stats = {
         'confirmed_this_month': confirmed_this_month,
         'pending_this_month': pending_this_month,
         'total_this_month': len(month_bookings),
         'next_booking': next_booking,
-        'total_completed': total_completed,
         'month_name': today_date.strftime('%B'),
     }
 

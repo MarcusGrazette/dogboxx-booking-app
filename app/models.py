@@ -313,8 +313,8 @@ class Booking(db.Model):
     CAPACITY_STATUSES = ('requested', 'confirmed', 'modified')       # counts toward slot capacity
     PENDING_STATUSES = ('requested', 'waitlisted')                    # awaiting confirmation
     ACTIVE_STATUSES = ('confirmed', 'requested', 'waitlisted')        # live bookings (admin views)
-    WALKER_STATUSES = ('confirmed', 'completed')                      # shown on walker pickup list
-    INVOICE_STATUSES = ('confirmed', 'completed', 'cancelled')        # billable activity
+    WALKER_STATUSES = ('confirmed',)                                  # shown on walker pickup list
+    INVOICE_STATUSES = ('confirmed', 'cancelled')                     # billable activity ('completed' is unused)
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)

@@ -49,7 +49,7 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
     """Return invoice data dict for a single client in the given month.
 
     Billable items:
-      - confirmed / completed bookings (walks + drop-ins)
+      - confirmed bookings (walks + drop-ins)
       - cancelled bookings where notice < cancellation_notice_days (from ServiceType.settings)
 
     Pricing:
@@ -80,7 +80,7 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
         .all()
     )
 
-    confirmed = [b for b in bookings if b.status in ('confirmed', 'completed')]
+    confirmed = [b for b in bookings if b.status == 'confirmed']
     # A cancelled booking is billed when is_billable_cancellation() says so:
     # an explicit admin bill/waive choice wins, otherwise the legacy default
     # (client-initiated late cancels only — closures and admin cancels stay free
