@@ -6,6 +6,8 @@
 **Scope:** ~13k lines Python, ~15.5k lines templates, 358 tests passing, CI green.
 **Branch reviewed:** `develop` (in sync with `main`).
 
+**Implementation status (2026-06-20):** All 5 tickets complete on `feature/pricing-module` (14 commits, pushed). Awaiting device test + PR to `develop`. 382 tests green on Postgres.
+
 ---
 
 ## What's already good
@@ -87,8 +89,15 @@ Only 1,413 lines of JS sit in `app/static/js/`. Templates carry roughly **4,000+
 
 Ordered so each builds a shared module the next reuses. Each is independently shippable and protected by the existing 358-test suite.
 
-### TICKET 1 — Extract a single pricing module
+### TICKET 1 — Extract a single pricing module ✅ DONE (`feature/pricing-module`)
 *P1 · ~1 day · Medium risk (money path)*
+
+> **Status (2026-06-15):** Implemented. New module `app/utils/pricing.py` holds
+> `config_for_date`, `is_drop_in`, `unit_price`, `build_line_items`,
+> `build_double_slot_discounts`. All 4 `config_for` copies deleted; the line-item
+> + double-slot construction in `invoicing_detail` and `monthly_summary` is now
+> shared. 16 new unit tests in `tests/test_pricing.py`; full suite green on
+> SQLite **and** Postgres (374 passed). Behaviour-preserving — see gotchas below.
 
 **Problem:** Pricing math and the `config_for` lookup are duplicated across `invoicing.py`, `admin/routes.py::_revenue_for_range`, and `client/routes.py::monthly_summary`. They can silently drift.
 
@@ -101,8 +110,16 @@ Ordered so each builds a shared module the next reuses. Each is independently sh
 
 **Risk note:** This is billing. Do it test-first — add a test asserting the revenue dashboard and the invoice agree *before* refactoring.
 
-### TICKET 2 — Split `admin/routes.py` into a package
+### TICKET 2 — Split `admin/routes.py` into a package ✅ DONE (`feature/pricing-module`)
 *P1 · ~1 day · Low risk (pure move)*
+
+> **Status (2026-06-20):** Implemented. `app/blueprints/admin/routes.py` (4,983 lines) deleted;
+> replaced by `app/blueprints/admin/views/` package with 12 domain modules:
+> `dashboard.py`, `revenue.py`, `board.py`, `activity.py`, `clients.py`, `walkers.py`,
+> `dogs.py`, `closures.py`, `invoicing.py`, `marketing.py`, `csv_import.py`,
+> `daily_messages.py`. `admin_bp` stays in `__init__.py`; each module imports it.
+> Dead `_get_slot_color` dropped. Two test-file imports fixed to use canonical module
+> paths (`app.utils.invoicing`, `app.blueprints.admin.views.revenue`). 382 tests green.
 
 **Problem:** One 4,986-line file holds 11 domains.
 
@@ -112,8 +129,17 @@ Ordered so each builds a shared module the next reuses. Each is independently sh
 
 **Risk note:** Mechanical. Move whole functions; do not refactor logic in the same PR. Land *after* Ticket 1 so moved invoicing/revenue code is already deduped.
 
-### TICKET 3 — Introduce `BookingService.create()`
+### TICKET 3 — Introduce `BookingService.create()` ✅ DONE (`feature/pricing-module`)
 *P2 · ~2 days · Medium risk*
+
+> **Status (2026-06-20):** Implemented. New module `app/services/booking_service.py` exposes
+> `create_booking(*, dog, user_id, date, slot, service, actor_id, batch_id, auto_confirm=True,
+> admin_override=False, same_day=False, created_by_id=None)` and `CapacityError`. All 7 booking
+> creation sites migrated: `client/book`, `book_both`, `book_drop_in`, `book` (index form),
+> `recurring_booking`, `admin/book_for_dog`, `admin/recurring_for_dog`. `_maybe_auto_confirm`
+> deleted (no remaining callers). Notification logic kept in callers — wording/grouping differs
+> too much between client/admin and single/bulk paths to embed in the service without complex
+> parameterisation. Each site migrated in its own commit (sites 1–7); 382 tests green on Postgres.
 
 **Problem:** The lock→create→record→assign→auto-confirm→notify sequence is reimplemented at 7 sites; `_maybe_auto_confirm` is client-only and re-derived in admin.
 
@@ -126,6 +152,15 @@ Ordered so each builds a shared module the next reuses. Each is independently sh
 ### TICKET 4 — Extract inline JS, highest-traffic templates first
 *P2 · ongoing · Low risk*
 
+> **Status (2026-06-20, partial):** `index.html` (954 inline lines) and `admin_dogs.html` (915 inline lines)
+> extracted. New static files: `app/static/js/client-home.js` (958 lines) and
+> `app/static/js/admin-dogs.js` (917 lines). Server data handed off via
+> `<script type="application/json" id="page-config">` (10 values for client-home, 2 for admin-dogs).
+> Templates reduced from ~1,500 to ~575 lines each (inline `<script>` gone; modals remain in HTML).
+> Same-origin JS needs no nonce — `'self'` in `script-src` covers it.
+> Remaining templates with notable inline JS: `admin.html` (~497), `notification_bell.html` (~454),
+> `profile.html` (~294).
+
 **Problem:** ~4,000 lines of JS inline in templates — uncached, untested, duplicated.
 
 **Do this (incremental, one template per PR):** Start with `index.html` (~1,000 lines) and `admin_dogs.html` (~916). Move each `<script>` block to `app/static/js/<page>.js`, load via `<script src=...>` with the existing cache-version pattern. Pass server data via `data-` attributes or a single `<script type="application/json">` block, not interpolated JS. Reuse `reusable-calendar.js` etc. instead of re-extracting.
@@ -134,8 +169,17 @@ Ordered so each builds a shared module the next reuses. Each is independently sh
 
 **Risk note:** Inline JS reads Jinja vars directly today — the `data-`attribute handoff is the only real gotcha. Do one template, verify on the iOS PWA, then proceed.
 
-### TICKET 5 — Dedupe leftover helpers
+### TICKET 5 — Dedupe leftover helpers ✅ DONE (`feature/pricing-module`)
 *P3 · ~2 hrs · Trivial*
+
+> **Status (2026-06-20):** `_is_drop_in` (3× in `walker/routes.py`) replaced with an import of
+> `is_drop_in` from `app.utils.pricing` (already extracted in Ticket 1 — identical function).
+> `booking_dict` (2× in `admin/views/board.py`) extracted to module-level `_booking_dict(b,
+> both_slots_dog_ids=None)`; the `has_both_slots` key is only included when the set is passed.
+> `slot_stats` (2×) and `slot_cnt` (2×) in `dashboard.py` were assessed: `slot_stats` has
+> different signatures and different local variable access in each route — not truly duplicated;
+> `slot_cnt` is a single-line closure over different local dicts — too minor to extract without
+> adding complexity. Both left in place. 382 tests green.
 
 After Tickets 1–3, sweep remaining duplicated nested functions: `_is_drop_in` (3× in `walker/routes.py`), `booking_dict` / `slot_stats` / `slot_cnt` (2× each in admin). Move to a shared `app/utils/` module or the new service.
 
@@ -148,3 +192,81 @@ After Tickets 1–3, sweep remaining duplicated nested functions: `_is_drop_in` 
 Do **Ticket 1 → 2 → 3** in order — each makes the next cleaner (dedupe pricing before splitting the admin file so you move clean code; build the service after the split so it has a tidy home). **Ticket 4** runs in parallel as background frontend work (different files, no conflict). **Ticket 5** is end-of-run cleanup.
 
 None of these change the data model, URL surface, or behavior — all internal restructuring protected by the existing 358-test suite.
+
+---
+
+## Implementation log & architectural gotchas
+
+*Notepad kept as tickets are worked. Capture anything non-obvious that the next
+engineer (or a future refactor) needs to know.*
+
+### Ticket 1 — pricing module (done)
+
+Discovered while reading the three pricing paths to unify them. **Both are
+pre-existing behaviours that the dedup deliberately preserved** — neither was
+"fixed", because each is a money decision for the business owner, not a silent
+code change.
+
+1. **The revenue dashboard omits the weekly discount.** ✅ **RESOLVED
+   (2026-06-15).** `invoice_for_client` applied the ≥5-walks-per-ISO-week
+   discount; the admin revenue dashboard (`_revenue_for_range`) did **not**, so
+   for a heavy-use client the dashboard reported *more* than was actually
+   invoiced. Business owner confirmed revenue should reflect weekly discounts.
+   Fix: the per-week rule is now a single shared function
+   `pricing.weekly_discount_for_walks(walk_dates, configs)` used by **both**
+   `invoice_for_client` and `_revenue_for_range`, so they cannot disagree on
+   whether/how much a week discounts. `_revenue_for_range` now returns
+   `(daily, weekly_discount_total)`; the daily chart bars stay gross (weekly
+   discount is a *weekly* concept, not attributable to one day), and the
+   headline total is netted, with a "after −£X weekly discount" reconciliation
+   line on the revenue stat card so bars + note = total. Weekly grouping is
+   **per billing household** (a dog's primary owner), matching the sum of
+   per-client invoices — verified by `test_invoicing.py::TestRevenueWeeklyDiscount`
+   (incl. a test that two 3-walk households do NOT trigger the discount; the
+   threshold is per-household, not global).
+
+   *Known remaining minor mismatch (not addressed):* `_revenue_for_range`
+   filters `status == 'confirmed'` only, while invoices count
+   `('confirmed', 'completed')`. No effect today — nothing sets `completed`
+   (the `WalkEvent`/completion feature is unbuilt) — but align the filter if
+   completion is ever shipped.
+
+2. **Double-slot discount is keyed two different ways.** The aggregate
+   `invoice_for_client` subtotal keys the discount by **`(dog_id, date)`** (so a
+   2-dog household where dog A takes AM and dog B takes PM does *not* get a
+   discount). The per-client *display* views (`invoicing_detail`,
+   `monthly_summary`) key by **date alone** — so they would show a discount row
+   that the subtotal didn't apply, for that multi-dog AM/PM case. The extracted
+   `build_double_slot_discounts` reproduces the **date-only** display behaviour
+   (matching what those two views did before), and `invoice_for_client` keeps
+   its `(dog_id, date)` subtotal keying. They reconcile in the common
+   single-dog case; the multi-dog edge case is a latent display/subtotal
+   mismatch that predates this work. Documented in the helper's docstring.
+
+3. **Invariant:** `config_for_date(configs, d)` requires `configs` sorted
+   **descending** by `effective_from`. Every call site already queries it that
+   way; if a new caller passes an unsorted list, the lookup returns the wrong
+   config silently. Kept as a documented precondition (cheap) rather than
+   re-sorting inside the helper on every call (the lists are already sorted at
+   the query).
+
+### Ticket 3 — BookingService (done)
+
+1. **Notifications kept in callers, not the service.** The ticket spec proposed a
+   `notify=True` parameter. Dropped: client and admin notification wording/grouping
+   differ enough (single vs. bulk, `NotificationBatch` co-owner fan-out, `book_both`
+   consolidated summary) that embedding it in the service would require complex
+   parameterisation for no real benefit. The service handles only DB work
+   (lock → check → create → flush → audit → optional auto-assign); callers retain
+   full control over notifications.
+
+2. **`same_day` bypasses the CapacityError hard-reject.** Same-day bookings can land
+   when there are no walkers and no waitlist — the owner assigns manually. The service
+   raises `CapacityError` only when `not available and not can_waitlist and not
+   same_day`. All call sites that set `same_day=True` (the client's index form and
+   `recurring_booking`) previously had the same inline guard.
+
+3. **`_maybe_auto_confirm` deleted.** It lived only in `client/routes.py` and the
+   admin paths re-derived the same logic. With all 7 sites using the service, no
+   callers remain. Grep confirms `record_booking_created` no longer appears in any
+   route body.

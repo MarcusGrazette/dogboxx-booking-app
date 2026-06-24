@@ -28,7 +28,7 @@ from app.models import (
     User, Client, Dog, DogOwner, Walker, ServiceType,
     Booking, PricingConfig,
 )
-from app.blueprints.admin.routes import _invoice_for_client
+from app.utils.invoicing import invoice_for_client as _invoice_for_client
 
 
 # ---------------------------------------------------------------------------
@@ -595,3 +595,64 @@ class TestInvoiceForClient:
             assert inv['weekly_discount_weeks'] == 0
             assert inv['weekly_discount_total'] == 0.0
             assert inv['subtotal'] == round(WALK_PRICE * 5, 2)
+
+
+# ---------------------------------------------------------------------------
+# Revenue dashboard — weekly discount must be netted off (matches invoices)
+# ---------------------------------------------------------------------------
+
+from app.blueprints.admin.views.revenue import _revenue_for_range
+
+MONTH_END_INCL = datetime.date(2026, 2, 28)   # inclusive end, as the route passes
+
+
+class TestRevenueWeeklyDiscount:
+    def test_revenue_nets_weekly_discount_and_matches_invoice(self, app):
+        """5 walks in one ISO week → revenue total nets the weekly discount and
+        equals the client's invoice subtotal (no more silent over-reporting)."""
+        with app.app_context():
+            u, dog = make_client_with_dog('rev_wkly@test.com')
+            st = make_walk_service()
+            make_pricing_config(weekly_discount=WEEKLY_DISCOUNT)
+            for day in range(2, 7):  # Mon–Fri 2026-02-02..06, one ISO week
+                add_booking(u, dog, st, datetime.date(2026, 2, day), 'Morning', status='confirmed')
+            db.session.commit()
+
+            daily, weekly_discount = _revenue_for_range(MONTH_START, MONTH_END_INCL)
+            gross = round(sum(r['revenue'] for r in daily), 2)
+            net = round(gross - weekly_discount, 2)
+
+            assert weekly_discount == round(WEEKLY_DISCOUNT * 5, 2)   # 5 walks
+            assert gross == round(WALK_PRICE * 5, 2)
+
+            inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
+            assert net == inv['subtotal']
+
+    def test_revenue_no_discount_below_threshold(self, app):
+        """4 walks in a week → no weekly discount netted."""
+        with app.app_context():
+            u, dog = make_client_with_dog('rev_nowkly@test.com')
+            st = make_walk_service()
+            make_pricing_config(weekly_discount=WEEKLY_DISCOUNT)
+            for day in range(2, 6):  # only 4 walks
+                add_booking(u, dog, st, datetime.date(2026, 2, day), 'Morning', status='confirmed')
+            db.session.commit()
+
+            daily, weekly_discount = _revenue_for_range(MONTH_START, MONTH_END_INCL)
+            assert weekly_discount == 0.0
+
+    def test_weekly_discount_grouped_per_household_not_globally(self, app):
+        """Two clients with 3 walks each (6 total) do NOT trigger the discount —
+        the ≥5 threshold is per household, not across the whole business."""
+        with app.app_context():
+            st = make_walk_service()
+            make_pricing_config(weekly_discount=WEEKLY_DISCOUNT)
+            u1, dog1 = make_client_with_dog('rev_hh1@test.com')
+            u2, dog2 = make_client_with_dog('rev_hh2@test.com')
+            for day in range(2, 5):  # 3 walks each
+                add_booking(u1, dog1, st, datetime.date(2026, 2, day), 'Morning', status='confirmed')
+                add_booking(u2, dog2, st, datetime.date(2026, 2, day), 'Morning', status='confirmed')
+            db.session.commit()
+
+            _daily, weekly_discount = _revenue_for_range(MONTH_START, MONTH_END_INCL)
+            assert weekly_discount == 0.0

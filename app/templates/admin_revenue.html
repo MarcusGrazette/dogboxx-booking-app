@@ -23,6 +23,9 @@
               £{{ "%.2f"|format(total_revenue) }}
             </div>
             <div class="text-muted small">Total revenue</div>
+            <div class="text-muted small" id="statWeeklyNote" {% if not weekly_discount %}hidden{% endif %}>
+              after &minus;£<span id="statWeekly">{{ "%.2f"|format(weekly_discount) }}</span> weekly discount
+            </div>
           </div>
         </div>
       </div>
@@ -272,6 +275,9 @@
     document.getElementById('statRevenue').textContent  = '£' + d.total_revenue.toFixed(2);
     document.getElementById('statWalks').textContent    = d.total_walks;
     document.getElementById('statDoubles').textContent  = d.total_doubles;
+    const weekly = d.weekly_discount || 0;
+    document.getElementById('statWeekly').textContent   = weekly.toFixed(2);
+    document.getElementById('statWeeklyNote').hidden    = (weekly <= 0);
   }
 
   // ── Navigation ───────────────────────────────────────────────────────────

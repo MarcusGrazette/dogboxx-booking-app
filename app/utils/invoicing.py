@@ -4,9 +4,11 @@ client-facing monthly summary page.
 """
 
 from collections import defaultdict
-from datetime import date as _date
 from sqlalchemy.orm import joinedload
-from app.models import DogOwner, Booking, ServiceType
+from app.models import DogOwner, Booking
+from app.utils.pricing import (
+    config_for_date, is_drop_in, unit_price, weekly_discount_for_walks,
+)
 
 
 def _cancellation_notice_days(booking):
@@ -47,7 +49,7 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
     """Return invoice data dict for a single client in the given month.
 
     Billable items:
-      - confirmed / completed bookings (walks + drop-ins)
+      - confirmed bookings (walks + drop-ins)
       - cancelled bookings where notice < cancellation_notice_days (from ServiceType.settings)
 
     Pricing:
@@ -57,12 +59,6 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
 
     Returns None if the user has no primary dog (and therefore no bookings).
     """
-
-    def config_for(d):
-        for c in all_configs:
-            if c.effective_from <= d:
-                return c
-        return None
 
     dog_owner_ids = [
         do.dog_id
@@ -84,16 +80,13 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
         .all()
     )
 
-    confirmed = [b for b in bookings if b.status in ('confirmed', 'completed')]
+    confirmed = [b for b in bookings if b.status == 'confirmed']
     # A cancelled booking is billed when is_billable_cancellation() says so:
     # an explicit admin bill/waive choice wins, otherwise the legacy default
     # (client-initiated late cancels only — closures and admin cancels stay free
     # unless the admin opted to bill at cancel time).
     late_cancels = [b for b in bookings if is_billable_cancellation(b)]
     all_billable = confirmed + late_cancels
-
-    def is_drop_in(b):
-        return b.service_type and b.service_type.slug == ServiceType.DROP_IN
 
     # Group walk items keyed by (dog_id, date) so the double-slot discount only
     # fires when the SAME dog is booked AM+PM on the same day. Keying by date
@@ -110,33 +103,17 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
     # Calculate subtotal
     subtotal = 0.0
     for b in all_billable:
-        cfg = config_for(b.date)
-        if cfg:
-            if is_drop_in(b):
-                subtotal += float(cfg.price_per_drop_in)
-            else:
-                subtotal += float(cfg.price_per_walk)
+        subtotal += unit_price(b, config_for_date(all_configs, b.date))
     for (_dog_id, d), slots in dog_date_slots.items():
         if 'Morning' in slots and 'Afternoon' in slots:
-            cfg = config_for(d)
+            cfg = config_for_date(all_configs, d)
             if cfg:
                 subtotal -= float(cfg.double_slot_discount)
 
     # Weekly discount — confirmed group walks only, ≥5 per ISO week
-    week_walks: dict = defaultdict(int)
-    for b in walk_confirmed:
-        iso_year, iso_week, _ = b.date.isocalendar()
-        week_walks[(iso_year, iso_week)] += 1
-
-    weekly_discount_total = 0.0
-    weekly_discount_weeks = 0
-    for (iso_year, iso_week), count in week_walks.items():
-        if count >= 5:
-            rep_date = _date.fromisocalendar(iso_year, iso_week, 1)  # Monday of the week
-            cfg = config_for(rep_date)
-            if cfg and cfg.weekly_discount:
-                weekly_discount_total += float(cfg.weekly_discount) * count
-                weekly_discount_weeks += 1
+    weekly_discount_total, weekly_discount_weeks = weekly_discount_for_walks(
+        [b.date for b in walk_confirmed], all_configs
+    )
     subtotal -= weekly_discount_total
 
     return {
