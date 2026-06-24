@@ -16,3 +16,4 @@ app/static/uploads/profiles/*.png
 .DS_Store
 .claude/
 CLAUDE.md
+SECURITY_REVIEW.md
