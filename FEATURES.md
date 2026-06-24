@@ -43,7 +43,7 @@
 | 27 | P2 | L | ✅ | **Multiple clients per dog** | dog_owners join table with primary/secondary roles. Admin join/revoke modal. Secondary owners can book and view shared dogs. |
 | 29 | P2 | L | ✅ | **Drop-in service type** | Client books AM/PM drop-in visits. Admin drop-in board (assign walkers, confirm/cancel, reorder). Walker pickup list includes drop-ins. Invoicing tracks drop-ins separately at price_per_drop_in. does_drop_ins flag on walkers. |
 | 28 | P3 | M | ✅ | **CSV client/dog import** | Upload CSV matching the create-client form fields. Bulk create client + dog records. Validation with error report on bad rows. No need to handle joined accounts — those are done manually post-import. |
-| 35 | P2 | M | ✅ | **Admin bulk booking operations** | Bulk-cancel upcoming bookings for a dog from `/admin/dogs` view (with preview modal showing dates). Recurring create on admin's behalf from the same view. Day-of-week filter on pause-walks. |
+| 35 | P2 | M | ✅ | **Admin bulk booking operations** | Bulk-cancel upcoming bookings for a dog from `/admin/dogs` view (with preview modal showing dates). Service filter on the cancel modal (All / Walk / Drop In) — cancel one service without touching others. Recurring create on admin's behalf from the same view. Day-of-week filter on pause-walks. |
 | 36 | P2 | M | ✅ | **Closures** | Admin marks a date as closed — auto-cancels active bookings with client notifications. Prevents new bookings on closed dates. Preview endpoint before confirming. |
 | 37 | P3 | S | ✅ | **Daily walker messages** | Admin-authored announcements shown to walkers on the pickup list for a given date. Auto-purge of old messages. |
 | 38 | P2 | L | ✅ | **Admin broadcasts** | One-shot message to all clients booked on a chosen date + slot scope (all / morning / afternoon). Bell + email delivery. Recipients resolved at send time from confirmed bookings (primary + secondary co-owners). Broadcast bar shown on assignment board. Audit rows kept. PRs #99–102. |
@@ -76,7 +76,7 @@
 | 45 | P1 | S | ✅ | **Notification audit trail (admin)** | Admin can see notification history per client on their detail page. |
 | 46 | P1 | L | ✅ | **Notification system overhaul** | `BookingStatusChange` append-only audit log at every status transition (chokepoint in `app/utils/booking_status.py`). `NotificationBatch` + `summarise()` for grouped bulk notifications. Caps: DB=100, page=50, bell=5. `batch_id` correlates rows from one bulk action. PRs #114–121. |
 | 47 | P2 | L | ✅ | **Admin activity feed** | `/admin/activity` rebuilt from `BookingStatusChange` log — slot moves, booking-reset events, bulk-action clustering. Collapsible batch groups. PR #118 (Session 4). |
-| 48 | P3 | L | ✅ | **Web Push / PWA push notifications** | VAPID-signed push via `pywebpush`. iOS PWA service worker (`app/static/js/sw.js`). `PushSubscription` model stores endpoints per user/device. Bell notification triggers push on unread. Home-screen badge reconciled to server truth on every page load + `visibilitychange` (PRs #128/#129). SSE uses Redis pub/sub when `REDIS_URL` is set so cross-worker events don't drop. |
+| 48 | P3 | L | ✅ | **Web Push / PWA push notifications** | VAPID-signed push via `pywebpush`. iOS PWA service worker (`app/static/js/sw.js`). `PushSubscription` model stores endpoints per user/device. Bell notification triggers push on unread. Home-screen badge reconciled to server truth on every page load + `visibilitychange` (PRs #128/#129). The bell dropdown list also reconciles on `visibilitychange` via `GET /notifications/recent` (count + top-N) so it self-heals after iOS suspends the EventSource (PR #135). SSE uses Redis pub/sub when `REDIS_URL` is set so cross-worker events don't drop. |
 
 ## Infrastructure & Quality
 
@@ -86,7 +86,7 @@
 | 51 | P1 | M | ✅ | **Security hardening** | CSRF, rate limiting, CSP headers, secure cookies, UUID file uploads, session hardening. |
 | 52 | P1 | S | ✅ | **DB indexes** | Indexes on date, walker_id, user_id, dog_id, status for query performance. |
 | 53 | P1 | M | ✅ | **Git branching** | `develop` for ongoing work, `main` for production. PRs required to merge to main. |
-| 54 | P1 | L | ✅ | **Unit test suite** | 347 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing, activity feed, broadcasts, closures, walker schedule, bulk-cancel, SSE transport. All passing on Postgres CI. |
+| 54 | P1 | L | ✅ | **Unit test suite** | 382 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing, pricing, activity feed, broadcasts, closures, walker schedule, bulk-cancel, SSE transport. All passing on Postgres CI. |
 | 55 | P2 | M | ✅ | **Password reset flow** | Email-based token reset via Resend. noreply@dogboxx.org verified. RESEND_API_KEY + APP_BASE_URL needed in prod env. |
 | 56 | P3 | S | ✅ | **CI/CD pipeline** | GitHub Actions (test.yml): runs pytest on push to main/develop and all PRs. All runs green. |
 | 57 | P3 | M | ✅ | **PWA service worker** | iOS home-screen install + Android PWA support. Pre-cached assets, pull-to-refresh (shared IIFE in both layouts), standalone-mode detection (`navigator.standalone \|\| display-mode:standalone`). |

@@ -132,7 +132,22 @@
           </div>
 
           <div class="mb-3">
-            <label for="broadcast-body" class="form-label fw-semibold">Body</label>
+            <div class="d-flex align-items-center justify-content-between mb-1">
+              <label for="broadcast-body" class="form-label fw-semibold mb-0">Body</label>
+              <div class="d-flex gap-2 align-items-center">
+                <span class="text-muted small me-1">Insert:</span>
+                <span class="badge bg-secondary merge-tag"
+                      data-tag="{{ '{{firstname}}' }}"
+                      style="cursor:pointer;font-family:monospace;">
+                  {{ '{{firstname}}' }}
+                </span>
+                <span class="badge bg-secondary merge-tag"
+                      data-tag="{{ '{{dog_name}}' }}"
+                      style="cursor:pointer;font-family:monospace;">
+                  {{ '{{dog_name}}' }}
+                </span>
+              </div>
+            </div>
             <textarea id="broadcast-body" name="body"
                       class="form-control"
                       rows="6"
@@ -397,6 +412,19 @@
       })
       .catch(() => setTestStatus('✗ Network error — please try again.', 'error'))
       .finally(() => { testBtn.disabled = false; });
+  });
+
+  // Merge-tag pills — insert {{firstname}} / {{dog_name}} at the cursor.
+  document.querySelectorAll('.merge-tag').forEach(pill => {
+    pill.addEventListener('click', () => {
+      const tag = pill.dataset.tag;
+      const start = bodyInput.selectionStart ?? bodyInput.value.length;
+      const end = bodyInput.selectionEnd ?? bodyInput.value.length;
+      bodyInput.value = bodyInput.value.slice(0, start) + tag + bodyInput.value.slice(end);
+      const caret = start + tag.length;
+      bodyInput.focus();
+      bodyInput.setSelectionRange(caret, caret);
+    });
   });
 
   // Past broadcasts — click row to toggle expanded body

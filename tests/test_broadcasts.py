@@ -306,6 +306,41 @@ class TestBroadcastSend:
         assert captured_broadcasts[0]['subject'] == 'Weather alert'
         assert captured_broadcasts[0]['recipients'][0]['email'] == 'c1@b-bcast.test.com'
 
+    def test_merge_tags_personalise_bell_and_carry_dog_name_to_email(
+            self, app, client, captured_broadcasts):
+        with app.app_context():
+            admin = _user('admin@bm-bcast.test.com', firstname='Admin',
+                          role='walker', is_admin=True)
+            st = _service_type()
+            d = date.today() + timedelta(days=1)
+            c1 = _user('c1@bm-bcast.test.com', firstname='Alice'); _client(c1.id)
+            dog1 = _dog('Daisy'); _own(dog1.id, c1.id)
+            _booking(c1.id, dog1.id, st.id, d, 'Morning')
+            db.session.commit()
+            admin_email = admin.email
+            iso = d.isoformat()
+            c1_id = c1.id
+
+        _login(client, admin_email)
+        resp = client.post('/admin/broadcasts', data={
+            'scope_date': iso, 'scope_slot': 'all',
+            'subject': 'Hello',
+            'body': 'Hi {{firstname}}, see you and {{dog_name}} soon.',
+            'channel_bell': 'on', 'channel_email': 'on',
+        }, follow_redirects=False)
+        assert resp.status_code == 302
+
+        # Bell body is personalised in the route (no merge tags remain)
+        with app.app_context():
+            n = Notification.query.filter_by(recipient_id=c1_id).one()
+            assert n.body == 'Hi Alice, see you and Daisy soon.'
+
+        # Email recipient carries firstname + dog_name for substitution
+        assert len(captured_broadcasts) == 1
+        rcpt = captured_broadcasts[0]['recipients'][0]
+        assert rcpt['firstname'] == 'Alice'
+        assert rcpt['dog_name'] == 'Daisy'
+
     def test_send_bell_only_skips_email_batch(
             self, app, client, captured_broadcasts):
         with app.app_context():

@@ -17,6 +17,7 @@ from app.blueprints.walker import walker_bp
 from app.utils.decorators import walker_required
 from app.utils.notifications import create_notification, NotificationBatch
 from app.utils.booking_status import bulk_transition
+from app.utils.pricing import is_drop_in as _is_drop_in
 import uuid
 
 
@@ -69,9 +70,6 @@ def _build_daily_overview(selected_date):
         .order_by(Booking.slot, Booking.pickup_order)
         .all()
     )
-
-    def _is_drop_in(b):
-        return b.service_type and b.service_type.slug == ServiceType.DROP_IN
 
     overview = {}
     for slot in ('Morning', 'Afternoon'):
@@ -844,9 +842,6 @@ def pickups(date_str=None):
         .all()
     )
 
-    def _is_drop_in(b):
-        return b.service_type and b.service_type.slug == ServiceType.DROP_IN
-
     # Order: AM drop-ins → AM walks → PM walks → PM drop-ins
     ctx['morning_drop_ins']   = [b for b in bookings if b.slot == 'Morning'   and     _is_drop_in(b)]
     ctx['morning_pickups']    = [b for b in bookings if b.slot == 'Morning'   and not _is_drop_in(b)]
@@ -1019,9 +1014,6 @@ def api_pickup_list(date_str):
         )
         .all()
     )
-
-    def _is_drop_in(b):
-        return b.service_type and b.service_type.slug == ServiceType.DROP_IN
 
     morning_drop_ins   = [b for b in bookings if b.slot == 'Morning'   and     _is_drop_in(b)]
     morning_pickups    = [b for b in bookings if b.slot == 'Morning'   and not _is_drop_in(b)]

@@ -175,7 +175,8 @@ class TestNewsletterTest:
         assert resp.content_type.startswith('application/json')
         data = resp.get_json()
         assert data['success'] is True
-        assert 'lydia@dogboxx.org' in data['message'].lower()
+        # Test email goes to the current admin's own address, not a hardcoded one
+        assert admin_email in data['message'].lower()
 
         # The captured batch was prefixed with [TEST] so it's clearly a test
         assert captured_newsletters[0]['subject'].startswith('[TEST] ')

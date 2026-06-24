@@ -64,4 +64,4 @@ flask db upgrade
 flask seed-service-types
 
 # exec replaces the shell so gunicorn receives Railway's SIGTERM directly
-exec gunicorn run:app --workers 2 --worker-class gevent --worker-connections 100 --bind 0.0.0.0:$PORT --timeout 120 --log-level info
+exec gunicorn run:app --workers 2 --worker-class gevent --worker-connections 100 --bind 0.0.0.0:$PORT --timeout 120 --log-level info --access-logfile -
