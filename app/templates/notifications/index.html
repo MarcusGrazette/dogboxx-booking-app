@@ -41,9 +41,9 @@
                         <i class="bi {{ icon }}"></i>
                     </div>
                     <div class="flex-grow-1 text-start">
-                        <div class="d-flex justify-content-between align-items-start">
+                        <div class="d-flex flex-column flex-sm-row justify-content-sm-between align-items-start">
                             <strong class="notif-title">{{ n.title }}</strong>
-                            <small class="text-muted ms-3 flex-shrink-0 notif-time"
+                            <small class="text-muted ms-sm-3 mt-1 mt-sm-0 flex-shrink-0 notif-time"
                                    data-ts="{{ n.created_at.isoformat() }}">
                                 {{ n.created_at.strftime('%d %b %Y %H:%M') }}
                             </small>

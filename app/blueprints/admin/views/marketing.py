@@ -80,7 +80,7 @@ def newsletter():
 @login_required
 @admin_required
 def newsletter_test():
-    """Send a test newsletter to lydia@dogboxx.org.
+    """Send a test newsletter to the current admin's own email.
 
     Returns JSON so the compose page never reloads — keeps the user's
     draft (subject + Quill body) intact while they iterate on the test.
@@ -97,20 +97,26 @@ def newsletter_test():
             message="Write a subject and body before sending a test.",
         ), 400
 
+    if not current_user.email:
+        return jsonify(
+            success=False,
+            message="Your account has no email address on file.",
+        ), 400
+
     base_url = current_app.config.get("APP_BASE_URL", "").rstrip("/")
     result = send_newsletter_batch(
         subject=f"[TEST] {subject}",
         html_template=html_body,
         recipients=[{
-            "email": "lydia@dogboxx.org",
-            "firstname": "Lydia",
-            "dog_name": "Luna",
+            "email": current_user.email,
+            "firstname": current_user.firstname or "there",
+            "dog_name": "your dog",
             "unsubscribe_url": f"{base_url}/auth/unsubscribe/test",
         }],
     )
     if result.get("sent"):
         return jsonify(success=True,
-                       message="Test email sent to lydia@dogboxx.org.")
+                       message=f"Test email sent to {current_user.email}.")
     return jsonify(success=False,
                    message="Test email failed — check logs."), 500
 
@@ -181,16 +187,24 @@ def broadcasts():
                 past_broadcasts=past_broadcasts,
             )
 
+        # Merge-tag substitution — {{firstname}} and {{dog_name}}. There is no
+        # auto-greeting; the admin inserts the tags they want via the pills.
+        def _personalise(text, user, dogs):
+            dog_name = dogs[0].name if dogs else "your dog"
+            return (text
+                    .replace("{{firstname}}", user.firstname or "")
+                    .replace("{{dog_name}}", dog_name))
+
         # Send: bell first (synchronous DB writes), then email batch.
         sender_id = current_user.id
         title = subject
         if channel_bell:
-            for user, _dogs in recipients:
+            for user, dogs in recipients:
                 create_notification(
                     recipient_id=user.id,
                     notification_type='system',
                     title=title,
-                    body=body,
+                    body=_personalise(body, user, dogs),
                     link=None,  # falls through to /notifications in the bell template
                     sender_id=sender_id,
                 )
@@ -198,8 +212,12 @@ def broadcasts():
         email_result = {'sent': 0, 'failed': 0}
         if channel_email:
             email_recipients = [
-                {"email": user.email, "firstname": user.firstname}
-                for user, _dogs in recipients
+                {
+                    "email": user.email,
+                    "firstname": user.firstname,
+                    "dog_name": dogs[0].name if dogs else "your dog",
+                }
+                for user, dogs in recipients
                 if user.email
             ]
             email_result = send_broadcast_batch(

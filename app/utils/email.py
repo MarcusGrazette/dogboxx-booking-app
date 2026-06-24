@@ -191,7 +191,10 @@ def send_broadcast_batch(subject: str, body_text: str, recipients: list) -> dict
     body_text is plain text. Newlines are preserved as <br>; the body is HTML
     escaped before insertion. No unsubscribe link (operational, not marketing).
 
-    Each recipient dict must have: email, firstname.
+    Each recipient dict must have: email, firstname. Optional: dog_name.
+
+    Merge tags supported in body_text: {{firstname}}, {{dog_name}}. There is no
+    auto-greeting — the admin writes the salutation (if any) into the body.
 
     Returns {'sent': int, 'failed': int}
     """
@@ -203,8 +206,6 @@ def send_broadcast_batch(subject: str, body_text: str, recipients: list) -> dict
         return {'sent': 0, 'failed': len(recipients)}
 
     RESEND_BATCH_URL = "https://api.resend.com/emails/batch"
-
-    body_html = _html.escape(body_text).replace("\n", "<br>")
 
     SHELL = """<!DOCTYPE html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
@@ -225,7 +226,6 @@ def send_broadcast_batch(subject: str, body_text: str, recipients: list) -> dict
           </tr>
           <tr>
             <td style="background-color:#ffffff;border:1px solid #e2dfde;border-top:none;border-radius:0 0 6px 6px;padding:32px;">
-              <p style="margin:0 0 16px 0;font-size:1rem;color:#3d3d3d;">Hi {{firstname}},</p>
               <div style="font-size:1rem;color:#3d3d3d;line-height:1.6;">{{body}}</div>
             </td>
           </tr>
@@ -238,8 +238,12 @@ def send_broadcast_batch(subject: str, body_text: str, recipients: list) -> dict
 
     batch = []
     for r in recipients:
-        html = SHELL.replace("{{firstname}}", _html.escape(r.get("firstname") or ""))
-        html = html.replace("{{body}}", body_html)
+        # Substitute merge tags into the raw text first, then escape the whole
+        # thing — so both the body and the injected names are HTML-safe.
+        text = body_text.replace("{{firstname}}", r.get("firstname") or "")
+        text = text.replace("{{dog_name}}", r.get("dog_name") or "your dog")
+        body_html = _html.escape(text).replace("\n", "<br>")
+        html = SHELL.replace("{{body}}", body_html)
         batch.append({
             "from": mail_from,
             "to": [r["email"]],
