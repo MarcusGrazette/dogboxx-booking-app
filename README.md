@@ -1,6 +1,6 @@
-# Dogboxx 🐾
+# Dogboxx
 
-A booking management platform for a small dog walking business. Built with Flask and PostgreSQL, it manages the full lifecycle of walk bookings — from client request through walker assignment and pickup.
+A booking management app for a small dog walking business. Built with Flask and PostgreSQL, it replaces the previous manual booking system. Clients would message the owner, who then added their booking to a shared calendar and to a spreadsheet for billig. The app means client bookings are entirely self-service, the owner can manage walker allocations and track revenue in one place. This saves time, reduces the risk of human error and gives clients and walkers a better experience.
 
 ## Tech Stack
 
@@ -13,15 +13,12 @@ A booking management platform for a small dog walking business. Built with Flask
 ## Features
 
 ### Client
-- Onboarding (address, pickup instructions, dog profile)
-- Book walks — one-off, recurring (daily/weekly), or both AM + PM slots in one action
-- Drop-in visits — bookable separately from group walks
-- Booking dashboard with status tracking (requested → confirmed / waitlisted)
-- In-app notification bell for booking confirmations, cancellations, and walker assignments
-- Web Push notifications on iOS and Android when installed as a PWA
-- Profile and dog profile editing (photo upload, per-dog pickup instructions)
-- Multi-dog support — dog selector on booking form; all dogs shown on profile
-- Monthly walk summary with booking history
+Clients can:
+- Book and manage walks and drop-ins
+- Get in-app and push (when installed as a progressive web app) notifications
+- View and edit pick up instructions
+- Edit their profile (upload a photo, upload a dog photo)
+- See monthly walk summary
 
 ### Admin
 - Dashboard with booking stats, 4-week chart, and walker availability grid
@@ -158,7 +155,7 @@ The seed also creates ~13 client accounts with dogs. See `seed.py` for the full 
 
 ### Demo data
 
-Two demo seed scripts add realistic booking data for presentations:
+Two demo seed scripts add realistic booking data:
 
 ```bash
 python seed_may_demo.py   # ~10 walks/slot/weekday across two weeks, ±2 randomised, 3–5 drop-ins/day
