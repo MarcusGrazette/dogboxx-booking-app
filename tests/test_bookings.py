@@ -1199,3 +1199,77 @@ class TestSameDayBooking:
             ).count() == 0
             # Exactly one admin notification for the whole same-day book-both.
             assert Notification.query.filter_by(recipient_id=admin_id).count() == 1
+
+
+# ---------------------------------------------------------------------------
+# SECURITY_REVIEW.md #2 — concurrent-duplicate race must return 409, not 500.
+#
+# A booking can pass the in-route duplicate pre-check yet still collide on the
+# (dog_id, date, slot) partial unique index at commit time (two co-owners or a
+# double-tapped "Book" button racing). The DB correctly rejects the second
+# write; the bug was that the resulting IntegrityError fell through to a generic
+# HTTP 500. Each JSON booking endpoint must now translate it to a graceful 409.
+#
+# We can't bypass the pre-check via status (its status set is identical to the
+# index's partial condition), so we simulate the index violation with a one-shot
+# before_commit listener that raises IntegrityError exactly as Postgres would.
+# ---------------------------------------------------------------------------
+
+class TestConcurrentDuplicateGraceful409:
+
+    def _setup(self, app):
+        tom = tomorrow()
+        with app.app_context():
+            make_walker_with_schedule(f'w_am_{id(self)}@t.com', tom.weekday(), 'Morning')
+            make_walker_with_schedule(f'w_pm_{id(self)}@t.com', tom.weekday(), 'Afternoon')
+            make_service(capacity=6)
+            make_drop_in_service(capacity=6)
+            user = make_user(f'cl_race_{id(self)}@t.com')
+            make_client_profile(user.id)
+            dog = make_dog()
+            attach_dog(dog.id, user.id)
+            db.session.commit()
+            return user.email, dog.id
+
+    @pytest.mark.parametrize('endpoint,extra', [
+        ('/book',         {'slot': 'Morning'}),
+        ('/book_drop_in', {'slot': 'Morning'}),
+        ('/book_both',    {}),
+    ])
+    def test_integrityerror_at_commit_returns_409(self, app, client, endpoint, extra):
+        from sqlalchemy import event
+        from sqlalchemy.exc import IntegrityError
+
+        email, dog_id = self._setup(app)
+        login(client, email)
+
+        # Raise on the FIRST commit (the booking commit) only, so any later
+        # session-store commit during teardown still succeeds.
+        state = {'fired': False}
+
+        def _raise_dupe(session):
+            if state['fired']:
+                return
+            state['fired'] = True
+            raise IntegrityError(
+                'INSERT INTO bookings', {},
+                Exception('duplicate key value violates unique constraint '
+                          '"ix_booking_dog_date_slot_active"'))
+
+        event.listen(db.session, 'before_commit', _raise_dupe)
+        try:
+            payload = {'dog_id': dog_id, 'date': tomorrow().isoformat(), **extra}
+            resp = client.post(endpoint, data=json.dumps(payload),
+                               content_type='application/json')
+        finally:
+            event.remove(db.session, 'before_commit', _raise_dupe)
+            db.session.remove()
+
+        assert resp.status_code == 409, \
+            f'{endpoint}: expected graceful 409, got {resp.status_code}'
+        data = resp.get_json()
+        assert data['success'] is False
+        # The losing write must be fully rolled back — nothing persisted.
+        with app.app_context():
+            assert Booking.query.count() == 0, \
+                f'{endpoint}: conflicting booking should have been rolled back'
