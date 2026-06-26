@@ -14,10 +14,56 @@ Usage (called from the after_commit hook — never call inside a transaction):
 
 import json
 import logging
+from urllib.parse import urlparse
 
 from flask import current_app
 
 log = logging.getLogger(__name__)
+
+
+# ── Web Push endpoint allowlist (SSRF mitigation — see SECURITY_REVIEW.md #4) ──
+#
+# The push `endpoint` is a client-supplied URL that the server later makes an
+# outbound POST to (`send_web_push` → `pywebpush.webpush`). Without validation an
+# authenticated user can point it at internal/metadata hosts (blind SSRF). Real
+# browsers only ever emit endpoints under a small set of vendor push zones, so we
+# allowlist those. Leading-dot suffixes anchor on a label boundary, so
+# `evilgoogleapis.com` cannot match `.googleapis.com`. VAPID signing does NOT
+# mitigate this — it authenticates the message, not the request destination.
+#
+# NOTE: a few entries (`.googleapis.com`, `.apple.com`) are broader than the push
+# zones proper; they stay safe because the parent domains are vendor-owned (an
+# attacker can't register a subdomain to reach internal hosts). Tighten to the
+# hosts the monitor logs actually show before flipping to enforcing (see #4).
+ALLOWED_PUSH_HOSTS = (
+    '.googleapis.com',             # Google FCM (Chrome / Android)
+    '.fcm.googleapis.com',         # Modern FCM endpoints
+    '.apple.com',                  # Apple APNs (Safari / iOS - broader to catch .push and .notify)
+    '.notify.windows.com',         # Microsoft WNS (Edge)
+    '.wns.windows.com',            # Microsoft WNS secondary
+    '.push.services.mozilla.com',  # Mozilla (Firefox)
+    '.push.opera.com',             # Opera
+)
+
+
+def is_allowed_push_endpoint(endpoint):
+    """True if *endpoint* is an HTTPS URL on a known push-service host.
+
+    Uses ``urlparse(...).hostname`` (not string matching) so userinfo tricks like
+    ``https://fcm.googleapis.com@evil.com/`` resolve to the real host (``evil.com``)
+    and are rejected. Trailing FQDN dots are normalised so a legitimate
+    ``fcm.googleapis.com.`` is not wrongly rejected.
+    """
+    try:
+        u = urlparse(endpoint or '')
+    except (ValueError, AttributeError):
+        return False
+    if u.scheme != 'https':
+        return False
+    host = (u.hostname or '').lower().rstrip('.')
+    if not host:
+        return False
+    return host.endswith(ALLOWED_PUSH_HOSTS)
 
 
 def send_web_push(user_id, title, body='', link='/', icon=None, unread_count=1, subscriptions=None):
