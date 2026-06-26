@@ -22,6 +22,16 @@ from datetime import datetime, timezone
 from app.blueprints.auth import auth_bp
 
 
+# Constant-time-ish login (SECURITY_REVIEW.md #3): when the submitted email isn't
+# in the DB we still run check_password_hash against this dummy hash, so the
+# response spends the same scrypt CPU as a real "wrong password" check. Without
+# it, an unknown email short-circuits (~7ms) while an existing one pays for the
+# hash (~100ms), letting an attacker enumerate registered emails despite the
+# generic error message. Generated via generate_password_hash so it always uses
+# the same algorithm/cost params as live hashes (a hardcoded string could drift).
+_DUMMY_PASSWORD_HASH = generate_password_hash("dogboxx-login-timing-equalizer")
+
+
 @auth_bp.route("/login", methods=["GET", "POST"])
 @limiter.limit("5 per minute")  # Limit login attempts
 def login():
@@ -40,11 +50,20 @@ def login():
         # Query database for user
         user = User.query.filter_by(email=email).first()
 
+        # Verify the password. When the email is unknown, hash against a dummy so
+        # both paths cost the same scrypt work — closes the user-enumeration timing
+        # oracle (SECURITY_REVIEW.md #3). Don't short-circuit on `not user`.
+        if user:
+            password_ok = check_password_hash(user.hashed_password, password)
+        else:
+            check_password_hash(_DUMMY_PASSWORD_HASH, password)  # spend the time, discard
+            password_ok = False
+
         # Track failed login attempts with redis-based rate limiting
-        if not user or not check_password_hash(user.hashed_password, password):
+        if not password_ok:
             # Log the failed attempt (for security auditing)
             logging.warning(f"Failed login attempt for email: {email} from IP: {request.remote_addr}")
-            
+
             # Show generic error message (don't reveal if email exists)
             flash("Invalid email or password", "error")
             return render_template("login.html", form=form)

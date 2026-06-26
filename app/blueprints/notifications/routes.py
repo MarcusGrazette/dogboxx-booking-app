@@ -1,3 +1,5 @@
+from urllib.parse import urlparse
+
 from flask import render_template, request, jsonify, Response, stream_with_context, current_app
 from flask_login import login_required, current_user
 from . import notifications_bp
@@ -146,6 +148,18 @@ def push_subscribe():
 
     if not p256dh or not auth:
         return jsonify({'ok': False, 'error': 'missing keys'}), 400
+
+    # SSRF mitigation (SECURITY_REVIEW.md #4) — LOG-ONLY for now. We still store
+    # the subscription, but warn if the endpoint host isn't on the push-service
+    # allowlist, so we can confirm the real set of hosts (incl. iOS) before
+    # flipping this to a hard 400. To enforce: return 400 here instead of warning.
+    from app.utils.webpush import is_allowed_push_endpoint
+    if not is_allowed_push_endpoint(endpoint):
+        host = urlparse(endpoint or '').hostname
+        current_app.logger.warning(
+            'Push endpoint not on allowlist (LOG-ONLY, stored anyway) — '
+            'user %s host=%r endpoint=%r', current_user.id, host, endpoint,
+        )
 
     # Upsert: update if endpoint exists for this user, otherwise insert.
     # If the endpoint exists under a *different* user (e.g. shared browser,

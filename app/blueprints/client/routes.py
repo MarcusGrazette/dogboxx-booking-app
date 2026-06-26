@@ -590,6 +590,14 @@ def book():
             },
         })
 
+    except IntegrityError:
+        # Lost a concurrent-duplicate race (two co-owners / double-tapped Book):
+        # the partial unique index on (dog_id, date, slot) rejected the second
+        # write. Return the same graceful 409 the pre-check uses instead of a 500
+        # (SECURITY_REVIEW.md #2).
+        db.session.rollback()
+        return jsonify({'success': False,
+                        'message': f'{dog.name} already has a booking for that slot.'}), 409
     except Exception as e:
         db.session.rollback()
         logging.error(f'AJAX booking error for user {current_user.id}: {e}')
@@ -743,7 +751,14 @@ def book_both():
                                  dog_name=dog.name, slot=slot, date=booking_date)
     walker_batch.flush()
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Concurrent-duplicate race on one of the two slots — unique index
+        # rejected it. Graceful 409 instead of a 500 (SECURITY_REVIEW.md #2).
+        db.session.rollback()
+        return jsonify({'success': False,
+                        'message': f'{dog.name} already has a booking for one of those slots.'}), 409
     created = final_created
 
     has_pickup_notes = bool(dog and dog.pickup_instructions)
@@ -845,7 +860,14 @@ def book_drop_in():
         return jsonify({'success': False, 'message': str(e)}), 409
 
     booking_status = new_booking.status
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Concurrent-duplicate race — unique index rejected it. Graceful 409
+        # instead of a 500 (SECURITY_REVIEW.md #2).
+        db.session.rollback()
+        return jsonify({'success': False,
+                        'message': f'{dog.name} already has a booking for that slot.'}), 409
 
     # Notify admins and co-owners
     date_str_fmt = booking_date.strftime('%a %-d %b')
@@ -1938,6 +1960,12 @@ def recurring_booking():
         db.session.commit()
         return jsonify(success=True, confirmed=confirmed, created=created, waitlisted=waitlisted, skipped=skipped)
 
+    except IntegrityError:
+        # Concurrent-duplicate race on one of the recurring dates — unique index
+        # rejected it. Graceful 409 instead of a 500 (SECURITY_REVIEW.md #2).
+        db.session.rollback()
+        return jsonify(success=False,
+                       message="Some of those slots were just booked — please reload and try again."), 409
     except Exception as e:
         db.session.rollback()
         logging.error(f"Error creating recurring bookings: {e}")
