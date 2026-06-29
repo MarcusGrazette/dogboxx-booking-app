@@ -96,7 +96,9 @@ def client_detail(client_id):
             already_linked_ids.add(sd['primary_owner'].id)
     available_clients = (
         User.query
-        .filter(User.role == 'client', User.active == True)
+        # presence of a Client record, not role == 'client' — includes dual-role
+        # users (walker + client) as eligible co-owners; excludes pure walkers.
+        .filter(User.client != None, User.active == True)  # noqa: E711
         .filter(~User.id.in_(already_linked_ids))
         .order_by(User.lastname, User.firstname)
         .all()
@@ -151,7 +153,11 @@ def join_dog_access(client_id):
     if not ownership:
         return jsonify(success=False, message="Dog not found for this client"), 404
 
-    secondary_user = User.query.filter(User.role == 'client', User.id == secondary_user_id).first()
+    # Membership test is presence of a Client record, not role == 'client', so a
+    # dual-role user (role='walker' with a Client record) can be a co-owner. A
+    # pure walker (no Client record) is still excluded. Matches the primary
+    # lookup above and the /admin/clients list.
+    secondary_user = User.query.filter(User.client != None, User.id == secondary_user_id).first()  # noqa: E711
     if not secondary_user:
         return jsonify(success=False, message="Secondary client not found"), 404
 
@@ -572,7 +578,9 @@ def add_dog(client_id):
             already_linked_ids.add(sd['primary_owner'].id)
     available_clients = (
         User.query
-        .filter(User.role == 'client', User.active == True)
+        # presence of a Client record, not role == 'client' — includes dual-role
+        # users (walker + client) as eligible co-owners; excludes pure walkers.
+        .filter(User.client != None, User.active == True)  # noqa: E711
         .filter(~User.id.in_(already_linked_ids))
         .order_by(User.lastname, User.firstname)
         .all()

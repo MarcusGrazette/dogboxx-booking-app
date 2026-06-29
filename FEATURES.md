@@ -83,13 +83,14 @@
 | # | Priority | Effort | Status | Feature | Notes |
 |---|----------|--------|--------|---------|-------|
 | 50 | P1 | M | ✅ | **PostgreSQL migration** | Moved from SQLite to PostgreSQL. Flask-Migrate (Alembic) for schema management. |
-| 51 | P1 | M | ✅ | **Security hardening** | CSRF, rate limiting, CSP headers, secure cookies, UUID file uploads, session hardening. |
+| 51 | P1 | M | ✅ | **Security hardening** | CSRF, rate limiting, CSP headers, secure cookies, UUID file uploads, session hardening. June 2026 pentest follow-up (PR #141): concurrent-duplicate booking → graceful 409, login user-enumeration timing oracle closed (dummy-hash), Web Push endpoint SSRF allowlist (`is_allowed_push_endpoint`, currently log-only — enforce-400 flip pending). |
 | 52 | P1 | S | ✅ | **DB indexes** | Indexes on date, walker_id, user_id, dog_id, status for query performance. |
 | 53 | P1 | M | ✅ | **Git branching** | `develop` for ongoing work, `main` for production. PRs required to merge to main. |
 | 54 | P1 | L | ✅ | **Unit test suite** | 383 tests across auth, bookings, capacity, multi-owner, notifications, drop-in, invoicing, pricing, activity feed, broadcasts, closures, walker schedule, bulk-cancel, SSE transport. All passing on Postgres CI. |
 | 55 | P2 | M | ✅ | **Password reset flow** | Email-based token reset via Resend. noreply@dogboxx.org verified. RESEND_API_KEY + APP_BASE_URL needed in prod env. |
 | 56 | P3 | S | ✅ | **CI/CD pipeline** | GitHub Actions (test.yml): runs pytest on push to main/develop and all PRs. All runs green. |
 | 57 | P3 | M | ✅ | **PWA service worker** | iOS home-screen install + Android PWA support. Pre-cached assets, pull-to-refresh (shared IIFE in both layouts), standalone-mode detection (`navigator.standalone \|\| display-mode:standalone`). |
+| 58 | P3 | M | 📋 | **QuickBooks Online export** | Scoped only, not started. Feed monthly invoices into QBO. Two paths: CSV export (~half a day, no deps, recommended Phase 1) vs QBO API push (OAuth + token lifecycle, only if button/payment-sync needed). Both consume the existing `invoice_for_client` dict. Full write-up + open decisions in `docs/QUICKBOOKS_INTEGRATION.md`. |
 
 ---
 
