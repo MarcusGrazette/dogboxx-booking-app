@@ -51,10 +51,15 @@ def invoicing():
     )
 
     # ── Clients ───────────────────────────────────────────────────────────
+    # Membership test is *presence of a Client record*, not role == 'client' —
+    # a dual-role user (role='walker' with a Client record, e.g. the owner who
+    # also has their own dog walked) is a billable client. role == 'client'
+    # silently dropped them from the list even though their detail page (which
+    # uses User.client != None) works. Matches clients.py / decorators.py.
     clients = (
         User.query
         .options(joinedload(User.client))
-        .filter(User.role == 'client')
+        .filter(User.client != None)  # noqa: E711 — SQLAlchemy uses != None for EXISTS
         .order_by(User.lastname, User.firstname)
         .all()
     )

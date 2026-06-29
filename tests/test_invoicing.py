@@ -656,3 +656,145 @@ class TestRevenueWeeklyDiscount:
 
             _daily, weekly_discount = _revenue_for_range(MONTH_START, MONTH_END_INCL)
             assert weekly_discount == 0.0
+
+
+# ---------------------------------------------------------------------------
+# /admin/invoicing list route — membership test must be presence of a Client
+# record, NOT role == 'client', so dual-role users (walker + client) appear.
+# ---------------------------------------------------------------------------
+
+class TestInvoicingListDualRole:
+    def _make_admin(self):
+        admin = User(
+            firstname='Admin', lastname='User', email='inv_admin@test.com',
+            role='walker', is_admin=True,
+            hashed_password=generate_password_hash('Testpass1!'), active=True,
+        )
+        db.session.add(admin)
+        db.session.flush()
+        return admin
+
+    def test_dual_role_user_appears_in_invoicing_list(self, app, client):
+        """A user with role='walker' but a Client record + billable booking is a
+        billable client and must show in /admin/invoicing. Regression: the list
+        previously filtered role == 'client' and silently dropped them, even
+        though their /invoicing/<id> detail page (User.client != None) worked."""
+        with app.app_context():
+            self._make_admin()
+
+            # Dual-role user: role='walker', yet owns a dog and has a billable walk
+            dual = User(
+                firstname='Dual', lastname='RoleClient', email='inv_dual@test.com',
+                role='walker', is_admin=False,
+                hashed_password=generate_password_hash('Testpass1!'), active=True,
+            )
+            db.session.add(dual)
+            db.session.flush()
+            db.session.add(Client(user_id=dual.id, onboarding_completed=True))
+            dog = Dog(name='DualDog', breed='Mutt')
+            db.session.add(dog)
+            db.session.flush()
+            db.session.add(DogOwner(dog_id=dog.id, user_id=dual.id, role='primary'))
+            st = make_walk_service()
+            make_pricing_config()
+            add_booking(dual, dog, st, MON_1, 'Morning', status='confirmed')
+            db.session.commit()
+
+        client.post('/auth/login',
+                    data={'email': 'inv_admin@test.com', 'password': 'Testpass1!'},
+                    follow_redirects=True)
+        resp = client.get('/admin/invoicing?month=2026-02')
+        assert resp.status_code == 200
+        assert b'RoleClient' in resp.data
+
+    def test_dual_role_primary_is_billed_for_co_owners_booking(self, app):
+        """Billing follows the *primary* owner. When a co-owned dog's primary is a
+        dual-role user (walker + client), the primary's invoice must include a
+        booking made by the secondary co-owner — and the co-owner (secondary,
+        no primary dog) is NOT billed for it. Before the list fix this household's
+        entire bill silently vanished: primary hidden, secondary never billable."""
+        with app.app_context():
+            # Primary = dual-role user (role='walker' + Client record + dog)
+            primary = User(
+                firstname='Dual', lastname='Primary', email='inv_dual_primary@test.com',
+                role='walker', is_admin=False,
+                hashed_password=generate_password_hash('Testpass1!'), active=True,
+            )
+            db.session.add(primary)
+            db.session.flush()
+            db.session.add(Client(user_id=primary.id, onboarding_completed=True))
+            dog = Dog(name='SharedDog', breed='Mutt')
+            db.session.add(dog)
+            db.session.flush()
+            db.session.add(DogOwner(dog_id=dog.id, user_id=primary.id, role='primary'))
+
+            # Co-owner = plain client, secondary on the same dog
+            co = make_user('inv_coowner@test.com')   # role='client'
+            db.session.add(Client(user_id=co.id, onboarding_completed=True))
+            db.session.add(DogOwner(dog_id=dog.id, user_id=co.id, role='secondary'))
+
+            st = make_walk_service()
+            make_pricing_config()
+            # Booking on the shared dog, MADE BY the co-owner (user_id = co)
+            add_booking(co, dog, st, MON_1, 'Morning', status='confirmed')
+            db.session.commit()
+
+            # Primary (dual-role) absorbs the household bill for the co-owner's walk
+            inv_primary = _invoice_for_client(primary.id, MONTH_START, MONTH_END, all_configs())
+            assert inv_primary is not None
+            assert inv_primary['total_billable'] == 1
+            assert inv_primary['subtotal'] == WALK_PRICE
+
+            # Co-owner has no primary dog → not billed for the shared dog (no double-bill)
+            inv_co = _invoice_for_client(co.id, MONTH_START, MONTH_END, all_configs())
+            assert inv_co is None
+
+
+# ---------------------------------------------------------------------------
+# join_dog_access — a dual-role user (walker + Client record) can be added as a
+# co-owner. Membership test is presence of a Client record, not role == 'client'.
+# ---------------------------------------------------------------------------
+
+class TestCoOwnerDualRole:
+    def test_dual_role_user_can_be_added_as_co_owner(self, app, client):
+        """Granting shared dog access to a dual-role user (role='walker' with a
+        Client record) must succeed. Regression: join_dog_access previously
+        filtered role == 'client' and rejected them with 'Secondary client not
+        found' even though they own dogs and use the client view."""
+        with app.app_context():
+            admin = User(
+                firstname='Admin', lastname='User', email='join_admin@test.com',
+                role='walker', is_admin=True,
+                hashed_password=generate_password_hash('Testpass1!'), active=True,
+            )
+            db.session.add(admin)
+
+            # Primary = plain client with a dog
+            primary, dog = make_client_with_dog('join_primary@test.com')
+
+            # Prospective co-owner = dual-role user (role='walker' + Client record)
+            dual = User(
+                firstname='Dual', lastname='CoOwner', email='join_dual@test.com',
+                role='walker', is_admin=False,
+                hashed_password=generate_password_hash('Testpass1!'), active=True,
+            )
+            db.session.add(dual)
+            db.session.flush()
+            db.session.add(Client(user_id=dual.id, onboarding_completed=True))
+            db.session.commit()
+            primary_id, dog_id, dual_id = primary.id, dog.id, dual.id
+
+        client.post('/auth/login',
+                    data={'email': 'join_admin@test.com', 'password': 'Testpass1!'},
+                    follow_redirects=True)
+        resp = client.post(
+            f'/admin/clients/{primary_id}/join',
+            json={'dog_id': dog_id, 'secondary_user_id': dual_id},
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()['success'] is True
+
+        with app.app_context():
+            link = DogOwner.query.filter_by(
+                dog_id=dog_id, user_id=dual_id, role='secondary').first()
+            assert link is not None
