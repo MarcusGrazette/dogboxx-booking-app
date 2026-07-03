@@ -22,7 +22,7 @@ migration-head health check are all solid. The findings below are the gaps.
 | 3 | Web Push: pass `timeout=10` | ✅ deployed | `600658e`, PR #145 — merged + deployed 2026-07-03. Logs clean (boot, /health 200, SSE listeners); no push traffic observed yet to exercise it live |
 | 5 | EXIF strip via re-save | ✅ deployed | `1d1a533`, PR #145 — merged + deployed 2026-07-03. Logs clean; user already verified via manual upload on develop before merge |
 | 4 | Static asset caching | 🔲 todo | Needs cache-busting decision — see finding |
-| 6 | Missing indexes (BSC.booking_id, push_subscriptions.user_id) | 🔲 todo | |
+| 6 | Missing indexes (BSC.booking_id, push_subscriptions.user_id) | ✅ done | `712af80` on develop — pending push/PR |
 | 7 | Board owners_display N+1 | 🔲 todo | |
 | 15 | UX sweep: native confirm()/alert() | 🔲 todo | Standalone polish PR |
 | 8–14, 16 | Lower priority — see findings | 🔲 todo | Pick up opportunistically |
@@ -132,7 +132,7 @@ already does) drops metadata for free.
 **Risk:** low — new uploads only; current code already discards EXIF
 orientation, so re-saving is behavior-identical.
 
-### 6. Missing indexes on append-only / FK columns
+### 6. Missing indexes on append-only / FK columns ✅
 
 - `booking_status_changes.booking_id` (`app/models.py:391`) — no index. Table
   grows forever by design; `Booking.status_history` filters on it → per-booking
