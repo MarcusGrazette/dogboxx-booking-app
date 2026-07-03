@@ -18,9 +18,9 @@ migration-head health check are all solid. The findings below are the gaps.
 | # | Finding | Status | Ref |
 |---|---------|--------|-----|
 | 1 | psycogreen + pool_pre_ping | ✅ deployed | `9ff4d1d`, PR #143 — merged + deployed 2026-07-03. Logs verified: clean gevent boot, /health 200 (real query through the patched wait callback), SSE Redis listener subscribed on both workers |
-| 2 | UserMixin / deactivation doesn't end sessions | ✅ on develop | `322d9b8` — UserMixin + is_active property + user_loader returns None for inactive; 3 regression tests. Prod checked 2026-07-03: zero `active=false` users, no knock-on logouts |
-| 3 | Web Push: pass `timeout=10` | 🔲 todo | Timeout only — skip the background-greenlet variant (simpler wins) |
-| 5 | EXIF strip via re-save | 🔲 todo | |
+| 2 | UserMixin / deactivation doesn't end sessions | ✅ deployed | `322d9b8`, PR #144 — merged + deployed 2026-07-03. Logs verified: clean boot, /health 200, SSE listeners on both workers, live client sessions unaffected. Prod pre-check: zero `active=false` users |
+| 3 | Web Push: pass `timeout=10` | 🔲 PR open | `600658e`, PR #145 — bundled with #5, awaiting merge |
+| 5 | EXIF strip via re-save | 🔲 PR open | `1d1a533`, PR #145 — bundled with #3, awaiting merge |
 | 4 | Static asset caching | 🔲 todo | Needs cache-busting decision — see finding |
 | 6 | Missing indexes (BSC.booking_id, push_subscriptions.user_id) | 🔲 todo | |
 | 7 | Board owners_display N+1 | 🔲 todo | |
@@ -78,7 +78,7 @@ inactive users.
   `SELECT email, role, is_admin FROM users WHERE active = false` (dual-role
   precedent: PR #142).
 
-### 3. Web Push fan-out is synchronous with no HTTP timeout
+### 3. Web Push fan-out is synchronous with no HTTP timeout ✅
 
 The `after_commit` hook (`app/__init__.py`) calls `send_web_push`, which
 sequentially POSTs to the push vendor per subscription
@@ -119,7 +119,7 @@ deploy while browsers keep stale JS → template↔JS mismatches. Safe options:
 config value), then go long-lived. Dog photos are UUID-named / never
 overwritten in place — safe for aggressive caching either way.
 
-### 5. EXIF stripping copies the image pixel-by-pixel through a Python list
+### 5. EXIF stripping copies the image pixel-by-pixel through a Python list ✅
 
 `process_dog_photo` (`app/utils/uploads.py:80-81`) does
 `clean_img.putdata(list(img.getdata()))` — for a phone photo near the 10 MB

@@ -75,15 +75,14 @@ def process_dog_photo(file_storage):
     if file_extension not in ALLOWED_EXTENSIONS:
         raise ValueError("Unsupported file format. Use JPG, PNG, or GIF.")
 
-    # 3. Re-open and strip metadata by copying pixel data to a fresh image
+    # 3. Re-open and resize. Pillow only writes EXIF to the output file when an
+    #    `exif=` kwarg is passed to save() — since we never pass one, this also
+    #    strips all metadata, without needing to copy pixel data through a fresh
+    #    Image object.
     img = Image.open(file_storage)
-    clean_img = Image.new(img.mode, img.size)
-    clean_img.putdata(list(img.getdata()))
+    img.thumbnail(MAX_SIZE, Image.LANCZOS)
 
-    # 4. Resize
-    clean_img.thumbnail(MAX_SIZE, Image.LANCZOS)
-
-    # 5. Save with a UUID filename
+    # 4. Save with a UUID filename
     unique_filename = f"{uuid.uuid4()}{file_extension}"
     upload_path = os.path.join(current_app.config["UPLOAD_FOLDER"], unique_filename)
 
@@ -94,7 +93,7 @@ def process_dog_photo(file_storage):
         '.gif': ('GIF', {}),
     }
     fmt, kwargs = format_map[file_extension]
-    clean_img.save(upload_path, fmt, **kwargs)
+    img.save(upload_path, fmt, **kwargs)
 
     logging.info(f"Saved dog photo: {unique_filename}")
     _backup_to_r2(upload_path, f"dogs/{unique_filename}")
