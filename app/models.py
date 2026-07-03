@@ -1,9 +1,10 @@
 from . import db
 from datetime import datetime, timezone
+from flask_login import UserMixin
 from .validators import password_strength_check
 
 
-class User(db.Model):
+class User(UserMixin, db.Model):
     __tablename__ = 'users'
 
     id = db.Column(db.Integer, primary_key=True)
@@ -26,18 +27,13 @@ class User(db.Model):
         nullable=False, default='email'
     )
 
-    # Flask-Login required methods
-    def get_id(self):
-        return str(self.id)
-
-    def is_authenticated(self):
-        return True
-
+    # Flask-Login reads is_active as an ATTRIBUTE (never calls it) — it must be
+    # a property, not a method: a bound method is always truthy, which silently
+    # bypassed login_user()'s inactive-user gate. UserMixin supplies
+    # is_authenticated / is_anonymous / get_id.
+    @property
     def is_active(self):
         return self.active
-
-    def is_anonymous(self):
-        return False
 
     def __repr__(self):
         return f'<User {self.email}>'

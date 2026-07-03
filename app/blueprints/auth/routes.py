@@ -69,7 +69,7 @@ def login():
             return render_template("login.html", form=form)
 
         # Check if user account is active
-        if not user.is_active():
+        if not user.is_active:
             flash("Your account has been deactivated. Please contact DogBoxx.", "error")
             return render_template("login.html", form=form)
 
@@ -222,7 +222,7 @@ def forgot_password():
         user = User.query.filter_by(email=email).first()
 
         # Always show the same success message — don't reveal whether the email exists
-        if user and user.is_active():
+        if user and user.is_active:
             token = _make_reset_token(user)
             base_url = current_app.config.get('APP_BASE_URL', '').rstrip('/')
             reset_url = f"{base_url}/auth/reset-password/{token}"
