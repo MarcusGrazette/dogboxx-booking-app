@@ -22,8 +22,8 @@ migration-head health check are all solid. The findings below are the gaps.
 | 3 | Web Push: pass `timeout=10` | ✅ deployed | `600658e`, PR #145 — merged + deployed 2026-07-03. Logs clean (boot, /health 200, SSE listeners); no push traffic observed yet to exercise it live |
 | 5 | EXIF strip via re-save | ✅ deployed | `1d1a533`, PR #145 — merged + deployed 2026-07-03. Logs clean; user already verified via manual upload on develop before merge |
 | 4 | Static asset caching | 🔲 todo | Needs cache-busting decision — see finding |
-| 6 | Missing indexes (BSC.booking_id, push_subscriptions.user_id) | ✅ done | `712af80` on develop — bundled with #7, pending PR |
-| 7 | Board owners_display N+1 | ✅ done | `7d60dbb` on develop — bundled with #6, pending PR |
+| 6 | Missing indexes (BSC.booking_id, push_subscriptions.user_id) | 🔲 PR open | `712af80`, PR #146 — bundled with #7, awaiting merge |
+| 7 | Board owners_display N+1 | 🔲 PR open | `7d60dbb`, PR #146 — bundled with #6, awaiting merge |
 | 15 | UX sweep: native confirm()/alert() | 🔲 todo | Standalone polish PR |
 | 8–14, 16 | Lower priority — see findings | 🔲 todo | Pick up opportunistically |
 
