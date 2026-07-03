@@ -19,8 +19,8 @@ migration-head health check are all solid. The findings below are the gaps.
 |---|---------|--------|-----|
 | 1 | psycogreen + pool_pre_ping | ✅ deployed | `9ff4d1d`, PR #143 — merged + deployed 2026-07-03. Logs verified: clean gevent boot, /health 200 (real query through the patched wait callback), SSE Redis listener subscribed on both workers |
 | 2 | UserMixin / deactivation doesn't end sessions | ✅ deployed | `322d9b8`, PR #144 — merged + deployed 2026-07-03. Logs verified: clean boot, /health 200, SSE listeners on both workers, live client sessions unaffected. Prod pre-check: zero `active=false` users |
-| 3 | Web Push: pass `timeout=10` | ✅ done | `timeout=10` added to `webpush()` call — pending deploy |
-| 5 | EXIF strip via re-save | 🔲 todo | |
+| 3 | Web Push: pass `timeout=10` | ✅ done | `600658e` on develop — pending deploy, bundled with #5 |
+| 5 | EXIF strip via re-save | ✅ done | pending commit on develop — pending deploy, bundled with #3 |
 | 4 | Static asset caching | 🔲 todo | Needs cache-busting decision — see finding |
 | 6 | Missing indexes (BSC.booking_id, push_subscriptions.user_id) | 🔲 todo | |
 | 7 | Board owners_display N+1 | 🔲 todo | |
@@ -119,7 +119,7 @@ deploy while browsers keep stale JS → template↔JS mismatches. Safe options:
 config value), then go long-lived. Dog photos are UUID-named / never
 overwritten in place — safe for aggressive caching either way.
 
-### 5. EXIF stripping copies the image pixel-by-pixel through a Python list
+### 5. EXIF stripping copies the image pixel-by-pixel through a Python list ✅
 
 `process_dog_photo` (`app/utils/uploads.py:80-81`) does
 `clean_img.putdata(list(img.getdata()))` — for a phone photo near the 10 MB
