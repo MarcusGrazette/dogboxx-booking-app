@@ -384,7 +384,7 @@ class BookingStatusChange(db.Model):
     __tablename__ = 'booking_status_changes'
 
     id = db.Column(db.Integer, primary_key=True)
-    booking_id = db.Column(db.Integer, db.ForeignKey('bookings.id'), nullable=False)
+    booking_id = db.Column(db.Integer, db.ForeignKey('bookings.id'), nullable=False, index=True)
     from_status = db.Column(db.String(20), nullable=True)  # null for initial creation
     to_status = db.Column(db.String(20), nullable=False)
     changed_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
@@ -571,7 +571,7 @@ class PushSubscription(db.Model):
     __tablename__ = 'push_subscriptions'
 
     id          = db.Column(db.Integer, primary_key=True)
-    user_id     = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id     = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     endpoint    = db.Column(db.Text, nullable=False, unique=True)
     p256dh      = db.Column(db.Text, nullable=False)   # client public key
     auth        = db.Column(db.Text, nullable=False)   # auth secret
