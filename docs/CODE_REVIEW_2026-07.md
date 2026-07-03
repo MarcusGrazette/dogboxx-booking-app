@@ -17,7 +17,7 @@ migration-head health check are all solid. The findings below are the gaps.
 
 | # | Finding | Status | Ref |
 |---|---------|--------|-----|
-| 1 | psycogreen + pool_pre_ping | ✅ done | `9ff4d1d` on develop — **deploy as its own PR to main**, then watch `railway logs` (SSE Redis listener line + admin smoke test); behavior is prod-only (gevent) |
+| 1 | psycogreen + pool_pre_ping | ✅ done | `9ff4d1d`, PR #143 (solo deploy) — after merge, watch `railway logs` (SSE Redis listener line + admin smoke test); behavior is prod-only (gevent) |
 | 2 | UserMixin / deactivation doesn't end sessions | 🔲 todo | |
 | 3 | Web Push: pass `timeout=10` | 🔲 todo | Timeout only — skip the background-greenlet variant (simpler wins) |
 | 5 | EXIF strip via re-save | 🔲 todo | |
