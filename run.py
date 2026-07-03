@@ -1,6 +1,23 @@
-from app import create_app
 import os
+
 import click
+
+# Make psycopg2 cooperative under gevent. Gunicorn's gevent worker monkey-patches
+# the stdlib before importing this module, so a patched `socket` reliably means
+# "we're in a gevent worker". Without this, psycopg2 (a C extension, immune to
+# monkey-patching) blocks the worker's entire event loop on every DB call —
+# serialising all greenlets, including held-open SSE streams, behind each query.
+# flask run / pytest / flask db upgrade import with an unpatched socket and skip.
+try:
+    from gevent import monkey
+except ImportError:  # local envs without gevent installed — nothing to patch
+    monkey = None
+
+if monkey is not None and monkey.is_module_patched('socket'):
+    from psycogreen.gevent import patch_psycopg
+    patch_psycopg()
+
+from app import create_app
 
 # Create app with environment-specific configuration
 app = create_app(os.environ.get('FLASK_ENV', 'development'))
