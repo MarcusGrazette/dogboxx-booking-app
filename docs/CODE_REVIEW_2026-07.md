@@ -19,8 +19,8 @@ migration-head health check are all solid. The findings below are the gaps.
 |---|---------|--------|-----|
 | 1 | psycogreen + pool_pre_ping | ✅ deployed | `9ff4d1d`, PR #143 — merged + deployed 2026-07-03. Logs verified: clean gevent boot, /health 200 (real query through the patched wait callback), SSE Redis listener subscribed on both workers |
 | 2 | UserMixin / deactivation doesn't end sessions | ✅ deployed | `322d9b8`, PR #144 — merged + deployed 2026-07-03. Logs verified: clean boot, /health 200, SSE listeners on both workers, live client sessions unaffected. Prod pre-check: zero `active=false` users |
-| 3 | Web Push: pass `timeout=10` | 🔲 PR open | `600658e`, PR #145 — bundled with #5, awaiting merge |
-| 5 | EXIF strip via re-save | 🔲 PR open | `1d1a533`, PR #145 — bundled with #3, awaiting merge |
+| 3 | Web Push: pass `timeout=10` | ✅ deployed | `600658e`, PR #145 — merged + deployed 2026-07-03. Logs clean (boot, /health 200, SSE listeners); no push traffic observed yet to exercise it live |
+| 5 | EXIF strip via re-save | ✅ deployed | `1d1a533`, PR #145 — merged + deployed 2026-07-03. Logs clean; user already verified via manual upload on develop before merge |
 | 4 | Static asset caching | 🔲 todo | Needs cache-busting decision — see finding |
 | 6 | Missing indexes (BSC.booking_id, push_subscriptions.user_id) | 🔲 todo | |
 | 7 | Board owners_display N+1 | 🔲 todo | |
