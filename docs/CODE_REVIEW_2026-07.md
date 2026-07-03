@@ -19,7 +19,7 @@ migration-head health check are all solid. The findings below are the gaps.
 |---|---------|--------|-----|
 | 1 | psycogreen + pool_pre_ping | ✅ deployed | `9ff4d1d`, PR #143 — merged + deployed 2026-07-03. Logs verified: clean gevent boot, /health 200 (real query through the patched wait callback), SSE Redis listener subscribed on both workers |
 | 2 | UserMixin / deactivation doesn't end sessions | ✅ deployed | `322d9b8`, PR #144 — merged + deployed 2026-07-03. Logs verified: clean boot, /health 200, SSE listeners on both workers, live client sessions unaffected. Prod pre-check: zero `active=false` users |
-| 3 | Web Push: pass `timeout=10` | 🔲 todo | Timeout only — skip the background-greenlet variant (simpler wins) |
+| 3 | Web Push: pass `timeout=10` | ✅ done | `timeout=10` added to `webpush()` call — pending deploy |
 | 5 | EXIF strip via re-save | 🔲 todo | |
 | 4 | Static asset caching | 🔲 todo | Needs cache-busting decision — see finding |
 | 6 | Missing indexes (BSC.booking_id, push_subscriptions.user_id) | 🔲 todo | |
@@ -78,7 +78,7 @@ inactive users.
   `SELECT email, role, is_admin FROM users WHERE active = false` (dual-role
   precedent: PR #142).
 
-### 3. Web Push fan-out is synchronous with no HTTP timeout
+### 3. Web Push fan-out is synchronous with no HTTP timeout ✅
 
 The `after_commit` hook (`app/__init__.py`) calls `send_web_push`, which
 sequentially POSTs to the push vendor per subscription

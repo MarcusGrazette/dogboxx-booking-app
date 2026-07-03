@@ -120,6 +120,7 @@ def send_web_push(user_id, title, body='', link='/', icon=None, unread_count=1, 
                 vapid_claims={
                     'sub': f'mailto:{vapid_email}',
                 },
+                timeout=10,
             )
             log.debug('Web Push sent to user %s (sub %s)', user_id, sub['id'])
 
