@@ -3,25 +3,53 @@ from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError
 from datetime import datetime, timezone, timedelta
+from collections import defaultdict
 import logging
 import traceback
 
 from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
 from app.utils.db_error_handler import handle_db_errors
-from app.models import User, Booking, Walker, WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, ServiceType
+from app.models import User, Booking, Walker, WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, ServiceType, DogOwner
 from app import db
 from app.capacity import get_max_per_walker, get_walker_slot_count, get_drop_in_capacity, auto_assign_walker, get_available_walkers, check_availability, acquire_booking_lock
 from app.utils.notifications import create_notification
 from app.utils.booking_status import transition_booking
 
 
-def _booking_dict(b, both_slots_dog_ids=None):
+def _batch_owners_display(dog_ids):
+    """Batch-build {dog_id: 'Hugh & Gillian'} for the given dog IDs.
+
+    Replaces per-booking calls to Dog.owners_display (one DogOwner query per
+    dog) with a single query — the board serialiser loop was running ~30-40
+    extra queries per board-data fetch (review #7).
+    """
+    if not dog_ids:
+        return {}
+    ownerships = (
+        DogOwner.query
+        .options(joinedload(DogOwner.user))
+        .filter(DogOwner.dog_id.in_(dog_ids))
+        .order_by(DogOwner.dog_id, DogOwner.role)  # 'primary' < 'secondary' alphabetically
+        .all()
+    )
+    names_by_dog = defaultdict(list)
+    for o in ownerships:
+        if o.user and o.user.firstname:
+            names_by_dog[o.dog_id].append(o.user.firstname)
+    return {dog_id: ' & '.join(names) for dog_id, names in names_by_dog.items()}
+
+
+def _booking_dict(b, both_slots_dog_ids=None, owners_display_map=None):
+    if b.dog:
+        owner_name = (owners_display_map or {}).get(b.dog_id, '') if owners_display_map is not None else b.dog.owners_display
+    else:
+        owner_name = b.user.full_name if b.user else ''
     d = {
         'id': b.id,
         'dog_name': b.dog.name if b.dog else 'Unknown',
         'dog_pic': b.dog.pic if b.dog and b.dog.pic else None,
-        'owner_name': b.dog.owners_display if b.dog else (b.user.full_name if b.user else ''),
+        'owner_name': owner_name,
         'slot': b.slot,
         'status': b.status,
         'pickup_order': b.pickup_order,
@@ -110,6 +138,7 @@ def drop_in_board_data(date_str):
         )
         .all()
     )
+    owners_display_map = _batch_owners_display({b.dog_id for b in all_bookings if b.dog_id})
 
     # Only walkers with does_drop_ins=True, scheduled for this day/slot or with ad hoc availability
     day_of_week = selected_date.weekday()
@@ -154,8 +183,8 @@ def drop_in_board_data(date_str):
         .all()
     ) if all_board_walker_ids else []
 
-    pending  = [_booking_dict(b) for b in all_bookings if b.status in ('requested', 'waitlisted')]
-    assigned = [_booking_dict(b) for b in all_bookings if b.walker_id and b.status == 'confirmed']
+    pending  = [_booking_dict(b, owners_display_map=owners_display_map) for b in all_bookings if b.status in ('requested', 'waitlisted')]
+    assigned = [_booking_dict(b, owners_display_map=owners_display_map) for b in all_bookings if b.walker_id and b.status == 'confirmed']
 
     slot_order = lambda s: 0 if s == 'Morning' else 1
     walkers_data = [
@@ -210,6 +239,7 @@ def board_data(date_str):
             )
             .all()
         )
+        owners_display_map = _batch_owners_display({b.dog_id for b in all_bookings if b.dog_id})
 
         day_of_week = selected_date.weekday()
         schedules = WalkerSchedule.query.filter_by(day_of_week=day_of_week, active=True).all()
@@ -240,7 +270,6 @@ def board_data(date_str):
 
         # Dogs that have active bookings in BOTH Morning and Afternoon today — used for the
         # double-walk icon on board cards (whether booked via "both walks" or manually).
-        from collections import defaultdict
         _dog_slots = defaultdict(set)
         for b in all_bookings:
             if b.status not in ('cancelled', 'rejected'):
@@ -250,8 +279,8 @@ def board_data(date_str):
             if 'Morning' in slots and 'Afternoon' in slots
         }
 
-        pending   = [_booking_dict(b, both_slots_dog_ids) for b in all_bookings if b.status in ('requested', 'waitlisted')]
-        assigned  = [_booking_dict(b, both_slots_dog_ids) for b in all_bookings if b.walker_id and b.status == 'confirmed']
+        pending   = [_booking_dict(b, both_slots_dog_ids, owners_display_map) for b in all_bookings if b.status in ('requested', 'waitlisted')]
+        assigned  = [_booking_dict(b, both_slots_dog_ids, owners_display_map) for b in all_bookings if b.walker_id and b.status == 'confirmed']
 
         slot_order = lambda s: 0 if s == 'Morning' else 1
         walkers_data = [
