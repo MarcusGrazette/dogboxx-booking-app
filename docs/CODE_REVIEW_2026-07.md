@@ -22,8 +22,8 @@ migration-head health check are all solid. The findings below are the gaps.
 | 3 | Web Push: pass `timeout=10` | ✅ deployed | `600658e`, PR #145 — merged + deployed 2026-07-03. Logs clean (boot, /health 200, SSE listeners); no push traffic observed yet to exercise it live |
 | 5 | EXIF strip via re-save | ✅ deployed | `1d1a533`, PR #145 — merged + deployed 2026-07-03. Logs clean; user already verified via manual upload on develop before merge |
 | 4 | Static asset caching | 🔲 todo | Needs cache-busting decision — see finding |
-| 6 | Missing indexes (BSC.booking_id, push_subscriptions.user_id) | ✅ done | `712af80` on develop — pending push/PR |
-| 7 | Board owners_display N+1 | 🔲 todo | |
+| 6 | Missing indexes (BSC.booking_id, push_subscriptions.user_id) | ✅ done | `712af80` on develop — bundled with #7, pending PR |
+| 7 | Board owners_display N+1 | ✅ done | `7d60dbb` on develop — bundled with #6, pending PR |
 | 15 | UX sweep: native confirm()/alert() | 🔲 todo | Standalone polish PR |
 | 8–14, 16 | Lower priority — see findings | 🔲 todo | Pick up opportunistically |
 
@@ -147,7 +147,7 @@ or lose row data; downgrade is `DROP INDEX`. Plain (non-CONCURRENT) build
 briefly blocks writes, but at this table size it's milliseconds, and
 `start.sh` runs migrations before the new gunicorn starts anyway.
 
-### 7. N+1 queries via `Dog` convenience properties
+### 7. N+1 queries via `Dog` convenience properties ✅
 
 `Dog.owners_display` and `Dog.primary_owner` (`app/models.py:167-178`) each run
 a query per call. `app/blueprints/admin/views/board.py:24` calls
