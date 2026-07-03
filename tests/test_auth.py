@@ -286,6 +286,54 @@ class TestLoginLogout:
         resp = client.get('/profile', follow_redirects=False)
         assert resp.status_code == 200
 
+    def test_deactivated_user_cannot_login(self, app, client):
+        with app.app_context():
+            user = make_user('deact_login@test.com', role='client')
+            make_client_profile(user.id)
+            user.active = False
+            db.session.commit()
+
+        resp = login(client, 'deact_login@test.com')
+        assert resp.status_code == 200
+        assert b'deactivated' in resp.data.lower()
+
+        # And no session was established
+        resp = client.get('/profile')
+        assert resp.status_code in (302, 301)
+
+    def test_deactivation_ends_live_session(self, app, client):
+        """Regression (code review 2026-07 #2): deactivating a user must kill
+        their existing session on the next request — the user_loader returns
+        None for inactive users. Previously is_active was a method (always
+        truthy to Flask-Login), so a deactivated user's session and
+        remember-me cookie stayed valid for up to 14 days."""
+        with app.app_context():
+            user = make_user('deact_live@test.com', role='client')
+            make_client_profile(user.id)
+            db.session.commit()
+            user_id = user.id
+
+        login(client, 'deact_live@test.com')
+        resp = client.get('/profile', follow_redirects=False)
+        assert resp.status_code == 200  # session live
+
+        with app.app_context():
+            db.session.get(User, user_id).active = False
+            db.session.commit()
+
+        # Very next request: session is dead, redirected to login
+        resp = client.get('/profile', follow_redirects=False)
+        assert resp.status_code in (302, 301)
+
+    def test_is_active_is_a_property_not_a_method(self, app):
+        """Guard against reintroducing the bound-method footgun: Flask-Login
+        reads is_active as an attribute, so it must be a bool, not callable."""
+        with app.app_context():
+            user = make_user('prop_check@test.com', role='client')
+            assert user.is_active is True
+            user.active = False
+            assert user.is_active is False
+
     def test_reset_password_rotates_session_id(self, app, client):
         """Regression: SID rotates when a password reset completes, so any
         session cookie picked up during the anonymous reset flow is dead."""

@@ -17,8 +17,8 @@ migration-head health check are all solid. The findings below are the gaps.
 
 | # | Finding | Status | Ref |
 |---|---------|--------|-----|
-| 1 | psycogreen + pool_pre_ping | ✅ done | `9ff4d1d`, PR #143 (solo deploy) — after merge, watch `railway logs` (SSE Redis listener line + admin smoke test); behavior is prod-only (gevent) |
-| 2 | UserMixin / deactivation doesn't end sessions | 🔲 todo | |
+| 1 | psycogreen + pool_pre_ping | ✅ deployed | `9ff4d1d`, PR #143 — merged + deployed 2026-07-03. Logs verified: clean gevent boot, /health 200 (real query through the patched wait callback), SSE Redis listener subscribed on both workers |
+| 2 | UserMixin / deactivation doesn't end sessions | ✅ on develop | `322d9b8` — UserMixin + is_active property + user_loader returns None for inactive; 3 regression tests. Prod checked 2026-07-03: zero `active=false` users, no knock-on logouts |
 | 3 | Web Push: pass `timeout=10` | 🔲 todo | Timeout only — skip the background-greenlet variant (simpler wins) |
 | 5 | EXIF strip via re-save | 🔲 todo | |
 | 4 | Static asset caching | 🔲 todo | Needs cache-busting decision — see finding |
@@ -51,7 +51,7 @@ accidental serialisation it removes was masking nothing we rely on — booking
 correctness is cross-worker safe already (advisory locks + partial unique index
 + IntegrityError→409 catches).
 
-### 2. Deactivating a user doesn't end their session — Flask-Login contract hand-rolled
+### 2. Deactivating a user doesn't end their session — Flask-Login contract hand-rolled ✅
 
 `User` (`app/models.py:33-37`) defines `is_authenticated` / `is_active` /
 `is_anonymous` as **methods**, not properties, and doesn't inherit `UserMixin`.

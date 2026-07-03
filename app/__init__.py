@@ -163,10 +163,16 @@ def create_app(config_name=None):
 
     @login_manager.user_loader
     def load_user(user_id):
-        """Load a user by their ID."""
+        """Load a user by their ID. Returning None for deactivated users is the
+        revocation chokepoint: it runs on every request (and on remember-cookie
+        restoration), so deactivation ends live sessions immediately instead of
+        letting them ride for up to 14 days."""
         # Import here to avoid circular dependency
         from app.models import User
-        return db.session.get(User, int(user_id))
+        user = db.session.get(User, int(user_id))
+        if user is None or not user.active:
+            return None
+        return user
 
     @app.before_request
     def set_csp_nonce():
