@@ -6,6 +6,11 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+    # pool_pre_ping: cheap liveness check on every connection checkout, so a
+    # connection killed while idle (Railway PG restart, idle timeout) reconnects
+    # transparently instead of surfacing an OperationalError to the request.
+    SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}
+
     # Business owner first name — used in same-day confirmation messages.
     OWNER_FIRSTNAME = os.environ.get('OWNER_FIRSTNAME', 'Lydia')
 
