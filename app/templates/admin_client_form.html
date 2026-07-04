@@ -361,22 +361,35 @@
 (function () {
     // Confirm before submitting if the admin changed the email address — it
     // changes the client's login and they need to know the new value.
-    var form = document.querySelector('form[method="post"]');
+    // Scoped via emailInput.closest('form') rather than a bare
+    // form[method="post"] selector — that selector is case-insensitive on the
+    // method attribute in HTML and matched the navbar's logout form (also
+    // method="POST", earlier in the DOM) instead of this one, so the confirm
+    // never fired.
     var emailInput = document.getElementById('email');
+    var form = emailInput ? emailInput.closest('form') : null;
     if (!form || !emailInput) return;
     var original = (emailInput.dataset.originalEmail || '').trim().toLowerCase();
+    var bypass = false;
     form.addEventListener('submit', function (e) {
+        if (bypass) { bypass = false; return; }
         var current = (emailInput.value || '').trim().toLowerCase();
         if (current && current !== original) {
-            var ok = window.confirm(
+            e.preventDefault();
+            showConfirm(
                 'Change this client\'s login email from\n  ' + original +
                 '\nto\n  ' + current + '?\n\n' +
-                'They\'ll need to use the new address to sign in.'
+                'They\'ll need to use the new address to sign in.',
+                function () {
+                    bypass = true;
+                    (form.requestSubmit ? form.requestSubmit() : form.submit());
+                },
+                {
+                    title: 'Change login email?', confirmLabel: 'Change email',
+                    danger: false, icon: 'bi-envelope',
+                    onCancel: function () { emailInput.focus(); },
+                }
             );
-            if (!ok) {
-                e.preventDefault();
-                emailInput.focus();
-            }
         }
     });
 }());

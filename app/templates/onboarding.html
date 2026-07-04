@@ -297,7 +297,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const file = this.files[0];
         if (!file) return;
         if (!file.type.startsWith('image/')) {
-            alert('Please choose an image file (JPG, PNG, etc.).');
+            showToast('Please choose an image file (JPG, PNG, etc.).', 'warning');
             return;
         }
 

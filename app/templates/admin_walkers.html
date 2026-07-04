@@ -329,12 +329,12 @@ document.querySelectorAll('.drop-in-toggle').forEach(function(toggle) {
                 label.textContent = data.does_drop_ins ? 'Yes' : 'No';
             } else {
                 toggle.checked = originalChecked;
-                alert(data.message || 'Could not update drop-in setting.');
+                showToast(data.message || 'Could not update drop-in setting.', 'danger');
             }
         })
         .catch(function() {
             toggle.checked = originalChecked;
-            alert('Request failed. Please try again.');
+            showToast('Request failed. Please try again.', 'danger');
         })
         .finally(function() {
             toggle.disabled = false;
@@ -361,12 +361,12 @@ document.querySelectorAll('.client-toggle').forEach(function(toggle) {
                 location.reload();
             } else {
                 toggle.checked = originalChecked;
-                alert(data.message || 'Could not update client access.');
+                showToast(data.message || 'Could not update client access.', 'danger');
             }
         })
         .catch(function() {
             toggle.checked = originalChecked;
-            alert('Request failed. Please try again.');
+            showToast('Request failed. Please try again.', 'danger');
         })
         .finally(function() {
             toggle.disabled = false;
@@ -397,10 +397,10 @@ clientOnlyConfirmBtn.addEventListener('click', function () {
         if (data.success) {
             location.reload();
         } else {
-            alert(data.message || 'Could not remove walker role.');
+            showToast(data.message || 'Could not remove walker role.', 'danger');
         }
     })
-    .catch(function() { alert('Request failed. Please try again.'); });
+    .catch(function() { showToast('Request failed. Please try again.', 'danger'); });
 });
 
 // ── Deactivate confirmation modal ───────────────────────────────────────────
@@ -445,13 +445,13 @@ walkerToggleConfirmBtn.addEventListener('click', function () {
                               walkerToggleModal, document.getElementById('walkerToggleModal'),
                               function () { location.reload(); });
             } else {
-                alert('Error: ' + (data.message || 'Something went wrong'));
+                showToast('Error: ' + (data.message || 'Something went wrong'), 'danger');
             }
         })
         .catch(function () {
             walkerToggleConfirmBtn.disabled = false;
             walkerToggleConfirmBtn.innerHTML = original;
-            alert('An error occurred. Please try again.');
+            showToast('An error occurred. Please try again.', 'danger');
         });
 });
 
@@ -586,12 +586,12 @@ document.querySelectorAll('.admin-toggle').forEach(function(toggle) {
                 label.textContent = data.is_admin ? 'Yes' : 'No';
             } else {
                 toggle.checked = originalChecked;
-                alert(data.message || 'Could not update admin access.');
+                showToast(data.message || 'Could not update admin access.', 'danger');
             }
         })
         .catch(function() {
             toggle.checked = originalChecked;
-            alert('Request failed. Please try again.');
+            showToast('Request failed. Please try again.', 'danger');
         })
         .finally(function() {
             toggle.disabled = false;

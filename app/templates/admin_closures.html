@@ -257,7 +257,7 @@
                 const row = document.getElementById(`closure-row-${pendingDeleteId}`);
                 if (row) row.remove();
             } else {
-                alert(data.message || 'Something went wrong.');
+                showToast(data.message || 'Something went wrong.', 'danger');
             }
             pendingDeleteId = null;
         })
