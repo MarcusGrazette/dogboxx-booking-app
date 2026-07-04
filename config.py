@@ -54,10 +54,10 @@ class Config:
         'frame-src': "https://iframe.mediadelivery.net",
     }
     
-    # Email (Resend)
-    RESEND_API_KEY = os.environ.get('RESEND_API_KEY')
-    MAIL_NO_REPLY = os.environ.get('MAIL_NO_REPLY', 'DogBoxx <noreply@dogboxx.org>')
-    MAIL_REPLY = os.environ.get('MAIL_REPLY', 'Lydia <lydia@dogboxx.org>')
+    # Email — Resend API key + sender addresses are read directly from the
+    # environment in app/utils/email.py (single source of truth: the Railway
+    # env vars). Only BUG_REPORTS_EMAIL is surfaced via config because it's
+    # consumed through current_app.config in the bug-report route.
     BUG_REPORTS_EMAIL = os.environ.get('BUG_REPORTS')
     APP_BASE_URL = os.environ.get('APP_BASE_URL', 'http://localhost:5000')
 

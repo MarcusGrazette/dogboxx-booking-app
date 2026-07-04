@@ -139,7 +139,7 @@ def add_closure():
 
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Error in add_closure: {e}")
+        logging.exception(f"Error in add_closure: {e}")
         return jsonify(success=False, message="Server error"), 500
 
 

@@ -276,7 +276,7 @@ def reset_password(token):
             return redirect(url_for('auth.login'))
         except Exception as e:
             db.session.rollback()
-            logging.error(f"Error resetting password for user {user.id}: {e}")
+            logging.exception(f"Error resetting password for user {user.id}: {e}")
             flash("Something went wrong. Please try again.", "error")
 
     return render_template("reset_password.html", form=form, token=token)
@@ -303,7 +303,7 @@ def unsubscribe(token):
         flash("You've been unsubscribed from newsletter emails.", "success")
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Error unsubscribing user {user.id}: {e}")
+        logging.exception(f"Error unsubscribing user {user.id}: {e}")
         flash("Something went wrong. Please try again.", "error")
 
     return redirect(url_for('auth.login'))
