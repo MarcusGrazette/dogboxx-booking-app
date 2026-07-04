@@ -14,7 +14,7 @@ def admin_required(f):
         if not current_user.is_admin:
             if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return jsonify(success=False, message="Forbidden"), 403
-            flash("Only admins can access this page.", "danger")
+            flash("Only admins can access this page.", "error")
             return redirect(url_for("client.index"))
         return f(*args, **kwargs)
     return decorated_function
@@ -27,7 +27,7 @@ def walker_required(f):
         if current_user.role != 'walker' and not current_user.is_admin:
             if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return jsonify(success=False, message="Forbidden"), 403
-            flash("Only walkers can access this page.", "danger")
+            flash("Only walkers can access this page.", "error")
             return redirect(url_for("client.index"))
         return f(*args, **kwargs)
     return decorated_function

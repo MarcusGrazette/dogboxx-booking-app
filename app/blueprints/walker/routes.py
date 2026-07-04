@@ -121,7 +121,7 @@ def profile():
     """Walker profile page: account info, photo, weekly schedule, and availability."""
     walker = Walker.query.filter_by(user_id=current_user.id).first()
     if not walker:
-        flash("Walker profile not found. Please contact support.", "danger")
+        flash("Walker profile not found. Please contact support.", "error")
         return redirect(url_for('client.index'))
 
     # Get default weekly schedule
@@ -785,7 +785,7 @@ def pickups(date_str=None):
     """
     walker = Walker.query.filter_by(user_id=current_user.id).first()
     if not walker:
-        flash("Walker profile not found. Please contact support.", "danger")
+        flash("Walker profile not found. Please contact support.", "error")
         return redirect(url_for('client.index'))
 
     today = datetime.now(timezone.utc).date()
@@ -796,7 +796,7 @@ def pickups(date_str=None):
         try:
             selected_date = datetime.strptime(raw_date, '%Y-%m-%d').date()
         except ValueError:
-            flash("Invalid date format.", "danger")
+            flash("Invalid date format.", "error")
             return redirect(url_for('walker.pickups'))
     else:
         selected_date = today
@@ -862,7 +862,7 @@ def monthly_summary():
 
     walker = Walker.query.filter_by(user_id=current_user.id).first()
     if not walker:
-        flash("Walker profile not found. Please contact support.", "danger")
+        flash("Walker profile not found. Please contact support.", "error")
         return redirect(url_for('client.index'))
 
     today = datetime.now(timezone.utc).date()

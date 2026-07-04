@@ -23,13 +23,13 @@ def daily_messages():
         content = request.form.get("content", "").strip()
 
         if not date_str or not content:
-            flash("Date and message content are required.", "danger")
+            flash("Date and message content are required.", "error")
             return redirect(url_for("admin.daily_messages"))
 
         try:
             msg_date = datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
-            flash("Invalid date format.", "danger")
+            flash("Invalid date format.", "error")
             return redirect(url_for("admin.daily_messages"))
 
         # Sanitise HTML from Quill — allow basic formatting tags only
