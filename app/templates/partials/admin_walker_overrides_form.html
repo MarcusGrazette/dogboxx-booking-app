@@ -99,7 +99,9 @@
 
 </div>
 
-{# Delete confirmation modal — replaces the system confirm() dialog #}
+{# Delete confirmation modal for this form's entries. Bespoke rather than the
+   shared partials/confirm_modal.html because this component (admin-override-form.js)
+   is embedded standalone on multiple pages with its own IDs/lifecycle. #}
 <div class="modal fade" id="schedDeleteModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-sm">
         <div class="modal-content border-0 shadow">
