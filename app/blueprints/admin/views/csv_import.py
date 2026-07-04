@@ -230,7 +230,7 @@ def csv_import_confirm():
             created += 1
         except Exception as e:
             db.session.rollback()
-            logging.error(f"CSV import error for {r.get('email')}: {e}")
+            logging.exception(f"CSV import error for {r.get('email')}: {e}")
             skipped += 1
 
     if created:

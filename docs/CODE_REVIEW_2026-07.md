@@ -21,12 +21,14 @@ migration-head health check are all solid. The findings below are the gaps.
 | 2 | UserMixin / deactivation doesn't end sessions | ✅ deployed | `322d9b8`, PR #144 — merged + deployed 2026-07-03. Logs verified: clean boot, /health 200, SSE listeners on both workers, live client sessions unaffected. Prod pre-check: zero `active=false` users |
 | 3 | Web Push: pass `timeout=10` | ✅ deployed | `600658e`, PR #145 — merged + deployed 2026-07-03. Logs clean (boot, /health 200, SSE listeners); no push traffic observed yet to exercise it live |
 | 5 | EXIF strip via re-save | ✅ deployed | `1d1a533`, PR #145 — merged + deployed 2026-07-03. Logs clean; user already verified via manual upload on develop before merge |
-| 4 | Static asset caching | 🟡 on develop | Chose **option (a) split policy** (not versioned URLs): `/static/*` exempted from `no-store`; CSS/images/fonts → `public, max-age=3600`, JS → `no-cache` (revalidate → 304, zero skew, preserves SW network-first). `/sw.js` route's own `no-cache` no longer clobbered. Rationale: PWA clients already serve CSS/images cache-first from the SW, so the real win is non-PWA admins on Chrome; JS stays revalidated to avoid template↔JS version skew (files aren't fingerprinted). Verified via test client: correct header per type + 304 on JS revalidation. 392 tests pass. Awaiting user smoke-test on develop before deploy. |
+| 4 | Static asset caching | ✅ deployed | `06ef7f4`, PR #148 — merged + deployed 2026-07-04. Chose **option (a) split policy** (not versioned URLs): `/static/*` exempted from `no-store`; CSS/images/fonts → `public, max-age=3600`, JS → `no-cache` (revalidate → 304, zero skew, preserves SW network-first). `/sw.js` route's own `no-cache` no longer clobbered. Rationale: SW-controlled clients already serve CSS/images cache-first, so the broad win is the JS 304 (was a full 200 re-download under `no-store`); JS stays revalidated to avoid template↔JS version skew (files aren't fingerprinted). Logs verified clean (both gevent workers, /health 200, SSE listener subscribed, no migration). **Prod headers confirmed live**: JS `no-cache`+ETag → 304/0 bytes on conditional GET, CSS `public, max-age=3600`, `/sw.js` `no-cache`, HTML `no-store`. User smoke-tested on develop (DevTools SW two-row pattern). |
 | 6 | Missing indexes (BSC.booking_id, push_subscriptions.user_id) | ✅ deployed | `712af80`, PR #146 — merged + deployed 2026-07-04. Migration ran clean on boot, /health 200 |
 | 7 | Board owners_display N+1 | ✅ deployed | `7d60dbb`, PR #146 — merged + deployed 2026-07-04. Logs clean; user verified board rendering pre-merge |
 | 15 | UX sweep: native confirm()/alert() | ✅ deployed | `6bf4621`, PR #147 — merged + deployed 2026-07-04. Shared `partials/confirm_modal.html` + `static/js/confirm-modal.js`/`toast.js` (promoted from `layout.html`), included in both layouts. All 10 listed templates converted plus the 3 fast-follow files (`admin_clients.html`, `profile.html`, `onboarding.html`) found during the sweep; `admin-override-form.js` was already using the modal pattern (reference for this work). `walker_schedule.html` was dead code (`/walker/schedule` redirects to `/walker/profile`, no `render_template` reference) — removed. Found and fixed a pre-existing bug in `admin_client_form.html`'s email-change confirm while converting it: `form[method="post"]` is case-insensitive on `method` and matched the navbar logout form instead, so the confirm never fired even natively — now scoped via `emailInput.closest('form')`. User smoke-tested on develop 2026-07-04; logs verified clean post-merge (boot, /health 200, SSE listener subscribed — no migration in this PR). |
 | 16 | Flash categories: standardise on "error" | ✅ deployed | `e524c06`, PR #147 — merged + deployed 2026-07-04, bundled with #15 (same UX-consistency theme). 11 `flash(..., "danger")` sites → `"error"`. Logs verified clean. |
-| 8–14 | Lower priority — see findings | 🔲 todo | Pick up opportunistically |
+| 9 | email.py config source of truth | 🟡 on develop | Resolved by **making env the single source** (not routing email.py through config): deleted the 3 dead `RESEND_API_KEY`/`MAIL_NO_REPLY`/`MAIL_REPLY` defs in `config.py` — nothing read them, and `MAIL_REPLY`'s config default (`Lydia <…>`) even contradicted the documented "fall back to MAIL_NO_REPLY". `email.py` keeps reading `os.environ` (stays context-free — no `current_app` coupling). Verified sender resolution + documented fallback. |
+| 10 | logging.exception traceback sweep | 🟡 on develop | Swept **34 broad `except Exception` handlers** across blueprints: `logging.error(f"…: {e}")` → `logging.exception(…)` (message + `{e}` kept; `e` stays referenced). Left the 8 typed handlers (IntegrityError/ValueError/RequestException — expected, return `str(e)` to user), `db_error_handler.py` (deliberate central handler, already logs `traceback.format_exc()`), and `uploads.py:44` (`.warning` for best-effort R2 backup — escalating to ERROR would misrepresent it). 392 tests pass. |
+| 8, 11–14 | Lower priority — see findings | 🔲 todo | Pick up opportunistically |
 
 ---
 
@@ -120,7 +122,7 @@ deploy while browsers keep stale JS → template↔JS mismatches. Safe options:
 config value), then go long-lived. Dog photos are UUID-named / never
 overwritten in place — safe for aggressive caching either way.
 
-**Decision (on develop):** option (a), refined into a per-type split in
+**Decision (deployed, PR #148):** option (a), refined into a per-type split in
 `add_security_headers`. `/static/*` CSS/images/fonts → `public, max-age=3600`;
 `/static/js/*` → `no-cache` (kept revalidated because the SW serves JS
 network-first — a max-age there would silently re-introduce stale JS, and the
@@ -190,7 +192,16 @@ they skate past the redirect until next login.
 
 Reads `RESEND_API_KEY` / `MAIL_NO_REPLY` / `MAIL_REPLY` from `os.environ`
 directly even though `config.py` defines all three — two sources of truth.
-**Fix:** use `current_app.config`.
+~~**Fix:** use `current_app.config`.~~
+
+**Decision (on develop):** collapsed the duplication from the *other* end —
+made the env vars the single source and deleted the config copies (they were
+dead: nothing read `config['RESEND_API_KEY']` etc., and `config.py`'s
+`MAIL_REPLY` default contradicted the documented MAIL_NO_REPLY fallback).
+Keeping `email.py` on `os.environ` avoids adding a `current_app`/app-context
+dependency to a leaf utility that today has none (no CLI/background senders,
+but future-proof). `BUG_REPORTS_EMAIL` stays in config — it *is* consumed via
+`current_app.config`.
 
 ### 10. Error handling loses stack traces
 

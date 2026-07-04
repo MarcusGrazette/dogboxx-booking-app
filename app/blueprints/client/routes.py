@@ -600,7 +600,7 @@ def book():
                         'message': f'{dog.name} already has a booking for that slot.'}), 409
     except Exception as e:
         db.session.rollback()
-        logging.error(f'AJAX booking error for user {current_user.id}: {e}')
+        logging.exception(f'AJAX booking error for user {current_user.id}: {e}')
         return jsonify({'success': False, 'message': 'An error occurred. Please try again.'}), 500
 
 
@@ -1062,7 +1062,7 @@ def profile():
                         flash(f"Upload error: {str(e)}", "error")
                         return render_template("profile.html", form=form, dog=dog, primary_dogs=primary_dogs, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=datetime.now().strftime("%Y-%m-%d"))
                     except Exception as e:
-                        logging.error(f"Error processing uploaded file: {e}")
+                        logging.exception(f"Error processing uploaded file: {e}")
                         flash("Error processing your image. Please try a different file.", "error")
                         return render_template("profile.html", form=form, dog=dog, primary_dogs=primary_dogs, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=datetime.now().strftime("%Y-%m-%d"))
 
@@ -1072,7 +1072,7 @@ def profile():
 
         except Exception as e:
             db.session.rollback()
-            logging.error(f"Error updating profile for user {current_user.email}: {e}")
+            logging.exception(f"Error updating profile for user {current_user.email}: {e}")
             flash("There was an error saving your changes. Please try again.", "error")
 
     elif request.method == 'GET':
@@ -1221,7 +1221,7 @@ def upload_dog_photo():
         return jsonify(success=False, error=str(e)), 400
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Error saving cropped dog photo for {current_user.email}: {e}")
+        logging.exception(f"Error saving cropped dog photo for {current_user.email}: {e}")
         return jsonify(success=False, error="Server error saving photo"), 500
 
 
@@ -1251,7 +1251,7 @@ def upload_profile_photo():
         return jsonify(success=False, error=str(e)), 400
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Error saving profile photo for {current_user.email}: {e}")
+        logging.exception(f"Error saving profile photo for {current_user.email}: {e}")
         return jsonify(success=False, error="Server error saving photo"), 500
 
 
@@ -1287,7 +1287,7 @@ def update_pickup():
         return jsonify(success=True)
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Error updating pickup notes for {current_user.email}: {e}")
+        logging.exception(f"Error updating pickup notes for {current_user.email}: {e}")
         return jsonify(success=False, error="Server error"), 500
 
 
@@ -1315,7 +1315,7 @@ def update_dog_details(dog_id):
         return jsonify(success=False, error="Invalid date"), 400
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Error updating dog details for dog {dog_id}: {e}")
+        logging.exception(f"Error updating dog details for dog {dog_id}: {e}")
         return jsonify(success=False, error="Server error"), 500
 
 
@@ -1396,7 +1396,7 @@ def onboard():
                     flash(f"Upload error: {str(e)}. Please try a different file.", "error")
                     return render_template("onboarding.html", form=form, existing_dog=existing_dog, has_address=has_address, has_dog_info=has_dog_info, today=datetime.now().strftime('%Y-%m-%d'))
                 except Exception as e:
-                    logging.error(f"Error processing uploaded file: {e}")
+                    logging.exception(f"Error processing uploaded file: {e}")
                     flash("There was an error processing your image. Please try a different file.", "error")
                     return render_template("onboarding.html", form=form, existing_dog=existing_dog, has_address=has_address, has_dog_info=has_dog_info, today=datetime.now().strftime('%Y-%m-%d'))
 
@@ -1438,7 +1438,7 @@ def onboard():
 
         except Exception as e:
             db.session.rollback()
-            logging.error(f"Error during onboarding for user {current_user.email}: {e}")
+            logging.exception(f"Error during onboarding for user {current_user.email}: {e}")
             logging.debug(f"Exception details: {traceback.format_exc()}")
 
             if isinstance(e, SQLAlchemyError):
@@ -1722,7 +1722,7 @@ def cancel_booking():
         
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Error cancelling booking: {e}")
+        logging.exception(f"Error cancelling booking: {e}")
         return jsonify(success=False, message="Server error"), 500
 
 
@@ -1968,7 +1968,7 @@ def recurring_booking():
                        message="Some of those slots were just booked — please reload and try again."), 409
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Error creating recurring bookings: {e}")
+        logging.exception(f"Error creating recurring bookings: {e}")
         return jsonify(success=False, message="Server error"), 500
 
 

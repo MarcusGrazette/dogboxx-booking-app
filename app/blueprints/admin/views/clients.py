@@ -191,7 +191,7 @@ def join_dog_access(client_id):
         )
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Error joining accounts: {e}")
+        logging.exception(f"Error joining accounts: {e}")
         return jsonify(success=False, message="An error occurred"), 500
 
 
@@ -244,7 +244,7 @@ def revoke_dog_access(client_id):
         )
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Error revoking dog access: {e}")
+        logging.exception(f"Error revoking dog access: {e}")
         return jsonify(success=False, message="An error occurred"), 500
 
 
@@ -336,7 +336,7 @@ def new_client():
             flash("A client with this email already exists.", "error")
         except Exception as e:
             db.session.rollback()
-            logging.error(f"Error creating client: {e}")
+            logging.exception(f"Error creating client: {e}")
             flash("An error occurred while creating the client.", "error")
 
     return render_template("admin_client_form.html", form=form, title="Add New Client", is_edit=False)
@@ -473,7 +473,7 @@ def edit_client(client_id):
             )
         except Exception as e:
             db.session.rollback()
-            logging.error(f"Error editing client {client_id}: {e}")
+            logging.exception(f"Error editing client {client_id}: {e}")
             flash("An error occurred while saving changes.", "error")
 
     elif request.method == 'GET':
@@ -542,7 +542,7 @@ def add_dog(client_id):
             flash(f"{new_dog.name} added successfully.", "success")
         except Exception as e:
             db.session.rollback()
-            logging.error(f"Error adding dog for client {client_id}: {e}")
+            logging.exception(f"Error adding dog for client {client_id}: {e}")
             flash("An error occurred while adding the dog.", "error")
         return redirect(url_for('admin.client_detail', client_id=client_id))
 
@@ -628,7 +628,7 @@ def deactivate_client(client_id):
 
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Error deactivating client {client_id}: {e}")
+        logging.exception(f"Error deactivating client {client_id}: {e}")
         return jsonify(success=False, message="Error deactivating client"), 500
 
 
@@ -650,7 +650,7 @@ def activate_client(client_id):
 
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Error activating client {client_id}: {e}")
+        logging.exception(f"Error activating client {client_id}: {e}")
         return jsonify(success=False, message="Error activating client"), 500
 
 

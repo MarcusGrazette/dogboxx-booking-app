@@ -198,7 +198,7 @@ def new_walker():
             flash("A walker with this email already exists.", "error")
         except Exception as e:
             db.session.rollback()
-            logging.error(f"Error creating walker: {e}")
+            logging.exception(f"Error creating walker: {e}")
             flash("An error occurred while creating the walker.", "error")
 
     return render_template("admin_walker_form.html", form=form, title="Add New Walker")
@@ -253,7 +253,7 @@ def deactivate_walker(walker_id):
 
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Error deactivating walker {walker_id}: {e}")
+        logging.exception(f"Error deactivating walker {walker_id}: {e}")
         return jsonify(success=False, message="Error deactivating walker"), 500
 
 
@@ -278,7 +278,7 @@ def activate_walker(walker_id):
 
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Error activating walker {walker_id}: {e}")
+        logging.exception(f"Error activating walker {walker_id}: {e}")
         return jsonify(success=False, message="Error activating walker"), 500
 
 
@@ -332,7 +332,7 @@ def walker_schedule(walker_id):
 
         except Exception as e:
             db.session.rollback()
-            logging.error(f"Error updating walker schedule: {e}")
+            logging.exception(f"Error updating walker schedule: {e}")
             flash("An error occurred while updating the schedule.", "error")
 
     # Pre-populate form with existing schedule

@@ -221,7 +221,7 @@ def upload_profile_photo():
         return jsonify(success=False, error=str(e)), 400
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Error saving walker profile photo for {current_user.email}: {e}")
+        logging.exception(f"Error saving walker profile photo for {current_user.email}: {e}")
         return jsonify(success=False, error="Server error saving photo"), 500
 
 

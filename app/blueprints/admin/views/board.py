@@ -512,7 +512,7 @@ def assign_walker():
         # This will be handled by the @handle_db_errors decorator
         # This code won't be reached for database errors, only for other types of exceptions
         db.session.rollback()
-        logging.error(f"Error assigning/unassigning walker: {e}")
+        logging.exception(f"Error assigning/unassigning walker: {e}")
         logging.debug(traceback.format_exc())
         return jsonify(success=False, message="Server error"), 500
 
@@ -588,7 +588,7 @@ def reorder_pickups():
 
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Error reordering pickups: {e}")
+        logging.exception(f"Error reordering pickups: {e}")
         return jsonify(success=False, message="Server error"), 500
 
 

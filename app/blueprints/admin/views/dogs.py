@@ -115,7 +115,7 @@ def update_dog(dog_id):
         db.session.commit()
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Error updating dog {dog_id}: {e}")
+        logging.exception(f"Error updating dog {dog_id}: {e}")
         return jsonify(success=False, message="Failed to save changes"), 500
 
     return jsonify(success=True, name=dog.name, breed=dog.breed or '—')
@@ -263,7 +263,7 @@ def book_for_dog():
 
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Error in admin book_for_dog: {e}")
+        logging.exception(f"Error in admin book_for_dog: {e}")
         return jsonify(success=False, message="Server error"), 500
 
 
@@ -409,7 +409,7 @@ def recurring_for_dog():
 
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Error in admin recurring_for_dog: {e}")
+        logging.exception(f"Error in admin recurring_for_dog: {e}")
         return jsonify(success=False, message="Server error"), 500
 
 
@@ -658,7 +658,7 @@ def dog_bulk_cancel(dog_id):
         db.session.commit()
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Bulk cancel error for dog {dog_id}: {e}")
+        logging.exception(f"Bulk cancel error for dog {dog_id}: {e}")
         return jsonify(success=False, message="Failed to cancel bookings"), 500
 
     return jsonify(success=True, cancelled_count=n)

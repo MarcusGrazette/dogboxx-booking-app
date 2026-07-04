@@ -508,7 +508,7 @@ def create_app(config_name=None):
                     return '', 503
             return '', 200
         except Exception as e:
-            app.logger.error(f'Health check failed: {e}')
+            app.logger.exception(f'Health check failed: {e}')
             return '', 503
 
     from flask_wtf.csrf import CSRFError
