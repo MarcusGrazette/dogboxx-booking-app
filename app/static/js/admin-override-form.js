@@ -68,7 +68,9 @@
             });
         }
 
-        // Bootstrap modal used to replace the system confirm() prompt.
+        // Bespoke Bootstrap confirm modal for this component (see the comment
+        // on #schedDeleteModal in admin_walker_overrides_form.html for why
+        // this doesn't use the shared partials/confirm_modal.html).
         // Created once per createOverrideForm() call; same instance reused
         // across every delete-button click within this form lifetime.
         const $deleteModalEl    = document.getElementById('schedDeleteModal');

@@ -1,7 +1,7 @@
-{# Shared generic confirm modal — replaces native confirm() dialogs.
-   See docs/CODE_REVIEW_2026-07.md #15 and docs/UX_GUIDE.md.
-   Include this once per page (already in layout.html / admin_layout.html),
-   then drive it from JS with:
+{# Shared generic confirm modal — the app-wide confirm UI (see docs/UX_GUIDE.md
+   and docs/CODE_REVIEW_2026-07.md #15). Never use the browser's native
+   confirm() — drive this instead. Include this once per page (already in
+   layout.html / admin_layout.html), then drive it from JS with:
      showConfirm(message, onConfirm, opts?)
    opts: { title, confirmLabel, danger (default true), icon }
    or wire a plain form submit automatically with:

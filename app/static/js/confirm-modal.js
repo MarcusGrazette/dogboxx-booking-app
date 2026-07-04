@@ -1,6 +1,7 @@
 /**
- * Shared confirm modal — replaces native confirm() dialogs. See
- * partials/confirm_modal.html and docs/CODE_REVIEW_2026-07.md #15.
+ * Shared confirm modal — the app-wide confirm UI. Never use the browser's
+ * native confirm(); use this instead. See partials/confirm_modal.html and
+ * docs/CODE_REVIEW_2026-07.md #15.
  *
  * Two ways to use it:
  *
