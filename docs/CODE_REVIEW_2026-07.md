@@ -19,11 +19,11 @@ migration-head health check are all solid. The findings below are the gaps.
 |---|---------|--------|-----|
 | 1 | psycogreen + pool_pre_ping | ✅ deployed | `9ff4d1d`, PR #143 — merged + deployed 2026-07-03. Logs verified: clean gevent boot, /health 200 (real query through the patched wait callback), SSE Redis listener subscribed on both workers |
 | 2 | UserMixin / deactivation doesn't end sessions | ✅ deployed | `322d9b8`, PR #144 — merged + deployed 2026-07-03. Logs verified: clean boot, /health 200, SSE listeners on both workers, live client sessions unaffected. Prod pre-check: zero `active=false` users |
-| 3 | Web Push: pass `timeout=10` | 🔲 PR open | `600658e`, PR #145 — bundled with #5, awaiting merge |
-| 5 | EXIF strip via re-save | 🔲 PR open | `1d1a533`, PR #145 — bundled with #3, awaiting merge |
+| 3 | Web Push: pass `timeout=10` | ✅ deployed | `600658e`, PR #145 — merged + deployed 2026-07-03. Logs clean (boot, /health 200, SSE listeners); no push traffic observed yet to exercise it live |
+| 5 | EXIF strip via re-save | ✅ deployed | `1d1a533`, PR #145 — merged + deployed 2026-07-03. Logs clean; user already verified via manual upload on develop before merge |
 | 4 | Static asset caching | 🔲 todo | Needs cache-busting decision — see finding |
-| 6 | Missing indexes (BSC.booking_id, push_subscriptions.user_id) | 🔲 todo | |
-| 7 | Board owners_display N+1 | 🔲 todo | |
+| 6 | Missing indexes (BSC.booking_id, push_subscriptions.user_id) | 🔲 PR open | `712af80`, PR #146 — bundled with #7, awaiting merge |
+| 7 | Board owners_display N+1 | 🔲 PR open | `7d60dbb`, PR #146 — bundled with #6, awaiting merge |
 | 15 | UX sweep: native confirm()/alert() | 🔲 todo | Standalone polish PR |
 | 8–14, 16 | Lower priority — see findings | 🔲 todo | Pick up opportunistically |
 
@@ -132,7 +132,7 @@ already does) drops metadata for free.
 **Risk:** low — new uploads only; current code already discards EXIF
 orientation, so re-saving is behavior-identical.
 
-### 6. Missing indexes on append-only / FK columns
+### 6. Missing indexes on append-only / FK columns ✅
 
 - `booking_status_changes.booking_id` (`app/models.py:391`) — no index. Table
   grows forever by design; `Booking.status_history` filters on it → per-booking
@@ -147,7 +147,7 @@ or lose row data; downgrade is `DROP INDEX`. Plain (non-CONCURRENT) build
 briefly blocks writes, but at this table size it's milliseconds, and
 `start.sh` runs migrations before the new gunicorn starts anyway.
 
-### 7. N+1 queries via `Dog` convenience properties
+### 7. N+1 queries via `Dog` convenience properties ✅
 
 `Dog.owners_display` and `Dog.primary_owner` (`app/models.py:167-178`) each run
 a query per call. `app/blueprints/admin/views/board.py:24` calls
