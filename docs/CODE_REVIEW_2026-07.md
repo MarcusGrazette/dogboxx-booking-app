@@ -21,7 +21,7 @@ migration-head health check are all solid. The findings below are the gaps.
 | 2 | UserMixin / deactivation doesn't end sessions | ✅ deployed | `322d9b8`, PR #144 — merged + deployed 2026-07-03. Logs verified: clean boot, /health 200, SSE listeners on both workers, live client sessions unaffected. Prod pre-check: zero `active=false` users |
 | 3 | Web Push: pass `timeout=10` | ✅ deployed | `600658e`, PR #145 — merged + deployed 2026-07-03. Logs clean (boot, /health 200, SSE listeners); no push traffic observed yet to exercise it live |
 | 5 | EXIF strip via re-save | ✅ deployed | `1d1a533`, PR #145 — merged + deployed 2026-07-03. Logs clean; user already verified via manual upload on develop before merge |
-| 4 | Static asset caching | 🔲 todo | Needs cache-busting decision — see finding |
+| 4 | Static asset caching | 🟡 on develop | Chose **option (a) split policy** (not versioned URLs): `/static/*` exempted from `no-store`; CSS/images/fonts → `public, max-age=3600`, JS → `no-cache` (revalidate → 304, zero skew, preserves SW network-first). `/sw.js` route's own `no-cache` no longer clobbered. Rationale: PWA clients already serve CSS/images cache-first from the SW, so the real win is non-PWA admins on Chrome; JS stays revalidated to avoid template↔JS version skew (files aren't fingerprinted). Verified via test client: correct header per type + 304 on JS revalidation. 392 tests pass. Awaiting user smoke-test on develop before deploy. |
 | 6 | Missing indexes (BSC.booking_id, push_subscriptions.user_id) | ✅ deployed | `712af80`, PR #146 — merged + deployed 2026-07-04. Migration ran clean on boot, /health 200 |
 | 7 | Board owners_display N+1 | ✅ deployed | `7d60dbb`, PR #146 — merged + deployed 2026-07-04. Logs clean; user verified board rendering pre-merge |
 | 15 | UX sweep: native confirm()/alert() | ✅ deployed | `6bf4621`, PR #147 — merged + deployed 2026-07-04. Shared `partials/confirm_modal.html` + `static/js/confirm-modal.js`/`toast.js` (promoted from `layout.html`), included in both layouts. All 10 listed templates converted plus the 3 fast-follow files (`admin_clients.html`, `profile.html`, `onboarding.html`) found during the sweep; `admin-override-form.js` was already using the modal pattern (reference for this work). `walker_schedule.html` was dead code (`/walker/schedule` redirects to `/walker/profile`, no `render_template` reference) — removed. Found and fixed a pre-existing bug in `admin_client_form.html`'s email-change confirm while converting it: `form[method="post"]` is case-insensitive on `method` and matched the navbar logout form instead, so the confirm never fired even natively — now scoped via `emailInput.closest('form')`. User smoke-tested on develop 2026-07-04; logs verified clean post-merge (boot, /health 200, SSE listener subscribed — no migration in this PR). |
@@ -119,6 +119,18 @@ deploy while browsers keep stale JS → template↔JS mismatches. Safe options:
 (b) add `?v=<version>` to static URLs (small `url_for` wrapper keyed off a
 config value), then go long-lived. Dog photos are UUID-named / never
 overwritten in place — safe for aggressive caching either way.
+
+**Decision (on develop):** option (a), refined into a per-type split in
+`add_security_headers`. `/static/*` CSS/images/fonts → `public, max-age=3600`;
+`/static/js/*` → `no-cache` (kept revalidated because the SW serves JS
+network-first — a max-age there would silently re-introduce stale JS, and the
+static endpoint's ETag gives cheap 304s anyway). `/sw.js` (its own route,
+endpoint `service_worker`) is left untouched so its `no-cache` survives.
+Rejected (b): static files aren't fingerprinted and there's no reliable
+app-wide version source, so `immutable` would fail *unsafe* (year-long
+staleness) on any missed bump — vs (a) which fails safe (≤1h, self-heals, and
+a hard-refresh bypasses it). Most clients are on the PWA (CSS/images already
+cache-first in the SW), so the win is concentrated on non-PWA admins.
 
 ### 5. EXIF stripping copies the image pixel-by-pixel through a Python list ✅
 

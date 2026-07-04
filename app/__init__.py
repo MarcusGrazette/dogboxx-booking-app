@@ -242,11 +242,35 @@ def create_app(config_name=None):
     @app.after_request
     def add_security_headers(response):
         """Add security-related headers to response"""
-        # Basic cache control
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        response.headers["Expires"] = "0"
-        response.headers["Pragma"] = "no-cache"
-        
+        # Cache control — see docs/CODE_REVIEW_2026-07.md #4.
+        #   HTML (and everything else): no-store, always fresh — booking data.
+        #   /static/* : cacheable, but static files are NOT fingerprinted
+        #     (brand.css is always brand.css), so the policy splits by type to
+        #     avoid template↔asset version skew:
+        #       - CSS / images / fonts change rarely and are the bulk of
+        #         page-load bytes → public, max-age=3600. Non-PWA clients
+        #         (admins on Chrome) stop re-downloading them every view. PWA
+        #         clients already serve these from the SW cache (cache-first),
+        #         so this only helps plain-browser sessions.
+        #       - JS is served network-first by the SW (sw.js Strategy 1a) so
+        #         updates propagate immediately; a max-age here would silently
+        #         re-introduce stale JS. Keep it no-cache — the static endpoint
+        #         emits ETag/Last-Modified, so browsers still get cheap 304s
+        #         (no body) instead of full re-downloads, with zero staleness.
+        #   /sw.js has its own route that sets no-cache; don't clobber it here.
+        if request.endpoint == 'static':
+            filename = (request.view_args or {}).get('filename', '')
+            if filename.startswith('js/'):
+                response.headers["Cache-Control"] = "no-cache"
+            else:
+                response.headers["Cache-Control"] = "public, max-age=3600"
+        elif request.endpoint == 'service_worker':
+            pass  # /sw.js route already set Cache-Control: no-cache
+        else:
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Expires"] = "0"
+            response.headers["Pragma"] = "no-cache"
+
         # Only add security headers in non-debug mode
         if not app.debug and not app.testing:
             # HSTS header (HTTP Strict Transport Security)
