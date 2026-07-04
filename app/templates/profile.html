@@ -613,7 +613,7 @@
         if (!file) return;
 
         if (!file.type.startsWith('image/')) {
-            alert('Please choose an image file (JPG, PNG, or GIF).');
+            showToast('Please choose an image file (JPG, PNG, or GIF).', 'warning');
             return;
         }
 
@@ -705,11 +705,11 @@
 
                     getCropModal().hide();
                 } else {
-                    alert('Could not save photo: ' + (data.error || 'Unknown error'));
+                    showToast('Could not save photo: ' + (data.error || 'Unknown error'), 'danger');
                 }
             })
             .catch(function () {
-                alert('Upload failed. Please check your connection and try again.');
+                showToast('Upload failed. Please check your connection and try again.', 'danger');
             })
             .finally(function () {
                 cropSaveBtn.disabled = false;

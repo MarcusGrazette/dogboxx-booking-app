@@ -22,10 +22,11 @@ migration-head health check are all solid. The findings below are the gaps.
 | 3 | Web Push: pass `timeout=10` | ✅ deployed | `600658e`, PR #145 — merged + deployed 2026-07-03. Logs clean (boot, /health 200, SSE listeners); no push traffic observed yet to exercise it live |
 | 5 | EXIF strip via re-save | ✅ deployed | `1d1a533`, PR #145 — merged + deployed 2026-07-03. Logs clean; user already verified via manual upload on develop before merge |
 | 4 | Static asset caching | 🔲 todo | Needs cache-busting decision — see finding |
-| 6 | Missing indexes (BSC.booking_id, push_subscriptions.user_id) | 🔲 PR open | `712af80`, PR #146 — bundled with #7, awaiting merge |
-| 7 | Board owners_display N+1 | 🔲 PR open | `7d60dbb`, PR #146 — bundled with #6, awaiting merge |
-| 15 | UX sweep: native confirm()/alert() | 🔲 todo | Standalone polish PR |
-| 8–14, 16 | Lower priority — see findings | 🔲 todo | Pick up opportunistically |
+| 6 | Missing indexes (BSC.booking_id, push_subscriptions.user_id) | ✅ deployed | `712af80`, PR #146 — merged + deployed 2026-07-04. Migration ran clean on boot, /health 200 |
+| 7 | Board owners_display N+1 | ✅ deployed | `7d60dbb`, PR #146 — merged + deployed 2026-07-04. Logs clean; user verified board rendering pre-merge |
+| 15 | UX sweep: native confirm()/alert() | ✅ on develop | Shared `partials/confirm_modal.html` + `static/js/confirm-modal.js`/`toast.js` (promoted from `layout.html`), included in both layouts. All 10 listed templates converted plus the 3 fast-follow files (`admin_clients.html`, `profile.html`, `onboarding.html`) found during the sweep; `admin-override-form.js` was already using the modal pattern (reference for this work). `walker_schedule.html` was dead code (`/walker/schedule` redirects to `/walker/profile`, no `render_template` reference) — removed. Found and fixed a pre-existing bug in `admin_client_form.html`'s email-change confirm while converting it: `form[method="post"]` is case-insensitive on `method` and matched the navbar logout form instead, so the confirm never fired even natively — now scoped via `emailInput.closest('form')`. User smoke-tested on develop 2026-07-04, confirmed good. |
+| 16 | Flash categories: standardise on "error" | ✅ on develop | Bundled with #15 (same UX-consistency theme). 11 `flash(..., "danger")` sites → `"error"` |
+| 8–14 | Lower priority — see findings | 🔲 todo | Pick up opportunistically |
 
 ---
 
@@ -226,7 +227,7 @@ if the 1-year cap is raised or the client base grows materially.
 
 ## UX consistency
 
-### 15. Native `confirm()`/`alert()` dialogs survive in ~10 templates
+### 15. Native `confirm()`/`alert()` dialogs survive in ~10 templates ✅
 
 `docs/UX_GUIDE.md` establishes toasts + the stacked success modal, but these
 still use browser-native dialogs (jarring next to styled modals; in the iOS PWA
@@ -242,8 +243,16 @@ alerts for errors. **⚠ Hazard:** converting a `confirm()` guard and mis-wiring
 it = destructive action fires *without* confirmation — manually click-test each
 conversion. New inline JS must carry the CSP nonce.
 
-### 16. Flash categories: 35× `"error"` vs 9× `"danger"`
+### 16. Flash categories: 35× `"error"` vs 9× `"danger"` ✅
 
 The toast partial normalises `danger` → `error` (`flash_toasts.html:24`) so
 users see no difference — pure code-consistency nit. Standardise on `"error"`
 (majority + the partial's native vocabulary); sweep the 9 stragglers.
+
+**Fix:** swept all 11 `flash(..., "danger")` call sites (count was 11, not 9,
+by the time this was picked up) to `"error"`: `decorators.py` (×2),
+`revenue.py`, `walker/routes.py` (×3), `client/routes.py` (×2),
+`daily_messages.py` (×2). Scope is server-side `flash()` only — the many
+`showToast(msg, 'danger')` JS calls elsewhere (`client-home.js`,
+`admin-board-core.js`, and the ones added by #15) are a separate, already-
+consistent convention and were left alone.

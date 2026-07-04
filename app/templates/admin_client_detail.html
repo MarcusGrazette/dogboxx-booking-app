@@ -566,27 +566,27 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // ── Revoke access ───────────────────────────────────────────────────────
     window.revokeAccess = function (primaryClientId, dogId, secondaryUserId, userName, rowId) {
-        if (!confirm(`Remove ${userName}'s access to this dog?`)) return;
-
-        fetch(`/admin/clients/${primaryClientId}/revoke-access`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
-            body: JSON.stringify({ dog_id: dogId, secondary_user_id: secondaryUserId })
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                if (rowId) {
-                    const row = document.getElementById(rowId);
-                    if (row) row.remove();
+        showConfirm(`Remove ${userName}'s access to this dog?`, function () {
+            fetch(`/admin/clients/${primaryClientId}/revoke-access`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
+                body: JSON.stringify({ dog_id: dogId, secondary_user_id: secondaryUserId })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    if (rowId) {
+                        const row = document.getElementById(rowId);
+                        if (row) row.remove();
+                    } else {
+                        window.location.reload();
+                    }
                 } else {
-                    window.location.reload();
+                    showToast(data.message || 'Could not revoke access.', 'danger');
                 }
-            } else {
-                alert(data.message || 'Could not revoke access.');
-            }
-        })
-        .catch(() => alert('Network error — please try again.'));
+            })
+            .catch(() => showToast('Network error — please try again.', 'danger'));
+        }, { confirmLabel: 'Remove' });
     };
 
 })();

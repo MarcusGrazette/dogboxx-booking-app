@@ -1,0 +1,24 @@
+{# Shared generic confirm modal — replaces native confirm() dialogs.
+   See docs/CODE_REVIEW_2026-07.md #15 and docs/UX_GUIDE.md.
+   Include this once per page (already in layout.html / admin_layout.html),
+   then drive it from JS with:
+     showConfirm(message, onConfirm, opts?)
+   opts: { title, confirmLabel, danger (default true), icon }
+   or wire a plain form submit automatically with:
+     <form data-confirm="Delete this?" data-confirm-label="Delete">
+   (both provided by static/js/confirm-modal.js). #}
+<div class="modal fade" id="dbConfirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-body pt-4 pb-2 text-center">
+                <i class="bi bi-trash text-danger mb-2" id="db-confirm-icon" style="font-size:1.75rem;"></i>
+                <p class="mb-0 fw-semibold" id="db-confirm-title">Are you sure?</p>
+                <p class="text-muted small mt-1" id="db-confirm-body" style="white-space:pre-line;"></p>
+            </div>
+            <div class="modal-footer border-0 justify-content-center gap-2 pt-0 pb-3">
+                <button type="button" class="btn btn-outline-secondary btn-sm px-4" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger btn-sm px-4" id="db-confirm-btn">Confirm</button>
+            </div>
+        </div>
+    </div>
+</div>

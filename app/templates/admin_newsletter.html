@@ -226,7 +226,7 @@
       return;
     }
     if (quill.getText().trim().length === 0) {
-      alert('Please write a message body before sending.');
+      showToast('Please write a message body before sending.', 'warning');
       return;
     }
     document.getElementById('modal-subject-preview').textContent = subject;

@@ -65,7 +65,7 @@
         <h5 class="card-title mb-0"><i class="bi bi-clock-history me-2"></i>Saved Messages</h5>
         {% if messages %}
         <form method="post" action="{{ url_for('admin.bulk_delete_old_daily_messages') }}"
-              onsubmit="return confirm('Delete all messages older than 30 days?');">
+              data-confirm="Delete all messages older than 30 days?" data-confirm-label="Delete">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-trash me-1"></i>Delete &gt;30 days old
@@ -102,7 +102,7 @@
               </button>
               <form method="post"
                     action="{{ url_for('admin.delete_daily_message', message_id=msg.id) }}"
-                    onsubmit="return confirm('Delete this message?');">
+                    data-confirm="Delete this message?" data-confirm-label="Delete">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
                   <i class="bi bi-trash"></i>
@@ -141,7 +141,7 @@
   document.getElementById('messageForm').addEventListener('submit', function (e) {
     if (quill.getText().trim().length === 0) {
       e.preventDefault();
-      alert('Please enter a message.');
+      showToast('Please enter a message.', 'warning');
       return;
     }
     document.getElementById('content_val').value = quill.root.innerHTML;

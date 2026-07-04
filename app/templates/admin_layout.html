@@ -323,6 +323,7 @@
             </div>
         </div>
     </main>
+    {% include 'partials/confirm_modal.html' %}
     {% block modals %}{% endblock %}
 
     <!-- Backdrop shown when sidebar is open on mobile (CSS controls visibility) -->
@@ -388,6 +389,8 @@ document.addEventListener('hide.bs.modal', function (event) {
 </script>
 
 <script src="{{ url_for('static', filename='js/pwa-pull-to-refresh.js') }}" nonce="{{ csp_nonce }}"></script>
+<script src="{{ url_for('static', filename='js/toast.js') }}" nonce="{{ csp_nonce }}"></script>
+<script src="{{ url_for('static', filename='js/confirm-modal.js') }}" nonce="{{ csp_nonce }}"></script>
 
 <script nonce="{{ csp_nonce }}">
 // Refresh sidebar pending-booking badge counts after board actions.

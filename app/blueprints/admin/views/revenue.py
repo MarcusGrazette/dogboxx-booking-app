@@ -248,7 +248,7 @@ def update_pricing():
         drop_in_price    = float(request.form.get('price_per_drop_in', 5))
         eff_from         = date.fromisoformat(request.form['effective_from'])
     except (KeyError, ValueError) as e:
-        flash(f"Invalid pricing data: {e}", "danger")
+        flash(f"Invalid pricing data: {e}", "error")
         return redirect(url_for('admin.revenue'))
 
     # Check for duplicate effective_from

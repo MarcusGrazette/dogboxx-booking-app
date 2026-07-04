@@ -307,7 +307,7 @@ def index():
 
         if errors:
             for e in errors:
-                flash(e, "danger")
+                flash(e, "error")
         else:
             # Use context manager for error handling
             with DBErrorHandler(
@@ -318,7 +318,7 @@ def index():
                 }
             ):
                 if not walk_service:
-                    flash("No service type available. Please contact support.", "danger")
+                    flash("No service type available. Please contact support.", "error")
                     return redirect(url_for("client.index"))
                 default_service = walk_service
 

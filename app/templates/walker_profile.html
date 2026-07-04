@@ -286,7 +286,7 @@ document.addEventListener('DOMContentLoaded', function () {
   fileInput.addEventListener('change', function () {
     const file = this.files[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) { alert('Please choose an image file.'); return; }
+    if (!file.type.startsWith('image/')) { showToast('Please choose an image file.', 'warning'); return; }
 
     const reader = new FileReader();
     reader.onload = function (e) {
@@ -344,10 +344,10 @@ document.addEventListener('DOMContentLoaded', function () {
           if (navAvatar && navAvatar.tagName === 'IMG') navAvatar.src = data.url + '?t=' + Date.now();
           getModal().hide();
         } else {
-          alert(data.error || 'Upload failed.');
+          showToast(data.error || 'Upload failed.', 'danger');
         }
       })
-      .catch(() => alert('Network error. Please try again.'))
+      .catch(() => showToast('Network error. Please try again.', 'danger'))
       .finally(() => { spinner.classList.add('d-none'); saveBtn.disabled = false; });
     }, 'image/jpeg', 0.9);
   });
@@ -394,22 +394,23 @@ function bindDeleteButtons() {
             const confirmMsg = total > 1
                 ? `Delete ${total} entries (${summary})?`
                 : `Delete this entry (${summary})?`;
-            if (!confirm(confirmMsg)) return;
 
-            fetch('{{ url_for("walker.schedule_changes_batch_delete") }}', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-                body: JSON.stringify({ adhoc_ids: adhocIds, unavail_ids: unavailIds }),
-            })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.success) {
-                        refreshList();
-                    } else {
-                        setSchedStatus('Failed to delete — please try again.', 'error');
-                    }
+            showConfirm(confirmMsg, function () {
+                fetch('{{ url_for("walker.schedule_changes_batch_delete") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({ adhoc_ids: adhocIds, unavail_ids: unavailIds }),
                 })
-                .catch(() => setSchedStatus('Network error.', 'error'));
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) {
+                            refreshList();
+                        } else {
+                            setSchedStatus('Failed to delete — please try again.', 'error');
+                        }
+                    })
+                    .catch(() => setSchedStatus('Network error.', 'error'));
+            }, { confirmLabel: 'Delete' });
         });
     });
 }

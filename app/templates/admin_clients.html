@@ -192,13 +192,13 @@ toggleConfirm.addEventListener('click', function () {
                               toggleModal, document.getElementById('toggleModal'),
                               () => location.reload());
             } else {
-                alert('Error: ' + (data.message || 'Something went wrong'));
+                showToast('Error: ' + (data.message || 'Something went wrong'), 'danger');
             }
         })
         .catch(() => {
             toggleConfirm.disabled = false;
             toggleConfirm.innerHTML = original;
-            alert('An error occurred. Please try again.');
+            showToast('An error occurred. Please try again.', 'danger');
         });
 });
 

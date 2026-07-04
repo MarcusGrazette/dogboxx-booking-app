@@ -201,7 +201,7 @@
         <h5 class="card-title mb-0"><i class="bi bi-clock-history me-2"></i>Past broadcasts</h5>
         {% if past_broadcasts %}
         <form method="post" action="{{ url_for('admin.bulk_delete_old_broadcasts') }}"
-              onsubmit="return confirm('Delete all broadcasts older than 30 days?');">
+              data-confirm="Delete all broadcasts older than 30 days?" data-confirm-label="Delete">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-trash me-1"></i>Delete &gt;30 days old
@@ -348,7 +348,7 @@
 
   sendBtn.addEventListener('click', () => {
     if (!bellCb.checked && !emailCb.checked) {
-      alert('Pick at least one delivery channel.');
+      showToast('Pick at least one delivery channel.', 'warning');
       return;
     }
     if (lastCount === 0) return;
