@@ -308,7 +308,7 @@ def board_data(date_str):
             max_capacity=max_capacity,
         )
     except Exception as e:
-        logging.error('Error loading board data for %s: %s', date_str, e)
+        logging.exception('Error loading board data for %s: %s', date_str, e)
         return jsonify(success=False, message="Could not load board data"), 500
 
 
@@ -550,7 +550,7 @@ def decline_booking(booking_id):
         return jsonify(success=True)
     except Exception as e:
         db.session.rollback()
-        logging.error('Error declining booking %s: %s', booking_id, e)
+        logging.exception('Error declining booking %s: %s', booking_id, e)
         return jsonify(success=False, message="Server error"), 500
 
 

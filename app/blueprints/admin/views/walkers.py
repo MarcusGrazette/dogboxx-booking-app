@@ -426,7 +426,7 @@ def walker_schedule_json(walker_id):
         return jsonify(success=True, affected_count=affected_count)
     except Exception as exc:
         db.session.rollback()
-        logging.error(f"Error updating walker schedule (modal): {exc}")
+        logging.exception(f"Error updating walker schedule (modal): {exc}")
         return jsonify(success=False, message="Error saving schedule"), 500
 
 
