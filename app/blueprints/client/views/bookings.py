@@ -1,23 +1,19 @@
 """
-Client routes.
-
-This module defines routes for client functionality, including home page, profile
-management, onboarding, and booking management.
+Client booking routes — creation (single, both-slots, drop-in, recurring),
+cancellation, pause-walks, calendar JSON, and booking notes.
 """
 
 from flask import current_app, request, redirect, render_template, flash, url_for, jsonify, session
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
-from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
-from app.models import User, Client, Dog, Booking, DogOwner, ServiceType, Walker, Closure
-from app import db, limiter
-from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
-from app.utils.uploads import process_dog_photo, process_cropped_photo
+from sqlalchemy.exc import IntegrityError, OperationalError
+from app.models import User, Dog, Booking, DogOwner, ServiceType, Walker, Closure
+from app import db
+from app.utils.db_error_handler import DBErrorHandler
 from app.utils.booking_access import get_accessible_dog_ids, user_can_access_booking
-from app.capacity import check_availability, get_slot_availability_summary, is_date_closed
-from app.forms import OnboardingForm, BookingForm, ProfileForm
+from app.capacity import is_date_closed
+from app.forms import BookingForm
 import logging
-import traceback
 import uuid
 from datetime import datetime, timezone, timedelta, date as date_type
 
@@ -30,81 +26,6 @@ from app.utils.booking_status import (
 from app.utils.invoicing import is_late_cancellation
 from app.utils.decorators import has_client_access
 from app.services.booking_service import create_booking, CapacityError
-
-
-@client_bp.route("/help")
-def help_page():
-    return render_template('help.html')
-
-
-@client_bp.route("/get-started")
-def get_started():
-    return render_template('get_started.html')
-
-
-@client_bp.route("/switch-view", methods=["POST"])
-@login_required
-def switch_view():
-    """Toggle between walker and client view for dual-role users."""
-    if current_user.role != 'walker' or current_user.client is None:
-        return redirect(url_for('client.index'))
-    view = request.form.get('view')
-    if view in ('walker', 'client'):
-        session['active_view'] = view
-    if session.get('active_view') == 'client':
-        return redirect(url_for('client.index'))
-    return redirect(url_for('walker.pickups'))
-
-
-@client_bp.route("/report-bug", methods=["POST"])
-@login_required
-@limiter.limit("3 per hour", key_func=lambda: f"report-bug:{current_user.id}")
-def report_bug():
-    from app.utils.email import send_email
-    from app.utils.logging_config import recent_log_buffer
-    from html import escape
-
-    description = (request.form.get("description") or "").strip()
-    if not description:
-        return jsonify(success=False, message="Please describe the issue."), 400
-
-    user = current_user
-    user_agent = request.headers.get("User-Agent", "unknown")
-    referrer = request.form.get("page_url") or request.referrer or "unknown"
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-
-    logs = list(recent_log_buffer)
-    log_section = "\n".join(logs) if logs else "(no recent warnings or errors)"
-
-    html = f"""
-    <h2 style="color:#1B1B1B;font-family:sans-serif;">Bug Report</h2>
-    <table style="font-family:sans-serif;font-size:14px;border-collapse:collapse;width:100%;">
-      <tr><td style="padding:6px 12px 6px 0;color:#555;white-space:nowrap;"><strong>User</strong></td>
-          <td style="padding:6px 0;">{escape(user.firstname)} {escape(user.lastname or '')} &lt;{escape(user.email)}&gt; — {escape(user.role)}</td></tr>
-      <tr><td style="padding:6px 12px 6px 0;color:#555;"><strong>URL</strong></td>
-          <td style="padding:6px 0;">{escape(referrer)}</td></tr>
-      <tr><td style="padding:6px 12px 6px 0;color:#555;"><strong>Browser</strong></td>
-          <td style="padding:6px 0;">{escape(user_agent)}</td></tr>
-      <tr><td style="padding:6px 12px 6px 0;color:#555;"><strong>Time</strong></td>
-          <td style="padding:6px 0;">{timestamp}</td></tr>
-    </table>
-
-    <h3 style="font-family:sans-serif;margin-top:24px;">Description</h3>
-    <p style="font-family:sans-serif;font-size:14px;white-space:pre-wrap;">{escape(description)}</p>
-
-    <h3 style="font-family:sans-serif;margin-top:24px;">Recent server logs (WARNING / ERROR)</h3>
-    <pre style="background:#f4f4f4;padding:12px;font-size:12px;overflow-x:auto;border-radius:4px;">{escape(log_section)}</pre>
-    """
-
-    ok = send_email(
-        to=current_app.config['BUG_REPORTS_EMAIL'],
-        subject=f"Bug report from {user.firstname} {user.lastname or ''}".strip(),
-        html=html,
-    )
-
-    if ok:
-        return jsonify(success=True)
-    return jsonify(success=False, message="Failed to send — please try again."), 500
 
 
 def _is_same_day(booking_date):
@@ -229,11 +150,11 @@ def index():
         # Dual-role walker in client view: let through. Otherwise send to walker home.
         if current_user.client is None or session.get('active_view') != 'client':
             return redirect(url_for('walker.pickups'))
-        
+
     user = User.query.options(
         joinedload(User.client)
     ).filter_by(id=current_user.id).first()
-    
+
     # Get user's dogs through DogOwner relationship
     user_dogs = Dog.query.join(DogOwner).filter(DogOwner.user_id == current_user.id).all()
 
@@ -311,7 +232,7 @@ def index():
         else:
             # Use context manager for error handling
             with DBErrorHandler(
-                flash_message=True, 
+                flash_message=True,
                 custom_error_messages={
                     IntegrityError: "Could not create booking due to a conflict. You might already have a booking at this time.",
                     OperationalError: "Our booking system is temporarily unavailable. Please try again later."
@@ -407,7 +328,7 @@ def index():
                     else:
                         flash("Booking request submitted — we'll confirm it shortly.", "success")
                 return redirect(url_for("client.index"))
-    
+
     has_drop_in_walkers = Walker.query.join(User).filter(
         Walker.does_drop_ins == True,
         User.active == True,
@@ -931,548 +852,6 @@ def book_drop_in():
     })
 
 
-@client_bp.route("/profile", methods=["GET", "POST"])
-@login_required
-def profile():
-    """Display and manage client profile, address, notifications and dog info."""
-    if not has_client_access(current_user):
-        return redirect(url_for('client.index'))
-
-    client = Client.query.filter_by(user_id=current_user.id).first()
-
-    # Get all primary dogs (user is the main owner — can edit photo/details)
-    primary_ownerships = DogOwner.query.filter_by(user_id=current_user.id, role='primary').all()
-    primary_dogs = []
-    for _po in primary_ownerships:
-        _d = db.session.get(Dog, _po.dog_id)
-        if _d:
-            primary_dogs.append(_d)
-    dog = primary_dogs[0] if primary_dogs else None  # first primary dog (for form hidden fields)
-
-    # Secondary-only owners (co-owners with no primary dog of their own) should be
-    # allowed to view/edit their profile without going through onboarding.
-    is_secondary_only = (not primary_ownerships and
-                         DogOwner.query.filter_by(user_id=current_user.id, role='secondary').first() is not None)
-
-    if not is_secondary_only and (not client or not client.onboarding_completed):
-        return redirect(url_for('client.onboard'))
-
-    # Get secondary dogs (user has shared access — read-only on the profile)
-    secondary_ownerships = DogOwner.query.filter_by(user_id=current_user.id, role='secondary').all()
-    secondary_dogs = []
-    for so in secondary_ownerships:
-        secondary_dog = db.session.get(Dog, so.dog_id)
-        if not secondary_dog:
-            continue
-        primary_o = DogOwner.query.filter_by(dog_id=so.dog_id, role='primary').first()
-        primary_user = db.session.get(User, primary_o.user_id) if primary_o else None
-        primary_client = Client.query.filter_by(user_id=primary_o.user_id).first() if primary_o else None
-        secondary_dogs.append({'dog': secondary_dog, 'primary_owner': primary_user, 'primary_client': primary_client})
-
-    # Booking stats for the profile sidebar
-    # Use dog_ids so secondary owners see all bookings for their shared dog,
-    # not just bookings they personally created.
-    from datetime import date
-    today_date = date.today()
-    month_start = date(today_date.year, today_date.month, 1)
-    if today_date.month == 12:
-        month_end = date(today_date.year + 1, 1, 1)
-    else:
-        month_end = date(today_date.year, today_date.month + 1, 1)
-
-    accessible_dog_ids = get_accessible_dog_ids(current_user.id)
-
-    month_bookings = Booking.query.filter(
-        Booking.dog_id.in_(accessible_dog_ids),
-        Booking.date >= month_start,
-        Booking.date < month_end,
-        Booking.status.notin_(['cancelled', 'rejected'])
-    ).all()
-    confirmed_this_month = sum(1 for b in month_bookings if b.status == 'confirmed')
-    pending_this_month = sum(1 for b in month_bookings if b.status in ('requested', 'waitlisted'))
-
-    next_booking = Booking.query.filter(
-        Booking.dog_id.in_(accessible_dog_ids),
-        Booking.date >= today_date,
-        Booking.status == 'confirmed'
-    ).order_by(Booking.date).first()
-
-    booking_stats = {
-        'confirmed_this_month': confirmed_this_month,
-        'pending_this_month': pending_this_month,
-        'total_this_month': len(month_bookings),
-        'next_booking': next_booking,
-        'month_name': today_date.strftime('%B'),
-    }
-
-    form = ProfileForm()
-
-    if form.validate_on_submit():
-        try:
-            # Personal info
-            current_user.firstname = form.firstname.data.strip()
-            current_user.lastname = form.lastname.data.strip()
-
-            # Create a Client record on first save if this is a secondary-only owner
-            if not client:
-                client = Client(user_id=current_user.id, onboarding_completed=True,
-                                onboarding_completed_at=datetime.now(timezone.utc))
-                db.session.add(client)
-
-            # Address
-            client.street_address = form.address_line_1.data.strip()
-            if form.address_line_2.data:
-                client.street_address += '\n' + form.address_line_2.data.strip()
-            if form.address_line_3.data:
-                client.street_address += '\n' + form.address_line_3.data.strip()
-            client.postal_code = form.postcode.data.strip()
-            client.maps_url = form.maps_url.data.strip() if form.maps_url.data else None
-
-            # Pickup notes live on the dog, not the client
-            if primary_dogs:
-                # Per-dog raw fields (named pickup_instructions_{id}) in the template
-                for _pd in primary_dogs:
-                    _val = request.form.get(f'pickup_instructions_{_pd.id}', '').strip() or None
-                    _pd.pickup_instructions = _val
-            elif secondary_dogs:
-                # Secondary-only path: update first shared dog's instructions via form field
-                secondary_dogs[0]['dog'].pickup_instructions = (
-                    form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
-                )
-
-            # Notifications — email toggle controls newsletter subscription
-            current_user.email_marketing = bool(form.notify_email.data)
-            current_user.notification_preference = 'email'
-
-            # Dog info — name/gender/breed are admin-managed (round-trip via hidden fields)
-            # dob and allergies are client-editable via per-dog raw fields
-            if dog:
-                dog.name = form.dog_name.data.strip()
-                dog.gender = form.dog_gender.data.strip()
-                dog.breed = form.dog_breed.data.strip() if form.dog_breed.data else ""
-
-            for _pd in primary_dogs:
-                # Handle photo upload
-                if 'file' in request.files and request.files['file'].filename:
-                    try:
-                        pic_filename = process_dog_photo(request.files['file'])
-                        if pic_filename:
-                            dog.pic = pic_filename
-                    except ValueError as e:
-                        flash(f"Upload error: {str(e)}", "error")
-                        return render_template("profile.html", form=form, dog=dog, primary_dogs=primary_dogs, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=datetime.now().strftime("%Y-%m-%d"))
-                    except Exception as e:
-                        logging.exception(f"Error processing uploaded file: {e}")
-                        flash("Error processing your image. Please try a different file.", "error")
-                        return render_template("profile.html", form=form, dog=dog, primary_dogs=primary_dogs, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=datetime.now().strftime("%Y-%m-%d"))
-
-            db.session.commit()
-            flash("Profile updated successfully!", "success")
-            return redirect(url_for('client.profile'))
-
-        except Exception as e:
-            db.session.rollback()
-            logging.exception(f"Error updating profile for user {current_user.email}: {e}")
-            flash("There was an error saving your changes. Please try again.", "error")
-
-    elif request.method == 'GET':
-        # Pre-fill form with existing data
-        form.firstname.data = current_user.firstname
-        form.lastname.data = current_user.lastname
-
-        # Split street_address back into lines
-        if client and client.street_address:
-            address_lines = client.street_address.split('\n')
-            form.address_line_1.data = address_lines[0] if len(address_lines) > 0 else ''
-            form.address_line_2.data = address_lines[1] if len(address_lines) > 1 else ''
-            form.address_line_3.data = address_lines[2] if len(address_lines) > 2 else ''
-        if client:
-            form.postcode.data = client.postal_code
-            form.maps_url.data = client.maps_url
-
-        # Pickup notes: primary dogs use per-dog raw fields in template;
-        # secondary-only path pre-fills the form field for backward compat
-        if not primary_dogs and secondary_dogs:
-            form.pickup_instructions.data = secondary_dogs[0]['dog'].pickup_instructions
-
-        # Notifications
-        form.notify_email.data = current_user.email_marketing
-
-        # Dog info
-        if dog:
-            form.dog_name.data = dog.name
-            form.dog_gender.data = dog.gender
-            form.dog_breed.data = dog.breed
-            form.dog_dob.data = dog.date_of_birth
-            form.dog_allergies.data = dog.allergies
-
-    return render_template("profile.html", form=form, dog=dog, primary_dogs=primary_dogs, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=datetime.now().strftime("%Y-%m-%d"))
-
-
-@client_bp.route("/monthly-summary")
-@login_required
-def monthly_summary():
-    """Client-facing monthly summary: bookings and estimated charges for a given month."""
-    from app.utils.invoicing import invoice_for_client
-    from app.utils.pricing import build_line_items, build_double_slot_discounts
-    from app.models import PricingConfig
-
-    if not has_client_access(current_user):
-        return redirect(url_for('client.index'))
-
-    today = date_type.today()
-    month_str = request.args.get('month', f'{today.year}-{today.month:02d}')
-    try:
-        year, month = int(month_str[:4]), int(month_str[5:7])
-        if not (1 <= month <= 12):
-            raise ValueError
-    except (ValueError, IndexError):
-        year, month = today.year, today.month
-
-    # Cap at current month — no peeking ahead
-    if (year, month) > (today.year, today.month):
-        year, month = today.year, today.month
-
-    month_start = date_type(year, month, 1)
-    month_end   = date_type(year + (month // 12), (month % 12) + 1, 1)
-
-    all_configs = (
-        PricingConfig.query
-        .filter(PricingConfig.effective_from <= month_end)
-        .order_by(PricingConfig.effective_from.desc())
-        .all()
-    )
-
-    inv = invoice_for_client(current_user.id, month_start, month_end, all_configs)
-    if inv is None:
-        inv = {
-            'confirmed': [], 'late_cancels': [], 'all_billable': [],
-            'total_walks': 0, 'total_drop_ins': 0, 'total_cancels': 0,
-            'total_billable': 0, 'doubles': 0, 'subtotal': 0.0,
-        }
-
-    late_cancel_ids = {b.id for b in inv['late_cancels']}
-    line_items = build_line_items(inv['all_billable'], late_cancel_ids, all_configs)
-    discounts = build_double_slot_discounts(inv['all_billable'], all_configs)
-
-    # Month nav
-    if month == 1:
-        prev_month = f'{year - 1}-12'
-    else:
-        prev_month = f'{year}-{month - 1:02d}'
-    if month == 12:
-        next_month = f'{year + 1}-01'
-    else:
-        next_month = f'{year}-{month + 1:02d}'
-    at_current = (year == today.year and month == today.month)
-
-    return render_template(
-        'client_monthly_summary.html',
-        inv=inv,
-        line_items=line_items,
-        discounts=discounts,
-        month_start=month_start,
-        prev_month=prev_month,
-        next_month=next_month,
-        at_current=at_current,
-        today=today,
-    )
-
-
-@client_bp.route("/profile/upload-dog-photo", methods=["POST"])
-@login_required
-def upload_dog_photo():
-    """AJAX endpoint: accept a cropped image blob and save it as the dog's photo.
-
-    Expects a multipart POST with a 'file' field containing the canvas blob
-    from Cropper.js. Returns JSON {success, url} or {success, error}.
-    """
-    dog_id_param = request.args.get('dog_id') or request.form.get('dog_id')
-    if dog_id_param:
-        try:
-            dog_id_param = int(dog_id_param)
-        except (TypeError, ValueError):
-            return jsonify(success=False, error="Invalid dog ID"), 400
-        dog_owner = DogOwner.query.filter_by(
-            user_id=current_user.id, dog_id=dog_id_param, role='primary'
-        ).first()
-    else:
-        dog_owner = DogOwner.query.filter_by(user_id=current_user.id, role='primary').first()
-    dog = db.session.get(Dog, dog_owner.dog_id) if dog_owner else None
-    if not dog:
-        return jsonify(success=False, error="Dog profile not found"), 404
-
-    if 'file' not in request.files:
-        return jsonify(success=False, error="No file provided"), 400
-
-    try:
-        filename = process_cropped_photo(request.files['file'])
-        if not filename:
-            return jsonify(success=False, error="Empty file"), 400
-
-        dog.pic = filename
-        db.session.commit()
-
-        url = url_for('static', filename=f'uploads/dogs/{filename}')
-        logging.info(f"Dog photo updated for client {current_user.email}: {filename}")
-        return jsonify(success=True, url=url)
-
-    except ValueError as e:
-        return jsonify(success=False, error=str(e)), 400
-    except Exception as e:
-        db.session.rollback()
-        logging.exception(f"Error saving cropped dog photo for {current_user.email}: {e}")
-        return jsonify(success=False, error="Server error saving photo"), 500
-
-
-@client_bp.route("/profile/upload-profile-photo", methods=["POST"])
-@login_required
-def upload_profile_photo():
-    """AJAX endpoint: accept a cropped image blob and save it as the user's profile photo.
-
-    Returns JSON {success, url} or {success, error}.
-    """
-    if 'file' not in request.files:
-        return jsonify(success=False, error="No file provided"), 400
-
-    try:
-        filename = process_cropped_photo(request.files['file'], subfolder='profiles')
-        if not filename:
-            return jsonify(success=False, error="Empty file"), 400
-
-        current_user.profile_pic = filename
-        db.session.commit()
-
-        url = url_for('static', filename=f'uploads/profiles/{filename}')
-        logging.info(f"Profile photo updated for user {current_user.email}: {filename}")
-        return jsonify(success=True, url=url)
-
-    except ValueError as e:
-        return jsonify(success=False, error=str(e)), 400
-    except Exception as e:
-        db.session.rollback()
-        logging.exception(f"Error saving profile photo for {current_user.email}: {e}")
-        return jsonify(success=False, error="Server error saving photo"), 500
-
-
-@client_bp.route("/profile/update-pickup", methods=["POST"])
-@login_required
-def update_pickup():
-    """AJAX: save pickup instructions (per dog) and newsletter preference."""
-    # has_client_access also lets dual-role walkers (role='walker' with a
-    # Client record) through. A bare role == 'client' check rejects them
-    # even though they own dogs and use the client view.
-    if not has_client_access(current_user):
-        return jsonify(success=False, error="Forbidden"), 403
-
-    client = Client.query.filter_by(user_id=current_user.id).first()
-    primary_ownerships = DogOwner.query.filter_by(user_id=current_user.id, role='primary').all()
-    primary_dogs = [db.session.get(Dog, po.dog_id) for po in primary_ownerships]
-    primary_dogs = [d for d in primary_dogs if d]
-
-    secondary_ownerships = DogOwner.query.filter_by(user_id=current_user.id, role='secondary').all()
-
-    try:
-        if primary_dogs:
-            for _pd in primary_dogs:
-                _val = request.form.get(f'pickup_instructions_{_pd.id}', '').strip() or None
-                _pd.pickup_instructions = _val
-        elif secondary_ownerships:
-            sec_dog = db.session.get(Dog, secondary_ownerships[0].dog_id)
-            if sec_dog:
-                sec_dog.pickup_instructions = request.form.get('pickup_instructions', '').strip() or None
-
-        current_user.email_marketing = request.form.get('notify_email') == 'true'
-        db.session.commit()
-        return jsonify(success=True)
-    except Exception as e:
-        db.session.rollback()
-        logging.exception(f"Error updating pickup notes for {current_user.email}: {e}")
-        return jsonify(success=False, error="Server error"), 500
-
-
-@client_bp.route("/profile/dog/<int:dog_id>/update-details", methods=["POST"])
-@login_required
-def update_dog_details(dog_id):
-    """AJAX: save DOB and health notes for a dog the current user owns as primary."""
-    ownership = DogOwner.query.filter_by(dog_id=dog_id, user_id=current_user.id, role='primary').first()
-    if not ownership:
-        return jsonify(success=False, error="Not authorised"), 403
-
-    dog = db.session.get(Dog, dog_id)
-    if not dog:
-        return jsonify(success=False, error="Dog not found"), 404
-
-    try:
-        from datetime import date as _date_type
-        dob_str = request.form.get('dob', '').strip()
-        dog.date_of_birth = _date_type.fromisoformat(dob_str) if dob_str else None
-        dog.allergies = request.form.get('health_notes', '').strip() or None
-        db.session.commit()
-        return jsonify(success=True)
-    except ValueError:
-        db.session.rollback()
-        return jsonify(success=False, error="Invalid date"), 400
-    except Exception as e:
-        db.session.rollback()
-        logging.exception(f"Error updating dog details for dog {dog_id}: {e}")
-        return jsonify(success=False, error="Server error"), 500
-
-
-@client_bp.route("/account-pending")
-@login_required
-def account_pending():
-    """Holding page for client users whose account exists but has no Client record yet.
-
-    This happens when an admin creates a User login but hasn't filled in the
-    client details (address / dog info) in the admin panel.  The before_request
-    guard redirects them here instead of to /onboard, which requires a Client row.
-    """
-    from app.models import Client
-    # If the Client record appears (admin just finished setting up), redirect onward.
-    client = Client.query.filter_by(user_id=current_user.id).first()
-    if client:
-        if client.onboarding_completed:
-            return redirect(url_for('client.index'))
-        return redirect(url_for('client.onboard'))
-    return render_template('account_pending.html')
-
-
-@client_bp.route("/onboard", methods=["GET", "POST"])
-@login_required
-def onboard():
-    """Handle client onboarding.
-
-    If the admin has already filled in address + dog info, onboarding_completed
-    will already be True and this route redirects away immediately.  Otherwise
-    the client fills in whatever the admin left blank.
-
-    If the admin created a dog record during account setup, we update that
-    existing dog rather than creating a duplicate.
-    """
-    if current_user.role != 'client':
-        flash("Onboarding is only required for clients.", "info")
-        return redirect(url_for('client.index'))
-
-    client = Client.query.filter_by(user_id=current_user.id).first()
-    if client and client.onboarding_completed:
-        return redirect(url_for('client.index'))
-
-    # Check for a dog already created by the admin
-    existing_dog_owner = DogOwner.query.filter_by(user_id=current_user.id, role='primary').first()
-    existing_dog = db.session.get(Dog, existing_dog_owner.dog_id) if existing_dog_owner else None
-
-    has_address = bool(client and client.street_address)
-    has_dog_info = bool(existing_dog and existing_dog.name and existing_dog.gender)
-
-    form = OnboardingForm()
-
-    if form.validate_on_submit():
-        try:
-            if not client:
-                client = Client(user_id=current_user.id)
-                db.session.add(client)
-
-            # Address
-            client.street_address = form.address_line_1.data.strip()
-            if form.address_line_2.data:
-                client.street_address += '\n' + form.address_line_2.data.strip()
-            if form.address_line_3.data:
-                client.street_address += '\n' + form.address_line_3.data.strip()
-            client.postal_code = form.postcode.data.strip()
-            client.maps_url = form.maps_url.data.strip() if form.maps_url.data else None
-            client.onboarding_completed = True
-            client.onboarding_completed_at = datetime.now(timezone.utc)
-
-            current_user.notification_preference = 'email'
-
-            # Handle file upload
-            pic_filename = None
-            if 'file' in request.files:
-                try:
-                    pic_filename = process_dog_photo(request.files['file'])
-                except ValueError as e:
-                    logging.error(f"Invalid file upload: {e}")
-                    flash(f"Upload error: {str(e)}. Please try a different file.", "error")
-                    return render_template("onboarding.html", form=form, existing_dog=existing_dog, has_address=has_address, has_dog_info=has_dog_info, today=datetime.now().strftime('%Y-%m-%d'))
-                except Exception as e:
-                    logging.exception(f"Error processing uploaded file: {e}")
-                    flash("There was an error processing your image. Please try a different file.", "error")
-                    return render_template("onboarding.html", form=form, existing_dog=existing_dog, has_address=has_address, has_dog_info=has_dog_info, today=datetime.now().strftime('%Y-%m-%d'))
-
-            # Dog: update existing record if admin already created one, else create fresh
-            dog_name = form.dog_name.data.strip()
-            dog_gender = form.dog_gender.data.strip()
-            dog_dob = form.dog_dob.data
-            dog_breed = form.dog_breed.data.strip() if form.dog_breed.data else ""
-            dog_allergies = form.dog_allergies.data.strip() if form.dog_allergies.data else ""
-
-            pickup_notes = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
-            if existing_dog:
-                existing_dog.name = dog_name
-                existing_dog.gender = dog_gender
-                existing_dog.breed = dog_breed
-                existing_dog.allergies = dog_allergies
-                existing_dog.date_of_birth = dog_dob
-                existing_dog.pickup_instructions = pickup_notes
-                if pic_filename:
-                    existing_dog.pic = pic_filename
-            else:
-                new_dog = Dog(
-                    name=dog_name,
-                    gender=dog_gender,
-                    breed=dog_breed,
-                    allergies=dog_allergies,
-                    date_of_birth=dog_dob,
-                    pic=pic_filename,
-                    pickup_instructions=pickup_notes,
-                )
-                db.session.add(new_dog)
-                db.session.flush()
-                db.session.add(DogOwner(dog_id=new_dog.id, user_id=current_user.id, role='primary'))
-
-            db.session.commit()
-
-            flash(f"Welcome to our platform, {current_user.firstname}! Your profile is now complete.", "success")
-            return redirect(url_for('client.index'))
-
-        except Exception as e:
-            db.session.rollback()
-            logging.exception(f"Error during onboarding for user {current_user.email}: {e}")
-            logging.debug(f"Exception details: {traceback.format_exc()}")
-
-            if isinstance(e, SQLAlchemyError):
-                if isinstance(e, IntegrityError):
-                    flash("There was a conflict with existing data. This might be because the information already exists in our system.", "error")
-                elif isinstance(e, OperationalError):
-                    flash("The database is currently unavailable. Please try again later.", "error")
-                else:
-                    flash("There was a database error. Please try again.", "error")
-            else:
-                flash("There was an error saving your information. Please try again.", "error")
-
-    elif request.method == 'GET':
-        # Pre-fill anything the admin already entered — address and/or dog
-        if client:
-            if client.street_address:
-                lines = client.street_address.split('\n')
-                form.address_line_1.data = lines[0] if len(lines) > 0 else ''
-                form.address_line_2.data = lines[1] if len(lines) > 1 else ''
-                form.address_line_3.data = lines[2] if len(lines) > 2 else ''
-            form.postcode.data = client.postal_code
-            form.pickup_instructions.data = existing_dog.pickup_instructions if existing_dog else None
-            form.maps_url.data = client.maps_url
-        form.notify_email.data = current_user.email_marketing
-        if existing_dog:
-            form.dog_name.data = existing_dog.name
-            form.dog_gender.data = existing_dog.gender
-            form.dog_breed.data = existing_dog.breed
-            form.dog_dob.data = existing_dog.date_of_birth
-            form.dog_allergies.data = existing_dog.allergies
-
-    return render_template("onboarding.html", form=form, existing_dog=existing_dog, has_address=has_address, has_dog_info=has_dog_info, today=datetime.now().strftime('%Y-%m-%d'))
-
-
 @client_bp.route("/pause-walks/preview")
 @login_required
 def pause_walks_preview():
@@ -1616,11 +995,11 @@ def cancel_booking():
         booking_id = request.form.get("booking_id") or request.json.get("booking_id")
         if not booking_id:
             return jsonify(success=False, message="No booking ID provided"), 400
-            
+
         booking = db.session.get(Booking, booking_id)
         if not booking:
             return jsonify(success=False, message="Booking not found"), 404
-            
+
         # Check authorization — allow booking creator, any dog owner, or admins
         if not user_can_access_booking(current_user, booking):
             return jsonify(success=False, message="You are not authorized to cancel this booking"), 403
@@ -1719,7 +1098,7 @@ def cancel_booking():
 
         db.session.commit()
         return jsonify(success=True, message="Booking successfully cancelled")
-        
+
     except Exception as e:
         db.session.rollback()
         logging.exception(f"Error cancelling booking: {e}")
@@ -1903,10 +1282,6 @@ def recurring_booking():
                 else:
                     created += 1
                     pending_bookings.append(booking)
-
-        freq_label    = 'daily' if frequency == 'daily' else 'weekly'
-        slot_label    = 'AM + PM' if slot == 'Both' else slot
-        service_label = 'drop-ins' if is_drop_in else 'walks'
 
         # Client + admin notifications via NotificationBatch / summarise().
         # Client gets one notice per outcome kind (confirmed / pending).

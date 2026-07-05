@@ -28,9 +28,10 @@ migration-head health check are all solid. The findings below are the gaps.
 | 16 | Flash categories: standardise on "error" | ✅ deployed | `e524c06`, PR #147 — merged + deployed 2026-07-04, bundled with #15 (same UX-consistency theme). 11 `flash(..., "danger")` sites → `"error"`. Logs verified clean. |
 | 9 | email.py config source of truth | ✅ deployed | `84de82c`, PR #149 — merged + deployed 2026-07-04. Resolved by **making env the single source** (not routing email.py through config): deleted the 3 dead `RESEND_API_KEY`/`MAIL_NO_REPLY`/`MAIL_REPLY` defs in `config.py` — nothing read them, and `MAIL_REPLY`'s config default (`Lydia <…>`) even contradicted the documented "fall back to MAIL_NO_REPLY". `email.py` keeps reading `os.environ` (stays context-free — no `current_app` coupling). Verified sender resolution + documented fallback. Audited full email routing (no changes needed): password-reset ← `MAIL_NO_REPLY`, newsletter/broadcasts ← `MAIL_REPLY`, bug-reports → `BUG_REPORTS` (lydia@). Noted `MAIL_FROM`/`NEWSLETTER_MAIL_FROM` are orphaned Railway vars (unreferenced) — Marcus to delete in dashboard. Logs clean on deploy (boot, /health 200, SSE listener). |
 | 10 | logging.exception traceback sweep | ✅ deployed | `84de82c`, PR #149 — merged + deployed 2026-07-04. Swept **34 broad `except Exception` handlers** across blueprints: `logging.error(f"…: {e}")` → `logging.exception(…)` (message + `{e}` kept; `e` stays referenced). Left the 8 typed handlers (IntegrityError/ValueError/RequestException — expected, return `str(e)` to user), `db_error_handler.py` (deliberate central handler, already logs `traceback.format_exc()`), and `uploads.py:44` (`.warning` for best-effort R2 backup — escalating to ERROR would misrepresent it). 392 tests pass. Post-deploy logs clean — no spurious ERROR/traceback noise under normal traffic (only fires on an actual caught exception). |
-| 8 | Onboarding check runs 2 queries every client request | 🔲 PR open | Session-cached: `check_password_change_required` now skips the `Client`/`DogOwner` lookups once `session['onboarding_ok']` is set. Flag is cleared on both login and logout (`auth/routes.py`) so it can't leak between accounts on a shared browser session — `session_interface.regenerate()` rotates the session ID but preserves session *data*, so an explicit pop was needed. Residual (accepted, per original finding): a client whose onboarding is later reset skates past the redirect until next login. 392 tests pass (SQLite + Postgres). PR #150 (develop → main), awaiting merge. |
-| 11 | Small security/HTTP nits | 🔲 PR open | Fixed 2 of 3: `enforce_https` redirect 301→308 (preserves method); CSRF handler validates `request.referrer` is same-host (`urlparse(...).netloc`) before redirecting, else falls back to `auth.login` — closes the open-redirect. Left the deactivated-account message as-is — explicitly called out in the original finding as an accepted support-clarity trade-off, not a bug. PR #150 (develop → main), awaiting merge. |
-| 12–14 | Lower priority — see findings | 🔲 todo | Pick up opportunistically |
+| 8 | Onboarding check runs 2 queries every client request | ✅ deployed | Session-cached: `check_password_change_required` now skips the `Client`/`DogOwner` lookups once `session['onboarding_ok']` is set. Flag is cleared on both login and logout (`auth/routes.py`) so it can't leak between accounts on a shared browser session — `session_interface.regenerate()` rotates the session ID but preserves session *data*, so an explicit pop was needed. Residual (accepted, per original finding): a client whose onboarding is later reset skates past the redirect until next login. 392 tests pass (SQLite + Postgres). PR #150 — merged + deployed 2026-07-05. Logs verified clean (gevent boot, /health 200, SSE listener subscribed, no migration — none in this PR). |
+| 11 | Small security/HTTP nits | ✅ deployed | Fixed 2 of 3: `enforce_https` redirect 301→308 (preserves method); CSRF handler validates `request.referrer` is same-host (`urlparse(...).netloc`) before redirecting, else falls back to `auth.login` — closes the open-redirect. Left the deactivated-account message as-is — explicitly called out in the original finding as an accepted support-clarity trade-off, not a bug. PR #150 — merged + deployed 2026-07-05. Logs verified clean. |
+| 12 | `client/routes.py` split into `views/` package | ✅ merged to develop | PR #151, merged 2026-07-05 — `client/routes.py` (1998 lines) split into `views/general.py`, `views/bookings.py`, `views/profile.py`, `views/onboarding.py`, following the admin split (PR #139). All 22 endpoint names preserved (`client.index`, `client.book`, etc.) — verified via `app.url_map` and a repo-wide grep of every `url_for('client.*')` call site. 392 tests pass on Postgres. Also fixed a stale `admin.routes`/`client.routes` doc reference in `pricing.py`'s module docstring, and (follow-up commit `39aa80e`) removed two pre-existing dead locals pyflakes caught during the split (FEATURES #60). **Not yet in `main`/prod** — no deploy triggered, this only pushed to `develop`. |
+| 13–14 | Lower priority — see findings | 🔲 todo | Pick up opportunistically |
 
 ---
 
@@ -182,8 +183,8 @@ nothing persisted.
 `DogOwner` query on **every** request from a client-role user, forever, even
 years after onboarding completed.
 
-**Fix (shipped):** stash `onboarding_ok=True` in the session once the check
-passes; skip thereafter. The flag is popped on both login and logout
+**Fix (shipped, PR #150):** stash `onboarding_ok=True` in the session once the
+check passes; skip thereafter. The flag is popped on both login and logout
 (`auth/routes.py`) — `session_interface.regenerate()` at login only rotates
 the session ID, it doesn't clear session *data*, so without an explicit pop a
 shared-browser login by a different account would inherit the previous
@@ -215,7 +216,7 @@ Broad handlers like `client/routes.py` `except Exception` blocks log
 `f"...: {e}"` — message only; prod 500s give no traceback in Railway logs.
 **Fix:** mechanical sweep to `logging.exception(...)` / `exc_info=True`.
 
-### 11. Small security/HTTP nits ✅ (2 of 3)
+### 11. Small security/HTTP nits ✅ (2 of 3, PR #150)
 
 - ~~`enforce_https` redirects with **301** (lets clients rewrite POST→GET) — use
   **308**.~~ **Fixed** — `redirect(url, code=308)`.
@@ -229,13 +230,27 @@ Broad handlers like `client/routes.py` `except Exception` blocks log
   inconsistent with the timing-oracle work. **Left as-is** — accepted
   support-clarity trade-off, not treated as a bug (per original finding).
 
-### 12. `client/routes.py` is ~2,000 lines
+### 12. `client/routes.py` is ~2,000 lines ✅
 
 Largest file in the app by 2×; mixes booking creation, profile, onboarding,
 pause/cancel, calendar JSON. Same treatment as the admin split (PR #139):
 `views/` package (bookings, profile, onboarding, calendar). **Risk:** endpoint
 names must survive the move or every `url_for('client.…')` breaks — PR #139 is
 the proven playbook; the test suite is the net.
+
+**Fix (branch `feature/client-views-split`):** split into four modules by
+notification/audit coupling rather than strict REST-resource lines —
+`views/bookings.py` groups every route that goes through the `create_booking`/
+`transition_booking`/`NotificationBatch` chokepoints (index, book, book_both,
+book_drop_in, recurring_booking, cancel_booking, pause_walks(_preview),
+calendar_data, update_booking_note — plus their four module-private helpers);
+`views/profile.py` (profile, monthly_summary, photo uploads, pickup/detail
+edits) and `views/onboarding.py` (account_pending, onboard) never touch
+booking creation at all — a clean seam; `views/general.py` takes the small
+misc routes (help, get-started, switch-view, report-bug). Two dead imports
+(`handle_db_errors`, `check_availability`/`get_slot_availability_summary`)
+were dropped since nothing called them. All 22 endpoint names preserved
+(verified via `app.url_map`); 392 tests pass on Postgres.
 
 ### 13. Naive `DateTime` columns storing UTC
 
