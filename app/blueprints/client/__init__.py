@@ -8,4 +8,6 @@ from flask import Blueprint
 
 client_bp = Blueprint('client', __name__, url_prefix='/')
 
-from app.blueprints.client import routes
+from app.blueprints.client.views import (  # noqa: E402,F401
+    general, bookings, profile, onboarding,
+)
