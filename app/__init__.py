@@ -1,4 +1,4 @@
-from flask import Flask, request, redirect, render_template, g
+from flask import Flask, request, redirect, render_template, g, session
 from flask_session import Session
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, current_user
@@ -194,7 +194,9 @@ def create_app(config_name=None):
             proto = request.headers.get('X-Forwarded-Proto', '')
             if proto == 'http':
                 url = request.url.replace('http://', 'https://', 1)
-                return redirect(url, code=301)
+                # 308 (not 301) preserves the request method on redirect — a
+                # 301 lets clients silently rewrite a POST into a GET.
+                return redirect(url, code=308)
 
     @app.before_request
     def check_password_change_required():
@@ -224,20 +226,28 @@ def create_app(config_name=None):
         # they don't need to onboard themselves.
         if current_user.role == 'client':
             if request.endpoint not in ['client.onboard', 'client.account_pending', 'auth.logout', 'auth.change_password', 'static']:
-                from app.models import Client, DogOwner
-                client = Client.query.filter_by(user_id=current_user.id).first()
-                has_secondary_dog = DogOwner.query.filter_by(
-                    user_id=current_user.id, role='secondary'
-                ).first() is not None
-                if not has_secondary_dog:
-                    from flask import url_for
-                    if client is None:
-                        # Admin created the User account but hasn't set up the
-                        # Client record yet — show a holding page rather than
-                        # the onboarding form (which would fail with no client).
-                        return redirect(url_for('client.account_pending'))
-                    if not client.onboarding_completed:
-                        return redirect(url_for('client.onboard'))
+                # Once a client clears this check, cache it in the session so we
+                # skip the Client/DogOwner queries on every subsequent request —
+                # this runs on every navigation for every client, forever.
+                # Residual: if onboarding is later reset for this client, they
+                # skate past the redirect until they next log in (session is
+                # cleared at login/logout — see auth/routes.py).
+                if not session.get('onboarding_ok'):
+                    from app.models import Client, DogOwner
+                    client = Client.query.filter_by(user_id=current_user.id).first()
+                    has_secondary_dog = DogOwner.query.filter_by(
+                        user_id=current_user.id, role='secondary'
+                    ).first() is not None
+                    if not has_secondary_dog:
+                        from flask import url_for
+                        if client is None:
+                            # Admin created the User account but hasn't set up the
+                            # Client record yet — show a holding page rather than
+                            # the onboarding form (which would fail with no client).
+                            return redirect(url_for('client.account_pending'))
+                        if not client.onboarding_completed:
+                            return redirect(url_for('client.onboard'))
+                    session['onboarding_ok'] = True
 
     @app.after_request
     def add_security_headers(response):
@@ -516,10 +526,19 @@ def create_app(config_name=None):
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
         from flask import flash, redirect, request, url_for, jsonify
+        from urllib.parse import urlparse
         if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify(success=False, message="Session timed out — please refresh."), 400
         flash("Your session timed out — please try again.", "warning")
-        return redirect(request.referrer or url_for('auth.login'))
+        # request.referrer is attacker-controllable (an arbitrary Referer header
+        # on the forged request), so redirecting to it unvalidated is an open
+        # redirect. Only follow it if it points back at this host.
+        referrer = request.referrer
+        if referrer:
+            netloc = urlparse(referrer).netloc
+            if netloc and netloc != request.host:
+                referrer = None
+        return redirect(referrer or url_for('auth.login'))
 
     @app.route('/sw.js')
     def service_worker():

@@ -76,6 +76,10 @@ def login():
         # Rotate the session ID before associating the session with this user.
         # Defeats session-fixation: any pre-planted SID cookie is now a dead row.
         current_app.session_interface.regenerate(session)
+        # regenerate() keeps session *data*, just rotates the ID — drop any
+        # per-user cache (e.g. onboarding_ok) so it can't leak to whoever logs
+        # in next on a shared browser/session.
+        session.pop('onboarding_ok', None)
 
         # Log user in
         login_user(user, remember=remember_me)
@@ -97,6 +101,7 @@ def logout():
     # flashes from previous requests can accumulate and cause double messages.
     from flask import session as flask_session
     flask_session.pop('_flashes', None)
+    flask_session.pop('onboarding_ok', None)
     flash("You have been logged out.", "info")
     return redirect(url_for("auth.login"))
 
