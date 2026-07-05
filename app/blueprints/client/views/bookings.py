@@ -1283,10 +1283,6 @@ def recurring_booking():
                     created += 1
                     pending_bookings.append(booking)
 
-        freq_label    = 'daily' if frequency == 'daily' else 'weekly'
-        slot_label    = 'AM + PM' if slot == 'Both' else slot
-        service_label = 'drop-ins' if is_drop_in else 'walks'
-
         # Client + admin notifications via NotificationBatch / summarise().
         # Client gets one notice per outcome kind (confirmed / pending).
         # Admins are notified for all outcomes (confirmed and pending/waitlisted).

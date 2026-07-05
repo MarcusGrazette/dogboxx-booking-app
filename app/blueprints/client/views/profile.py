@@ -351,7 +351,6 @@ def update_pickup():
     if not has_client_access(current_user):
         return jsonify(success=False, error="Forbidden"), 403
 
-    client = Client.query.filter_by(user_id=current_user.id).first()
     primary_ownerships = DogOwner.query.filter_by(user_id=current_user.id, role='primary').all()
     primary_dogs = [db.session.get(Dog, po.dog_id) for po in primary_ownerships]
     primary_dogs = [d for d in primary_dogs if d]
