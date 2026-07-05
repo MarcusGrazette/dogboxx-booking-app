@@ -28,7 +28,9 @@ migration-head health check are all solid. The findings below are the gaps.
 | 16 | Flash categories: standardise on "error" | ✅ deployed | `e524c06`, PR #147 — merged + deployed 2026-07-04, bundled with #15 (same UX-consistency theme). 11 `flash(..., "danger")` sites → `"error"`. Logs verified clean. |
 | 9 | email.py config source of truth | ✅ deployed | `84de82c`, PR #149 — merged + deployed 2026-07-04. Resolved by **making env the single source** (not routing email.py through config): deleted the 3 dead `RESEND_API_KEY`/`MAIL_NO_REPLY`/`MAIL_REPLY` defs in `config.py` — nothing read them, and `MAIL_REPLY`'s config default (`Lydia <…>`) even contradicted the documented "fall back to MAIL_NO_REPLY". `email.py` keeps reading `os.environ` (stays context-free — no `current_app` coupling). Verified sender resolution + documented fallback. Audited full email routing (no changes needed): password-reset ← `MAIL_NO_REPLY`, newsletter/broadcasts ← `MAIL_REPLY`, bug-reports → `BUG_REPORTS` (lydia@). Noted `MAIL_FROM`/`NEWSLETTER_MAIL_FROM` are orphaned Railway vars (unreferenced) — Marcus to delete in dashboard. Logs clean on deploy (boot, /health 200, SSE listener). |
 | 10 | logging.exception traceback sweep | ✅ deployed | `84de82c`, PR #149 — merged + deployed 2026-07-04. Swept **34 broad `except Exception` handlers** across blueprints: `logging.error(f"…: {e}")` → `logging.exception(…)` (message + `{e}` kept; `e` stays referenced). Left the 8 typed handlers (IntegrityError/ValueError/RequestException — expected, return `str(e)` to user), `db_error_handler.py` (deliberate central handler, already logs `traceback.format_exc()`), and `uploads.py:44` (`.warning` for best-effort R2 backup — escalating to ERROR would misrepresent it). 392 tests pass. Post-deploy logs clean — no spurious ERROR/traceback noise under normal traffic (only fires on an actual caught exception). |
-| 8, 11–14 | Lower priority — see findings | 🔲 todo | Pick up opportunistically |
+| 8 | Onboarding check runs 2 queries every client request | ✅ on develop | Session-cached: `check_password_change_required` now skips the `Client`/`DogOwner` lookups once `session['onboarding_ok']` is set. Flag is cleared on both login and logout (`auth/routes.py`) so it can't leak between accounts on a shared browser session — `session_interface.regenerate()` rotates the session ID but preserves session *data*, so an explicit pop was needed. Residual (accepted, per original finding): a client whose onboarding is later reset skates past the redirect until next login. 392 tests pass (SQLite + Postgres). |
+| 11 | Small security/HTTP nits | ✅ on develop | Fixed 2 of 3: `enforce_https` redirect 301→308 (preserves method); CSRF handler validates `request.referrer` is same-host (`urlparse(...).netloc`) before redirecting, else falls back to `auth.login` — closes the open-redirect. Left the deactivated-account message as-is — explicitly called out in the original finding as an accepted support-clarity trade-off, not a bug. |
+| 12–14 | Lower priority — see findings | 🔲 todo | Pick up opportunistically |
 
 ---
 
@@ -174,15 +176,19 @@ interaction.
 already use. **Risk:** low — read-path refactor; a bug shows wrong owner names,
 nothing persisted.
 
-### 8. Two extra queries on every request for every client
+### 8. Two extra queries on every request for every client ✅
 
 `check_password_change_required` (`app/__init__.py`) runs a `Client` query +
 `DogOwner` query on **every** request from a client-role user, forever, even
 years after onboarding completed.
 
-**Fix:** stash `onboarding_ok=True` in the session once the check passes; skip
-thereafter. **Residual (accepted):** if a client's onboarding is ever reset,
-they skate past the redirect until next login.
+**Fix (shipped):** stash `onboarding_ok=True` in the session once the check
+passes; skip thereafter. The flag is popped on both login and logout
+(`auth/routes.py`) — `session_interface.regenerate()` at login only rotates
+the session ID, it doesn't clear session *data*, so without an explicit pop a
+shared-browser login by a different account would inherit the previous
+user's cached flag. **Residual (accepted):** if a client's onboarding is ever
+reset, they skate past the redirect until next login.
 
 ---
 
@@ -209,17 +215,19 @@ Broad handlers like `client/routes.py` `except Exception` blocks log
 `f"...: {e}"` — message only; prod 500s give no traceback in Railway logs.
 **Fix:** mechanical sweep to `logging.exception(...)` / `exc_info=True`.
 
-### 11. Small security/HTTP nits
+### 11. Small security/HTTP nits ✅ (2 of 3)
 
-- `enforce_https` redirects with **301** (lets clients rewrite POST→GET) — use
-  **308**. Low impact given HSTS.
-- CSRF error handler redirects to `request.referrer` unvalidated — open
-  redirect via attacker-controlled Referer. Validate same-origin or fall back
-  to login.
+- ~~`enforce_https` redirects with **301** (lets clients rewrite POST→GET) — use
+  **308**.~~ **Fixed** — `redirect(url, code=308)`.
+- ~~CSRF error handler redirects to `request.referrer` unvalidated — open
+  redirect via attacker-controlled Referer.~~ **Fixed** — `handle_csrf_error`
+  now checks `urlparse(referrer).netloc == request.host` (relative referrers,
+  which have no netloc, pass through unchanged) and falls back to
+  `auth.login` otherwise.
 - A deactivated account with the correct password gets a distinct
   "deactivated" message (`auth/routes.py:73`) — tiny account-existence oracle,
-  inconsistent with the timing-oracle work. Probably an acceptable
-  support-clarity trade; noting it's a known choice.
+  inconsistent with the timing-oracle work. **Left as-is** — accepted
+  support-clarity trade-off, not treated as a bug (per original finding).
 
 ### 12. `client/routes.py` is ~2,000 lines
 
