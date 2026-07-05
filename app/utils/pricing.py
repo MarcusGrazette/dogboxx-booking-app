@@ -4,7 +4,8 @@ Single source of truth for pricing primitives.
 Before this module the date→`PricingConfig` lookup (`config_for`) was
 copy-pasted in four places and the per-booking unit-price / double-slot /
 line-item construction was reimplemented in `invoicing.py`,
-`admin.routes.invoicing_detail`, and `client.routes.monthly_summary`. A
+`admin.views.invoicing.invoicing_detail`, and
+`client.views.profile.monthly_summary`. A
 pricing rule changed in one place could silently disagree with another — a
 correctness risk on a money path. Everything pricing-shaped now lives here.
 
