@@ -2,8 +2,9 @@
 Custom decorators for role-based access control.
 """
 
+import hmac
 from functools import wraps
-from flask import flash, redirect, url_for, jsonify, request
+from flask import current_app, flash, redirect, url_for, jsonify, request
 from flask_login import current_user
 
 
@@ -29,6 +30,25 @@ def walker_required(f):
                 return jsonify(success=False, message="Forbidden"), 403
             flash("Only walkers can access this page.", "error")
             return redirect(url_for("client.index"))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def internal_only(f):
+    """Restrict a route to callers presenting the shared internal secret.
+
+    For endpoints that exist purely so one Railway service can read another's
+    state — no logged-in user, no session. Railway volumes can only be mounted
+    to a single service, so this is how the reconcile-uploads cron service
+    (which has no volume of its own) reads the uploads volume that only `web`
+    has mounted.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        expected = current_app.config.get('INTERNAL_API_SECRET')
+        provided = request.headers.get('X-Internal-Secret', '')
+        if not expected or not hmac.compare_digest(expected, provided):
+            return jsonify(success=False, message="Forbidden"), 403
         return f(*args, **kwargs)
     return decorated_function
 

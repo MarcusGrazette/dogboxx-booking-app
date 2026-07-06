@@ -77,6 +77,12 @@ class Config:
     # only initializes when this is present, so local runs never send events.
     SENTRY_DSN = os.environ.get('SENTRY_DSN')
 
+    # Shared secret for the /api/internal/uploads-manifest route (see
+    # app/utils/decorators.py::internal_only) — lets the reconcile-uploads
+    # cron service read the uploads volume via `web`, since Railway volumes
+    # can only be mounted to one service.
+    INTERNAL_API_SECRET = os.environ.get('INTERNAL_API_SECRET')
+
 
 class DevelopmentConfig(Config):
     """Development configuration."""
@@ -131,6 +137,8 @@ class TestingConfig(Config):
     WTF_CSRF_ENABLED = False
     RATELIMIT_ENABLED = False
     SSE_REDIS_URL = None  # tests always use the in-memory SSE fan-out
+    SENTRY_DSN = None  # never send test-environment noise to Sentry, even if
+                       # SENTRY_DSN is set in local .env for manual verification
 
     # No HTTPS enforcement in testing
     SESSION_COOKIE_SECURE = False
