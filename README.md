@@ -11,6 +11,7 @@ A booking management app for a small dog walking business. Built with Flask and 
 - **Email:** Transactional and newsletter delivery via the Resend API
 - **Push:** Web Push (VAPID) to installed PWAs on iOS and Android via `pywebpush`
 - **File uploads:** UUID-named uploads with server-side image validation
+- **Monitoring:** Error tracking and uptime checks via Sentry
 
 ## Features
 
