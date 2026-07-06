@@ -197,12 +197,19 @@ never hear about.
   whose schedule just changed isn't told.
 
 ### 7.5 Walk pickup/drop-off events aren't recorded at all
-`WalkEvent` is a **dead table** (like the `dental_*` types §7.6, and like `BookingStatusChange` §8.2
-*was* before Session 1 wired it up): the model + `Booking` relationship (`models.py:577`) + `__init__.py`
-import exist, but **no code ever writes a `WalkEvent` row, and there is no pickup/drop-off recording UI**. So clients get nothing
-when their dog is collected or dropped home — and the gap is deeper than notifications: the events
-themselves don't exist. Recording pickup/drop-off is a **prerequisite feature**, not just a missing
-notification (see §9.9 D2).
+
+> **Status (July 2026): won't build — owner decision.** The dead table described below was removed
+> on 2026-05-29 (migration `b40f4de664d4`), and the owner has since decided against building
+> pickup/drop-off recording at all. Pickup/drop-off notifications are therefore permanently out of
+> scope, not deferred. The `completed` label in the `booking_status` PG enum (which this feature
+> would have written) stays forever — dropping an enum value needs a table rewrite for zero gain.
+
+At audit time, `WalkEvent` was a **dead table** (like the `dental_*` types §7.6, and like
+`BookingStatusChange` §8.2 *was* before Session 1 wired it up): the model + `Booking` relationship +
+`__init__.py` import existed, but **no code ever wrote a `WalkEvent` row, and there was no
+pickup/drop-off recording UI**. So clients got nothing when their dog was collected or dropped home —
+and the gap was deeper than notifications: the events themselves didn't exist. Recording
+pickup/drop-off was a **prerequisite feature**, not just a missing notification (see §9.9 D2).
 
 ### 7.6 Dead notification types
 `dental_confirmed` and `dental_available` are defined in `NOTIFICATION_META`
@@ -296,7 +303,7 @@ admin schedule changes are filed under "client" or "walker" and never appear und
 | Closure created (`add_closure`) | ✅ per-booking cancels | ⚠️ partial — the resulting cancellations appear (mis-attributed, §8.3); the closure itself is not an event |
 | Broadcast sent (`broadcasts`) | ✅ clients | ❌ |
 | Dog access revoked (`revoke-access`) | ✅ secondary | ❌ |
-| Walk pickup / drop-off (`WalkEvent`) | none | ❌ — and the events aren't recorded at all (dead table, §7.5) |
+| Walk pickup / drop-off (`WalkEvent`) | none | ❌ — events aren't recorded; table removed, feature won't be built (§7.5) |
 
 ### 8.5 Grouping consistency (feed vs notifications)
 
@@ -445,7 +452,7 @@ per recipient.)
 | §7.2 `deactivate_walker` / `admin_add_unavailability` reset, notify nobody | same — both routed through `bulk_transition` + batch notify | 3 |
 | §7.3 admin pending bookings never reach client | notify client on requested/waitlisted (not just confirmed) in `book_for_dog`/`recurring_for_dog` | 2 |
 | §7.4 closures & bulk-cancel skip co-owners + walker | expand recipients (co-owners, ex-walker) in `add_closure`, `dog_bulk_cancel` | 3 |
-| §7.5 walk pickup/drop-off not recorded (dead `WalkEvent` table) | **out of scope** (decided D2) — recording pickup/drop-off is a separate prerequisite feature; revisit notifications once events exist | — |
+| §7.5 walk pickup/drop-off not recorded (dead `WalkEvent` table) | **permanently out of scope** — owner decided (July 2026) the recording feature won't be built; table already removed 2026-05-29. Do not revisit | — |
 | §7.6 dead `dental_*` types | delete from `NOTIFICATION_META` | 2 |
 | §7.7 wording inconsistency | route walker text through `summarise()` (`'walk'`/`'drop-in'`) | 2 |
 | §7.8 admin bulk grouping inconsistent | `NotificationBatch` in `recurring_for_dog`, `book_for_dog`, `add_closure`, `dog_bulk_cancel` | 2 |
@@ -467,7 +474,8 @@ reconstructing from current state:
 - `WalkerUnavailability` / `WalkerAdHocAvailability` — actor = `created_by_id` if set, else the walker.
 - `Closure` — "DogBoxx closed on <date>" event (actor = `created_by_id`, already on the model).
 - `Broadcast` — "broadcast sent to N clients" (actor = `sender_id`).
-- *(future)* `WalkEvent` — pickup / drop-off, **once recording is built** (§7.5, D2). Not a source today.
+- ~~*(future)* `WalkEvent`~~ — was slated as a source once pickup/drop-off recording was built; the
+  owner decided (July 2026) the feature **won't be built** and the table was removed (§7.5). Never a source.
 
 > **Feed phrasing vs `summarise()` (F7, decided):** an earlier draft said feed descriptions come from
 > `summarise()`. In the shipped code the feed **deliberately builds its own verb-prefix descriptions**

@@ -102,7 +102,7 @@
 |---|---|
 | Firebase Auth migration | Overkill for current scale. Flask-Login is sufficient. Revisit post-launch. |
 | Public client self-registration | Business prefers admin-created accounts (vets clients first). Register route + `RegisterForm` + `register.html` removed entirely in PR #124 (2026-06-05); `/onboard` remains as the post-creation detail-completion flow. |
-| Walker pickup status tracking (en_route / picked_up / dropped_off) | Anticipatory `WalkEvent` model/table was never wired up (no writes, no recording UI) and has been **removed** (migration `b40f4de664d4`, 2026-05-29). Rebuild the table fresh in the same PR as the feature if/when prioritised — pickup list remains the priority. |
+| Walker pickup status tracking (en_route / picked_up / dropped_off) | **Won't build — owner decision, July 2026.** The anticipatory `WalkEvent` model/table was never wired up (no writes, no recording UI) and was removed (migration `b40f4de664d4`, 2026-05-29). Remaining traces are deliberate permanent fossils: the `completed`/`modified` labels in the `booking_status` PG enum (never written; dropping an enum value needs a full table rewrite for zero gain) and the defensive `completed` exclusions in status filters / the partial unique index — leave all of them alone. |
 
 ---
 
