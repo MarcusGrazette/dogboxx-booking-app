@@ -10,9 +10,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install PostgreSQL client
-        run: sudo apt-get install -y postgresql-client
-
       - name: Configure AWS CLI for Cloudflare R2
         run: |
           aws configure set aws_access_key_id     "$R2_ACCESS_KEY_ID"
@@ -24,12 +21,31 @@ jobs:
 
       - name: Dump and upload to R2
         run: |
+          set -euo pipefail
           TIMESTAMP=$(date -u +%Y-%m-%d)
-          pg_dump "$DATABASE_PUBLIC_URL" --clean --if-exists \
-            | gzip \
-            | aws s3 cp - "s3://dogboxx-db-backups/${TIMESTAMP}.sql.gz" \
-                --endpoint-url "$R2_ENDPOINT_URL"
-          echo "Backup complete: ${TIMESTAMP}.sql.gz"
+          FILE="${TIMESTAMP}.sql.gz"
+
+          # Run pg_dump via a postgres:18 container rather than the runner's apt-installed
+          # client — pg_dump refuses to dump a server newer than itself, and Ubuntu's default
+          # apt package is a fixed older major version. Pinning to the image tag that matches
+          # Railway's Postgres major version keeps this correct across future Postgres upgrades
+          # (bump the tag here, same as CLAUDE.md's PITR guidance to track by major version).
+          docker run --rm postgres:18 pg_dump "$DATABASE_PUBLIC_URL" --clean --if-exists \
+            | gzip > "$FILE"
+
+          # A real dump of this app's schema + data is comfortably over 10 KB even on a near-empty
+          # DB. Below that, pg_dump silently failed (e.g. a version mismatch) — catch it before
+          # upload rather than shipping an empty backup with a green checkmark, which is exactly
+          # what happened for ~3 months (2026-04-11 to 2026-07-06) before this fix.
+          SIZE=$(stat -c%s "$FILE")
+          MIN_SIZE=10240
+          if [ "$SIZE" -lt "$MIN_SIZE" ]; then
+            echo "::error::Backup file is only $SIZE bytes (expected at least $MIN_SIZE) — pg_dump likely failed. Aborting before upload."
+            exit 1
+          fi
+
+          aws s3 cp "$FILE" "s3://dogboxx-db-backups/${FILE}" --endpoint-url "$R2_ENDPOINT_URL"
+          echo "Backup complete: ${FILE} (${SIZE} bytes)"
         env:
           DATABASE_PUBLIC_URL: ${{ secrets.DATABASE_PUBLIC_URL }}
           R2_ENDPOINT_URL:     ${{ secrets.R2_ENDPOINT_URL }}
