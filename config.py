@@ -73,6 +73,10 @@ class Config:
     # only — fine for flask run, silently lossy under --workers > 1).
     SSE_REDIS_URL = os.environ.get('REDIS_URL')
 
+    # Sentry error monitoring (app/__init__.py). Unset in dev/CI/test — Sentry
+    # only initializes when this is present, so local runs never send events.
+    SENTRY_DSN = os.environ.get('SENTRY_DSN')
+
 
 class DevelopmentConfig(Config):
     """Development configuration."""

@@ -63,7 +63,20 @@ def create_app(config_name=None):
     # Import and use configuration from config.py
     from config import config
     app.config.from_object(config[config_name])
-    
+
+    # Sentry error monitoring — only initializes when SENTRY_DSN is set, so
+    # dev/CI/test never send events. send_default_pii is left off deliberately:
+    # this app holds real client names/addresses, and Sentry is a third party.
+    sentry_dsn = app.config.get('SENTRY_DSN')
+    if sentry_dsn:
+        import sentry_sdk
+        sentry_sdk.init(
+            dsn=sentry_dsn,
+            environment=config_name,
+            send_default_pii=False,
+            traces_sample_rate=1.0,
+        )
+
     # Configure logging
     from app.utils.logging_config import configure_logging
     log_level = app.config.get('LOG_LEVEL', 'INFO')
