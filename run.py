@@ -85,6 +85,53 @@ def make_walker(email):
         click.echo(f"Walker record created for {email}.")
 
 
+@app.cli.command("reconcile-uploads")
+def reconcile_uploads_cmd():
+    """Compare the uploads volume against the R2 backup bucket and report any
+    gaps. Read-only — never writes or deletes anything on either side. Run
+    from a dedicated Railway cron service (see FEATURES.md #63b); needs
+    WEB_INTERNAL_URL, INTERNAL_API_SECRET, and the R2_* env vars set."""
+    from app.utils.uploads_reconcile import (
+        diff_manifests, fetch_r2_manifest, fetch_volume_manifest,
+    )
+    from app.utils.email import send_email
+
+    with app.app_context():
+        internal_url = os.environ.get("WEB_INTERNAL_URL", "http://web.railway.internal:8080")
+        secret = os.environ.get("INTERNAL_API_SECRET", "")
+        bucket = os.environ.get("R2_BUCKET_UPLOADS", "dogboxx-uploads-backup")
+
+        volume_files = fetch_volume_manifest(internal_url, secret)
+        r2_files = fetch_r2_manifest(bucket)
+        missing_from_r2, orphaned_in_r2, size_mismatches = diff_manifests(volume_files, r2_files)
+
+        click.echo(f"Volume files: {len(volume_files)}, R2 files: {len(r2_files)}")
+        click.echo(f"Missing from R2: {len(missing_from_r2)}")
+        click.echo(f"Orphaned in R2 (no volume file — expected, not a problem): {len(orphaned_in_r2)}")
+        click.echo(f"Size mismatches: {len(size_mismatches)}")
+
+        if missing_from_r2 or size_mismatches:
+            for key in missing_from_r2:
+                click.echo(f"  MISSING FROM R2: {key}")
+            for key in size_mismatches:
+                click.echo(f"  SIZE MISMATCH: {key} (volume={volume_files[key]}, r2={r2_files[key]})")
+
+            bug_reports = os.environ.get("BUG_REPORTS")
+            if bug_reports:
+                items = "".join(f"<li>Missing from R2: {key}</li>" for key in missing_from_r2)
+                items += "".join(
+                    f"<li>Size mismatch: {key} (volume={volume_files[key]}, r2={r2_files[key]})</li>"
+                    for key in size_mismatches
+                )
+                send_email(
+                    to=bug_reports,
+                    subject="DogBoxx: uploads reconciliation found a problem",
+                    html=f"<p>Upload reconciliation found the following:</p><ul>{items}</ul>",
+                )
+        else:
+            click.echo("All volume files present in R2 with matching sizes.")
+
+
 if __name__ == "__main__":
     # Get port from environment or default to 5000
     port = int(os.environ.get('PORT', 5000))
