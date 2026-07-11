@@ -17,3 +17,4 @@ app/static/uploads/profiles/*.png
 .claude/
 CLAUDE.md
 SECURITY_REVIEW.md
+docs_internal/
