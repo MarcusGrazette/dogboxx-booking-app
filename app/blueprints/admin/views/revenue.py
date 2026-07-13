@@ -29,8 +29,8 @@ def _revenue_for_range(start, end):
     Weekly discount is computed per billing household (a dog's primary owner) so
     it matches the sum of per-client invoices. Uses the PricingConfig with the
     highest effective_from <= the relevant day. Note: like the invoice path's
-    double-slot keying, weekly grouping is by primary owner — see
-    docs/ARCHITECTURE_REVIEW.md for the two-dog-household caveat (out of scope).
+    double-slot keying, weekly grouping is by primary owner — see the internal
+    handbook's pricing-invoicing page for the two-dog-household caveat (out of scope).
     """
     from datetime import timedelta
     from app.models import PricingConfig, Booking, ServiceType, DogOwner
