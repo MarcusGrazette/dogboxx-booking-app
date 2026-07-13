@@ -63,8 +63,8 @@ function createCalendar(calendarId, callbacks = {}) {
           const hl = highlightedDates[ds];
           if (hl) {
             // String value ('pending', 'confirmed') → cal-<status>
-            // Truthy object value (admin compat) → cal-pending
-            cls.push(typeof hl === 'string' ? 'cal-' + hl : 'cal-pending');
+            // Object value (admin compat) → cal-<type>, defaulting to pending
+            cls.push(typeof hl === 'string' ? 'cal-' + hl : 'cal-' + (hl.type || 'pending'));
           }
           html += `<td class="${cls.join(' ')}" data-date="${ds}" data-day="${day}">${day}</td>`;
         }
