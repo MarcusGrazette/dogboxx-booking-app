@@ -13,6 +13,7 @@ from app.utils.notifications import NotificationBatch
 from app.utils.booking_status import bulk_transition
 from app.services.booking_service import create_booking, CapacityError
 from app.utils.invoicing import is_late_cancellation
+from app.utils.sanitize import clean_rich_text_or_none
 
 
 def _parse_day_filter(raw_values):
@@ -107,7 +108,7 @@ def update_dog(dog_id):
     dog.breed = (data.get('breed') or '').strip()
     dog.date_of_birth = dob
     dog.allergies = (data.get('allergies') or '').strip()
-    dog.pickup_instructions = (data.get('pickup_instructions') or '').strip() or None
+    dog.pickup_instructions = clean_rich_text_or_none(data.get('pickup_instructions'))
     dog.whatsapp_group_url = (data.get('whatsapp_group_url') or '').strip() or None
     dog.hold_key = bool(data.get('hold_key'))
 

@@ -9,6 +9,7 @@ from app.models import User, Client, Dog, Booking, DogOwner
 from app import db
 from app.utils.uploads import process_dog_photo, process_cropped_photo
 from app.utils.booking_access import get_accessible_dog_ids
+from app.utils.sanitize import clean_rich_text_or_none
 from app.forms import ProfileForm
 import logging
 from datetime import datetime, timezone, date as date_type
@@ -118,12 +119,13 @@ def profile():
             if primary_dogs:
                 # Per-dog raw fields (named pickup_instructions_{id}) in the template
                 for _pd in primary_dogs:
-                    _val = request.form.get(f'pickup_instructions_{_pd.id}', '').strip() or None
-                    _pd.pickup_instructions = _val
+                    _pd.pickup_instructions = clean_rich_text_or_none(
+                        request.form.get(f'pickup_instructions_{_pd.id}', '')
+                    )
             elif secondary_dogs:
                 # Secondary-only path: update first shared dog's instructions via form field
-                secondary_dogs[0]['dog'].pickup_instructions = (
-                    form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
+                secondary_dogs[0]['dog'].pickup_instructions = clean_rich_text_or_none(
+                    form.pickup_instructions.data
                 )
 
             # Notifications — email toggle controls newsletter subscription
@@ -341,6 +343,44 @@ def upload_profile_photo():
         return jsonify(success=False, error="Server error saving photo"), 500
 
 
+@client_bp.route("/profile/dog/<int:dog_id>/pickup-photo", methods=["POST"])
+@login_required
+def upload_pickup_photo(dog_id):
+    """AJAX endpoint: attach/replace a reference photo for a dog's pickup notes
+    (e.g. a photo of the key safe or buzzer) — not cropped, arbitrary aspect ratio.
+
+    Returns JSON {success, url} or {success, error}.
+    """
+    # Pickup notes (and now their reference photo) are shared by all co-owners,
+    # not just the primary — mirrors update_pickup()'s ownership check.
+    dog_owner = DogOwner.query.filter_by(user_id=current_user.id, dog_id=dog_id).first()
+    dog = db.session.get(Dog, dog_owner.dog_id) if dog_owner else None
+    if not dog:
+        return jsonify(success=False, error="Dog not found"), 404
+
+    if 'file' not in request.files:
+        return jsonify(success=False, error="No file provided"), 400
+
+    try:
+        filename = process_dog_photo(request.files['file'], subfolder='pickup_notes')
+        if not filename:
+            return jsonify(success=False, error="Empty file"), 400
+
+        dog.pickup_notes_photo = filename
+        db.session.commit()
+
+        url = url_for('static', filename=f'uploads/pickup_notes/{filename}')
+        logging.info(f"Pickup notes photo updated for dog {dog.id} by {current_user.email}: {filename}")
+        return jsonify(success=True, url=url)
+
+    except ValueError as e:
+        return jsonify(success=False, error=str(e)), 400
+    except Exception as e:
+        db.session.rollback()
+        logging.exception(f"Error saving pickup notes photo for dog {dog_id}: {e}")
+        return jsonify(success=False, error="Server error saving photo"), 500
+
+
 @client_bp.route("/profile/update-pickup", methods=["POST"])
 @login_required
 def update_pickup():
@@ -360,12 +400,15 @@ def update_pickup():
     try:
         if primary_dogs:
             for _pd in primary_dogs:
-                _val = request.form.get(f'pickup_instructions_{_pd.id}', '').strip() or None
-                _pd.pickup_instructions = _val
+                _pd.pickup_instructions = clean_rich_text_or_none(
+                    request.form.get(f'pickup_instructions_{_pd.id}', '')
+                )
         elif secondary_ownerships:
             sec_dog = db.session.get(Dog, secondary_ownerships[0].dog_id)
             if sec_dog:
-                sec_dog.pickup_instructions = request.form.get('pickup_instructions', '').strip() or None
+                sec_dog.pickup_instructions = clean_rich_text_or_none(
+                    request.form.get('pickup_instructions', '')
+                )
 
         current_user.email_marketing = request.form.get('notify_email') == 'true'
         db.session.commit()

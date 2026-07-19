@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from app.models import Client, Dog, DogOwner
 from app import db
 from app.utils.uploads import process_dog_photo
+from app.utils.sanitize import clean_rich_text_or_none
 from app.forms import OnboardingForm
 import logging
 import traceback
@@ -105,7 +106,7 @@ def onboard():
             dog_breed = form.dog_breed.data.strip() if form.dog_breed.data else ""
             dog_allergies = form.dog_allergies.data.strip() if form.dog_allergies.data else ""
 
-            pickup_notes = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
+            pickup_notes = clean_rich_text_or_none(form.pickup_instructions.data)
             if existing_dog:
                 existing_dog.name = dog_name
                 existing_dog.gender = dog_gender
