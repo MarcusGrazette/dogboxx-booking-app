@@ -128,3 +128,78 @@ class TestAdminClientDetailPickupEditView:
         assert edit_field_start > 0
         field_snippet = html[edit_field_start:edit_field_start + 400]
         assert '>None<' not in field_snippet
+
+
+class TestAdminDogsPickupPhotoUpload:
+    """Regression: the admin dogs table's edit modal (opened via row click ->
+    view modal -> Edit, the .view-edit-btn path) had no photo-upload control
+    at all — only client /profile and admin_client_detail.html got one."""
+
+    def test_upload_endpoint_saves_photo_and_returns_url(
+            self, app, client, admin_user, dog):
+        with app.app_context():
+            admin_email = admin_user.email
+            dog_id = dog.id
+
+        login(client, admin_email)
+        with open('app/static/uploads/dogs/default-dog.png', 'rb') as f:
+            resp = client.post(
+                f'/admin/dogs/{dog_id}/pickup-photo',
+                data={'file': (f, 'photo.png')},
+                content_type='multipart/form-data',
+            )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data['success'] is True
+        assert 'pickup_notes' in data['url']
+
+        with app.app_context():
+            refreshed = db.session.get(Dog, dog_id)
+            assert refreshed.pickup_notes_photo is not None
+            assert refreshed.pickup_notes_photo in data['url']
+
+    def test_upload_endpoint_requires_admin(self, app, client, client_user, dog):
+        with app.app_context():
+            email = client_user.email
+            dog_id = dog.id
+
+        login(client, email)
+        with open('app/static/uploads/dogs/default-dog.png', 'rb') as f:
+            resp = client.post(
+                f'/admin/dogs/{dog_id}/pickup-photo',
+                data={'file': (f, 'photo.png')},
+                content_type='multipart/form-data',
+                follow_redirects=False,
+            )
+        assert resp.status_code in (302, 403)
+
+    def test_upload_endpoint_rejects_unknown_dog(self, app, client, admin_user):
+        with app.app_context():
+            admin_email = admin_user.email
+
+        login(client, admin_email)
+        with open('app/static/uploads/dogs/default-dog.png', 'rb') as f:
+            resp = client.post(
+                '/admin/dogs/999999/pickup-photo',
+                data={'file': (f, 'photo.png')},
+                content_type='multipart/form-data',
+            )
+        assert resp.status_code == 404
+
+    def test_edit_modal_view_edit_btn_carries_photo_url_dataset(
+            self, app, client, admin_user, dog):
+        """The .view-edit-btn (the real, working edit entry point) must carry
+        data-dog-pickup-photo-url so the edit modal's photo thumbnail can be
+        populated when reopened — the edit modal itself has no server-side
+        knowledge of which dog is being edited otherwise."""
+        with app.app_context():
+            d = db.session.get(Dog, dog.id)
+            d.pickup_notes_photo = 'abc123.png'
+            db.session.commit()
+            admin_email = admin_user.email
+
+        login(client, admin_email)
+        resp = client.get('/admin/dogs')
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        assert 'data-dog-pickup-photo-url="/static/uploads/pickup_notes/abc123.png"' in html

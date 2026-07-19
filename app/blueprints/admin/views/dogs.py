@@ -1,4 +1,4 @@
-from flask import request, render_template, jsonify
+from flask import request, render_template, jsonify, url_for
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from datetime import datetime, timezone
@@ -14,6 +14,7 @@ from app.utils.booking_status import bulk_transition
 from app.services.booking_service import create_booking, CapacityError
 from app.utils.invoicing import is_late_cancellation
 from app.utils.sanitize import clean_rich_text_or_none
+from app.utils.uploads import process_dog_photo
 
 
 def _parse_day_filter(raw_values):
@@ -120,6 +121,39 @@ def update_dog(dog_id):
         return jsonify(success=False, message="Failed to save changes"), 500
 
     return jsonify(success=True, name=dog.name, breed=dog.breed or '—')
+
+
+@admin_bp.route("/dogs/<int:dog_id>/pickup-photo", methods=["POST"])
+@login_required
+@admin_required
+def upload_dog_pickup_photo(dog_id):
+    """AJAX: attach/replace a reference photo for a dog's pickup notes,
+    from the admin dogs table's edit modal."""
+    dog = db.session.get(Dog, dog_id)
+    if not dog:
+        return jsonify(success=False, message="Dog not found"), 404
+
+    if 'file' not in request.files:
+        return jsonify(success=False, message="No file provided"), 400
+
+    try:
+        filename = process_dog_photo(request.files['file'], subfolder='pickup_notes')
+        if not filename:
+            return jsonify(success=False, message="Empty file"), 400
+
+        dog.pickup_notes_photo = filename
+        db.session.commit()
+
+        url = url_for('static', filename=f'uploads/pickup_notes/{filename}')
+        logging.info(f"Pickup notes photo updated for dog {dog.id} by admin {current_user.email}: {filename}")
+        return jsonify(success=True, url=url)
+
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        db.session.rollback()
+        logging.exception(f"Error saving pickup notes photo for dog {dog.id}: {e}")
+        return jsonify(success=False, message="Server error saving photo"), 500
 
 
 @admin_bp.route("/book_for_dog", methods=["POST"])
