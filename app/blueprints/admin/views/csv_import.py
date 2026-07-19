@@ -7,6 +7,7 @@ from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
 from app.models import User, Dog, Client, DogOwner
 from app import db
+from app.utils.sanitize import clean_rich_text_or_none
 from werkzeug.security import generate_password_hash
 import secrets
 
@@ -216,7 +217,7 @@ def csv_import_confirm():
                     breed=r.get('dog_breed') or '',
                     allergies='',
                     date_of_birth=dob,
-                    pickup_instructions=r.get('pickup_instructions'),
+                    pickup_instructions=clean_rich_text_or_none(r.get('pickup_instructions')),
                 )
                 db.session.add(dog)
                 db.session.flush()

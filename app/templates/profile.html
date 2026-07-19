@@ -5,10 +5,36 @@
 {% block main_class %}container py-3{% endblock %}
 
 {% block head_extra %}
-<link href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js" defer></script>
+<link href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css" rel="stylesheet"
+      integrity="sha384-6LFfkTKLRlzFtgx8xsWyBdKGpcMMQTkv+dB7rAbugeJAu1Ym2q1Aji1cjHBG12Xh" crossorigin="anonymous">
+<script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js" defer
+        integrity="sha384-jrOgQzBlDeUNdmQn3rUt/PZD+pdcRBdWd/HWRqRo+n2OR2QtGyjSaJC0GiCeH+ir" crossorigin="anonymous"></script>
+<link href="https://unpkg.com/quill@1.3.7/dist/quill.snow.css" rel="stylesheet"
+      integrity="sha384-cPa8kzsYWhqpAfWOLWYIw3V0BhPi/m3lrd8tBTPxr2NrYCHRVZ7xy1cEoRGOM/03" crossorigin="anonymous">
 <style>
-
+    /* Pickup notes rich text editor */
+    .pickup-quill {
+        min-height: 120px;
+        font-size: 0.95rem;
+        background: #fff;
+        border-radius: 0 0 0.375rem 0.375rem;
+        text-align: left;
+    }
+    .pickup-quill-wrap .ql-toolbar {
+        border-radius: 0.375rem 0.375rem 0 0;
+        border-color: #dee2e6 !important;
+    }
+    .pickup-quill-wrap .ql-container {
+        border-color: #dee2e6 !important;
+        border-radius: 0 0 0.375rem 0.375rem;
+    }
+    .pickup-photo-thumb {
+        width: 40px;
+        height: 40px;
+        border-radius: 0.375rem;
+        object-fit: cover;
+        flex-shrink: 0;
+    }
 
     /* Toggle switch */
     .form-switch .form-check-input {
@@ -343,16 +369,57 @@
                         <p class="text-muted mb-2" style="font-size:0.8rem;">
                             Anything we need to know when collecting {{ dog.name }}?
                         </p>
-                        <textarea class="form-control" name="pickup_instructions_{{ dog.id }}" rows="4"
-                                  placeholder="e.g. Our buzzer is labelled A, you can park the bike in our courtyard.">{{ dog.pickup_instructions or '' }}</textarea>
+                        <div class="pickup-quill-wrap">
+                          <div id="pickup-quill-{{ dog.id }}" class="pickup-quill"
+                               data-placeholder="e.g. Our buzzer is labelled A, you can park the bike in our courtyard."></div>
+                        </div>
+                        <textarea name="pickup_instructions_{{ dog.id }}" class="d-none" aria-hidden="true"
+                                  data-pickup-hidden="{{ dog.id }}">{{ dog.pickup_instructions or '' }}</textarea>
+
+                        <div class="d-flex align-items-center gap-2 mt-2">
+                            {% if dog.pickup_notes_photo %}
+                            <img src="{{ url_for('static', filename='uploads/pickup_notes/' + dog.pickup_notes_photo) }}"
+                                 class="pickup-photo-thumb" id="pickup-photo-thumb-{{ dog.id }}" alt="Pickup reference photo">
+                            {% else %}
+                            <img src="" class="pickup-photo-thumb d-none" id="pickup-photo-thumb-{{ dog.id }}" alt="Pickup reference photo">
+                            {% endif %}
+                            <button type="button" class="btn btn-sm btn-outline-secondary pickup-photo-btn"
+                                    data-dog-id="{{ dog.id }}"
+                                    data-url="{{ url_for('client.upload_pickup_photo', dog_id=dog.id) }}">
+                                <i class="bi bi-camera me-1"></i>{{ 'Change photo' if dog.pickup_notes_photo else 'Add a reference photo' }}
+                            </button>
+                            <input type="file" class="d-none pickup-photo-input" id="pickup-photo-input-{{ dog.id }}" accept="image/*">
+                            <span class="pickup-photo-error text-danger small" id="pickup-photo-error-{{ dog.id }}"></span>
+                        </div>
                         {% if not loop.last %}<hr class="my-3">{% endif %}
                         {% endfor %}
                     {% else %}
                         <p class="text-muted mb-3" style="font-size:0.8rem;">
                             Anything we need to know when collecting {{ secondary_dogs[0].dog.name if secondary_dogs else 'your dog' }}?
                         </p>
-                        {{ form.pickup_instructions(class="form-control", rows=5,
-                           placeholder="e.g. Our buzzer is labelled A, you can park the bike in our courtyard.") }}
+                        <div class="pickup-quill-wrap">
+                          <div id="pickup-quill-secondary" class="pickup-quill"
+                               data-placeholder="e.g. Our buzzer is labelled A, you can park the bike in our courtyard."></div>
+                        </div>
+                        {{ form.pickup_instructions(class="d-none", **{"aria-hidden": "true", "data-pickup-hidden": "secondary"}) }}
+                        {% set sdog = secondary_dogs[0].dog if secondary_dogs else None %}
+                        {% if sdog %}
+                        <div class="d-flex align-items-center gap-2 mt-2">
+                            {% if sdog.pickup_notes_photo %}
+                            <img src="{{ url_for('static', filename='uploads/pickup_notes/' + sdog.pickup_notes_photo) }}"
+                                 class="pickup-photo-thumb" id="pickup-photo-thumb-{{ sdog.id }}" alt="Pickup reference photo">
+                            {% else %}
+                            <img src="" class="pickup-photo-thumb d-none" id="pickup-photo-thumb-{{ sdog.id }}" alt="Pickup reference photo">
+                            {% endif %}
+                            <button type="button" class="btn btn-sm btn-outline-secondary pickup-photo-btn"
+                                    data-dog-id="{{ sdog.id }}"
+                                    data-url="{{ url_for('client.upload_pickup_photo', dog_id=sdog.id) }}">
+                                <i class="bi bi-camera me-1"></i>{{ 'Change photo' if sdog.pickup_notes_photo else 'Add a reference photo' }}
+                            </button>
+                            <input type="file" class="d-none pickup-photo-input" id="pickup-photo-input-{{ sdog.id }}" accept="image/*">
+                            <span class="pickup-photo-error text-danger small" id="pickup-photo-error-{{ sdog.id }}"></span>
+                        </div>
+                        {% endif %}
                     {% endif %}
                     <div class="d-flex align-items-center gap-2 mt-3">
                         <button type="button" id="save-pickup-btn"
@@ -435,6 +502,8 @@
     </div>
 </div>
 {{ super() }}
+<script src="https://unpkg.com/quill@1.3.7/dist/quill.min.js"
+        integrity="sha384-QUJ+ckWz1M+a7w0UfG1sEn4pPrbQwSxGm/1TIPyioqXBrwuT9l4f9gdHWLDLbVWI" crossorigin="anonymous"></script>
 <script nonce="{{ csp_nonce }}">
 (function () {
     'use strict';
@@ -478,6 +547,72 @@
                 errEl.style.display = 'inline';
             })
             .finally(function () { btn.disabled = false; });
+        });
+    });
+
+    // ── Pickup notes rich text editors ──────────────────────────────────────
+    // One Quill instance per dog (plus one for the secondary-only path). Each
+    // syncs its HTML into a hidden textarea on every edit, so the existing
+    // pickup-notes save handler below (which reads those textareas directly)
+    // and a normal full-page form submit both keep working unchanged.
+    document.querySelectorAll('.pickup-quill').forEach(function (el) {
+        var key    = el.id.replace('pickup-quill-', '');
+        var hidden = document.querySelector('[data-pickup-hidden="' + key + '"]');
+        if (!hidden) return;
+
+        var quill = new Quill(el, {
+            theme: 'snow',
+            placeholder: el.dataset.placeholder || '',
+            modules: {
+                toolbar: [
+                    [{ header: [1, 2, 3, false] }],
+                    ['bold', 'italic', 'underline'],
+                    [{ list: 'ordered' }, { list: 'bullet' }],
+                    ['blockquote', 'link'],
+                    ['clean'],
+                ],
+            },
+        });
+        quill.root.innerHTML = hidden.value;
+        quill.on('text-change', function () {
+            hidden.value = quill.root.innerHTML;
+        });
+    });
+
+    // ── Pickup notes reference photo upload ─────────────────────────────────
+    document.querySelectorAll('.pickup-photo-btn').forEach(function (btn) {
+        var dogId  = btn.dataset.dogId;
+        var input  = document.getElementById('pickup-photo-input-' + dogId);
+        var thumb  = document.getElementById('pickup-photo-thumb-' + dogId);
+        var errEl  = document.getElementById('pickup-photo-error-' + dogId);
+
+        btn.addEventListener('click', function () { input.click(); });
+
+        input.addEventListener('change', function () {
+            if (!input.files || !input.files[0]) return;
+            errEl.textContent = '';
+            btn.disabled = true;
+
+            var body = new FormData();
+            body.append('file', input.files[0]);
+
+            fetch(btn.dataset.url, {
+                method:  'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+                body:    body,
+            })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    thumb.src = data.url;
+                    thumb.classList.remove('d-none');
+                    btn.innerHTML = '<i class="bi bi-camera me-1"></i>Change photo';
+                } else {
+                    errEl.textContent = data.error || 'Could not upload photo';
+                }
+            })
+            .catch(function () { errEl.textContent = 'Network error — please try again'; })
+            .finally(function () { btn.disabled = false; input.value = ''; });
         });
     });
 

@@ -44,7 +44,7 @@ def _backup_to_r2(local_path, r2_key):
         logging.warning(f"R2 backup failed for {r2_key}: {e}")
 
 
-def process_dog_photo(file_storage):
+def process_dog_photo(file_storage, subfolder=None):
     """Process and save an uploaded dog photo.
 
     Validates the image, strips EXIF metadata, resizes, and saves
@@ -52,6 +52,9 @@ def process_dog_photo(file_storage):
 
     Args:
         file_storage: A werkzeug FileStorage object from request.files
+        subfolder:    Upload sub-directory under static/uploads/. Defaults to
+                      None, which uses UPLOAD_FOLDER directly (the 'dogs'
+                      folder) — pass e.g. 'pickup_notes' to save elsewhere.
 
     Returns:
         The saved filename (e.g. 'abc123.jpg'), or None if no file provided.
@@ -84,7 +87,14 @@ def process_dog_photo(file_storage):
 
     # 4. Save with a UUID filename
     unique_filename = f"{uuid.uuid4()}{file_extension}"
-    upload_path = os.path.join(current_app.config["UPLOAD_FOLDER"], unique_filename)
+    if subfolder:
+        base_dir = os.path.dirname(current_app.config["UPLOAD_FOLDER"])
+        target_dir = os.path.join(base_dir, subfolder)
+        os.makedirs(target_dir, exist_ok=True)
+    else:
+        subfolder = "dogs"
+        target_dir = current_app.config["UPLOAD_FOLDER"]
+    upload_path = os.path.join(target_dir, unique_filename)
 
     format_map = {
         '.png': ('PNG', {}),
@@ -95,8 +105,8 @@ def process_dog_photo(file_storage):
     fmt, kwargs = format_map[file_extension]
     img.save(upload_path, fmt, **kwargs)
 
-    logging.info(f"Saved dog photo: {unique_filename}")
-    _backup_to_r2(upload_path, f"dogs/{unique_filename}")
+    logging.info(f"Saved dog photo ({subfolder}): {unique_filename}")
+    _backup_to_r2(upload_path, f"{subfolder}/{unique_filename}")
     return unique_filename
 
 

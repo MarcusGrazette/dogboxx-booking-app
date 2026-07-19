@@ -12,6 +12,7 @@ from app.models import User, Dog, Client, DogOwner, Notification
 from app import db
 from app.forms import ClientCreateForm
 from app.utils.uploads import process_dog_photo
+from app.utils.sanitize import clean_rich_text_or_none
 from werkzeug.security import generate_password_hash
 import secrets
 
@@ -310,7 +311,7 @@ def new_client():
                     allergies=form.dog_allergies.data.strip() if form.dog_allergies.data else "",
                     date_of_birth=form.dog_dob.data,
                     whatsapp_group_url=(form.dog_whatsapp_group_url.data.strip() or None) if form.dog_whatsapp_group_url.data else None,
-                    pickup_instructions=form.pickup_instructions.data.strip() if form.pickup_instructions.data else None,
+                    pickup_instructions=clean_rich_text_or_none(form.pickup_instructions.data),
                     hold_key=bool(form.hold_key.data),
                 )
                 db.session.add(new_dog)
@@ -400,7 +401,7 @@ def edit_client(client_id):
             client.maps_url = form.maps_url.data.strip() if form.maps_url.data else None
 
             has_dog = bool(form.dog_name.data and form.dog_name.data.strip() and form.dog_gender.data)
-            pickup_notes = form.pickup_instructions.data.strip() if form.pickup_instructions.data else None
+            pickup_notes = clean_rich_text_or_none(form.pickup_instructions.data)
             if has_dog:
                 if dog:
                     dog.name = form.dog_name.data.strip()
@@ -450,7 +451,9 @@ def edit_client(client_id):
                 else:
                     extra_dog.date_of_birth = None
                 extra_dog.allergies = request.form.get(f'dog_allergies_{did}', '').strip()
-                extra_dog.pickup_instructions = request.form.get(f'dog_pickup_instructions_{did}', '').strip() or None
+                extra_dog.pickup_instructions = clean_rich_text_or_none(
+                    request.form.get(f'dog_pickup_instructions_{did}', '')
+                )
                 extra_dog.whatsapp_group_url = request.form.get(f'dog_whatsapp_{did}', '').strip() or None
                 extra_dog.hold_key = bool(request.form.get(f'dog_hold_key_{did}'))
 
@@ -531,7 +534,7 @@ def add_dog(client_id):
                 breed=form.dog_breed.data.strip() if form.dog_breed.data else "",
                 date_of_birth=form.dog_dob.data,
                 allergies=form.dog_allergies.data.strip() if form.dog_allergies.data else "",
-                pickup_instructions=form.pickup_instructions.data.strip() if form.pickup_instructions.data else None,
+                pickup_instructions=clean_rich_text_or_none(form.pickup_instructions.data),
                 whatsapp_group_url=(form.dog_whatsapp_group_url.data.strip() or None) if form.dog_whatsapp_group_url.data else None,
                 hold_key=bool(form.hold_key.data),
             )
@@ -668,10 +671,10 @@ def update_client_pickup_details(client_id):
         return jsonify(success=False, message="Client record not found"), 404
 
     data = request.get_json(silent=True) or {}
-    pickup_instructions = (data.get('pickup_instructions') or '').strip() or None
+    pickup_instructions = clean_rich_text_or_none(data.get('pickup_instructions'))
 
-    if pickup_instructions and len(pickup_instructions) > 1000:
-        return jsonify(success=False, message="Instructions too long (max 1000 chars)"), 400
+    if pickup_instructions and len(pickup_instructions) > 20000:
+        return jsonify(success=False, message="Instructions too long"), 400
 
     if 'maps_url' in data:
         maps_url = (data.get('maps_url') or '').strip() or None
@@ -688,3 +691,41 @@ def update_client_pickup_details(client_id):
     dog.pickup_instructions = pickup_instructions
     db.session.commit()
     return jsonify(success=True)
+
+
+@admin_bp.route("/clients/<int:client_id>/pickup-photo", methods=["POST"])
+@login_required
+@admin_required
+def upload_client_pickup_photo(client_id):
+    """AJAX: attach/replace a reference photo for a client's dog's pickup notes."""
+    user = User.query.filter(User.client != None, User.id == client_id).first()
+    if not user:
+        return jsonify(success=False, message="Client not found"), 404
+
+    from app.models import DogOwner
+    dog_owner = DogOwner.query.filter_by(user_id=user.id, role='primary').first()
+    dog = db.session.get(Dog, dog_owner.dog_id) if dog_owner else None
+    if not dog:
+        return jsonify(success=False, message="No dog record found — add a dog first"), 404
+
+    if 'file' not in request.files:
+        return jsonify(success=False, message="No file provided"), 400
+
+    try:
+        filename = process_dog_photo(request.files['file'], subfolder='pickup_notes')
+        if not filename:
+            return jsonify(success=False, message="Empty file"), 400
+
+        dog.pickup_notes_photo = filename
+        db.session.commit()
+
+        url = url_for('static', filename=f'uploads/pickup_notes/{filename}')
+        logging.info(f"Pickup notes photo updated for dog {dog.id} by admin {current_user.email}: {filename}")
+        return jsonify(success=True, url=url)
+
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        db.session.rollback()
+        logging.exception(f"Error saving pickup notes photo for dog {dog.id}: {e}")
+        return jsonify(success=False, message="Server error saving photo"), 500

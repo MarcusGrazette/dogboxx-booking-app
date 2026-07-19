@@ -341,6 +341,122 @@ class TestBroadcastSend:
         assert rcpt['firstname'] == 'Alice'
         assert rcpt['dog_name'] == 'Daisy'
 
+    def test_html_body_bell_gets_plain_text_email_and_db_get_html(
+            self, app, client, captured_broadcasts):
+        """Body is Quill-authored HTML: the bell dropdown can't render markup
+        so it gets a tags-stripped plain summary, while email and the DB
+        audit row keep the full sanitized HTML."""
+        with app.app_context():
+            admin = _user('admin@bh-bcast.test.com', firstname='Admin', role='walker', is_admin=True)
+            st = _service_type()
+            d = date.today() + timedelta(days=1)
+            c1 = _user('c1@bh-bcast.test.com', firstname='Alice'); _client(c1.id)
+            dog1 = _dog('Daisy'); _own(dog1.id, c1.id)
+            _booking(c1.id, dog1.id, st.id, d, 'Morning')
+            db.session.commit()
+            admin_email = admin.email
+            iso = d.isoformat()
+            c1_id = c1.id
+
+        _login(client, admin_email)
+        html_body = (
+            '<h1>Heads up</h1><p>Hi {{firstname}}, walks are '
+            '<strong>cancelled</strong> today.</p>'
+        )
+        resp = client.post('/admin/broadcasts', data={
+            'scope_date': iso, 'scope_slot': 'all',
+            'subject': 'Weather', 'body': html_body,
+            'channel_bell': 'on', 'channel_email': 'on',
+        }, follow_redirects=False)
+        assert resp.status_code == 302
+
+        with app.app_context():
+            # Bell: plain-text summary, personalised, no markup.
+            n = Notification.query.filter_by(recipient_id=c1_id).one()
+            assert n.body == 'Heads up Hi Alice, walks are cancelled today.'
+            assert '<' not in n.body
+
+            # Audit row keeps the sanitized HTML (not personalised).
+            b = Broadcast.query.one()
+            assert '<h1>Heads up</h1>' in b.body
+
+        # Email gets the full sanitized HTML. Merge-tag substitution for email
+        # happens inside the real send_broadcast_batch (per recipient dict),
+        # not before it's called — captured_broadcasts mocks that function
+        # out, so the body it records is still pre-substitution, same as the
+        # existing test_merge_tags_personalise_bell_and_carry_dog_name_to_email.
+        assert len(captured_broadcasts) == 1
+        email_body = captured_broadcasts[0]['body']
+        assert '<h1>Heads up</h1>' in email_body
+        assert '{{firstname}}' in email_body
+
+    def test_disallowed_tag_escaped_in_db_and_email_html(
+            self, app, client, captured_broadcasts):
+        """A <script> tag in the submitted body must never survive as live,
+        renderable markup in the DB audit row or the outgoing email HTML —
+        sanitize_rich_text escapes it to inert text."""
+        with app.app_context():
+            admin = _user('admin@bx-bcast.test.com', role='walker', is_admin=True)
+            st = _service_type()
+            d = date.today() + timedelta(days=1)
+            c1 = _user('c1@bx-bcast.test.com'); _client(c1.id)
+            dog1 = _dog('Daisy'); _own(dog1.id, c1.id)
+            _booking(c1.id, dog1.id, st.id, d, 'Morning')
+            db.session.commit()
+            admin_email = admin.email
+            iso = d.isoformat()
+
+        _login(client, admin_email)
+        resp = client.post('/admin/broadcasts', data={
+            'scope_date': iso, 'scope_slot': 'all',
+            'subject': 'X', 'body': '<p>Hi</p><script>alert(1)</script>',
+            'channel_bell': 'on', 'channel_email': 'on',
+        }, follow_redirects=False)
+        assert resp.status_code == 302
+
+        with app.app_context():
+            b = Broadcast.query.one()
+            assert '<script>' not in b.body
+            assert '&lt;script&gt;' in b.body
+
+        email_body = captured_broadcasts[0]['body']
+        assert '<script>' not in email_body
+        assert '&lt;script&gt;' in email_body
+
+    def test_bell_plain_text_summary_is_html_escaped_when_rendered(
+            self, app, client):
+        """The bell body is stored as plain text (via rich_text_to_plain),
+        which may legitimately contain literal '<'/'>' characters recovered
+        from an originally-escaped disallowed tag. The safety guarantee is
+        downstream: the template that renders n.body auto-escapes it — this
+        test drives that actual render path rather than the raw DB value."""
+        with app.app_context():
+            admin = _user('admin@bp-bcast.test.com', role='walker', is_admin=True)
+            st = _service_type()
+            d = date.today() + timedelta(days=1)
+            c1 = _user('c1@bp-bcast.test.com'); _client(c1.id)
+            dog1 = _dog('Daisy'); _own(dog1.id, c1.id)
+            _booking(c1.id, dog1.id, st.id, d, 'Morning')
+            db.session.commit()
+            admin_email = admin.email
+            iso = d.isoformat()
+            c1_email = c1.email
+
+        _login(client, admin_email)
+        resp = client.post('/admin/broadcasts', data={
+            'scope_date': iso, 'scope_slot': 'all',
+            'subject': 'X', 'body': '<p>Hi</p><script>alert(1)</script>',
+            'channel_bell': 'on',
+        }, follow_redirects=False)
+        assert resp.status_code == 302
+
+        # View as the recipient — the bell partial renders on any client page.
+        client.post('/auth/logout', follow_redirects=True)
+        _login(client, c1_email)
+        page = client.get('/').data.decode()
+        assert '<script>alert(1)</script>' not in page
+        assert '&lt;script&gt;alert(1)&lt;/script&gt;' in page
+
     def test_send_bell_only_skips_email_batch(
             self, app, client, captured_broadcasts):
         with app.app_context():
