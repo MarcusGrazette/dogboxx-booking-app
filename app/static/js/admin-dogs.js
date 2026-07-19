@@ -295,18 +295,77 @@ document.addEventListener('DOMContentLoaded', function () {
     const editDobInp     = document.getElementById('edit-dog-dob');
     const editAllergyInp = document.getElementById('edit-dog-allergies');
     const editPickupTA   = document.getElementById('edit-dog-pickup');
+    const editPickupQuill = new Quill(document.getElementById('edit-dog-pickup-quill'), {
+        theme: 'snow',
+        modules: {
+            toolbar: [
+                [{ header: [1, 2, 3, false] }],
+                ['bold', 'italic', 'underline'],
+                [{ list: 'ordered' }, { list: 'bullet' }],
+                ['blockquote', 'link'],
+                ['clean'],
+            ],
+        },
+    });
+    editPickupQuill.on('text-change', function () { editPickupTA.value = editPickupQuill.root.innerHTML; });
+    function setEditPickupHtml(html) { editPickupQuill.root.innerHTML = html || ''; }
+
+    // ── Pickup notes reference photo (single shared modal — one upload target
+    //    at a time, keyed by editActiveDogId, same pattern as the Quill editor)
+    const editPickupPhotoThumb = document.getElementById('edit-dog-pickup-photo-thumb');
+    const editPickupPhotoBtn   = document.getElementById('edit-dog-pickup-photo-btn');
+    const editPickupPhotoLabel = document.getElementById('edit-dog-pickup-photo-btn-label');
+    const editPickupPhotoInput = document.getElementById('edit-dog-pickup-photo-input');
+    const editPickupPhotoError = document.getElementById('edit-dog-pickup-photo-error');
+
+    function setEditPickupPhoto(url) {
+        if (url) {
+            editPickupPhotoThumb.src = url;
+            editPickupPhotoThumb.classList.remove('d-none');
+            editPickupPhotoLabel.textContent = 'Change photo';
+        } else {
+            editPickupPhotoThumb.src = '';
+            editPickupPhotoThumb.classList.add('d-none');
+            editPickupPhotoLabel.textContent = 'Add a reference photo';
+        }
+    }
+
+    editPickupPhotoBtn.addEventListener('click', () => editPickupPhotoInput.click());
+    editPickupPhotoInput.addEventListener('change', () => {
+        if (!editPickupPhotoInput.files || !editPickupPhotoInput.files[0] || !editActiveDogId) return;
+        editPickupPhotoError.textContent = '';
+        editPickupPhotoBtn.disabled = true;
+
+        const body = new FormData();
+        body.append('file', editPickupPhotoInput.files[0]);
+
+        fetch(`/admin/dogs/${editActiveDogId}/pickup-photo`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCsrf() },
+            body: body,
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                setEditPickupPhoto(data.url);
+            } else {
+                editPickupPhotoError.textContent = data.message || 'Could not upload photo';
+            }
+        })
+        .catch(() => { editPickupPhotoError.textContent = 'Network error — please try again'; })
+        .finally(() => { editPickupPhotoBtn.disabled = false; editPickupPhotoInput.value = ''; });
+    });
+
     const editWaInp      = document.getElementById('edit-dog-whatsapp');
     const editHoldKey    = document.getElementById('edit-dog-hold-key');
     const editResult     = document.getElementById('edit-dog-result');
     const editSubmitBtn  = document.getElementById('edit-dog-submit-btn');
 
     let editActiveDogId  = null;
-    let editActiveRow    = null;
 
     document.querySelectorAll('.edit-dog-btn').forEach(btn => {
         btn.addEventListener('click', function () {
             editActiveDogId  = this.dataset.dogId;
-            editActiveRow    = this.closest('tr');
 
             editDogName.textContent   = this.dataset.dogName;
             editNameInp.value         = this.dataset.dogName;
@@ -314,7 +373,8 @@ document.addEventListener('DOMContentLoaded', function () {
             editBreedInp.value        = this.dataset.dogBreed;
             editDobInp.value          = this.dataset.dogDob;
             editAllergyInp.value      = this.dataset.dogAllergies;
-            editPickupTA.value        = this.dataset.dogPickup;
+            setEditPickupHtml(this.dataset.dogPickup);
+            setEditPickupPhoto(this.dataset.dogPickupPhotoUrl);
             editWaInp.value           = this.dataset.dogWhatsapp;
             editHoldKey.checked       = this.dataset.dogHoldKey === 'true';
             editResult.style.display  = 'none';
@@ -352,36 +412,17 @@ document.addEventListener('DOMContentLoaded', function () {
         .then(r => r.json())
         .then(data => {
             if (data.success) {
-                // Update the row's name and breed cells in place
-                if (editActiveRow) {
-                    const nameCell = editActiveRow.querySelector('td:first-child');
-                    if (nameCell) {
-                        const img = nameCell.querySelector('img');
-                        nameCell.textContent = data.name;
-                        if (img) nameCell.prepend(img);
-                    }
-                    const breedCell = editActiveRow.querySelectorAll('td')[1];
-                    if (breedCell) breedCell.textContent = data.breed;
-                    // Rebuild data-search with updated name/breed, preserving owner suffix
-                    const ownerText = editActiveRow.dataset.ownerSearch || '';
-                    editActiveRow.dataset.search = `${data.name.toLowerCase()} ${(editBreedInp.value.trim()).toLowerCase()} ${ownerText}`;
-                    // Update the button data-* so re-opening modal shows fresh values
-                    const editBtn = editActiveRow.querySelector('.edit-dog-btn');
-                    if (editBtn) {
-                        editBtn.dataset.dogName       = data.name;
-                        editBtn.dataset.dogBreed      = editBreedInp.value.trim();
-                        editBtn.dataset.dogGender     = editGenderSel.value;
-                        editBtn.dataset.dogDob        = editDobInp.value;
-                        editBtn.dataset.dogAllergies  = editAllergyInp.value.trim();
-                        editBtn.dataset.dogPickup     = editPickupTA.value.trim();
-                        editBtn.dataset.dogWhatsapp   = editWaInp.value.trim();
-                        editBtn.dataset.dogHoldKey    = editHoldKey.checked ? 'true' : 'false';
-                    }
-                    // Update book-btn dog name too
-                    const bookBtn = editActiveRow.querySelector('.book-btn');
-                    if (bookBtn) bookBtn.dataset.dogName = data.name;
-                }
-                editModal.hide();
+                // Full reload rather than patching the row/view-modal/edit-modal
+                // in three places by hand — a stale view modal (this table's
+                // read-only "row click" popup renders dog fields server-side at
+                // page load and was never kept in sync after an in-place save)
+                // is worse than a brief reload. Preserve the search filter
+                // across the reload so it doesn't feel like starting over.
+                const query = document.getElementById('dog-search')?.value || '';
+                if (query) sessionStorage.setItem('dogSearchQuery', query);
+                else sessionStorage.removeItem('dogSearchQuery');
+                window.location.reload();
+                return;
             } else {
                 showEditResult('danger', data.message || 'Something went wrong');
                 editSubmitBtn.disabled = false;
@@ -430,6 +471,14 @@ document.addEventListener('DOMContentLoaded', function () {
             applyFilter();
             searchInput.focus();
         });
+
+        // Restore the filter query across the reload an edit-save triggers.
+        const savedQuery = sessionStorage.getItem('dogSearchQuery');
+        if (savedQuery) {
+            sessionStorage.removeItem('dogSearchQuery');
+            searchInput.value = savedQuery;
+            applyFilter();
+        }
     }
 
     // ── View modal → Edit / View Upcoming transition ───────────────────────
@@ -447,14 +496,14 @@ document.addEventListener('DOMContentLoaded', function () {
             pendingViewAction = function () {
                 if (isEdit) {
                     editActiveDogId          = d.dogId;
-                    editActiveRow            = document.querySelector('button.edit-dog-btn[data-dog-id="' + d.dogId + '"]')?.closest('tr') || null;
                     editDogName.textContent  = d.dogName;
                     editNameInp.value        = d.dogName;
                     editGenderSel.value      = d.dogGender;
                     editBreedInp.value       = d.dogBreed;
                     editDobInp.value         = d.dogDob;
                     editAllergyInp.value     = d.dogAllergies;
-                    editPickupTA.value       = d.dogPickup;
+                    setEditPickupHtml(d.dogPickup);
+                    setEditPickupPhoto(d.dogPickupPhotoUrl);
                     editWaInp.value          = d.dogWhatsapp;
                     editHoldKey.checked      = d.dogHoldKey === 'true';
                     editResult.style.display = 'none';

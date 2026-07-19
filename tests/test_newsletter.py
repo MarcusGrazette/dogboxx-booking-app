@@ -127,6 +127,30 @@ class TestNewsletterSend:
         assert recipients_by_email['c1@nl-test.com']['dog_name'] == 'Buddy'
         assert recipients_by_email['c2@nl-test.com']['dog_name'] == 'your dog'
 
+    def test_html_body_is_sanitized_before_send(self, app, client,
+                                                captured_newsletters):
+        """The newsletter's Quill HTML used to reach send_newsletter_batch
+        (and the outgoing email) completely unsanitized. It must now go
+        through the same shared bleach allowlist as Daily Messages/broadcasts."""
+        with app.app_context():
+            admin = _make_user('admin5@nl-test.com', role='walker', is_admin=True)
+            c1 = _make_user('c1@nl-test.com')
+            _make_client(c1.id)
+            db.session.commit()
+            admin_email = admin.email
+
+        _login(client, admin_email)
+        resp = client.post('/admin/newsletter', data={
+            'subject': 'Hello',
+            'html_body': '<h1>Big news</h1><p>Hi</p><script>alert(1)</script>',
+        })
+        assert resp.status_code != 500
+
+        assert len(captured_newsletters) == 1
+        html_template = captured_newsletters[0]['html_template']
+        assert '<h1>Big news</h1>' in html_template
+        assert '<script>' not in html_template
+
     def test_send_skips_unsubscribed_clients(self, app, client,
                                              captured_newsletters):
         """Clients with email_marketing=False are not included in the batch."""
@@ -180,6 +204,37 @@ class TestNewsletterTest:
 
         # The captured batch was prefixed with [TEST] so it's clearly a test
         assert captured_newsletters[0]['subject'].startswith('[TEST] ')
+
+    def test_test_send_sanitizes_html_body(self, app, client,
+                                           captured_newsletters):
+        with app.app_context():
+            admin = _make_user('admin6@nl-test.com', role='walker', is_admin=True)
+            db.session.commit()
+            admin_email = admin.email
+
+        _login(client, admin_email)
+        resp = client.post('/admin/newsletter/test', data={
+            'subject': 'Hello',
+            'html_body': '<p>Hi</p><script>alert(1)</script>',
+        })
+        assert resp.status_code == 200
+        assert '<script>' not in captured_newsletters[0]['html_template']
+
+    def test_test_send_rejects_empty_quill_markup(self, app, client,
+                                                  captured_newsletters):
+        """An empty Quill editor's innerHTML is markup like <p><br></p>, not
+        an empty string — must still be treated as no body, not sent."""
+        with app.app_context():
+            admin = _make_user('admin7@nl-test.com', role='walker', is_admin=True)
+            db.session.commit()
+            admin_email = admin.email
+
+        _login(client, admin_email)
+        resp = client.post('/admin/newsletter/test', data={
+            'subject': 'Hello', 'html_body': '<p><br></p>',
+        })
+        assert resp.status_code == 400
+        assert captured_newsletters == []
 
     def test_test_send_rejects_empty_draft(self, app, client,
                                            captured_newsletters):

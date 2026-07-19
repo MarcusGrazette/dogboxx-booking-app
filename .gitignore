@@ -13,6 +13,8 @@ app/static/uploads/dogs/*.jpg
 app/static/uploads/dogs/*.png
 app/static/uploads/profiles/*.jpg
 app/static/uploads/profiles/*.png
+app/static/uploads/pickup_notes/*.jpg
+app/static/uploads/pickup_notes/*.png
 .DS_Store
 .claude/
 CLAUDE.md
