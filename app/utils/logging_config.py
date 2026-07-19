@@ -75,6 +75,13 @@ def configure_logging(app_name: str = "app",
     
     werkzeug_logger = logging.getLogger('werkzeug')
     werkzeug_logger.setLevel(logging.INFO)
+
+    # watchdog (Werkzeug's reloader backend) recursively watches the whole
+    # project root, which includes this module's own log file — at DEBUG its
+    # internal event logging feeds back into itself (log write -> inotify
+    # event -> log write...) and fills the disk. Keep it quiet.
+    watchdog_logger = logging.getLogger('watchdog')
+    watchdog_logger.setLevel(logging.WARNING)
     
     # Flask app logger
     app_logger = logging.getLogger(app_name)
