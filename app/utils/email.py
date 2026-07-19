@@ -27,7 +27,6 @@ Required environment variables:
     APP_BASE_URL    — e.g. https://dogboxx.up.railway.app
 """
 
-import html as _html
 import logging
 import os
 import re
@@ -188,8 +187,9 @@ def send_broadcast_batch(subject: str, body_text: str, recipients: list) -> dict
     Send a stripped-down operational broadcast (e.g. weather cancellation) to a
     list of recipients via Resend batch API.
 
-    body_text is plain text. Newlines are preserved as <br>; the body is HTML
-    escaped before insertion. No unsubscribe link (operational, not marketing).
+    body_text is Quill-authored HTML, already sanitized by the caller
+    (app.utils.sanitize.sanitize_rich_text) before it reached this function —
+    inserted into the shell as-is. No unsubscribe link (operational, not marketing).
 
     Each recipient dict must have: email, firstname. Optional: dog_name.
 
@@ -238,11 +238,10 @@ def send_broadcast_batch(subject: str, body_text: str, recipients: list) -> dict
 
     batch = []
     for r in recipients:
-        # Substitute merge tags into the raw text first, then escape the whole
-        # thing — so both the body and the injected names are HTML-safe.
-        text = body_text.replace("{{firstname}}", r.get("firstname") or "")
-        text = text.replace("{{dog_name}}", r.get("dog_name") or "your dog")
-        body_html = _html.escape(text).replace("\n", "<br>")
+        # Merge tags are literal text inside the sanitized HTML (bleach only
+        # touches tags/attributes), so substitution is safe post-sanitization.
+        body_html = body_text.replace("{{firstname}}", r.get("firstname") or "")
+        body_html = body_html.replace("{{dog_name}}", r.get("dog_name") or "your dog")
         html = SHELL.replace("{{body}}", body_html)
         batch.append({
             "from": mail_from,

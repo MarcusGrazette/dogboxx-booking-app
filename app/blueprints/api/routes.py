@@ -57,7 +57,7 @@ def uploads_manifest():
     """
     root = os.path.join(current_app.static_folder, "uploads")
     manifest = {}
-    for subfolder in ("dogs", "profiles"):
+    for subfolder in ("dogs", "profiles", "pickup_notes"):
         folder = os.path.join(root, subfolder)
         if not os.path.isdir(folder):
             continue

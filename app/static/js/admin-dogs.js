@@ -295,6 +295,20 @@ document.addEventListener('DOMContentLoaded', function () {
     const editDobInp     = document.getElementById('edit-dog-dob');
     const editAllergyInp = document.getElementById('edit-dog-allergies');
     const editPickupTA   = document.getElementById('edit-dog-pickup');
+    const editPickupQuill = new Quill(document.getElementById('edit-dog-pickup-quill'), {
+        theme: 'snow',
+        modules: {
+            toolbar: [
+                [{ header: [1, 2, 3, false] }],
+                ['bold', 'italic', 'underline'],
+                [{ list: 'ordered' }, { list: 'bullet' }],
+                ['blockquote', 'link'],
+                ['clean'],
+            ],
+        },
+    });
+    editPickupQuill.on('text-change', function () { editPickupTA.value = editPickupQuill.root.innerHTML; });
+    function setEditPickupHtml(html) { editPickupQuill.root.innerHTML = html || ''; }
     const editWaInp      = document.getElementById('edit-dog-whatsapp');
     const editHoldKey    = document.getElementById('edit-dog-hold-key');
     const editResult     = document.getElementById('edit-dog-result');
@@ -314,7 +328,7 @@ document.addEventListener('DOMContentLoaded', function () {
             editBreedInp.value        = this.dataset.dogBreed;
             editDobInp.value          = this.dataset.dogDob;
             editAllergyInp.value      = this.dataset.dogAllergies;
-            editPickupTA.value        = this.dataset.dogPickup;
+            setEditPickupHtml(this.dataset.dogPickup);
             editWaInp.value           = this.dataset.dogWhatsapp;
             editHoldKey.checked       = this.dataset.dogHoldKey === 'true';
             editResult.style.display  = 'none';
@@ -454,7 +468,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     editBreedInp.value       = d.dogBreed;
                     editDobInp.value         = d.dogDob;
                     editAllergyInp.value     = d.dogAllergies;
-                    editPickupTA.value       = d.dogPickup;
+                    setEditPickupHtml(d.dogPickup);
                     editWaInp.value          = d.dogWhatsapp;
                     editHoldKey.checked      = d.dogHoldKey === 'true';
                     editResult.style.display = 'none';

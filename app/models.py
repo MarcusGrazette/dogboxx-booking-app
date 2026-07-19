@@ -136,7 +136,8 @@ class Dog(db.Model):
     other_info = db.Column(db.String(500), nullable=True)
     pic = db.Column(db.String(300), nullable=True)
     whatsapp_group_url = db.Column(db.String(2048), nullable=True)
-    pickup_instructions = db.Column(db.String(1000), nullable=True)
+    pickup_instructions = db.Column(db.Text, nullable=True)
+    pickup_notes_photo = db.Column(db.String(300), nullable=True)
     hold_key = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -157,6 +158,7 @@ class Dog(db.Model):
             'other_info': self.other_info,
             'pic': self.pic,
             'pickup_instructions': self.pickup_instructions,
+            'pickup_notes_photo': self.pickup_notes_photo,
         }
 
     @property

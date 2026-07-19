@@ -47,7 +47,7 @@ class OnboardingForm(FlaskForm):
     )
     pickup_instructions = TextAreaField(
         "Access instructions (optional)",
-        validators=[Length(max=1000)],
+        validators=[Length(max=20000)],
         render_kw={
             "rows": 5,
             "placeholder": "Anything we need to know when accessing your home? Eg, door codes, notes on the concierge, fiddly keys... Or any special instructions for pickup and drop off?"},
@@ -147,7 +147,7 @@ class ProfileForm(FlaskForm):
     )
     pickup_instructions = TextAreaField(
         "Access instructions (optional)",
-        validators=[Length(max=1000)],
+        validators=[Length(max=20000)],
         render_kw={"rows": 3, "placeholder": "Door codes, concierge notes, special instructions..."}
     )
     maps_url = StringField(
@@ -235,7 +235,7 @@ class ClientCreateForm(FlaskForm):
     )
     pickup_instructions = TextAreaField(
         "Access instructions",
-        validators=[Optional(), Length(max=1000)],
+        validators=[Optional(), Length(max=20000)],
         render_kw={"rows": 3, "placeholder": "Door codes, concierge notes, fiddly keys…"}
     )
     maps_url = StringField(

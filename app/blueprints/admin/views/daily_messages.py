@@ -16,7 +16,7 @@ def daily_messages():
     """Create or update a daily message for the walker team."""
     from app.models import DailyMessage
     from datetime import date as date_type
-    import bleach
+    from app.utils.sanitize import sanitize_rich_text
 
     if request.method == "POST":
         date_str = request.form.get("date", "").strip()
@@ -32,13 +32,7 @@ def daily_messages():
             flash("Invalid date format.", "error")
             return redirect(url_for("admin.daily_messages"))
 
-        # Sanitise HTML from Quill — allow basic formatting tags only
-        allowed_tags = list(bleach.sanitizer.ALLOWED_TAGS) + [
-            'p', 'br', 'h1', 'h2', 'h3', 'ul', 'ol', 'li', 'strong', 'em',
-            'u', 's', 'blockquote', 'pre', 'code', 'a', 'span',
-        ]
-        allowed_attrs = {'a': ['href', 'target', 'rel'], 'span': ['class'], '*': ['class']}
-        clean_content = bleach.clean(content, tags=allowed_tags, attributes=allowed_attrs)
+        clean_content = sanitize_rich_text(content)
 
         msg = DailyMessage.query.filter_by(date=msg_date).first()
         now = datetime.now(timezone.utc)

@@ -8,6 +8,7 @@ from app.utils.decorators import admin_required
 from app.models import User, DogOwner, Broadcast
 from app import db
 from app.utils.notifications import create_notification
+from app.utils.sanitize import sanitize_rich_text, clean_rich_text_or_none, rich_text_to_plain
 
 
 # ── Newsletter ────────────────────────────────────────────────────────────────
@@ -27,7 +28,7 @@ def newsletter():
 
     if request.method == "POST":
         subject = request.form.get("subject", "").strip()
-        html_body = request.form.get("html_body", "").strip()
+        html_body = clean_rich_text_or_none(request.form.get("html_body", ""))
 
         if not subject or not html_body:
             flash("Subject and body are required.", "error")
@@ -89,7 +90,7 @@ def newsletter_test():
     from flask import current_app
 
     subject = request.form.get("subject", "").strip()
-    html_body = request.form.get("html_body", "").strip()
+    html_body = clean_rich_text_or_none(request.form.get("html_body", ""))
 
     if not subject or not html_body:
         return jsonify(
@@ -139,7 +140,7 @@ def broadcasts():
         date_str = request.form.get("scope_date", "").strip()
         scope_slot = request.form.get("scope_slot", "").strip()
         subject = request.form.get("subject", "").strip()
-        body = request.form.get("body", "").strip()
+        body = clean_rich_text_or_none(request.form.get("body", ""))
         channel_bell = request.form.get("channel_bell") == "on"
         channel_email = request.form.get("channel_email") == "on"
 
@@ -180,7 +181,7 @@ def broadcasts():
                     "scope_date": date_str,
                     "scope_slot": scope_slot,
                     "subject": subject,
-                    "body": body,
+                    "body": body or "",
                     "channel_bell": channel_bell,
                     "channel_email": channel_email,
                 },
@@ -189,6 +190,8 @@ def broadcasts():
 
         # Merge-tag substitution — {{firstname}} and {{dog_name}}. There is no
         # auto-greeting; the admin inserts the tags they want via the pills.
+        # body is sanitized HTML; merge tags are literal text within it, so
+        # substitution is safe post-sanitization.
         def _personalise(text, user, dogs):
             dog_name = dogs[0].name if dogs else "your dog"
             return (text
@@ -204,7 +207,9 @@ def broadcasts():
                     recipient_id=user.id,
                     notification_type='system',
                     title=title,
-                    body=_personalise(body, user, dogs),
+                    # Plain-text summary — the bell dropdown can't render markup,
+                    # so it gets a tags-stripped version; email/DB keep the HTML.
+                    body=rich_text_to_plain(_personalise(body, user, dogs)),
                     link=None,  # falls through to /notifications in the bell template
                     sender_id=sender_id,
                 )
@@ -305,7 +310,7 @@ def broadcasts_test():
     from app.utils.email import send_broadcast_batch
 
     subject = request.form.get("subject", "").strip()
-    body = request.form.get("body", "").strip()
+    body = clean_rich_text_or_none(request.form.get("body", ""))
 
     if not subject or not body:
         return jsonify(
