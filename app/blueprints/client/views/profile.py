@@ -384,7 +384,7 @@ def upload_pickup_photo(dog_id):
 @client_bp.route("/profile/update-pickup", methods=["POST"])
 @login_required
 def update_pickup():
-    """AJAX: save pickup instructions (per dog) and newsletter preference."""
+    """AJAX: save pickup instructions (per dog)."""
     # has_client_access also lets dual-role walkers (role='walker' with a
     # Client record) through. A bare role == 'client' check rejects them
     # even though they own dogs and use the client view.
@@ -410,12 +410,28 @@ def update_pickup():
                     request.form.get('pickup_instructions', '')
                 )
 
-        current_user.email_marketing = request.form.get('notify_email') == 'true'
         db.session.commit()
         return jsonify(success=True)
     except Exception as e:
         db.session.rollback()
         logging.exception(f"Error updating pickup notes for {current_user.email}: {e}")
+        return jsonify(success=False, error="Server error"), 500
+
+
+@client_bp.route("/profile/update-notifications", methods=["POST"])
+@login_required
+def update_notifications():
+    """AJAX: save newsletter subscription preference (auto-saved on toggle)."""
+    if not has_client_access(current_user):
+        return jsonify(success=False, error="Forbidden"), 403
+
+    try:
+        current_user.email_marketing = request.form.get('notify_email') == 'true'
+        db.session.commit()
+        return jsonify(success=True)
+    except Exception as e:
+        db.session.rollback()
+        logging.exception(f"Error updating newsletter preference for {current_user.email}: {e}")
         return jsonify(success=False, error="Server error"), 500
 
 
