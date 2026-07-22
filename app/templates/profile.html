@@ -435,10 +435,10 @@
                 </div>
             </div>
 
-            {# ─── NOTIFICATIONS CARD ─── #}
+            {# ─── NEWSLETTERS CARD ─── #}
             <div class="card profile-card">
                 <div class="card-header">
-                    <i class="bi bi-bell-fill me-2" style="color:#E02FAC;"></i>Notifications
+                    <i class="bi bi-bell-fill me-2" style="color:#E02FAC;"></i>Newsletters
                 </div>
                 <div class="card-body p-4">
 
@@ -446,9 +446,13 @@
                         <div>
                             <div class="fw-semibold small"><i class="bi bi-envelope me-1 text-muted"></i> Email newsletter &amp; updates</div>
                             <div class="text-muted" style="font-size:0.75rem;">Toggle on to get the monthly DogBoxx newsletter to {{ current_user.email }}</div>
+                            <span id="notify-email-feedback" class="text-success small" style="display:none; font-size:0.75rem;">
+                                <i class="bi bi-check-circle-fill me-1"></i>Saved
+                            </span>
+                            <span id="notify-email-error" class="text-danger small" style="display:none; font-size:0.75rem;"></span>
                         </div>
                         <div class="form-check form-switch mb-0">
-                            {{ form.notify_email(class="form-check-input", role="switch") }}
+                            {{ form.notify_email(class="form-check-input", role="switch", **{"data-url": url_for('client.update_notifications')}) }}
                         </div>
                     </div>
 
@@ -637,10 +641,6 @@
             var secField = document.querySelector('textarea[name="pickup_instructions"]');
             if (secField) body.append('pickup_instructions', secField.value);
 
-            // Newsletter toggle
-            var toggle = document.querySelector('input[name="notify_email"]');
-            body.append('notify_email', toggle && toggle.checked ? 'true' : 'false');
-
             fetch(pickupBtn.dataset.url, {
                 method:  'POST',
                 headers: { 'X-CSRFToken': csrfToken },
@@ -661,6 +661,45 @@
                 pickupError.style.display = 'inline';
             })
             .finally(function () { pickupBtn.disabled = false; });
+        });
+    }
+
+    // ── Newsletter toggle auto-save ─────────────────────────────────────────────
+    var notifyToggle   = document.querySelector('input[name="notify_email"]');
+    var notifyFeedback = document.getElementById('notify-email-feedback');
+    var notifyError    = document.getElementById('notify-email-error');
+
+    if (notifyToggle) {
+        notifyToggle.addEventListener('change', function () {
+            notifyToggle.disabled = true;
+            notifyFeedback.style.display = 'none';
+            notifyError.style.display    = 'none';
+
+            var body = new FormData();
+            body.append('notify_email', notifyToggle.checked ? 'true' : 'false');
+
+            fetch(notifyToggle.dataset.url, {
+                method:  'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+                body:    body,
+            })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    notifyFeedback.style.display = 'inline';
+                    setTimeout(function () { notifyFeedback.style.display = 'none'; }, 3000);
+                } else {
+                    notifyToggle.checked = !notifyToggle.checked;
+                    notifyError.textContent = data.error || 'Could not save';
+                    notifyError.style.display = 'inline';
+                }
+            })
+            .catch(function () {
+                notifyToggle.checked = !notifyToggle.checked;
+                notifyError.textContent = 'Network error — please try again';
+                notifyError.style.display = 'inline';
+            })
+            .finally(function () { notifyToggle.disabled = false; });
         });
     }
 
