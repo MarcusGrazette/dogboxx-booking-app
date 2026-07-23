@@ -18,7 +18,7 @@ blinker==1.9.0
 cachelib==0.13.0
 certifi==2025.7.14
 charset-normalizer==3.4.2
-click==8.2.1
+click==8.3.3
 cryptography==48.0.1
 dnspython==2.7.0
 email_validator==2.2.0
@@ -35,7 +35,7 @@ packaging==25.0
 bleach==6.4.0
 tinycss2==1.5.1
 boto3==1.37.28
-pillow==12.2.0
+pillow==12.3.0
 psycogreen==1.0.2
 psycopg2-binary==2.9.11
 redis>=3.0
