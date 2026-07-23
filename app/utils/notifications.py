@@ -118,7 +118,10 @@ def create_notification(recipient_id, notification_type, title,
             'title':         title,
             'body':          body or '',
             'link':          link or '/',
-            'icon':          icon,
+            # `icon` here is a Bootstrap Icons CSS class (e.g. 'bi-x-circle-fill'),
+            # meant for the bell/SSE UI, not a URL — send_web_push() falls back to
+            # a real image when this is None. Don't reuse the bell's icon value.
+            'icon':          None,
             'unread_count':  unread_count,
             'subscriptions': [
                 {'id': s.id, 'endpoint': s.endpoint, 'p256dh': s.p256dh, 'auth': s.auth}
