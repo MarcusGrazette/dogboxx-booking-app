@@ -59,6 +59,7 @@ def weekly_overview(date_str=None):
     roster_by_day = [
         {
             'label': WEEKDAY_LABELS[i],
+            'date': week_start + timedelta(days=i),
             'parts': day_walker_names(week_by_day[week_start + timedelta(days=i)]),
         }
         for i in range(WEEKDAYS)

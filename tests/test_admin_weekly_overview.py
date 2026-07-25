@@ -130,6 +130,7 @@ class TestRosterByDayCard:
         html = resp.data.decode()
 
         assert "Who's working, by day" in html
+        assert f'Mon {week_start.strftime("%-d %b")}' in html  # e.g. "Mon 27 Jul"
         assert 'AM</strong> Sarah' in html
         assert 'PM</strong> Priya' in html
 

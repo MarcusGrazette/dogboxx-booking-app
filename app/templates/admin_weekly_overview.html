@@ -30,7 +30,7 @@
     <ul class="list-unstyled small mb-0">
         {% for day in roster_by_day %}
         <li class="d-flex py-2 px-3{% if not loop.last %} border-bottom{% endif %}">
-            <span class="fw-semibold" style="width:3.5rem;flex-shrink:0;">{{ day.label }}</span>
+            <span class="fw-semibold" style="width:6rem;flex-shrink:0;">{{ day.label }} {{ day.date.strftime('%-d %b') }}</span>
             <span class="text-muted">
                 {% if not day.parts %}
                 No walkers scheduled
