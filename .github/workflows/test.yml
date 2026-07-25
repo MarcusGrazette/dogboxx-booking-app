@@ -81,12 +81,11 @@ jobs:
       - name: Install production dependencies
         run: pip install -r requirements.txt
 
-      - name: Audit dependencies for known CVEs (non-blocking)
-        # Informational for now: continue-on-error keeps a finding from failing the
-        # workflow while the current backlog is triaged. Remove it (and mark this job a
-        # required check) once the flagged CVEs are resolved. Installs prod requirements
-        # and audits the installed env, so the full prod transitive tree is covered.
-        continue-on-error: true
+      - name: Audit dependencies for known CVEs
+        # Job shows red on a finding — visible signal, not a merge gate: neither `main`
+        # nor `develop` has branch protection configured, so nothing enforces this.
+        # Installs prod requirements and audits the installed env, so the full prod
+        # transitive tree is covered.
         run: |
           pip install pip-audit
           pip-audit --progress-spinner=off
