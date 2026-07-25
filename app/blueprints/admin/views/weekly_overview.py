@@ -1,7 +1,8 @@
 """
-Admin weekly overview — a manual check-in tool for the owner: which walkers
-are scheduled this week, what dogs they have each day, and a per-walker
-Copy button for pasting a plain-text summary into email/WhatsApp.
+Admin weekly overview — a manual check-in tool for the owner: a top-of-page
+card showing which walkers are on AM/PM each day, then a per-walker list
+with a day-by-day breakdown and a Copy button for pasting a plain-text
+summary into email/WhatsApp.
 
 Data source is identical to the walker-facing weekly overview (same
 app.utils.weekly_schedule helpers) — "scheduled to work" means actually has
@@ -17,9 +18,11 @@ from app.utils.decorators import admin_required
 from app.utils.weekly_schedule import (
     get_week_start,
     fetch_week_bookings,
+    build_week_by_day,
     build_week_by_walker,
     format_walker_week_text,
     day_slot_parts,
+    day_walker_names,
     WEEKDAYS,
     WEEKDAY_LABELS,
 )
@@ -49,6 +52,18 @@ def weekly_overview(date_str=None):
 
     bookings = fetch_week_bookings(week_start)
 
+    # Top-of-page "who's working, by day" summary — same underlying grouping
+    # the walker weekly view uses, just rendered as AM/PM walker names
+    # instead of per-slot walker cards.
+    week_by_day = build_week_by_day(bookings, week_start)
+    roster_by_day = [
+        {
+            'label': WEEKDAY_LABELS[i],
+            'parts': day_walker_names(week_by_day[week_start + timedelta(days=i)]),
+        }
+        for i in range(WEEKDAYS)
+    ]
+
     walker_weeks = []
     for entry in build_week_by_walker(bookings):
         walker = entry['walker']
@@ -76,6 +91,7 @@ def weekly_overview(date_str=None):
         "admin_weekly_overview.html",
         week_start=week_start,
         week_end=week_end,
+        roster_by_day=roster_by_day,
         walker_weeks=walker_weeks,
         prev_week=(week_start - timedelta(days=7)).strftime('%Y-%m-%d'),
         next_week=(week_start + timedelta(days=7)).strftime('%Y-%m-%d'),

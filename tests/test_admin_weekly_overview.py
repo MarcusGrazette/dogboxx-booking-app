@@ -104,3 +104,92 @@ class TestWeeklyOverviewContent:
         next_week = (week_start + datetime.timedelta(days=7)).strftime('%Y-%m-%d')
         assert f'/admin/weekly-overview/{prev_week}' in html
         assert f'/admin/weekly-overview/{next_week}' in html
+
+
+class TestRosterByDayCard:
+    """The top-of-page "Who's working, by day" card — AM/PM walker names
+    per weekday, independent of the per-walker list below it."""
+
+    def test_card_lists_am_and_pm_walkers_per_day(
+        self, app, logged_in_admin, dog, service_type, client_user
+    ):
+        sarah = make_user(firstname='Sarah', lastname='S', role='walker',
+                           email='sarah_roster@test.dogboxx.org')
+        sarah_w = Walker(user_id=sarah.id)
+        priya = make_user(firstname='Priya', lastname='P', role='walker',
+                           email='priya_roster@test.dogboxx.org')
+        priya_w = Walker(user_id=priya.id)
+        db.session.add_all([sarah_w, priya_w])
+        db.session.commit()
+
+        week_start = get_week_start(datetime.date.today())
+        _confirm_booking(client_user, dog, sarah_w, service_type, week_start, 'Morning')
+        _confirm_booking(client_user, dog, priya_w, service_type, week_start, 'Afternoon')
+
+        resp = logged_in_admin.get('/admin/weekly-overview')
+        html = resp.data.decode()
+
+        assert "Who's working, by day" in html
+        assert 'AM</strong> Sarah' in html
+        assert 'PM</strong> Priya' in html
+
+    def test_card_shows_no_walkers_scheduled_for_empty_week(self, logged_in_admin):
+        resp = logged_in_admin.get('/admin/weekly-overview')
+        html = resp.data.decode()
+        # 5 empty day rows in the by-day card + the page's own "no walkers
+        # scheduled this week" empty state below it.
+        assert html.count('No walkers scheduled') == 6
+
+    def test_card_dedupes_walker_with_walk_and_dropin_in_same_slot(
+        self, app, logged_in_admin, dog, service_type, client_user
+    ):
+        from app.models import Dog, DogOwner, ServiceType
+        dropin = ServiceType(name='Drop In', slug=ServiceType.DROP_IN,
+                              capacity_model='walker_assigned', slot_type='morning_afternoon',
+                              requires_walker=True, default_max_capacity=6, active=True)
+        db.session.add(dropin)
+        db.session.commit()
+
+        sarah = make_user(firstname='Sarah', lastname='S', role='walker',
+                           email='sarah_dedupe@test.dogboxx.org')
+        sarah_w = Walker(user_id=sarah.id)
+        db.session.add(sarah_w)
+        db.session.commit()
+
+        second_dog = Dog(name='Rex', breed='Mixed')
+        db.session.add(second_dog)
+        db.session.flush()
+        db.session.add(DogOwner(dog_id=second_dog.id, user_id=client_user.id, role='primary'))
+        db.session.commit()
+
+        week_start = get_week_start(datetime.date.today())
+        _confirm_booking(client_user, dog, sarah_w, service_type, week_start, 'Morning')
+        _confirm_booking(client_user, second_dog, sarah_w, dropin, week_start, 'Morning')
+
+        resp = logged_in_admin.get('/admin/weekly-overview')
+        html = resp.data.decode()
+        # Sarah has two groups that day (a walk + a drop-in) but the by-day
+        # card must list her once per slot, not "Sarah, Sarah".
+        assert 'AM</strong> Sarah' in html
+        assert 'Sarah, Sarah' not in html
+
+    def test_card_reflects_prev_next_week_navigation(
+        self, app, logged_in_admin, dog, service_type, client_user
+    ):
+        walker_u = make_user(firstname='Priya', lastname='P', role='walker',
+                              email='priya_nav@test.dogboxx.org')
+        walker = Walker(user_id=walker_u.id)
+        db.session.add(walker)
+        db.session.commit()
+
+        week_start = get_week_start(datetime.date.today())
+        next_week_start = week_start + datetime.timedelta(days=7)
+        _confirm_booking(client_user, dog, walker, service_type, next_week_start, 'Morning')
+
+        # Not on the current week's card...
+        resp = logged_in_admin.get('/admin/weekly-overview')
+        assert 'Priya' not in resp.data.decode()
+
+        # ...but present once navigated to next week.
+        resp = logged_in_admin.get(f'/admin/weekly-overview/{next_week_start.strftime("%Y-%m-%d")}')
+        assert 'Priya' in resp.data.decode()

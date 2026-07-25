@@ -114,6 +114,24 @@ def build_week_by_walker(bookings):
     )
 
 
+def day_walker_names(day_data):
+    """[(abbrev, 'Aaron, Sarah'), ...] for one day's {slot: {'walker_groups':
+    [...]}} data (see group_bookings_by_slot) — Morning then Afternoon,
+    skipping slots nobody's working. Names are deduped and sorted (a walker
+    doing both a walk and a drop-in in the same slot appears once). Feeds
+    the admin roster's "who's working, by day" summary card."""
+    parts = []
+    for slot, abbrev in (('Morning', 'AM'), ('Afternoon', 'PM')):
+        names = sorted({
+            g['walker'].user.firstname
+            for g in day_data[slot]['walker_groups']
+            if g['walker'] and g['walker'].user
+        })
+        if names:
+            parts.append((abbrev, ', '.join(names)))
+    return parts
+
+
 def day_slot_parts(day_bookings):
     """[(abbrev, 'Bella, Max'), ...] for one day's bookings, Morning then
     Afternoon, skipping slots with nothing booked. Shared building block for
