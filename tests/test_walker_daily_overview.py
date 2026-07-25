@@ -46,6 +46,6 @@ class TestDailyOverviewStillWorks:
         resp = logged_in_walker.get('/walker/pickups?view=overview')
         html = resp.data.decode()
         assert 'My pickups' in html
-        assert 'Daily overview' in html
-        assert 'Weekly overview' in html
+        assert 'Daily view' in html
+        assert 'Weekly view' in html
         assert '/walker/weekly' in html

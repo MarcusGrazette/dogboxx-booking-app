@@ -46,7 +46,6 @@ def weekly_overview(date_str=None):
 
     week_start = get_week_start(anchor_date)
     week_end = week_start + timedelta(days=WEEKDAYS - 1)
-    at_current_week = (week_start == get_week_start(today))
 
     bookings = fetch_week_bookings(week_start)
 
@@ -77,7 +76,6 @@ def weekly_overview(date_str=None):
         "admin_weekly_overview.html",
         week_start=week_start,
         week_end=week_end,
-        at_current_week=at_current_week,
         walker_weeks=walker_weeks,
         prev_week=(week_start - timedelta(days=7)).strftime('%Y-%m-%d'),
         next_week=(week_start + timedelta(days=7)).strftime('%Y-%m-%d'),

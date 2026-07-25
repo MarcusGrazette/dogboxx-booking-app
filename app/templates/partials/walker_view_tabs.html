@@ -21,13 +21,13 @@
        class="walker-view-tab{% if active == 'overview' %} active{% endif %}"
        role="tab"
        aria-selected="{{ 'true' if active == 'overview' else 'false' }}">
-        <i class="bi bi-people me-1"></i>Daily overview
+        <i class="bi bi-people me-1"></i>Daily view
     </a>
     <a href="{{ url_for('walker.weekly_overview', date_str=anchor_date.strftime('%Y-%m-%d')) }}"
        class="walker-view-tab{% if active == 'weekly' %} active{% endif %}"
        role="tab"
        aria-selected="{{ 'true' if active == 'weekly' else 'false' }}">
-        <i class="bi bi-calendar-week me-1"></i>Weekly overview
+        <i class="bi bi-calendar-week me-1"></i>Weekly view
     </a>
 </div>
 {% endmacro %}

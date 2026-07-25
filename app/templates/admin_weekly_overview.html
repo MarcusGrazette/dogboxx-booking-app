@@ -14,9 +14,6 @@
     </a>
     <h5 class="mb-0 fw-bold">
         {{ week_start.strftime('%-d %b') }} – {{ week_end.strftime('%-d %b') }}
-        {% if at_current_week %}
-        <span class="badge rounded-pill ms-1" style="background:#E02FAC; font-size:0.65rem;">This week</span>
-        {% endif %}
     </h5>
     <a href="{{ url_for('admin.weekly_overview', date_str=next_week) }}"
        class="btn btn-outline-secondary btn-sm" aria-label="Next week">
