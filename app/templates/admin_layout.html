@@ -247,6 +247,13 @@
                             <span>Walkers</span>
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('admin.weekly_overview') }}"
+                           class="nav-link {% if request.endpoint == 'admin.weekly_overview' %}active{% endif %}">
+                            <i class="bi bi-calendar-week me-2"></i>
+                            <span>Weekly Overview</span>
+                        </a>
+                    </li>
 
                     {# ── Comms ─────────────────────────────────────────── #}
                     <li class="nav-header">Comms</li>
@@ -410,6 +417,21 @@ function _setPendingBadge(id, count) {
     if (count > 0) { el.textContent = count; el.style.display = ''; }
     else           { el.style.display = 'none'; }
 }
+</script>
+
+<script nonce="{{ csp_nonce }}">
+// Copy-to-clipboard for any admin page — event-delegated on document so a
+// new page just needs a button with class="copy-week-btn" and
+// data-copy-text="..." (see admin_weekly_overview.html) to get this for free.
+document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.copy-week-btn');
+    if (!btn) return;
+    navigator.clipboard.writeText(btn.dataset.copyText).then(function () {
+        showToast('Copied to clipboard', 'success');
+    }).catch(function () {
+        showToast('Could not copy — try again', 'error');
+    });
+});
 </script>
 
 {% block scripts %}{% endblock %}
