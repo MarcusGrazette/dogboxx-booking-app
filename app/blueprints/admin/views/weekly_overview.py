@@ -21,6 +21,7 @@ from app.utils.weekly_schedule import (
     build_week_by_day,
     build_week_by_walker,
     format_walker_week_text,
+    format_roster_week_text,
     day_slot_parts,
     day_walker_names,
     WEEKDAYS,
@@ -64,6 +65,7 @@ def weekly_overview(date_str=None):
         }
         for i in range(WEEKDAYS)
     ]
+    roster_copy_text = format_roster_week_text(week_by_day, week_start)
 
     walker_weeks = []
     for entry in build_week_by_walker(bookings):
@@ -93,6 +95,7 @@ def weekly_overview(date_str=None):
         week_start=week_start,
         week_end=week_end,
         roster_by_day=roster_by_day,
+        roster_copy_text=roster_copy_text,
         walker_weeks=walker_weeks,
         prev_week=(week_start - timedelta(days=7)).strftime('%Y-%m-%d'),
         next_week=(week_start + timedelta(days=7)).strftime('%Y-%m-%d'),

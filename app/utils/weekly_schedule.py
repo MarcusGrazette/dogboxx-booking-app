@@ -132,6 +132,35 @@ def day_walker_names(day_data):
     return parts
 
 
+def format_roster_week_text(week_by_day, week_start):
+    """Canonical clipboard text for the whole team's week — the Copy button
+    on the admin roster's top "who's working, by day" card, e.g.:
+
+        Team schedule — week of 27 Jul
+        Mon: AM Sarah, Priya · PM Priya
+        Tue: AM Sarah
+        Wed: —
+        Thu: —
+        Fri: —
+
+    `week_by_day` is the {date: {slot: {...}}} shape from build_week_by_day.
+    Mirrors format_walker_week_text's per-day formatting (day_walker_names
+    stands in for that function's dog-name grouping) so the two texts read
+    the same way.
+    """
+    lines = [f"Team schedule — week of {week_start.strftime('%-d %b')}"]
+
+    for i in range(WEEKDAYS):
+        d = week_start + timedelta(days=i)
+        parts = day_walker_names(week_by_day[d])
+        if not parts:
+            lines.append(f"{WEEKDAY_LABELS[i]}: —")
+        else:
+            lines.append(f"{WEEKDAY_LABELS[i]}: " + " · ".join(f"{abbrev} {names}" for abbrev, names in parts))
+
+    return "\n".join(lines)
+
+
 def day_slot_parts(day_bookings):
     """[(abbrev, 'Bella, Max'), ...] for one day's bookings, Morning then
     Afternoon, skipping slots with nothing booked. Shared building block for

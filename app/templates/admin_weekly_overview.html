@@ -24,8 +24,13 @@
 {# Top-of-page "who's working, by day" card — AM/PM walker names per day,
    at a glance, before the per-walker breakdown + copy buttons below. #}
 <div class="card mb-4">
-    <div class="card-header fw-semibold">
-        <i class="bi bi-people me-2" style="color:#E02FAC;"></i>Who's working, by day
+    <div class="card-header fw-semibold d-flex align-items-center justify-content-between gap-2">
+        <span><i class="bi bi-people me-2" style="color:#E02FAC;"></i>Who's working, by day</span>
+        <button type="button"
+                class="btn btn-sm btn-outline-primary copy-week-btn flex-shrink-0"
+                data-copy-text="{{ roster_copy_text }}">
+            <i class="bi bi-clipboard me-1"></i>Copy
+        </button>
     </div>
     <ul class="list-unstyled small mb-0">
         {% for day in roster_by_day %}

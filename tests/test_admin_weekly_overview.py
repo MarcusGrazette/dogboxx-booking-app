@@ -134,6 +134,38 @@ class TestRosterByDayCard:
         assert 'AM</strong> Sarah' in html
         assert 'PM</strong> Priya' in html
 
+    def test_card_has_its_own_copy_button_with_team_wide_text(
+        self, app, logged_in_admin, dog, service_type, client_user
+    ):
+        sarah = make_user(firstname='Sarah', lastname='S', role='walker',
+                           email='sarah_roster_copy@test.dogboxx.org')
+        sarah_w = Walker(user_id=sarah.id)
+        priya = make_user(firstname='Priya', lastname='P', role='walker',
+                           email='priya_roster_copy@test.dogboxx.org')
+        priya_w = Walker(user_id=priya.id)
+        db.session.add_all([sarah_w, priya_w])
+        db.session.commit()
+
+        week_start = get_week_start(datetime.date.today())
+        _confirm_booking(client_user, dog, sarah_w, service_type, week_start, 'Morning')
+        _confirm_booking(client_user, dog, priya_w, service_type, week_start, 'Afternoon')
+
+        resp = logged_in_admin.get('/admin/weekly-overview')
+        html = resp.data.decode()
+
+        # 3 buttons (this card's + one per walker) + 2 fixed mentions in the
+        # shared clipboard JS (admin_layout.html's comment + CSS selector).
+        assert html.count('copy-week-btn') == 5
+        assert f'Team schedule — week of {week_start.strftime("%-d %b")}' in html
+        assert 'Mon: AM Sarah · PM Priya' in html  # inside data-copy-text (raw, not HTML-entity)
+
+    def test_card_copy_text_is_all_dashes_for_empty_week(self, logged_in_admin):
+        resp = logged_in_admin.get('/admin/weekly-overview')
+        html = resp.data.decode()
+        # Just the by-day card's button (no walkers) + the 2 fixed JS mentions.
+        assert html.count('copy-week-btn') == 3
+        assert 'Mon: —\nTue: —\nWed: —\nThu: —\nFri: —' in html
+
     def test_card_shows_no_walkers_scheduled_for_empty_week(self, logged_in_admin):
         resp = logged_in_admin.get('/admin/weekly-overview')
         html = resp.data.decode()
