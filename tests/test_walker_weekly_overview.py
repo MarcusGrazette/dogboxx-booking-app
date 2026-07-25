@@ -108,3 +108,58 @@ class TestWeeklyOverviewContent:
         next_week = (week_start + datetime.timedelta(days=7)).strftime('%Y-%m-%d')
         assert f'/walker/weekly/{prev_week}' in html
         assert f'/walker/weekly/{next_week}' in html
+
+    def test_day_cards_are_closed_by_default(
+        self, app, logged_in_walker, walker_user, dog, service_type, client_user
+    ):
+        """Every day card — including today's — starts collapsed; the user
+        opens the ones they care about rather than the page dumping the
+        whole week open on load."""
+        walker = Walker.query.filter_by(user_id=walker_user.id).first()
+        week_start = get_week_start(datetime.date.today())
+        _confirm_booking(client_user, dog, walker, service_type, week_start, 'Morning')
+
+        resp = logged_in_walker.get('/walker/weekly')
+        html = resp.data.decode()
+        assert 'collapse show' not in html
+        for i in range(len(WEEKDAY_LABELS)):
+            assert f'id="collapse-day-{i}" class="collapse"' in html
+
+    def test_working_days_are_highlighted_non_working_days_are_not(
+        self, app, logged_in_walker, walker_user, dog, service_type, client_user
+    ):
+        walker = Walker.query.filter_by(user_id=walker_user.id).first()
+        week_start = get_week_start(datetime.date.today())
+        # Only Monday has a booking for this walker.
+        _confirm_booking(client_user, dog, walker, service_type, week_start, 'Morning')
+
+        resp = logged_in_walker.get('/walker/weekly')
+        html = resp.data.decode()
+        assert html.count('card-accent-pink') == 1
+        assert html.count('bi-calendar-check-fill') == 1
+
+    def test_no_working_days_means_no_highlight(self, logged_in_walker):
+        resp = logged_in_walker.get('/walker/weekly')
+        html = resp.data.decode()
+        assert 'card-accent-pink' not in html
+        assert 'bi-calendar-check-fill' not in html
+
+    def test_highlight_reflects_the_viewing_walker_not_other_walkers(
+        self, app, logged_in_walker, walker_user, dog, service_type, client_user
+    ):
+        """A day another walker works but the viewing walker doesn't must not
+        be highlighted for the viewing walker."""
+        from tests.conftest import make_user
+        other_user = make_user(firstname='Other', lastname='W', role='walker',
+                                email='other_wk_highlight@test.dogboxx.org')
+        other_walker = Walker(user_id=other_user.id)
+        db.session.add(other_walker)
+        db.session.commit()
+
+        week_start = get_week_start(datetime.date.today())
+        tuesday = week_start + datetime.timedelta(days=1)
+        _confirm_booking(client_user, dog, other_walker, service_type, tuesday, 'Afternoon')
+
+        resp = logged_in_walker.get('/walker/weekly')
+        html = resp.data.decode()
+        assert 'card-accent-pink' not in html

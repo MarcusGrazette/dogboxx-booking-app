@@ -41,25 +41,29 @@
     </div>
     {% else %}
 
-    {# One collapsible card per weekday (Mon-Fri only — DogBoxx doesn't
-       operate weekends). Today's card (or Monday's, on a non-current week)
-       is expanded by default so there's always something visible on load. #}
+    {# One collapsed-by-default card per weekday (Mon-Fri only — DogBoxx
+       doesn't operate weekends). A pink accent + filled calendar icon marks
+       the days the logged-in walker is actually scheduled to work. #}
     {% for day in week_days %}
-    <div class="card mb-2">
+    <div class="card mb-2{% if day.is_working %} card-accent-pink{% endif %}">
         <div class="pickup-slot-header"
              role="button"
              data-bs-toggle="collapse"
              data-bs-target="#collapse-day-{{ loop.index0 }}"
-             aria-expanded="{{ 'true' if day.expanded else 'false' }}"
+             aria-expanded="false"
              aria-controls="collapse-day-{{ loop.index0 }}"
              style="cursor:pointer;user-select:none;">
+            {% if day.is_working %}
+            <i class="bi bi-calendar-check-fill" style="color:#E02FAC;" aria-label="You're working"></i>
+            {% else %}
             <i class="bi bi-calendar3"></i>
+            {% endif %}
             {{ day.label }}, {{ day.date.strftime('%-d %b') }}
             {% if day.is_today %}<span class="overview-you-pill ms-1">today</span>{% endif %}
             <span class="slot-count">{{ day.dog_count }} {{ 'dog' if day.dog_count == 1 else 'dogs' }}</span>
             <i class="bi bi-chevron-down ms-2 pickup-chevron" style="font-size:0.8rem;transition:transform 0.2s;"></i>
         </div>
-        <div id="collapse-day-{{ loop.index0 }}" class="collapse{% if day.expanded %} show{% endif %}">
+        <div id="collapse-day-{{ loop.index0 }}" class="collapse">
             <div class="card-body">
                 {% if day.dog_count == 0 %}
                 <p class="text-muted small mb-0">Nothing scheduled.</p>

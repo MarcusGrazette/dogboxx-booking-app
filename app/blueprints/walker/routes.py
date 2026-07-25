@@ -872,21 +872,26 @@ def weekly_overview(date_str=None):
     week = build_week_by_day(bookings, week_start)
 
     # Build template-ready per-day rows so the template does no date math —
-    # just one collapsible section per weekday, today (or Monday, when
-    # viewing a different week) expanded by default.
+    # one collapsed-by-default section per weekday, flagged with is_working
+    # so the header can highlight days the viewing walker is actually on.
     week_days = []
     for i in range(WEEKDAYS):
         d = week_start + timedelta(days=i)
         day_data = week[d]
         dog_count = day_data['Morning']['dog_count'] + day_data['Afternoon']['dog_count']
         is_today = (d == today)
+        is_working = any(
+            group['walker'] and group['walker'].id == walker.id
+            for slot_data in day_data.values()
+            for group in slot_data['walker_groups']
+        )
         week_days.append({
             'date': d,
             'label': WEEKDAY_LABELS[i],
             'data': day_data,
             'dog_count': dog_count,
             'is_today': is_today,
-            'expanded': is_today if at_current_week else (i == 0),
+            'is_working': is_working,
         })
     has_pickups = any(day['dog_count'] for day in week_days)
 
