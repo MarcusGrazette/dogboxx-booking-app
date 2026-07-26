@@ -1,5 +1,6 @@
 {% extends "layout.html" %}
 {% from "partials/calendar_component.html" import calendar_widget %}
+{% from "partials/walker_view_tabs.html" import view_tabs %}
 
 {% block title %}{% if view == 'overview' %}Daily Overview{% else %}Pickup List{% endif %}{% endblock %}
 
@@ -16,20 +17,7 @@
     </div>
 
     {# View switcher — full-width segmented control, sticky thumb-distance. #}
-    <div class="walker-view-switcher mb-3" role="tablist" aria-label="Walker view">
-        <a href="{{ url_for('walker.pickups', date=selected_date.strftime('%Y-%m-%d')) }}"
-           class="walker-view-tab{% if view != 'overview' %} active{% endif %}"
-           role="tab"
-           aria-selected="{{ 'true' if view != 'overview' else 'false' }}">
-            <i class="bi bi-list-check me-1"></i>My pickups
-        </a>
-        <a href="{{ url_for('walker.pickups', date=selected_date.strftime('%Y-%m-%d'), view='overview') }}"
-           class="walker-view-tab{% if view == 'overview' %} active{% endif %}"
-           role="tab"
-           aria-selected="{{ 'true' if view == 'overview' else 'false' }}">
-            <i class="bi bi-people me-1"></i>Daily overview
-        </a>
-    </div>
+    {{ view_tabs(view, selected_date) }}
 
     <!-- Date summary bar (shown when calendar is collapsed) -->
     <div id="date-summary" class="mb-3 d-none">

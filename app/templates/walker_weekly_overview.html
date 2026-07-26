@@ -1,0 +1,81 @@
+{% extends "layout.html" %}
+{% from "partials/walker_view_tabs.html" import view_tabs %}
+{% from "partials/_overview_macros.html" import slot_section %}
+
+{% block title %}Weekly Overview{% endblock %}
+
+{% block main %}
+<div class="container" style="max-width: 700px;">
+    <div class="page-header">
+        <h2><i class="bi bi-calendar-week me-2"></i>Weekly Overview</h2>
+    </div>
+
+    {# View switcher — same 3-tab control as the pickups page. Uses the
+       Monday of the current week as the anchor for the other two tabs. #}
+    {{ view_tabs('weekly', week_start) }}
+
+    {# Week navigation — plain prev/next like walker_monthly_summary.html's
+       month nav. Full page load, no calendar widget: a week view doesn't
+       need day-level picking, and this keeps the page to two tap targets. #}
+    <div class="d-flex align-items-center gap-3 mb-3">
+        <a href="{{ url_for('walker.weekly_overview', date_str=prev_week) }}"
+           class="btn btn-outline-secondary btn-sm" aria-label="Previous week">
+            <i class="bi bi-chevron-left"></i>
+        </a>
+        <h5 class="mb-0 fw-bold flex-grow-1 text-center">
+            {{ week_start.strftime('%-d %b') }} – {{ week_end.strftime('%-d %b') }}
+            {% if at_current_week %}<span class="overview-you-pill ms-1">this week</span>{% endif %}
+        </h5>
+        <a href="{{ url_for('walker.weekly_overview', date_str=next_week) }}"
+           class="btn btn-outline-secondary btn-sm" aria-label="Next week">
+            <i class="bi bi-chevron-right"></i>
+        </a>
+    </div>
+
+    {% if not has_pickups %}
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-emoji-smile display-4 text-muted"></i>
+            <p class="mt-3 text-muted fs-5">No walks or drop-ins scheduled this week.</p>
+        </div>
+    </div>
+    {% else %}
+
+    {# One collapsed-by-default card per weekday (Mon-Fri only — DogBoxx
+       doesn't operate weekends). A pink accent + filled calendar icon marks
+       the days the logged-in walker is actually scheduled to work. #}
+    {% for day in week_days %}
+    <div class="card mb-2{% if day.is_working %} card-accent-pink{% endif %}">
+        <div class="pickup-slot-header"
+             role="button"
+             data-bs-toggle="collapse"
+             data-bs-target="#collapse-day-{{ loop.index0 }}"
+             aria-expanded="false"
+             aria-controls="collapse-day-{{ loop.index0 }}"
+             style="cursor:pointer;user-select:none;">
+            {% if day.is_working %}
+            <i class="bi bi-calendar-check-fill" style="color:#E02FAC;" aria-label="You're working"></i>
+            {% else %}
+            <i class="bi bi-calendar3"></i>
+            {% endif %}
+            {{ day.label }}, {{ day.date.strftime('%-d %b') }}
+            {% if day.is_today %}<span class="overview-you-pill ms-1">today</span>{% endif %}
+            <span class="slot-count">{{ day.dog_count }} {{ 'dog' if day.dog_count == 1 else 'dogs' }}</span>
+            <i class="bi bi-chevron-down ms-2 pickup-chevron" style="font-size:0.8rem;transition:transform 0.2s;"></i>
+        </div>
+        <div id="collapse-day-{{ loop.index0 }}" class="collapse">
+            <div class="card-body">
+                {% if day.dog_count == 0 %}
+                <p class="text-muted small mb-0">Nothing scheduled.</p>
+                {% else %}
+                {{ slot_section('Morning',   'sunrise', day.data.Morning,   walker) }}
+                {{ slot_section('Afternoon', 'sunset',  day.data.Afternoon, walker) }}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    {% endif %}
+</div>
+{% endblock %}

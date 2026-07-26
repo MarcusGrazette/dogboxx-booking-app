@@ -18,6 +18,14 @@ from app.utils.decorators import walker_required
 from app.utils.notifications import create_notification, NotificationBatch
 from app.utils.booking_status import bulk_transition
 from app.utils.pricing import is_drop_in as _is_drop_in
+from app.utils.weekly_schedule import (
+    get_week_start,
+    fetch_week_bookings,
+    group_bookings_by_slot,
+    build_week_by_day,
+    WEEKDAYS,
+    WEEKDAY_LABELS,
+)
 import uuid
 
 
@@ -70,32 +78,7 @@ def _build_daily_overview(selected_date):
         .order_by(Booking.slot, Booking.pickup_order)
         .all()
     )
-
-    overview = {}
-    for slot in ('Morning', 'Afternoon'):
-        slot_bookings = [b for b in bookings if b.slot == slot]
-
-        # Group by (walker_id, is_drop_in) so a walker doing both shows two cards
-        groups = {}
-        for b in slot_bookings:
-            key = (b.walker_id, _is_drop_in(b))
-            groups.setdefault(key, {
-                'walker': b.walker,
-                'is_drop_in': _is_drop_in(b),
-                'bookings': [],
-            })['bookings'].append(b)
-
-        # Sort: group walks first, drop-ins after; within each, walker first name
-        walker_groups = sorted(
-            groups.values(),
-            key=lambda g: (g['is_drop_in'], (g['walker'].user.firstname or '').lower()),
-        )
-
-        overview[slot] = {
-            'walker_groups': walker_groups,
-            'dog_count': sum(len(g['bookings']) for g in walker_groups),
-        }
-    return overview
+    return group_bookings_by_slot(bookings)
 
 
 @walker_bp.route("/")
@@ -851,6 +834,79 @@ def pickups(date_str=None):
     ctx['double_booked_dog_ids'] = _double_booked_dog_ids(selected_date)
 
     return render_template("walker_pickups.html", **ctx)
+
+
+@walker_bp.route("/weekly")
+@walker_bp.route("/weekly/<date_str>")
+@login_required
+@walker_required
+def weekly_overview(date_str=None):
+    """Team-wide weekly overview — same underlying data as the daily overview
+    (view=overview on /pickups) but spanning a full week. DogBoxx only
+    operates Monday-Friday, so the week is always those 5 days regardless of
+    which day the anchor date lands on (a weekend anchor still resolves to
+    that week's Mon-Fri via get_week_start).
+    """
+    walker = Walker.query.filter_by(user_id=current_user.id).first()
+    if not walker:
+        flash("Walker profile not found. Please contact support.", "error")
+        return redirect(url_for('client.index'))
+
+    today = datetime.now(timezone.utc).date()
+
+    raw_date = date_str or request.args.get('date')
+    if raw_date:
+        try:
+            anchor_date = datetime.strptime(raw_date, '%Y-%m-%d').date()
+        except ValueError:
+            flash("Invalid date format.", "error")
+            return redirect(url_for('walker.weekly_overview'))
+    else:
+        anchor_date = today
+
+    week_start = get_week_start(anchor_date)
+    week_end = week_start + timedelta(days=WEEKDAYS - 1)
+    at_current_week = (week_start == get_week_start(today))
+
+    bookings = fetch_week_bookings(week_start)
+    week = build_week_by_day(bookings, week_start)
+
+    # Build template-ready per-day rows so the template does no date math —
+    # one collapsed-by-default section per weekday, flagged with is_working
+    # so the header can highlight days the viewing walker is actually on.
+    week_days = []
+    for i in range(WEEKDAYS):
+        d = week_start + timedelta(days=i)
+        day_data = week[d]
+        dog_count = day_data['Morning']['dog_count'] + day_data['Afternoon']['dog_count']
+        is_today = (d == today)
+        is_working = any(
+            group['walker'] and group['walker'].id == walker.id
+            for slot_data in day_data.values()
+            for group in slot_data['walker_groups']
+        )
+        week_days.append({
+            'date': d,
+            'label': WEEKDAY_LABELS[i],
+            'data': day_data,
+            'dog_count': dog_count,
+            'is_today': is_today,
+            'is_working': is_working,
+        })
+    has_pickups = any(day['dog_count'] for day in week_days)
+
+    return render_template(
+        "walker_weekly_overview.html",
+        walker=walker,
+        today=today,
+        week_start=week_start,
+        week_end=week_end,
+        week_days=week_days,
+        has_pickups=has_pickups,
+        prev_week=(week_start - timedelta(days=7)).strftime('%Y-%m-%d'),
+        next_week=(week_start + timedelta(days=7)).strftime('%Y-%m-%d'),
+        at_current_week=at_current_week,
+    )
 
 
 @walker_bp.route("/monthly-summary")

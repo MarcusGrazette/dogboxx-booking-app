@@ -1,0 +1,33 @@
+{# Shared 3-tab segmented control for the walker pickups/overview/weekly
+   pages — keeps "My pickups | Daily overview | Weekly overview" visually
+   identical everywhere it appears (walker_pickups.html renders the first
+   two, walker_weekly_overview.html renders the third).
+
+   active: 'pickups' | 'overview' | 'weekly'
+   anchor_date: a date used to build the other two tabs' links — the Monday
+   of the current week when called from the weekly view, or the currently
+   viewed day when called from the daily pages — so switching tabs lands you
+   in roughly the same place you were looking at.
+#}
+{% macro view_tabs(active, anchor_date) %}
+<div class="walker-view-switcher mb-3" role="tablist" aria-label="Walker view">
+    <a href="{{ url_for('walker.pickups', date=anchor_date.strftime('%Y-%m-%d')) }}"
+       class="walker-view-tab{% if active == 'pickups' %} active{% endif %}"
+       role="tab"
+       aria-selected="{{ 'true' if active == 'pickups' else 'false' }}">
+        <i class="bi bi-list-check me-1"></i>My pickups
+    </a>
+    <a href="{{ url_for('walker.pickups', date=anchor_date.strftime('%Y-%m-%d'), view='overview') }}"
+       class="walker-view-tab{% if active == 'overview' %} active{% endif %}"
+       role="tab"
+       aria-selected="{{ 'true' if active == 'overview' else 'false' }}">
+        <i class="bi bi-people me-1"></i>Daily view
+    </a>
+    <a href="{{ url_for('walker.weekly_overview', date_str=anchor_date.strftime('%Y-%m-%d')) }}"
+       class="walker-view-tab{% if active == 'weekly' %} active{% endif %}"
+       role="tab"
+       aria-selected="{{ 'true' if active == 'weekly' else 'false' }}">
+        <i class="bi bi-calendar-week me-1"></i>Weekly view
+    </a>
+</div>
+{% endmacro %}
