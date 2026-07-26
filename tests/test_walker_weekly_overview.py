@@ -135,8 +135,10 @@ class TestWeeklyOverviewContent:
 
         resp = logged_in_walker.get('/walker/weekly')
         html = resp.data.decode()
-        assert html.count('card-accent-pink') == 1
-        assert html.count('bi-calendar-check-fill') == 1
+        # One highlight in the top "who's working, by day" roster row, one in
+        # the day card below — both mark the same working Monday.
+        assert html.count('card-accent-pink') == 2
+        assert html.count('bi-calendar-check-fill') == 2
 
     def test_no_working_days_means_no_highlight(self, logged_in_walker):
         resp = logged_in_walker.get('/walker/weekly')

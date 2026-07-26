@@ -36,7 +36,7 @@ class TestDailyOverviewStillWorks:
         today = datetime.date.today()
         _confirm_booking(client_user, dog, walker, service_type, today, 'Morning')
 
-        resp = logged_in_walker.get('/walker/pickups?view=overview')
+        resp = logged_in_walker.get(f'/walker/pickups/{today.strftime("%Y-%m-%d")}?view=overview')
         html = resp.data.decode()
         assert walker_user.firstname in html
         assert dog.name in html

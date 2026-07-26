@@ -23,6 +23,7 @@ from app.utils.weekly_schedule import (
     fetch_week_bookings,
     group_bookings_by_slot,
     build_week_by_day,
+    day_walker_names,
     WEEKDAYS,
     WEEKDAY_LABELS,
 )
@@ -782,7 +783,12 @@ def pickups(date_str=None):
             flash("Invalid date format.", "error")
             return redirect(url_for('walker.pickups'))
     else:
-        selected_date = today
+        # DogBoxx is Mon-Fri only — landing here on a weekend with no
+        # explicit date should default to the coming Monday, not a closed day.
+        if today.weekday() >= 5:  # Saturday=5, Sunday=6
+            selected_date = today + timedelta(days=7 - today.weekday())
+        else:
+            selected_date = today
 
     view = request.args.get('view', 'pickups')
     if view not in ('pickups', 'overview'):
@@ -895,6 +901,20 @@ def weekly_overview(date_str=None):
         })
     has_pickups = any(day['dog_count'] for day in week_days)
 
+    # Top-of-page "who's working, by day" summary — same underlying grouping
+    # as the admin roster card, but flagged with is_working so the viewing
+    # walker's own days can be highlighted instead of showing every walker
+    # with equal weight.
+    roster_by_day = [
+        {
+            'label': day['label'],
+            'date': day['date'],
+            'parts': day_walker_names(day['data']),
+            'is_working': day['is_working'],
+        }
+        for day in week_days
+    ]
+
     return render_template(
         "walker_weekly_overview.html",
         walker=walker,
@@ -902,6 +922,7 @@ def weekly_overview(date_str=None):
         week_start=week_start,
         week_end=week_end,
         week_days=week_days,
+        roster_by_day=roster_by_day,
         has_pickups=has_pickups,
         prev_week=(week_start - timedelta(days=7)).strftime('%Y-%m-%d'),
         next_week=(week_start + timedelta(days=7)).strftime('%Y-%m-%d'),

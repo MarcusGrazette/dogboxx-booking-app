@@ -32,6 +32,36 @@
         </a>
     </div>
 
+    {# Top-of-page "who's working, by day" card — AM/PM walker names per day,
+       at a glance. Mirrors the admin roster's card (app/utils/weekly_schedule.py
+       :: day_walker_names); the pink accent + filled calendar icon flag the
+       viewing walker's own working days, same convention as the day cards
+       below, instead of listing every walker with equal weight. #}
+    <div class="card mb-3">
+        <div class="card-header fw-semibold">
+            <i class="bi bi-people me-2" style="color:#E02FAC;"></i>Who's working, by day
+        </div>
+        <ul class="list-unstyled small mb-0">
+            {% for day in roster_by_day %}
+            <li class="d-flex align-items-center py-2 px-3{% if not loop.last %} border-bottom{% endif %}{% if day.is_working %} card-accent-pink{% endif %}">
+                <span class="fw-semibold d-flex align-items-center" style="width:6.5rem;flex-shrink:0;">
+                    {% if day.is_working %}
+                    <i class="bi bi-calendar-check-fill me-1" style="color:#E02FAC;" aria-label="You're working"></i>
+                    {% endif %}
+                    {{ day.label }} {{ day.date.strftime('%-d %b') }}
+                </span>
+                <span class="text-muted">
+                    {% if not day.parts %}
+                    No walkers scheduled
+                    {% else %}
+                    {% for abbrev, names in day.parts %}{% if not loop.first %} &middot; {% endif %}<strong>{{ abbrev }}</strong> {{ names }}{% endfor %}
+                    {% endif %}
+                </span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+
     {% if not has_pickups %}
     <div class="card">
         <div class="card-body text-center py-5">
