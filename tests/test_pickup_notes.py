@@ -93,7 +93,7 @@ class TestPickupNotesSafeRendering:
             walker_email = walker_user.email
 
         login(client, walker_email)
-        resp = client.get('/walker/pickups')
+        resp = client.get(f'/walker/pickups/{today.strftime("%Y-%m-%d")}')
         assert resp.status_code == 200
         html = resp.data.decode()
 

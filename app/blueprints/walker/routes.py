@@ -783,7 +783,12 @@ def pickups(date_str=None):
             flash("Invalid date format.", "error")
             return redirect(url_for('walker.pickups'))
     else:
-        selected_date = today
+        # DogBoxx is Mon-Fri only — landing here on a weekend with no
+        # explicit date should default to the coming Monday, not a closed day.
+        if today.weekday() >= 5:  # Saturday=5, Sunday=6
+            selected_date = today + timedelta(days=7 - today.weekday())
+        else:
+            selected_date = today
 
     view = request.args.get('view', 'pickups')
     if view not in ('pickups', 'overview'):
