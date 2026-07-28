@@ -124,6 +124,7 @@ def _wants_json():
 
 @notifications_bp.route('/push-subscribe', methods=['POST'])
 @login_required
+@limiter.limit("20 per hour")
 def push_subscribe():
     """Save (or refresh) a Web Push subscription for the current user.
 
@@ -137,6 +138,10 @@ def push_subscribe():
         }
 
     Upserts on endpoint — safe to call on every page load.
+
+    Returns 400 if the endpoint host isn't a known push service (SSRF guard —
+    see the comment below). All five mainstream browser engines are allowlisted,
+    so this should only ever fire on an attack or a genuinely new vendor.
     """
     data = request.get_json(silent=True)
     if not data or not data.get('endpoint') or not data.get('keys'):
@@ -149,17 +154,30 @@ def push_subscribe():
     if not p256dh or not auth:
         return jsonify({'ok': False, 'error': 'missing keys'}), 400
 
-    # SSRF mitigation (SECURITY_REVIEW.md #4) — LOG-ONLY for now. We still store
-    # the subscription, but warn if the endpoint host isn't on the push-service
-    # allowlist, so we can confirm the real set of hosts (incl. iOS) before
-    # flipping this to a hard 400. To enforce: return 400 here instead of warning.
+    # SSRF mitigation — ENFORCING since 2026-07-28 (was log-only from PR #141).
+    # `endpoint` is a client-supplied URL that the server later POSTs to from
+    # inside Railway's private network, so an unvalidated one is a stored blind
+    # SSRF: internal hosts, cloud metadata, anything routable from `web`.
+    #
+    # Flipped after reviewing every endpoint ever stored in production
+    # (Apr–Jul 2026, 26 subscriptions across 14 users): only fcm.googleapis.com
+    # and web.push.apple.com, both already allowlisted, both https. Enforcement
+    # is write-path only — is_allowed_push_endpoint() is deliberately NOT called
+    # in send_web_push(), so existing rows keep delivering and flipping this
+    # could not break a working subscription.
+    #
+    # Logged at error, not warning: a hit here is now an exception rather than
+    # routine noise, so it should reach Sentry. The host alone is what you need
+    # to extend ALLOWED_PUSH_HOSTS — the full endpoint is a delivery capability,
+    # so it stays out of the logs.
     from app.utils.webpush import is_allowed_push_endpoint
     if not is_allowed_push_endpoint(endpoint):
         host = urlparse(endpoint or '').hostname
-        current_app.logger.warning(
-            'Push endpoint not on allowlist (LOG-ONLY, stored anyway) — '
-            'user %s host=%r endpoint=%r', current_user.id, host, endpoint,
+        current_app.logger.error(
+            'Rejected push endpoint not on allowlist — user %s host=%r',
+            current_user.id, host,
         )
+        return jsonify({'ok': False, 'error': 'unsupported push endpoint'}), 400
 
     # Upsert: update if endpoint exists for this user, otherwise insert.
     # If the endpoint exists under a *different* user (e.g. shared browser,
