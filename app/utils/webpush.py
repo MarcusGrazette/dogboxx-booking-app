@@ -31,10 +31,19 @@ log = logging.getLogger(__name__)
 # `evilgoogleapis.com` cannot match `.googleapis.com`. VAPID signing does NOT
 # mitigate this — it authenticates the message, not the request destination.
 #
+# Enforced at the write path (`push_subscribe`) since 2026-07-28. Deliberately
+# NOT re-checked in send_web_push(): validating on registration only means the
+# guard can never invalidate an already-stored subscription, which is what made
+# it safe to flip on. The trade-off is that it also can't clean up a bad row
+# already in the table — production was checked and held only the two legitimate
+# hosts, so no cleanup was needed.
+#
 # NOTE: a few entries (`.googleapis.com`, `.apple.com`) are broader than the push
 # zones proper; they stay safe because the parent domains are vendor-owned (an
-# attacker can't register a subdomain to reach internal hosts). Tighten to the
-# hosts the monitor logs actually show before flipping to enforcing (see #4).
+# attacker can't register a subdomain to reach internal hosts). Keep them broad —
+# an earlier note here suggested narrowing to observed hosts before enforcing,
+# but vendors do rotate endpoint hostnames (FCM has), and narrowing would trade
+# resilience for no security gain given the parent domains are already vendor-owned.
 ALLOWED_PUSH_HOSTS = (
     '.googleapis.com',             # Google FCM (Chrome / Android)
     '.fcm.googleapis.com',         # Modern FCM endpoints
