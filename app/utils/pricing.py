@@ -9,11 +9,19 @@ line-item construction was reimplemented in `invoicing.py`,
 pricing rule changed in one place could silently disagree with another — a
 correctness risk on a money path. Everything pricing-shaped now lives here.
 
-Pricing rules (unchanged from the original implementations):
+Pricing rules:
   - Group walks: ``price_per_walk``; ``double_slot_discount`` once per dog
     booked AM+PM on the same day; ``weekly_discount`` per walk for ISO weeks
     with ≥5 confirmed group walks.
   - Drop-ins: ``price_per_drop_in``; no double-slot discount; no weekly discount.
+
+The extraction originally preserved each call site's behaviour verbatim, which
+carried one real divergence across: ``build_double_slot_discounts`` grouped by
+date alone while ``invoice_for_client`` grouped by ``(dog_id, date)``, so a
+multi-dog household with dog A in the AM and dog B in the PM saw a discount line
+on the invoice detail page that the billed subtotal never included. Both now key
+by ``(dog_id, date)``. When adding a rule here, the aggregation key matters as
+much as the arithmetic — that is where the two implementations drifted.
 """
 
 from collections import defaultdict
@@ -101,25 +109,30 @@ def weekly_discount_for_walks(walk_dates, configs):
 
 
 def build_double_slot_discounts(all_billable, configs):
-    """Double-slot discount rows — one per day a dog has both Morning + Afternoon.
+    """Double-slot discount rows — one per ``(dog, day)`` where that dog has
+    both Morning + Afternoon.
 
     Group walks only (drop-ins never qualify). Returns ``[{date, amount}, ...]``
     sorted by date, skipping days whose config has a zero/empty discount.
 
-    Note: keyed by date alone (not dog_id), matching the original
-    ``invoicing_detail`` / ``monthly_summary`` behaviour. The aggregate
-    ``invoice_for_client`` keys by ``(dog_id, date)`` for multi-dog households —
-    see that function. The two are reconciled per-client (a household billed as
-    one), so the date-only keying here is correct for the per-client views.
+    Keyed by ``(dog_id, date)`` to match ``invoice_for_client``'s subtotal: the
+    discount rewards ONE dog doing two slots, so a multi-dog household with dog
+    A in the AM and dog B in the PM has no dog on a double slot and gets no
+    discount. Conversely a household where two dogs each do AM+PM gets two rows,
+    matching ``inv['doubles'] == 2``. The rows carry only the date (the invoice
+    templates render per-day lines), but multiple rows can share one date.
     """
-    date_slots = defaultdict(set)
+    dog_date_slots = defaultdict(set)
     for b in all_billable:
         if not is_drop_in(b):
-            date_slots[b.date].add(b.slot)
+            dog_date_slots[(b.dog_id, b.date)].add(b.slot)
 
     discounts = []
-    for d in sorted(d for d, slots in date_slots.items()
-                    if 'Morning' in slots and 'Afternoon' in slots):
+    qualifying = (k for k, slots in dog_date_slots.items()
+                  if 'Morning' in slots and 'Afternoon' in slots)
+    # Sort by date, then dog_id — same-day rows are visually identical, but a
+    # total order keeps the output independent of booking iteration order.
+    for _dog_id, d in sorted(qualifying, key=lambda k: (k[1], k[0])):
         cfg = config_for_date(configs, d)
         if cfg and cfg.double_slot_discount:
             discounts.append({'date': d, 'amount': float(cfg.double_slot_discount)})
