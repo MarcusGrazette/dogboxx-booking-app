@@ -8,6 +8,9 @@ Covers:
 - Mixed walks + drop-ins: both counted, totals correct
 - Same-day AM+PM group walks → double-slot discount applied
 - Drop-ins on same day as group walks → no double discount for drop-in pair
+- Double-slot discount: the billed subtotal (invoice_for_client) and the rendered
+  discount lines (pricing.build_double_slot_discounts) agree. These are two
+  implementations of one rule; asserting only the first is what let them drift.
 - Late cancel (< 5 days notice) → billable
 - Early cancel (>= 5 days notice) → not billable
 - Cancel with no cancelled_at → not billable
@@ -29,6 +32,7 @@ from app.models import (
     Booking, PricingConfig,
 )
 from app.utils.invoicing import invoice_for_client as _invoice_for_client
+from app.utils.pricing import build_double_slot_discounts
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +245,8 @@ class TestInvoiceForClient:
             expected = round(WALK_PRICE * 2 - DOUBLE_DISCOUNT, 2)
             assert inv['doubles'] == 1
             assert inv['subtotal'] == expected
+            rows = build_double_slot_discounts(inv['all_billable'], all_configs())
+            assert rows == [{'date': MON_1, 'amount': float(DOUBLE_DISCOUNT)}]
 
     def test_double_slot_discount_not_applied_to_drop_ins(self, app):
         """AM + PM drop-ins on the same day → no double-slot discount."""
@@ -290,6 +296,10 @@ class TestInvoiceForClient:
             assert inv['total_walks'] == 2
             assert inv['doubles'] == 0
             assert inv['subtotal'] == round(WALK_PRICE * 2, 2)
+            # The rendered discount lines must agree with the billed subtotal —
+            # two implementations of one rule, and they drifted once before
+            # (a phantom -GBP5 line on the detail page of exactly this household).
+            assert build_double_slot_discounts(inv['all_billable'], all_configs()) == []
 
     def test_double_slot_discount_per_dog_when_one_dog_has_both_slots(self, app):
         """Multi-dog household: dog A has AM+PM, dog B has only AM.
@@ -310,6 +320,8 @@ class TestInvoiceForClient:
             assert inv['total_walks'] == 3
             assert inv['doubles'] == 1
             assert inv['subtotal'] == round(WALK_PRICE * 3 - DOUBLE_DISCOUNT, 2)
+            rows = build_double_slot_discounts(inv['all_billable'], all_configs())
+            assert rows == [{'date': MON_1, 'amount': float(DOUBLE_DISCOUNT)}]
 
     def test_double_slot_discount_per_dog_when_both_dogs_have_both_slots(self, app):
         """Multi-dog household: dog A and dog B both have AM+PM on the same day.
@@ -331,6 +343,9 @@ class TestInvoiceForClient:
             assert inv['total_walks'] == 4
             assert inv['doubles'] == 2
             assert inv['subtotal'] == round(WALK_PRICE * 4 - DOUBLE_DISCOUNT * 2, 2)
+            # One discount line per dog, both on the same date.
+            rows = build_double_slot_discounts(inv['all_billable'], all_configs())
+            assert rows == [{'date': MON_1, 'amount': float(DOUBLE_DISCOUNT)}] * 2
 
     def test_late_cancel_is_billable(self, app):
         """Cancel with < 5 days notice → charged."""

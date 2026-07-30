@@ -29,9 +29,9 @@ def _cfg(effective_from, walk=10.0, drop_in=6.0, double=2.0):
     )
 
 
-def _booking(bid, d, slot, slug=ServiceType.WALK):
+def _booking(bid, d, slot, slug=ServiceType.WALK, dog_id=1):
     return SimpleNamespace(
-        id=bid, date=d, slot=slot,
+        id=bid, dog_id=dog_id, date=d, slot=slot,
         service_type=SimpleNamespace(slug=slug),
     )
 
@@ -127,6 +127,52 @@ class TestDoubleSlotDiscounts:
         am = _booking(1, date(2026, 6, 1), 'Morning')
         pm = _booking(2, date(2026, 6, 1), 'Afternoon')
         assert build_double_slot_discounts([am, pm], configs) == []
+
+    def test_no_discount_when_two_dogs_split_the_slots(self):
+        """Multi-dog household, dog A in the AM and dog B in the PM: neither dog
+        is on a double slot, so no row. Keying by date alone produced a phantom
+        discount line here that invoice_for_client never billed."""
+        configs = [_cfg(date(2026, 1, 1), double=2.5)]
+        am = _booking(1, date(2026, 6, 1), 'Morning',   dog_id=101)
+        pm = _booking(2, date(2026, 6, 1), 'Afternoon', dog_id=102)
+        assert build_double_slot_discounts([am, pm], configs) == []
+
+    def test_one_row_when_only_one_dog_has_both_slots(self):
+        configs = [_cfg(date(2026, 1, 1), double=2.5)]
+        bookings = [
+            _booking(1, date(2026, 6, 1), 'Morning',   dog_id=101),
+            _booking(2, date(2026, 6, 1), 'Afternoon', dog_id=101),
+            _booking(3, date(2026, 6, 1), 'Morning',   dog_id=102),
+        ]
+        out = build_double_slot_discounts(bookings, configs)
+        assert out == [{'date': date(2026, 6, 1), 'amount': 2.5}]
+
+    def test_one_row_per_dog_when_both_dogs_have_both_slots(self):
+        """Two rows on one date — the templates render a line per row and the
+        week subtotals sum the amounts, so 2 x the discount is applied."""
+        configs = [_cfg(date(2026, 1, 1), double=2.5)]
+        bookings = [
+            _booking(1, date(2026, 6, 1), 'Morning',   dog_id=101),
+            _booking(2, date(2026, 6, 1), 'Afternoon', dog_id=101),
+            _booking(3, date(2026, 6, 1), 'Morning',   dog_id=102),
+            _booking(4, date(2026, 6, 1), 'Afternoon', dog_id=102),
+        ]
+        out = build_double_slot_discounts(bookings, configs)
+        assert out == [
+            {'date': date(2026, 6, 1), 'amount': 2.5},
+            {'date': date(2026, 6, 1), 'amount': 2.5},
+        ]
+
+    def test_rows_sorted_by_date_regardless_of_input_order(self):
+        configs = [_cfg(date(2026, 1, 1), double=2.5)]
+        bookings = [
+            _booking(1, date(2026, 6, 3), 'Afternoon', dog_id=102),
+            _booking(2, date(2026, 6, 1), 'Morning',   dog_id=101),
+            _booking(3, date(2026, 6, 3), 'Morning',   dog_id=102),
+            _booking(4, date(2026, 6, 1), 'Afternoon', dog_id=101),
+        ]
+        out = build_double_slot_discounts(bookings, configs)
+        assert [r['date'] for r in out] == [date(2026, 6, 1), date(2026, 6, 3)]
 
 
 # ── weekly_discount_for_walks ──────────────────────────────────────────────

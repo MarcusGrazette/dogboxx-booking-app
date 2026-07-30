@@ -91,7 +91,9 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
     # Group walk items keyed by (dog_id, date) so the double-slot discount only
     # fires when the SAME dog is booked AM+PM on the same day. Keying by date
     # alone would over-discount multi-dog households where dog A took the
-    # morning and dog B took the afternoon.
+    # morning and dog B took the afternoon. pricing.build_double_slot_discounts
+    # — which renders the discount LINES for this same invoice — must use the
+    # identical key, or the lines and this subtotal disagree on the same page.
     dog_date_slots = defaultdict(set)
     for b in all_billable:
         if not is_drop_in(b):
