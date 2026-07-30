@@ -9,6 +9,7 @@ DoD assertions:
 """
 import datetime
 import json
+import uuid
 
 import pytest
 from werkzeug.security import generate_password_hash
@@ -193,7 +194,7 @@ class TestFeedEventSources:
         with app.app_context():
             admin = _make_user('af_admin4@test.com', role='walker', is_admin=True)
             closure = Closure(date=monday, reason='Bank holiday',
-                              created_by_id=admin.id)
+                              created_by_id=admin.id, range_id=uuid.uuid4().hex)
             db.session.add(closure)
             db.session.commit()
 

@@ -595,6 +595,9 @@ class Closure(db.Model):
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     # Indexed: the activity feed filters this source by created_at month range (F4).
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    # Groups the N per-date rows created by one date-range closure action, so the
+    # admin list and activity feed can collapse them into a single entry.
+    range_id = db.Column(db.String(32), nullable=False, index=True)
 
     created_by = db.relationship('User', foreign_keys=[created_by_id])
 
