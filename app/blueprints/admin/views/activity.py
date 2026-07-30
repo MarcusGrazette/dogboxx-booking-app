@@ -317,22 +317,31 @@ def activity_feed():
         ))
 
     # ── Closures ──────────────────────────────────────────────────────────────
+    # A date-range closure creates one Closure row per date sharing a range_id —
+    # group them back into a single feed entry rather than one row per date.
+    closure_groups = {}
     for c in (Closure.query
               .options(joinedload(Closure.created_by))
               .filter(Closure.created_at >= dt_start,
                       Closure.created_at < dt_end)
               .all()):
-        if not c.created_at:
+        if not c.created_at or not c.created_by:
             continue
-        actor = c.created_by
-        if not actor:
-            continue
-        close_date = c.date.strftime('%a %-d %b') if c.date else '?'
-        desc = f"DogBoxx closed on {close_date}"
-        if c.reason:
-            desc += f" — {c.reason}"
+        closure_groups.setdefault(c.range_id, []).append(c)
+
+    for members in closure_groups.values():
+        members.sort(key=lambda c: c.date)
+        first, actor = members[0], members[0].created_by
+        if len(members) == 1:
+            close_label = f"on {first.date.strftime('%a %-d %b')}"
+        else:
+            close_label = (f"{first.date.strftime('%a %-d %b')}–"
+                            f"{members[-1].date.strftime('%a %-d %b')} ({len(members)} days)")
+        desc = f"DogBoxx closed {close_label}"
+        if first.reason:
+            desc += f" — {first.reason}"
         events.append(_make_event(
-            ts=c.created_at, actor_type=_actor_type(actor),
+            ts=first.created_at, actor_type=_actor_type(actor),
             actor_name=actor.full_name, actor_id=actor.id,
             description=desc, badge='closure', activity_type='closure',
             link=url_for('admin.closures'),
