@@ -322,7 +322,7 @@ def board_data(date_str):
 def assign_walker():
     """Assign (or unassign) a walker and slot to a booking. Admin only. Returns JSON.
 
-    POST body (JSON or form-encoded):
+    POST body (JSON):
         booking_id  (int)   Required. Booking to update.
         walker_id   (int)   Walker to assign. Omit or null to unassign.
         slot        (str)   'Morning' or 'Afternoon'. Overrides booking.slot if provided.
@@ -338,8 +338,10 @@ def assign_walker():
     On unassignment (walker_id = null):
         - Clears booking.walker_id, sets status back to 'requested'
     """
-    # Accept JSON or form-encoded
-    data = request.get_json(silent=True) or request.form
+    # JSON only — the only caller (admin-board-core.js) sends JSON, and JSON has
+    # real booleans. A form-encoded fallback here previously meant slot_override
+    # arrived as the string "false", and bool("false") is True in Python.
+    data = request.get_json(silent=True) or {}
     booking_id = data.get("booking_id")
     walker_id = data.get("walker_id")
     slot = data.get("slot")
@@ -371,7 +373,10 @@ def assign_walker():
             ), 200
 
         # Otherwise, assign to a walker (normal flow)
-        walker = Walker.query.filter_by(id=int(walker_id)).first()
+        try:
+            walker = Walker.query.filter_by(id=int(walker_id)).first()
+        except (TypeError, ValueError):
+            return jsonify(success=False, message="Invalid walker ID"), 400
         if not walker:
             return jsonify(success=False, message="Walker not found"), 404
 
@@ -412,7 +417,7 @@ def assign_walker():
                 Booking.walker_id == walker.id,
                 Booking.date == booking.date,
                 Booking.slot == slot,
-                Booking.status != 'cancelled',
+                Booking.status.in_(Booking.CAPACITY_STATUSES),
                 Booking.id != booking.id,
                 ServiceType.slug == service_slug,
             ).count()

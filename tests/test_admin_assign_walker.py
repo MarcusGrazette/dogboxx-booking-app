@@ -232,3 +232,80 @@ class TestUnavailabilityMessage:
         data = resp.get_json()
         assert resp.status_code == 400
         assert 'marked unavailable' in data['message']
+
+
+class TestCapacityExcludesRejectedAndWaitlisted:
+    """H3 regression: the capacity check must count Booking.CAPACITY_STATUSES,
+    not "anything != cancelled" — otherwise a rejected/waitlisted booking still
+    occupies a walker's slot, and an admin declining bookings on a busy day
+    permanently locks that walker out of the rest of the day."""
+
+    def test_rejected_booking_does_not_consume_capacity(self, app, client):
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_admin()
+            _, walker = _make_walker()
+            new_booking = _make_booking(monday, slot='Morning')
+            # Capacity of 1 so a single non-counting booking is enough to prove the fix.
+            new_booking.service_type.default_max_capacity = 1
+            db.session.add(WalkerSchedule(
+                walker_id=walker.id, day_of_week=0, slot='Morning', active=True,
+            ))
+            # A different dog — the (dog_id, date, slot) unique index means the
+            # rejected booking can't share new_booking's dog for this repro.
+            other_client = User(
+                firstname='Other', lastname='Client', email='other_aw@test.com',
+                role='client', active=True,
+                hashed_password=generate_password_hash('Testpass1!'),
+            )
+            db.session.add(other_client)
+            db.session.flush()
+            db.session.add(Client(user_id=other_client.id, onboarding_completed=True))
+            other_dog = Dog(name='Rex', breed='Poodle')
+            db.session.add(other_dog)
+            db.session.flush()
+            db.session.add(DogOwner(dog_id=other_dog.id, user_id=other_client.id, role='primary'))
+            db.session.add(Booking(
+                user_id=other_client.id, dog_id=other_dog.id,
+                service_type_id=new_booking.service_type_id,
+                date=monday, slot='Morning', status='rejected', walker_id=walker.id,
+            ))
+            db.session.commit()
+            admin_email, booking_id, walker_id = admin.email, new_booking.id, walker.id
+
+        _login(client, admin_email)
+        resp = _post_assign(client, booking_id, walker_id, slot='Morning')
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()['success'] is True
+
+
+class TestSlotOverrideJsonOnly:
+    """H4 regression: assign_walker must be JSON-only. It previously fell back
+    to request.form, where every value is a string — bool("false") is True in
+    Python, so a form-encoded slot_override=false silently bypassed the
+    availability check instead of respecting it."""
+
+    def test_form_encoded_body_is_rejected_not_parsed(self, app, client):
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_admin()
+            _, walker = _make_walker()
+            booking = _make_booking(monday, slot='Afternoon')
+            # No WalkerSchedule row — walker is not scheduled for Afternoon at all,
+            # so this would only succeed if slot_override were misread as True.
+            db.session.commit()
+            admin_email, booking_id, walker_id = admin.email, booking.id, walker.id
+
+        _login(client, admin_email)
+        resp = client.post(
+            '/admin/assign_walker',
+            data={
+                'booking_id': str(booking_id),
+                'walker_id': str(walker_id),
+                'slot_override': 'false',
+            },
+        )
+        data = resp.get_json()
+        assert resp.status_code == 400
+        assert data['success'] is False
+        assert 'No booking ID' in data['message']
