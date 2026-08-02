@@ -66,7 +66,7 @@ def activity_feed():
 
     def _make_event(ts, actor_type, actor_name, actor_id, description, badge, activity_type, link,
                     batch_id=None, booking_date=None, dog_name_raw=None, svc_label_raw=None,
-                    booking_id=None):
+                    booking_id=None, extra_note=None):
         parts = actor_name.split()
         initials = (parts[0][0] + (parts[-1][0] if len(parts) > 1 else '')).upper() if parts else '?'
         label, icon, icon_color, badge_bg = BADGE_META.get(badge, ('', 'bi-circle', '#666', 'rgba(0,0,0,0.06)'))
@@ -75,7 +75,7 @@ def activity_feed():
                     initials=initials, badge_label=label, icon=icon, icon_color=icon_color, badge_bg=badge_bg,
                     batch_id=batch_id, booking_date=booking_date,
                     dog_name_raw=dog_name_raw, svc_label_raw=svc_label_raw,
-                    booking_id=booking_id, is_cluster=False)
+                    booking_id=booking_id, extra_note=extra_note, is_cluster=False)
 
     def _cluster_events(event_list):
         """Group BSC events sharing a batch_id into collapsible clusters (D4).
@@ -164,18 +164,28 @@ def activity_feed():
         else:
             span = None
 
+        # 'confirmed'/'waitlisted' clusters only ever arise from bookings
+        # created in one batch (book_both, recurring_booking) landing at
+        # different terminal statuses — the actor booked, they didn't
+        # individually confirm/waitlist each one. cancelled/rejected/requested
+        # are genuine actor-performed bulk actions and keep their own verbs.
         verb_map = {
-            'confirmed': 'confirmed', 'cancelled': 'cancelled',
+            'confirmed': 'booked', 'cancelled': 'cancelled',
             'rejected': 'declined',   'requested': 'requested',
-            'waitlisted': 'waitlisted',
+            'waitlisted': 'booked',
         }
         verb     = verb_map.get(badge, badge)
+        if badge == 'requested' and activity_type == 'availability':
+            # A batch of availability-driven resets, not fresh requests.
+            verb = 'reset to pending'
         dog_pfx  = f"{dog_names[0]}'s " if len(dog_names) == 1 else ''
         desc     = f"{dog_pfx}{n} {svc}{plural} {verb}"
         if span:
             desc += f" ({span})"
         if len(dog_names) > 1:
             desc += f" · {', '.join(dog_names)}"
+        if children[0].get('extra_note'):
+            desc += f" — {children[0]['extra_note']}"
 
         return dict(
             ts=ts, actor_type=actor_type, actor_name=actor_name, actor_id=actor_id,
@@ -197,6 +207,8 @@ def activity_feed():
                 .joinedload(Booking.service_type),
             joinedload(BookingStatusChange.booking)
                 .joinedload(Booking.user),
+            joinedload(BookingStatusChange.walker)
+                .joinedload(Walker.user),
             joinedload(BookingStatusChange.changed_by),
         )
         .filter(BookingStatusChange.created_at >= dt_start,
@@ -232,14 +244,42 @@ def activity_feed():
 
         ts = bsc.to_status
         if ts == 'confirmed':
-            # A slot-override re-confirm has old_slot/new_slot set (F6) — show
-            # it as a move rather than an indistinguishable re-confirm.
+            # Distinguish *why* this row is confirmed using signals already on
+            # the BSC row (see CLAUDE.md / activity-feed wording notes):
+            #  - old_slot set            -> admin slot-override move
+            #  - batch_id set            -> auto-assigned right after creation
+            #    (shared batch_id with the creation row — only create_booking's
+            #    internal auto-confirm call sets this for to_status='confirmed')
+            #  - from_status='confirmed' -> admin picked a different walker on
+            #    an already-confirmed booking (reassignment)
+            #  - otherwise               -> admin picked a walker for a
+            #    requested/waitlisted booking via the assign modal
+            walker_name = bsc.walker.user.full_name if (bsc.walker and bsc.walker.user) else None
             if bsc.old_slot is not None:
                 desc = f"Moved {dog}'s {svc_label} on {walk_date} to {slot}"
+                if walker_name:
+                    desc += f" — assigned to {walker_name}"
+                if b.user and atype == 'admin':
+                    desc += f" for {b.user.full_name}"
+            elif bsc.batch_id is not None:
+                desc = f"Booked {dog}'s {slot} {svc_label} on {walk_date}"
+                if walker_name:
+                    desc += f" — auto-assigned to {walker_name}"
+                if b.user and atype == 'admin':
+                    desc += f" for {b.user.full_name}"
+            elif bsc.from_status == 'confirmed':
+                # Reassignment is a walker-to-walker change on a booking the
+                # client already has confirmed — naming the client here is
+                # redundant clutter, not new information.
+                desc = f"Reassigned {dog}'s {slot} {svc_label} on {walk_date}"
+                if walker_name:
+                    desc += f" to {walker_name}"
             else:
-                desc = f"Confirmed {dog}'s {slot} {svc_label} on {walk_date}"
-            if b.user and atype == 'admin':
-                desc += f" for {b.user.full_name}"
+                desc = f"Assigned {dog}'s {slot} {svc_label} on {walk_date}"
+                if walker_name:
+                    desc += f" to {walker_name}"
+                if b.user and atype == 'admin':
+                    desc += f" for {b.user.full_name}"
             badge, activity_type = 'confirmed', 'booking'
         elif ts in ('cancelled', 'rejected'):
             verb = 'Declined' if ts == 'rejected' else 'Cancelled'
@@ -248,7 +288,10 @@ def activity_feed():
                 desc += f" ({b.user.full_name})"
             badge, activity_type = ts, 'cancellation'
         elif ts == 'waitlisted':
-            desc = f"Waitlisted {dog}'s {slot} {svc_label} on {walk_date}"
+            # Waitlisting is always a system outcome of a booking hitting
+            # capacity at creation time, never an actor-performed action — the
+            # 'Waitlisted' badge pill (BADGE_META) already conveys the outcome.
+            desc = f"Booked {dog}'s {slot} {svc_label} on {walk_date}"
             if b.user and atype == 'admin':
                 desc += f" for {b.user.full_name}"
             badge, activity_type = 'waitlisted', 'booking'
@@ -257,9 +300,17 @@ def activity_feed():
                 desc = f"Requested {dog}'s {slot} {svc_label} on {walk_date}"
                 if b.user and atype == 'admin':
                     desc += f" for {b.user.full_name}"
+                badge, activity_type = 'requested', 'booking'
+            elif bsc.notes:
+                # reset_bookings_for_lost_availability threads a human-readable
+                # cause through `notes` — file this under Availability changes,
+                # not a bare booking event, and say why.
+                desc = f"Reset {dog}'s {slot} {svc_label} on {walk_date} to requested — {bsc.notes}"
+                badge, activity_type = 'requested', 'availability'
             else:
+                # Plain admin unassign via the board — no cause to report.
                 desc = f"Reset {dog}'s {slot} {svc_label} on {walk_date} to requested"
-            badge, activity_type = 'requested', 'booking'
+                badge, activity_type = 'requested', 'booking'
 
         events.append(_make_event(
             ts=bsc.created_at, actor_type=atype,
@@ -269,6 +320,7 @@ def activity_feed():
             batch_id=bsc.batch_id, booking_date=b.date,
             dog_name_raw=b.dog.name, svc_label_raw=svc_label,
             booking_id=b.id,
+            extra_note=bsc.notes if activity_type == 'availability' else None,
         ))
 
     # ── Walker unavailabilities ────────────────────────────────────────────────

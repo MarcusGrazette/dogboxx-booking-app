@@ -288,7 +288,10 @@ def add_unavailability():
     # (§7.1): one grouped booking_reset per user. Actor = the walker making
     # themselves unavailable.
     client_batch = NotificationBatch(actor_id=current_user.id)
-    reset_bookings_for_lost_availability(affected, actor_id=current_user.id, batch=client_batch)
+    reset_bookings_for_lost_availability(
+        affected, actor_id=current_user.id, batch=client_batch,
+        reason=f"{walker.user.firstname} marked unavailable",
+    )
     client_batch.flush()
 
     db.session.commit()
@@ -658,8 +661,11 @@ def schedule_changes_batch():
     # Reset to requested (walker unassigned) and notify each affected client
     # (§7.1): one grouped booking_reset per user across the whole range.
     client_batch = NotificationBatch(actor_id=current_user.id)
-    reset_bookings_for_lost_availability(all_affected, actor_id=current_user.id,
-                                         batch=client_batch, transition_batch_id=batch_id)
+    reset_bookings_for_lost_availability(
+        all_affected, actor_id=current_user.id, batch=client_batch,
+        transition_batch_id=batch_id,
+        reason=f"{walker.user.firstname} marked unavailable",
+    )
     client_batch.flush()
 
     db.session.commit()
@@ -730,7 +736,10 @@ def schedule_changes_batch_delete():
             ).all())
 
     client_batch = NotificationBatch(actor_id=current_user.id)
-    reset_bookings_for_lost_availability(all_affected, actor_id=current_user.id, batch=client_batch)
+    reset_bookings_for_lost_availability(
+        all_affected, actor_id=current_user.id, batch=client_batch,
+        reason=f"{walker.user.firstname}'s availability was removed",
+    )
     client_batch.flush()
 
     deleted = 0
@@ -779,7 +788,10 @@ def delete_adhoc(id):
         ).all()
 
     client_batch = NotificationBatch(actor_id=current_user.id)
-    reset_bookings_for_lost_availability(affected, actor_id=current_user.id, batch=client_batch)
+    reset_bookings_for_lost_availability(
+        affected, actor_id=current_user.id, batch=client_batch,
+        reason=f"{walker.user.firstname}'s availability was removed",
+    )
     client_batch.flush()
 
     db.session.delete(adhoc)

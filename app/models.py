@@ -395,6 +395,10 @@ class BookingStatusChange(db.Model):
     # activity feed can detect moves without parsing the free-text notes string.
     old_slot = db.Column(db.String(32), nullable=True)
     new_slot = db.Column(db.String(32), nullable=True)
+    # Snapshot of the booking's walker as of this transition (not the current
+    # live booking.walker_id) — lets the activity feed show who was actually
+    # assigned at each historical point, even after a later reassignment.
+    walker_id = db.Column(db.Integer, db.ForeignKey('walkers.id'), nullable=True)
     # Correlates rows produced by one bulk action so the activity feed can
     # collapse them into a single expandable cluster. NULL for single-row
     # transitions. uuid4().hex generated once per bulk action, stamped on
@@ -405,6 +409,7 @@ class BookingStatusChange(db.Model):
 
     booking = db.relationship('Booking', back_populates='status_history')
     changed_by = db.relationship('User')
+    walker = db.relationship('Walker')
 
     def to_dict(self):
         return {
@@ -414,6 +419,7 @@ class BookingStatusChange(db.Model):
             'to_status': self.to_status,
             'changed_by_id': self.changed_by_id,
             'notes': self.notes,
+            'walker_id': self.walker_id,
             'batch_id': self.batch_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }

@@ -35,7 +35,10 @@ def transition_booking(booking, to_status, *, actor_id, notes=None,
     False=waive / None=default policy) on admin cancel paths to override the
     late-cancel billing default — see app/utils/invoicing.py. Pass old_slot/
     new_slot on slot-override re-confirms so the activity feed can detect moves
-    structurally. Returns the BSC row. Caller still commits.
+    structurally. The BSC row always snapshots booking.walker_id *after* any
+    mutation above, so historical reads (e.g. the activity feed) see who was
+    assigned as of this exact transition, not whoever holds the booking now.
+    Returns the BSC row. Caller still commits.
     """
     from_status = booking.status
     now = datetime.now(timezone.utc)
@@ -60,6 +63,7 @@ def transition_booking(booking, to_status, *, actor_id, notes=None,
         notes=notes,
         old_slot=old_slot,
         new_slot=new_slot,
+        walker_id=booking.walker_id,
         batch_id=batch_id,
     )
     db.session.add(bsc)
@@ -78,6 +82,7 @@ def record_booking_created(booking, *, actor_id, batch_id=None):
         to_status=booking.status,
         changed_by_id=actor_id,
         notes=None,
+        walker_id=booking.walker_id,
         batch_id=batch_id,
     )
     db.session.add(bsc)

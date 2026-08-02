@@ -172,6 +172,8 @@ class TestTransitionHelpers:
             assert row.from_status == 'requested'
             assert row.to_status == 'confirmed'
             assert row.changed_by_id == user.id
+            # BSC row snapshots the walker as of this transition (post-mutation).
+            assert row.walker_id == walker.id
 
     def test_transition_to_cancelled_sets_cancelled_fields(self, app):
         with app.app_context():
@@ -215,9 +217,12 @@ class TestTransitionHelpers:
             b.walker_id = walker.id
             db.session.flush()
             # No walker_id kwarg → must not change it.
-            transition_booking(b, 'cancelled', actor_id=user.id, cancelled_by='admin')
+            row = transition_booking(b, 'cancelled', actor_id=user.id, cancelled_by='admin')
             db.session.commit()
             assert b.walker_id == walker.id
+            # A call that never touches walker_id still snapshots the
+            # booking's current value onto the BSC row (not None/stale).
+            assert row.walker_id == walker.id
 
     def test_bulk_transition_one_row_each_shared_batch(self, app):
         with app.app_context():

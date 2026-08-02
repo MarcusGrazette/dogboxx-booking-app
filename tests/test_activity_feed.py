@@ -223,6 +223,223 @@ class TestFeedEventSources:
         assert b'Test announcement' in resp.data
 
 
+class TestConfirmedWaitlistedWording:
+    """The description text for a 'confirmed'/'waitlisted' BSC row must match
+    what actually happened, not just restate the status — regression coverage
+    for the activity-feed wording fix (batch_id/old_slot/from_status signals
+    distinguish auto-assign, manual assign, reassign, and slot-override)."""
+
+    def test_auto_assign_on_creation_reads_as_booked(self, app, client):
+        """create_booking's internal auto-confirm shares a batch_id with the
+        creation row -> 'Booked ... — auto-assigned to <walker>'."""
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_user('af_auto1_admin@test.com', role='walker', is_admin=True)
+            client_u = _make_user('af_auto1_client@test.com', role='client')
+            db.session.add(Client(user_id=client_u.id, onboarding_completed=True))
+            st = _make_service()
+            dog = _make_dog(client_u.id)
+            _, walker = _make_walker_user('af_auto1_walker@test.com')
+            batch_id = uuid.uuid4().hex
+            booking = Booking(user_id=client_u.id, dog_id=dog.id,
+                              service_type_id=st.id, date=monday,
+                              slot='Morning', status='requested')
+            db.session.add(booking)
+            db.session.flush()
+            record_booking_created(booking, actor_id=client_u.id, batch_id=batch_id)
+            transition_booking(booking, 'confirmed', actor_id=client_u.id,
+                               walker_id=walker.id, batch_id=batch_id)
+            db.session.commit()
+
+        _login(client, 'af_auto1_admin@test.com')
+        resp = _get_feed(client, _this_month())
+        assert resp.status_code == 200
+        assert b'Booked' in resp.data
+        assert b'auto-assigned to' in resp.data
+
+    def test_manual_assign_reads_as_assigned(self, app, client):
+        """Admin assign-modal call on a requested booking, no batch_id ->
+        'Assigned ... to <walker>'."""
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_user('af_man1_admin@test.com', role='walker', is_admin=True)
+            client_u = _make_user('af_man1_client@test.com', role='client')
+            db.session.add(Client(user_id=client_u.id, onboarding_completed=True))
+            st = _make_service()
+            dog = _make_dog(client_u.id)
+            _, walker = _make_walker_user('af_man1_walker@test.com')
+            booking = Booking(user_id=client_u.id, dog_id=dog.id,
+                              service_type_id=st.id, date=monday,
+                              slot='Morning', status='requested')
+            db.session.add(booking)
+            db.session.flush()
+            record_booking_created(booking, actor_id=client_u.id)
+            transition_booking(booking, 'confirmed', actor_id=admin.id, walker_id=walker.id)
+            db.session.commit()
+
+        _login(client, 'af_man1_admin@test.com')
+        resp = _get_feed(client, _this_month())
+        assert resp.status_code == 200
+        assert b'Assigned' in resp.data
+        assert b'to Test User' in resp.data
+
+    def test_reassign_on_already_confirmed_reads_as_reassigned(self, app, client):
+        """Admin picks a different walker on an already-confirmed booking ->
+        'Reassigned ... to <walker>', distinct from a fresh assign."""
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_user('af_re1_admin@test.com', role='walker', is_admin=True)
+            client_u = _make_user('af_re1_client@test.com', role='client')
+            db.session.add(Client(user_id=client_u.id, onboarding_completed=True))
+            st = _make_service()
+            dog = _make_dog(client_u.id)
+            _, walker_a = _make_walker_user('af_re1_walkera@test.com')
+            _, walker_b = _make_walker_user('af_re1_walkerb@test.com')
+            booking = Booking(user_id=client_u.id, dog_id=dog.id,
+                              service_type_id=st.id, date=monday,
+                              slot='Morning', status='confirmed', walker_id=walker_a.id)
+            db.session.add(booking)
+            db.session.flush()
+            record_booking_created(booking, actor_id=client_u.id)
+            transition_booking(booking, 'confirmed', actor_id=admin.id, walker_id=walker_b.id)
+            db.session.commit()
+
+        _login(client, 'af_re1_admin@test.com')
+        resp = _get_feed(client, _this_month())
+        assert resp.status_code == 200
+        assert b'Reassigned' in resp.data
+
+    def test_waitlisted_creation_reads_as_booked(self, app, client):
+        """A booking landing waitlisted at creation is a system/capacity
+        outcome, not something the client did -> text says 'Booked', the
+        'Waitlisted' badge pill still conveys the outcome."""
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_user('af_wl1_admin@test.com', role='walker', is_admin=True)
+            client_u = _make_user('af_wl1_client@test.com', role='client')
+            db.session.add(Client(user_id=client_u.id, onboarding_completed=True))
+            st = _make_service()
+            dog = _make_dog(client_u.id)
+            booking = Booking(user_id=client_u.id, dog_id=dog.id,
+                              service_type_id=st.id, date=monday,
+                              slot='Morning', status='waitlisted')
+            db.session.add(booking)
+            db.session.flush()
+            record_booking_created(booking, actor_id=client_u.id)
+            db.session.commit()
+
+        _login(client, 'af_wl1_admin@test.com')
+        resp = _get_feed(client, _this_month())
+        assert resp.status_code == 200
+        assert b'Booked' in resp.data
+        assert b'Waitlisted' in resp.data
+
+    def test_reassign_shows_historical_walker_not_current(self, app, client):
+        """A booking reassigned from walker A to walker B must still show A
+        on the *first* transition's feed row, not silently collapse both rows
+        onto B (today's walker) — regression for the BSC.walker_id snapshot
+        (previously the feed read the booking's live walker relationship)."""
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_user('af_hist_admin@test.com', role='walker', is_admin=True)
+            client_u = _make_user('af_hist_client@test.com', role='client')
+            db.session.add(Client(user_id=client_u.id, onboarding_completed=True))
+            st = _make_service()
+            dog = _make_dog(client_u.id)
+
+            walker_a_user = User(firstname='Alice', lastname='Walker', email='af_hist_walkera@test.com',
+                                 role='walker', hashed_password=generate_password_hash('Testpass1!'))
+            db.session.add(walker_a_user)
+            db.session.flush()
+            walker_a = Walker(user_id=walker_a_user.id)
+            db.session.add(walker_a)
+
+            walker_b_user = User(firstname='Bob', lastname='Walker', email='af_hist_walkerb@test.com',
+                                 role='walker', hashed_password=generate_password_hash('Testpass1!'))
+            db.session.add(walker_b_user)
+            db.session.flush()
+            walker_b = Walker(user_id=walker_b_user.id)
+            db.session.add(walker_b)
+            db.session.commit()
+
+            booking = Booking(user_id=client_u.id, dog_id=dog.id,
+                              service_type_id=st.id, date=monday,
+                              slot='Morning', status='requested')
+            db.session.add(booking)
+            db.session.flush()
+            record_booking_created(booking, actor_id=client_u.id)
+            transition_booking(booking, 'confirmed', actor_id=admin.id, walker_id=walker_a.id)
+            db.session.commit()
+            transition_booking(booking, 'confirmed', actor_id=admin.id, walker_id=walker_b.id)
+            db.session.commit()
+
+        _login(client, 'af_hist_admin@test.com')
+        resp = _get_feed(client, _this_month())
+        assert resp.status_code == 200
+        assert b'Alice Walker' in resp.data
+        assert b'Bob Walker' in resp.data
+
+
+class TestAvailabilityResetWording:
+    """Bookings reset by an availability change must say why and file under
+    the 'Availability changes' filter, not render as a bare unattributed
+    booking event — regression coverage for the notes-threaded reason."""
+
+    def test_availability_driven_reset_shows_reason_and_availability_type(self, app, client):
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_user('af_avreset_admin@test.com', role='walker', is_admin=True)
+            client_u = _make_user('af_avreset_client@test.com', role='client')
+            db.session.add(Client(user_id=client_u.id, onboarding_completed=True))
+            st = _make_service()
+            dog = _make_dog(client_u.id)
+            _, walker = _make_walker_user('af_avreset_walker@test.com')
+            booking = Booking(user_id=client_u.id, dog_id=dog.id,
+                              service_type_id=st.id, date=monday,
+                              slot='Morning', status='confirmed', walker_id=walker.id)
+            db.session.add(booking)
+            db.session.flush()
+            record_booking_created(booking, actor_id=client_u.id)
+            transition_booking(booking, 'requested', actor_id=admin.id, walker_id=None,
+                               notes="Test User marked unavailable")
+            db.session.commit()
+
+        _login(client, 'af_avreset_admin@test.com')
+        resp = _get_feed(client, _this_month())
+        assert resp.status_code == 200
+        assert b'Reset' in resp.data
+        assert b'Test User marked unavailable' in resp.data
+        assert b'data-activity="availability"' in resp.data
+
+    def test_plain_unassign_has_no_reason_and_stays_booking_type(self, app, client):
+        """A manual admin unassign via the board (no reset cause) keeps the
+        old bare wording and activity_type='booking' — distinct from an
+        availability-driven reset."""
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_user('af_plainreset_admin@test.com', role='walker', is_admin=True)
+            client_u = _make_user('af_plainreset_client@test.com', role='client')
+            db.session.add(Client(user_id=client_u.id, onboarding_completed=True))
+            st = _make_service()
+            dog = _make_dog(client_u.id)
+            _, walker = _make_walker_user('af_plainreset_walker@test.com')
+            booking = Booking(user_id=client_u.id, dog_id=dog.id,
+                              service_type_id=st.id, date=monday,
+                              slot='Morning', status='confirmed', walker_id=walker.id)
+            db.session.add(booking)
+            db.session.flush()
+            record_booking_created(booking, actor_id=client_u.id)
+            transition_booking(booking, 'requested', actor_id=admin.id, walker_id=None)
+            db.session.commit()
+
+        _login(client, 'af_plainreset_admin@test.com')
+        resp = _get_feed(client, _this_month())
+        assert resp.status_code == 200
+        assert b'Reset' in resp.data
+        assert b'to requested' in resp.data
+        assert b'data-activity="booking"' in resp.data
+
+
 # ---------------------------------------------------------------------------
 # 2. Correct actor_type per initiator
 # ---------------------------------------------------------------------------
