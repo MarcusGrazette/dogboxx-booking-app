@@ -4,7 +4,6 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timezone
 import logging
-import uuid
 
 from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
@@ -15,7 +14,7 @@ from app.models import (
 from app import db
 from app.forms import WalkerCreateForm, WalkerScheduleForm
 from app.utils.notifications import NotificationBatch
-from app.utils.booking_status import transition_booking, bulk_transition
+from app.utils.availability_reset import reset_bookings_for_lost_availability
 from werkzeug.security import generate_password_hash
 import secrets
 
@@ -116,28 +115,18 @@ def remove_walker_role(walker_user_id):
     from datetime import date as _date
     today = _date.today()
 
-    # Reassign future confirmed bookings so they stay on the board. Fetch the
-    # rows (not a bulk .update()) so each transition is logged via bulk_transition
-    # with a shared batch_id. Actor = the admin removing the role.
+    # Reassign future confirmed bookings so they stay on the board. Removing
+    # the walker role unassigns their confirmed walks just like
+    # deactivate_walker — the client must be told their booking reverted to
+    # pending, not left to discover it silently (§7.2).
     affected = Booking.query.filter(
         Booking.walker_id == user.walker.id,
         Booking.date >= today,
         Booking.status == 'confirmed',
     ).all()
-    bulk_transition(affected, 'requested', actor_id=current_user.id,
-                    walker_id=None, batch_id=uuid.uuid4().hex)
-
-    # Notify each affected client (§7.2): one grouped booking_reset per user.
-    # Removing the walker role unassigns their confirmed walks just like
-    # deactivate_walker — the client must be told their booking reverted to
-    # pending, not left to discover it silently.
-    if affected:
-        client_batch = NotificationBatch(actor_id=current_user.id)
-        for b in affected:
-            client_batch.add(b.user_id, 'booking_reset',
-                             dog_name=b.dog.name if b.dog else 'Unknown', slot=b.slot, date=b.date,
-                             svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
-        client_batch.flush()
+    client_batch = NotificationBatch(actor_id=current_user.id)
+    reset_bookings_for_lost_availability(affected, actor_id=current_user.id, batch=client_batch)
+    client_batch.flush()
 
     # Deactivate schedule so they no longer appear on future capacity
     WalkerSchedule.query.filter_by(walker_id=user.walker.id).update(
@@ -219,9 +208,9 @@ def deactivate_walker(walker_id):
 
         user.active = False
 
-        # Return future confirmed bookings to pending so they stay visible on the
-        # board. Fetch the rows (not a bulk .update()) so each transition is
-        # logged via bulk_transition. Actor = the admin deactivating the walker.
+        # Return future confirmed bookings to pending so they stay visible on
+        # the board, and notify each affected client (§7.2): one grouped
+        # booking_reset per user. Actor = the admin deactivating the walker.
         from datetime import date as _date
         today = _date.today()
         affected = Booking.query.filter(
@@ -229,17 +218,9 @@ def deactivate_walker(walker_id):
             Booking.date >= today,
             Booking.status == 'confirmed',
         ).all()
-        bulk_transition(affected, 'requested', actor_id=current_user.id,
-                        walker_id=None, batch_id=uuid.uuid4().hex)
-
-        # Notify each affected client (§7.2): one grouped booking_reset per user.
-        if affected:
-            client_batch = NotificationBatch(actor_id=current_user.id)
-            for b in affected:
-                client_batch.add(b.user_id, 'booking_reset',
-                                 dog_name=b.dog.name if b.dog else 'Unknown', slot=b.slot, date=b.date,
-                                 svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
-            client_batch.flush()
+        client_batch = NotificationBatch(actor_id=current_user.id)
+        reset_bookings_for_lost_availability(affected, actor_id=current_user.id, batch=client_batch)
+        client_batch.flush()
 
         # Deactivate schedule rows so the walker no longer appears on future board dates
         WalkerSchedule.query.filter_by(walker_id=user.walker.id).update(
@@ -407,18 +388,11 @@ def walker_schedule_json(walker_id):
                 )
                 .all()
             )
-            # Shared batch_id so the feed can cluster this schedule edit's resets.
-            batch_id = uuid.uuid4().hex
+            affected = [b for b in future_confirmed if (b.date.weekday(), b.slot) in removed]
             client_batch = NotificationBatch(actor_id=current_user.id)
-            for b in future_confirmed:
-                if (b.date.weekday(), b.slot) in removed:
-                    transition_booking(b, 'requested', actor_id=current_user.id,
-                                       walker_id=None, batch_id=batch_id)
-                    client_batch.add(b.user_id, 'booking_reset',
-                                     dog_name=b.dog.name if b.dog else 'Unknown', slot=b.slot, date=b.date,
-                                     svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
-                    affected_count += 1
+            reset_bookings_for_lost_availability(affected, actor_id=current_user.id, batch=client_batch)
             client_batch.flush()
+            affected_count = len(affected)
 
         db.session.commit()
 
@@ -588,6 +562,23 @@ def admin_delete_adhoc(walker_id, adhoc_id):
     adhoc = db.session.get(WalkerAdHocAvailability, adhoc_id)
     if not adhoc or adhoc.walker_id != walker_id:
         return jsonify(success=False, message="Not found"), 404
+
+    # This ad-hoc slot may have a confirmed booking sitting on it — same
+    # reset obligation as the walker-facing /adhoc/<id> delete. `adhoc.date`
+    # was validated >= today only at creation time, so a stale row past its
+    # date is skipped rather than queried — the walk already happened.
+    from datetime import date as _date
+    today = _date.today()
+    affected = []
+    if adhoc.date >= today:
+        affected = Booking.query.filter_by(
+            walker_id=adhoc.walker_id, date=adhoc.date, slot=adhoc.slot, status='confirmed',
+        ).all()
+
+    client_batch = NotificationBatch(actor_id=current_user.id)
+    reset_bookings_for_lost_availability(affected, actor_id=current_user.id, batch=client_batch)
+    client_batch.flush()
+
     db.session.delete(adhoc)
     db.session.commit()
     return jsonify(success=True)
@@ -624,23 +615,15 @@ def admin_add_unavailability(walker_id):
     db.session.add(unavail)
 
     # Any confirmed bookings this walker held for this date/slot are no longer
-    # guaranteed — reset them to requested so they surface as pending on the board.
+    # guaranteed — reset them to requested so they surface as pending on the
+    # board, and notify each affected client (§7.2): one grouped
+    # booking_reset per user. Actor = the admin marking the walker unavailable.
     affected = Booking.query.filter_by(
         walker_id=walker.id, date=unavail_date, slot=slot, status='confirmed',
     ).all()
-    # Reset to requested (walker unassigned), logging a BSC row per booking.
-    # Actor = the admin marking the walker unavailable.
-    bulk_transition(affected, 'requested', actor_id=current_user.id,
-                    walker_id=None, batch_id=uuid.uuid4().hex)
-
-    # Notify each affected client (§7.2): one grouped booking_reset per user.
-    if affected:
-        client_batch = NotificationBatch(actor_id=current_user.id)
-        for b in affected:
-            client_batch.add(b.user_id, 'booking_reset',
-                             dog_name=b.dog.name, slot=b.slot, date=b.date,
-                             svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
-        client_batch.flush()
+    client_batch = NotificationBatch(actor_id=current_user.id)
+    reset_bookings_for_lost_availability(affected, actor_id=current_user.id, batch=client_batch)
+    client_batch.flush()
 
     db.session.commit()
 

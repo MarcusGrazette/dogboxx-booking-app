@@ -16,7 +16,7 @@ from datetime import datetime, timezone, timedelta, date
 from app.blueprints.walker import walker_bp
 from app.utils.decorators import walker_required
 from app.utils.notifications import create_notification, NotificationBatch
-from app.utils.booking_status import bulk_transition
+from app.utils.availability_reset import reset_bookings_for_lost_availability
 from app.utils.pricing import is_drop_in as _is_drop_in
 from app.utils.weekly_schedule import (
     get_week_start,
@@ -269,10 +269,6 @@ def add_unavailability():
     affected = Booking.query.filter_by(
         walker_id=walker.id, date=unavail_date, slot=slot, status='confirmed',
     ).all()
-    # Reset to requested (walker unassigned) so they resurface as pending, and
-    # log a BSC row per booking. Actor = the walker making themselves unavailable.
-    bulk_transition(affected, 'requested', actor_id=current_user.id,
-                    walker_id=None, batch_id=uuid.uuid4().hex)
 
     walker_name = walker.user.firstname
     date_label = unavail_date.strftime('%a %-d %b')
@@ -288,14 +284,12 @@ def add_unavailability():
             sender_id=current_user.id,
         )
 
-    # Notify each affected client (§7.1): one grouped booking_reset per user.
-    if affected:
-        client_batch = NotificationBatch(actor_id=current_user.id)
-        for b in affected:
-            client_batch.add(b.user_id, 'booking_reset',
-                             dog_name=b.dog.name if b.dog else 'Unknown', slot=b.slot, date=b.date,
-                             svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
-        client_batch.flush()
+    # Reset to requested (walker unassigned) and notify each affected client
+    # (§7.1): one grouped booking_reset per user. Actor = the walker making
+    # themselves unavailable.
+    client_batch = NotificationBatch(actor_id=current_user.id)
+    reset_bookings_for_lost_availability(affected, actor_id=current_user.id, batch=client_batch)
+    client_batch.flush()
 
     db.session.commit()
 
@@ -560,12 +554,11 @@ def schedule_changes_batch():
     created_unavail_ids = []
     skipped_reasons = []
     skipped = 0
-    affected_count = 0
     # One batch_id ties together every booking reset by this batch schedule
     # change so the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
     batch_id = uuid.uuid4().hex
-    # Collect all affected bookings across the loop so we can send one grouped
-    # booking_reset per client after the loop (§7.1).
+    # Collect all affected bookings across the loop so we can reset + send one
+    # grouped booking_reset per client after the loop (§7.1).
     all_affected = []
 
     current = start_date
@@ -594,14 +587,12 @@ def schedule_changes_batch():
                 db.session.flush()
                 created_unavail_ids.append(row.id)
 
-                # Reset any confirmed bookings for this slot back to requested,
-                # logging a BSC row per booking. Actor = whoever applied the batch.
+                # Confirmed bookings for this slot are no longer guaranteed —
+                # collected here and reset in one pass after the loop so the
+                # whole range shares one grouped booking_reset per client (§7.1).
                 affected = Booking.query.filter_by(
                     walker_id=walker.id, date=current, slot=slot, status='confirmed',
                 ).all()
-                bulk_transition(affected, 'requested', actor_id=current_user.id,
-                                walker_id=None, batch_id=batch_id)
-                affected_count += len(affected)
                 all_affected.extend(affected)
             else:  # available
                 if slot in scheduled_slots:
@@ -627,6 +618,7 @@ def schedule_changes_batch():
         current += timedelta(days=1)
 
     created = len(created_adhoc_ids) + len(created_unavail_ids)
+    affected_count = len(all_affected)
 
     # Notify admins of walker-initiated schedule changes (not when admin acts on behalf of walker).
     if not current_user.is_admin and created > 0:
@@ -663,14 +655,12 @@ def schedule_changes_batch():
                 sender_id=current_user.id,
             )
 
-    # Notify each affected client (§7.1): one grouped booking_reset per user.
-    if all_affected:
-        client_batch = NotificationBatch(actor_id=current_user.id)
-        for b in all_affected:
-            client_batch.add(b.user_id, 'booking_reset',
-                             dog_name=b.dog.name if b.dog else 'Unknown', slot=b.slot, date=b.date,
-                             svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
-        client_batch.flush()
+    # Reset to requested (walker unassigned) and notify each affected client
+    # (§7.1): one grouped booking_reset per user across the whole range.
+    client_batch = NotificationBatch(actor_id=current_user.id)
+    reset_bookings_for_lost_availability(all_affected, actor_id=current_user.id,
+                                         batch=client_batch, transition_batch_id=batch_id)
+    client_batch.flush()
 
     db.session.commit()
 
@@ -718,6 +708,31 @@ def schedule_changes_batch_delete():
     if not isinstance(adhoc_ids, list) or not isinstance(unavail_ids, list):
         return jsonify(success=False, message="Invalid IDs."), 400
 
+    # Deleting an ad-hoc slot can orphan a confirmed booking sitting on it,
+    # same as the single-row /adhoc/<id> delete — so the affected rows must be
+    # read (with their date/slot) *before* the bulk delete below discards
+    # that information. Deleting an unavailability row only ever increases
+    # availability, so unavail_ids never need this.
+    all_affected = []
+    if adhoc_ids:
+        today = datetime.now(timezone.utc).date()
+        adhoc_rows = WalkerAdHocAvailability.query.filter(
+            WalkerAdHocAvailability.id.in_(adhoc_ids),
+            WalkerAdHocAvailability.walker_id == walker.id,
+        ).all()
+        for row in adhoc_rows:
+            # `row.date` was validated >= today only at creation time; skip
+            # stale rows rather than querying — the walk already happened.
+            if row.date < today:
+                continue
+            all_affected.extend(Booking.query.filter_by(
+                walker_id=walker.id, date=row.date, slot=row.slot, status='confirmed',
+            ).all())
+
+    client_batch = NotificationBatch(actor_id=current_user.id)
+    reset_bookings_for_lost_availability(all_affected, actor_id=current_user.id, batch=client_batch)
+    client_batch.flush()
+
     deleted = 0
     if adhoc_ids:
         deleted += WalkerAdHocAvailability.query.filter(
@@ -749,6 +764,23 @@ def delete_adhoc(id):
 
     if adhoc.walker_id != walker.id:
         return jsonify(success=False, message="Forbidden"), 403
+
+    # This ad-hoc slot may have a confirmed booking sitting on it — losing the
+    # availability it was granted on must reset that booking, same as losing
+    # any other slot (§ Walker availability change must reset confirmed
+    # bookings). `adhoc.date` was validated >= today only at creation time, so
+    # a stale row past its date is skipped rather than queried — the walk has
+    # already happened and re-requesting it would be wrong, not just useless.
+    today = datetime.now(timezone.utc).date()
+    affected = []
+    if adhoc.date >= today:
+        affected = Booking.query.filter_by(
+            walker_id=adhoc.walker_id, date=adhoc.date, slot=adhoc.slot, status='confirmed',
+        ).all()
+
+    client_batch = NotificationBatch(actor_id=current_user.id)
+    reset_bookings_for_lost_availability(affected, actor_id=current_user.id, batch=client_batch)
+    client_batch.flush()
 
     db.session.delete(adhoc)
     db.session.commit()
