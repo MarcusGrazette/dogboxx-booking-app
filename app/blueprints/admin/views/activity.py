@@ -275,11 +275,12 @@ def activity_feed():
                 if walker_name:
                     desc += f" to {walker_name}"
             else:
+                # Same reasoning as the reassignment case above: assigning a
+                # walker via the modal doesn't change who the booking is
+                # for, so naming the client adds nothing.
                 desc = f"Assigned {dog}'s {slot} {svc_label} on {walk_date}"
                 if walker_name:
                     desc += f" to {walker_name}"
-                if b.user and atype == 'admin':
-                    desc += f" for {b.user.full_name}"
             badge, activity_type = 'confirmed', 'booking'
         elif ts in ('cancelled', 'rejected'):
             verb = 'Declined' if ts == 'rejected' else 'Cancelled'
