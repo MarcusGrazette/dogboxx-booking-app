@@ -125,7 +125,10 @@ def remove_walker_role(walker_user_id):
         Booking.status == 'confirmed',
     ).all()
     client_batch = NotificationBatch(actor_id=current_user.id)
-    reset_bookings_for_lost_availability(affected, actor_id=current_user.id, batch=client_batch)
+    reset_bookings_for_lost_availability(
+        affected, actor_id=current_user.id, batch=client_batch,
+        reason=f"{user.firstname}'s walker role was removed",
+    )
     client_batch.flush()
 
     # Deactivate schedule so they no longer appear on future capacity
@@ -219,7 +222,10 @@ def deactivate_walker(walker_id):
             Booking.status == 'confirmed',
         ).all()
         client_batch = NotificationBatch(actor_id=current_user.id)
-        reset_bookings_for_lost_availability(affected, actor_id=current_user.id, batch=client_batch)
+        reset_bookings_for_lost_availability(
+            affected, actor_id=current_user.id, batch=client_batch,
+            reason=f"{user.firstname} was deactivated",
+        )
         client_batch.flush()
 
         # Deactivate schedule rows so the walker no longer appears on future board dates
@@ -390,7 +396,10 @@ def walker_schedule_json(walker_id):
             )
             affected = [b for b in future_confirmed if (b.date.weekday(), b.slot) in removed]
             client_batch = NotificationBatch(actor_id=current_user.id)
-            reset_bookings_for_lost_availability(affected, actor_id=current_user.id, batch=client_batch)
+            reset_bookings_for_lost_availability(
+                affected, actor_id=current_user.id, batch=client_batch,
+                reason=f"{walker.user.firstname}'s recurring schedule changed",
+            )
             client_batch.flush()
             affected_count = len(affected)
 
@@ -576,7 +585,10 @@ def admin_delete_adhoc(walker_id, adhoc_id):
         ).all()
 
     client_batch = NotificationBatch(actor_id=current_user.id)
-    reset_bookings_for_lost_availability(affected, actor_id=current_user.id, batch=client_batch)
+    reset_bookings_for_lost_availability(
+        affected, actor_id=current_user.id, batch=client_batch,
+        reason=f"{adhoc.walker.user.firstname}'s availability was removed",
+    )
     client_batch.flush()
 
     db.session.delete(adhoc)
@@ -622,7 +634,10 @@ def admin_add_unavailability(walker_id):
         walker_id=walker.id, date=unavail_date, slot=slot, status='confirmed',
     ).all()
     client_batch = NotificationBatch(actor_id=current_user.id)
-    reset_bookings_for_lost_availability(affected, actor_id=current_user.id, batch=client_batch)
+    reset_bookings_for_lost_availability(
+        affected, actor_id=current_user.id, batch=client_batch,
+        reason=f"{walker.user.firstname} marked unavailable",
+    )
     client_batch.flush()
 
     db.session.commit()
