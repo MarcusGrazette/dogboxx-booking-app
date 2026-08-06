@@ -228,6 +228,59 @@ class TestScheduleChangesBatch:
         with app.app_context():
             assert WalkerUnavailability.query.filter_by(date=mon).count() == 1
 
+    def test_available_rejected_when_unavailable_entry_exists(self, app, client):
+        """Marking a date/slot available when it's already marked unavailable
+        must be rejected as a conflict, not silently create both rows
+        (issue #174)."""
+        with app.app_context():
+            u, _ = _make_walker(schedule_days=[])
+            email = u.email
+        _login(client, email)
+        tue = _next_weekday(1)
+        client.post('/walker/schedule-changes/batch', json={
+            'start_date': tue.isoformat(),
+            'slots':      ['Morning'],
+            'type':       'unavailable',
+        })
+        resp = client.post('/walker/schedule-changes/batch', json={
+            'start_date': tue.isoformat(),
+            'slots':      ['Morning'],
+            'type':       'available',
+        })
+        data = resp.get_json()
+        assert resp.status_code == 409
+        assert data['success'] is False
+        assert data['conflict'] is True
+        with app.app_context():
+            assert WalkerUnavailability.query.filter_by(date=tue).count() == 1
+            assert WalkerAdHocAvailability.query.filter_by(date=tue).count() == 0
+
+    def test_unavailable_rejected_when_available_entry_exists(self, app, client):
+        """The reverse of the above: marking a date/slot unavailable when it's
+        already marked available must also be rejected (issue #174)."""
+        with app.app_context():
+            u, _ = _make_walker(schedule_days=[])
+            email = u.email
+        _login(client, email)
+        wed = _next_weekday(2)
+        client.post('/walker/schedule-changes/batch', json={
+            'start_date': wed.isoformat(),
+            'slots':      ['Afternoon'],
+            'type':       'available',
+        })
+        resp = client.post('/walker/schedule-changes/batch', json={
+            'start_date': wed.isoformat(),
+            'slots':      ['Afternoon'],
+            'type':       'unavailable',
+        })
+        data = resp.get_json()
+        assert resp.status_code == 409
+        assert data['success'] is False
+        assert data['conflict'] is True
+        with app.app_context():
+            assert WalkerAdHocAvailability.query.filter_by(date=wed).count() == 1
+            assert WalkerUnavailability.query.filter_by(date=wed).count() == 0
+
 
 # ---------------------------------------------------------------------------
 # Batch delete endpoint

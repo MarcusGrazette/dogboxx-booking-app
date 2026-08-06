@@ -552,6 +552,39 @@ def schedule_changes_batch():
         return jsonify(success=False,
                        message=f"Range too long — please pick a span of {MAX_RANGE_DAYS} days or fewer."), 400
 
+    # ── Conflict check ───────────────────────────────────────────────────
+    # An 'unavailable' entry and an 'available' (ad hoc) entry for the same
+    # date/slot can silently coexist — WalkerUnavailability always wins in
+    # capacity.py::get_available_walkers(), so the newer entry looks saved
+    # but has no real effect. Reject the whole batch up front rather than
+    # create a conflicting entry; the walker must delete the old one first.
+    conflict_model = WalkerAdHocAvailability if change_type == 'unavailable' else WalkerUnavailability
+    conflict_label = 'available' if change_type == 'unavailable' else 'unavailable'
+    conflicts = (
+        conflict_model.query
+        .filter(
+            conflict_model.walker_id == walker.id,
+            conflict_model.date >= start_date,
+            conflict_model.date <= end_date,
+            conflict_model.slot.in_(slots),
+        )
+        .order_by(conflict_model.date, conflict_model.slot)
+        .all()
+    )
+    if conflicts:
+        descriptions = [f"{c.date.strftime('%a %-d %b')} ({c.slot})" for c in conflicts]
+        preview = ', '.join(descriptions[:5])
+        if len(descriptions) > 5:
+            preview += f", and {len(descriptions) - 5} more"
+        return jsonify(
+            success=False,
+            conflict=True,
+            message=(
+                f"Already marked {conflict_label} for {preview} — "
+                "delete that entry first if you want to change it."
+            ),
+        ), 409
+
     # ── Iterate and apply ─────────────────────────────────────────────────
     created_adhoc_ids = []
     created_unavail_ids = []
