@@ -4,6 +4,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, current_user
 from flask_migrate import Migrate
 from dotenv import load_dotenv
+import gevent
 import os
 import secrets
 import logging
@@ -135,24 +136,37 @@ def create_app(config_name=None):
         # ── Web Push ─────────────────────────────────────────────────────────
         wp_pending = session.info.pop('webpush_pending', [])
         if wp_pending:
-            from app.utils.webpush import send_web_push
-            for item in wp_pending:
-                try:
-                    send_web_push(
-                        user_id=item['user_id'],
-                        title=item['title'],
-                        body=item.get('body', ''),
-                        link=item.get('link', '/'),
-                        icon=item.get('icon'),
-                        unread_count=item.get('unread_count', 1),
-                        subscriptions=item.get('subscriptions', []),
-                    )
-                except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).warning(
-                        'Web Push after_commit error for user %s: %s',
-                        item['user_id'], e
-                    )
+            def _send_pending_pushes(pending_items):
+                # Runs off the request path so a slow/dead FCM or APNs endpoint
+                # can't stall the triggering request (booking write, etc.) —
+                # recipients × devices, each at timeout=10, used to run inline
+                # inside db.session.commit() itself. Needs its own app context:
+                # by the time this greenlet is scheduled the request that
+                # queued it may already have torn its context down. Gunicorn's
+                # gevent worker drives the hub for the whole process, so this
+                # is scheduled the same way the worker schedules requests
+                # themselves — not reliable under the plain `flask run` dev
+                # server, which never yields to gevent's hub.
+                from app.utils.webpush import send_web_push
+                with app.app_context():
+                    for item in pending_items:
+                        try:
+                            send_web_push(
+                                user_id=item['user_id'],
+                                title=item['title'],
+                                body=item.get('body', ''),
+                                link=item.get('link', '/'),
+                                icon=item.get('icon'),
+                                unread_count=item.get('unread_count', 1),
+                                subscriptions=item.get('subscriptions', []),
+                            )
+                        except Exception as e:
+                            logging.getLogger(__name__).warning(
+                                'Web Push after_commit error for user %s: %s',
+                                item['user_id'], e
+                            )
+
+            gevent.spawn(_send_pending_pushes, wp_pending)
 
     # Initialize Flask-Migrate for database migrations
     migrate.init_app(app, db)

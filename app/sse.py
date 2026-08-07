@@ -113,15 +113,26 @@ def _handle_pubsub_message(message):
     _deliver_local(user_id, data)
 
 
-def subscribe(user_id: int) -> queue.Queue:
-    """Register a new SSE connection for a user. Returns a fresh Queue."""
+def subscribe(user_id: int, max_per_user: int = 8) -> queue.Queue | None:
+    """Register a new SSE connection for a user. Returns a fresh Queue, or
+    None if the user is already at max_per_user active connections — the
+    caller should respond 429 rather than open a stream. Bounds a single
+    account (buggy reconnect loop, or a deliberate script) from pinning an
+    unbounded number of the worker's --worker-connections slots, and from
+    growing the list every broadcast() has to iterate for that user."""
+    with _lock:
+        if len(_connections[user_id]) >= max_per_user:
+            log.warning("SSE: user %s at connection cap (%d) — refusing new subscribe",
+                        user_id, max_per_user)
+            return None
+        q = queue.Queue(maxsize=50)
+        _connections[user_id].append(q)
+        active = len(_connections[user_id])
+
     url = _redis_url()
     if url:
         _ensure_listener(url)
-    q = queue.Queue(maxsize=50)
-    with _lock:
-        _connections[user_id].append(q)
-    log.debug("SSE: user %s connected (%d active)", user_id, len(_connections[user_id]))
+    log.debug("SSE: user %s connected (%d active)", user_id, active)
     return q
 
 

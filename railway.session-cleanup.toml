@@ -2,4 +2,4 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "flask session_cleanup"
+startCommand = "flask session_cleanup && flask sweep-push-subscriptions"

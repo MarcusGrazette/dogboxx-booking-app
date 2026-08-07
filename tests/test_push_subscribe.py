@@ -129,3 +129,119 @@ class TestPushSubscribeValidation:
         resp = _post(client, 'https://fcm.googleapis.com/fcm/send/x')
         assert resp.status_code in (302, 401)
         assert resp.status_code != 200
+
+
+class TestLastSeenAt:
+    """M31: last_seen_at is the only real liveness signal — it must advance
+    even when the upsert is a no-op (identical keys), which is the common
+    case updated_at silently failed to cover (onupdate doesn't fire on an
+    unchanged row)."""
+
+    def test_set_on_first_subscribe(self, app, logged_in_client):
+        endpoint = 'https://fcm.googleapis.com/fcm/send/lsa1'
+        resp = _post(logged_in_client, endpoint)
+        assert resp.status_code == 200
+        with app.app_context():
+            sub = PushSubscription.query.filter_by(endpoint=endpoint).first()
+            assert sub.last_seen_at is not None
+
+    def test_advances_on_identical_repost(self, app, logged_in_client):
+        endpoint = 'https://fcm.googleapis.com/fcm/send/lsa2'
+        _post(logged_in_client, endpoint)
+        with app.app_context():
+            sub = PushSubscription.query.filter_by(endpoint=endpoint).first()
+            first_seen = sub.last_seen_at
+
+        # Re-POST with the exact same endpoint + keys — a no-op UPDATE as far
+        # as p256dh/auth are concerned, which is exactly the case where
+        # updated_at's onupdate wouldn't fire.
+        _post(logged_in_client, endpoint)
+        with app.app_context():
+            sub = PushSubscription.query.filter_by(endpoint=endpoint).first()
+            assert sub.last_seen_at >= first_seen
+
+
+class TestOldEndpointCleanup:
+    """M31: sw.js's pushsubscriptionchange handler sends old_endpoint so a
+    browser-initiated rotation deletes the row it replaces instead of
+    orphaning it forever."""
+
+    def test_old_endpoint_deleted_new_endpoint_kept(self, app, logged_in_client):
+        old = 'https://fcm.googleapis.com/fcm/send/rot-old'
+        new = 'https://fcm.googleapis.com/fcm/send/rot-new'
+        _post(logged_in_client, old)
+
+        resp = logged_in_client.post('/notifications/push-subscribe', json={
+            'endpoint': new,
+            'keys': {'p256dh': 'test-p256dh-key', 'auth': 'test-auth-secret'},
+            'old_endpoint': old,
+        })
+        assert resp.status_code == 200
+        with app.app_context():
+            assert PushSubscription.query.filter_by(endpoint=old).first() is None
+            assert PushSubscription.query.filter_by(endpoint=new).first() is not None
+
+    def test_old_endpoint_belonging_to_another_user_is_not_deleted(
+            self, app, logged_in_client, client_user):
+        """old_endpoint is attacker-influenceable (no CSRF token on this
+        route) — it must only ever delete the caller's own row."""
+        from werkzeug.security import generate_password_hash
+        from app.models import User, Client
+
+        with app.app_context():
+            other = User(firstname='Other', lastname='User', email='other_rot@test.com',
+                        role='client', hashed_password=generate_password_hash('Testpass1!'))
+            db.session.add(other)
+            db.session.commit()
+            db.session.add(Client(user_id=other.id, onboarding_completed=True))
+            db.session.commit()
+            others_endpoint = 'https://fcm.googleapis.com/fcm/send/not-yours'
+            db.session.add(PushSubscription(
+                user_id=other.id, endpoint=others_endpoint,
+                p256dh='k', auth='a'))
+            db.session.commit()
+
+        new = 'https://fcm.googleapis.com/fcm/send/rot-new-2'
+        resp = logged_in_client.post('/notifications/push-subscribe', json={
+            'endpoint': new,
+            'keys': {'p256dh': 'test-p256dh-key', 'auth': 'test-auth-secret'},
+            'old_endpoint': others_endpoint,
+        })
+        assert resp.status_code == 200
+        with app.app_context():
+            assert PushSubscription.query.filter_by(endpoint=others_endpoint).first() is not None
+
+
+class TestSweepPushSubscriptions:
+    """M31: the query flask sweep-push-subscriptions runs (run.py). CLI
+    commands in run.py attach to run.py's own app instance, not the
+    create_app() factory this test suite uses (same reason reconcile-uploads
+    has no test coverage either) — so this exercises the same DELETE the
+    command issues rather than invoking the command itself."""
+
+    def test_sweeps_stale_keeps_fresh(self, app, client_user):
+        import datetime as dt
+
+        with app.app_context():
+            stale = PushSubscription(
+                user_id=client_user.id, endpoint='https://fcm.googleapis.com/fcm/send/stale',
+                p256dh='k', auth='a',
+                last_seen_at=dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=91))
+            fresh = PushSubscription(
+                user_id=client_user.id, endpoint='https://fcm.googleapis.com/fcm/send/fresh',
+                p256dh='k', auth='a',
+                last_seen_at=dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=1))
+            db.session.add_all([stale, fresh])
+            db.session.commit()
+
+            cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=90)
+            deleted = (PushSubscription.query
+                       .filter(PushSubscription.last_seen_at < cutoff)
+                       .delete(synchronize_session=False))
+            db.session.commit()
+
+            assert deleted == 1
+            assert PushSubscription.query.filter_by(
+                endpoint='https://fcm.googleapis.com/fcm/send/stale').first() is None
+            assert PushSubscription.query.filter_by(
+                endpoint='https://fcm.googleapis.com/fcm/send/fresh').first() is not None

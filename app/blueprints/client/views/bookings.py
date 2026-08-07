@@ -8,10 +8,10 @@ from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError
 from app.models import User, Dog, Booking, DogOwner, ServiceType, Walker, Closure
-from app import db
+from app import db, limiter
 from app.utils.db_error_handler import DBErrorHandler
 from app.utils.booking_access import get_accessible_dog_ids, user_can_access_booking
-from app.capacity import is_date_closed
+from app.capacity import is_date_closed, MAX_RECURRING_SERIES
 from app.forms import BookingForm
 import logging
 import uuid
@@ -1143,6 +1143,7 @@ def calendar_data(year, month):
 
 @client_bp.route("/recurring_booking", methods=["POST"])
 @login_required
+@limiter.limit("10 per hour")
 def recurring_booking():
     """Create a series of bookings from a start date, end date, slot and frequency.
 
@@ -1160,8 +1161,9 @@ def recurring_booking():
 
     Returns JSON: { success, created, waitlisted, skipped }
 
-    Note: the 1-year cap is a client-facing safeguard. Admins booking on behalf
-    of clients via /admin/recurring_for_dog have no such cap.
+    Note: the 1-year cap is a client-facing safeguard, as is
+    MAX_RECURRING_SERIES below (app.capacity — shared with
+    /admin/recurring_for_dog).
     """
     try:
         data = request.get_json()
@@ -1242,6 +1244,23 @@ def recurring_booking():
 
         slots_to_book = ['Morning', 'Afternoon'] if slot == 'Both' else [slot]
 
+        # Each iteration below takes a transaction-scoped advisory lock
+        # (capacity.py::acquire_booking_lock) — bounding total iterations here
+        # bounds request latency and query volume even with per-iteration
+        # commits releasing each lock quickly (see loop below).
+        total_ops = len(target_dates) * len(slots_to_book)
+        if total_ops > MAX_RECURRING_SERIES:
+            # Deliberately no raw number in the message: MAX_RECURRING_SERIES
+            # is a backend implementation detail (weekday-count x slots), not
+            # something a client thinks in terms of on a date picker. This
+            # should be unreachable via the UI anyway — the number was sized
+            # to exactly cover the 1-year cap above at Both slots — so seeing
+            # it at all implies a direct API call or a future UI change that
+            # relaxed the 1-year cap without revisiting this one.
+            return jsonify(success=False,
+                           message="That date range creates too many bookings for one "
+                                   "request — please choose a shorter range."), 400
+
         for d in target_dates:
             for s in slots_to_book:
                 existing = Booking.query.filter(
@@ -1270,6 +1289,16 @@ def recurring_booking():
                         auto_confirm=not is_drop_in,
                     )
                 except CapacityError:
+                    db.session.rollback()
+                    skipped += 1
+                    continue
+                except IntegrityError:
+                    # Concurrent-duplicate race on this specific date/slot (unique
+                    # index on active (dog_id, date, slot)) — someone else booked
+                    # it first. With per-booking commits this can no longer roll
+                    # back the whole series, so treat it like a capacity conflict:
+                    # skip this one slot and keep going.
+                    db.session.rollback()
                     skipped += 1
                     continue
 
@@ -1282,6 +1311,17 @@ def recurring_booking():
                 else:
                     created += 1
                     pending_bookings.append(booking)
+
+                # Commit per booking, not once at the end: the advisory lock
+                # create_booking() takes is transaction-scoped, so holding one
+                # open uncommitted transaction across the whole series would hold
+                # every lock in it simultaneously for the series' duration,
+                # blocking any other booking on those same (service, date, slot)
+                # combos. Committing here releases each lock within milliseconds
+                # instead. Read above, before this commit: a commit expires every
+                # object in the session, so reading booking.status after it would
+                # cost an extra re-fetch query for no benefit.
+                db.session.commit()
 
         # Client + admin notifications via NotificationBatch / summarise().
         # Client gets one notice per outcome kind (confirmed / pending).
@@ -1336,11 +1376,13 @@ def recurring_booking():
         return jsonify(success=True, confirmed=confirmed, created=created, waitlisted=waitlisted, skipped=skipped)
 
     except IntegrityError:
-        # Concurrent-duplicate race on one of the recurring dates — unique index
-        # rejected it. Graceful 409 instead of a 500 (SECURITY_REVIEW.md #2).
+        # Per-slot duplicate races are now caught inside the loop above (each
+        # booking commits on its own) — this only catches an IntegrityError from
+        # the final notification commit, which isn't expected but stays a
+        # graceful 409 instead of a 500 if it ever happens (SECURITY_REVIEW.md #2).
         db.session.rollback()
         return jsonify(success=False,
-                       message="Some of those slots were just booked — please reload and try again."), 409
+                       message="Something changed while processing your bookings — please reload and check the results."), 409
     except Exception as e:
         db.session.rollback()
         logging.exception(f"Error creating recurring bookings: {e}")

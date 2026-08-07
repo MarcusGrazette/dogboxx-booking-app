@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 from flask import render_template, request, jsonify, Response, stream_with_context, current_app
@@ -6,7 +7,7 @@ from . import notifications_bp
 from app.utils.notifications import mark_read, mark_all_read, get_recent
 from app.models import Notification, PushSubscription
 from app.utils.notifications import get_meta
-from app import db, limiter
+from app import db, limiter, csrf
 
 
 @notifications_bp.route('/stream')
@@ -21,6 +22,13 @@ def stream():
     from app.sse import subscribe, stream_generator
     user_id = current_user.id
     q = subscribe(user_id)
+    if q is None:
+        # At the per-user connection cap — the browser's EventSource treats
+        # any non-2xx as a failure and already retries with backoff
+        # (notification_bell.html's onerror handler), so no client change
+        # needed. A capped-out surface just falls back to the bell's existing
+        # foreground reconciliation instead of live push.
+        return Response('', status=429, mimetype='text/event-stream')
     return Response(
         stream_with_context(stream_generator(user_id, q)),
         mimetype='text/event-stream',
@@ -125,6 +133,7 @@ def _wants_json():
 @notifications_bp.route('/push-subscribe', methods=['POST'])
 @login_required
 @limiter.limit("20 per hour")
+@csrf.exempt
 def push_subscribe():
     """Save (or refresh) a Web Push subscription for the current user.
 
@@ -134,10 +143,22 @@ def push_subscribe():
             "keys": {
                 "p256dh": "<base64url>",
                 "auth":   "<base64url>"
-            }
+            },
+            "old_endpoint": "https://fcm.googleapis.com/..."   // optional, M31
         }
 
-    Upserts on endpoint — safe to call on every page load.
+    Upserts on endpoint — safe to call on every page load. `old_endpoint`,
+    when present, is the subscription this one replaces (sent by sw.js's
+    pushsubscriptionchange handler on a browser-initiated rotation) — deleted
+    for the current user so the rotation doesn't orphan the old row forever.
+
+    CSRF-exempt: the service worker's pushsubscriptionchange handler can fire
+    with no page open and no access to a page-embedded CSRF token, so this
+    can't require one. Compensating controls: @login_required (a cross-site
+    POST carries no session cookie at all under SESSION_COOKIE_SAMESITE=Lax,
+    which is the primary thing CSRF protection defends against here) plus the
+    endpoint allowlist below, which bounds what this can actually be used for
+    regardless.
 
     Returns 400 if the endpoint host isn't a known push service (SSRF guard —
     see the comment below). All five mainstream browser engines are allowlisted,
@@ -147,9 +168,10 @@ def push_subscribe():
     if not data or not data.get('endpoint') or not data.get('keys'):
         return jsonify({'ok': False, 'error': 'invalid payload'}), 400
 
-    endpoint = data['endpoint']
-    p256dh   = data['keys'].get('p256dh', '')
-    auth     = data['keys'].get('auth', '')
+    endpoint     = data['endpoint']
+    old_endpoint = data.get('old_endpoint')
+    p256dh       = data['keys'].get('p256dh', '')
+    auth         = data['keys'].get('auth', '')
 
     if not p256dh or not auth:
         return jsonify({'ok': False, 'error': 'missing keys'}), 400
@@ -193,17 +215,36 @@ def push_subscribe():
         db.session.flush()  # release unique constraint on endpoint before re-insert
         sub = None
 
+    now = datetime.now(timezone.utc)
     if sub:
         sub.p256dh = p256dh
         sub.auth   = auth
+        # Set explicitly rather than relying on updated_at's onupdate: an
+        # identical-key upsert (the common case — most page loads re-POST the
+        # same subscription) is a no-op UPDATE, so onupdate wouldn't fire even
+        # though the device is still genuinely active (M31).
+        sub.last_seen_at = now
     else:
         sub = PushSubscription(
             user_id=current_user.id,
             endpoint=endpoint,
             p256dh=p256dh,
             auth=auth,
+            last_seen_at=now,
         )
         db.session.add(sub)
+
+    # Browser-initiated rotation (M31): the old endpoint is still valid at the
+    # push service — it'll keep returning 201 forever, so send_web_push()'s
+    # 404/410 pruning never catches it — but nothing renders since the
+    # subscription behind it has moved to `endpoint`. Delete it now instead of
+    # leaving it to the 90-day sweep. Scoped to the current user: this is
+    # reachable without a CSRF token (see docstring), so it must not be able
+    # to delete another user's row.
+    if old_endpoint and old_endpoint != endpoint:
+        PushSubscription.query.filter_by(
+            user_id=current_user.id, endpoint=old_endpoint,
+        ).delete(synchronize_session=False)
 
     db.session.commit()
     current_app.logger.info('Push subscription saved for user %s', current_user.id)

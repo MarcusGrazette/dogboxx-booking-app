@@ -1,6 +1,7 @@
 from flask import request, render_template, jsonify, url_for
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
+from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timezone
 import logging
 import uuid
@@ -12,6 +13,7 @@ from app import db
 from app.utils.notifications import NotificationBatch
 from app.utils.booking_status import bulk_transition
 from app.services.booking_service import create_booking, CapacityError
+from app.capacity import MAX_RECURRING_SERIES
 from app.utils.invoicing import is_late_cancellation
 from app.utils.sanitize import clean_rich_text_or_none
 from app.utils.uploads import process_dog_photo
@@ -377,6 +379,24 @@ def recurring_for_dog():
         if not target_pairs:
             return jsonify(success=False, message="No valid dates in that range"), 400
 
+        # Each iteration below takes a transaction-scoped advisory lock
+        # (capacity.py::acquire_booking_lock) — bounding total iterations here
+        # bounds request latency and query volume even with per-iteration
+        # commits releasing each lock quickly (see loop below). Unlike the
+        # client-facing /recurring_booking, this route has no date-range cap of
+        # its own, so this is the only thing bounding series size here —
+        # MAX_RECURRING_SERIES is shared with that route (app/capacity.py) since
+        # an admin selecting all weekdays x both slots over a year-long range
+        # can hit the same worst case. Unlike the client message, the exact
+        # number is shown here deliberately: this is a trusted internal admin
+        # tool, more likely to actually hit the cap in normal use (no date-range
+        # limit backstops it), and a precise count is more useful than vague
+        # guidance for someone planning a large recurring setup.
+        if len(target_pairs) > MAX_RECURRING_SERIES:
+            return jsonify(success=False,
+                           message=f"That range creates too many bookings at once "
+                                   f"(max {MAX_RECURRING_SERIES}). Please book a shorter period."), 400
+
         active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
         confirmed = requested = waitlisted = skipped = 0
         # One batch_id ties together every booking in this recurring series so
@@ -416,6 +436,16 @@ def recurring_for_dog():
                     admin_override=True, created_by_id=current_user.id,
                 )
             except CapacityError:
+                db.session.rollback()
+                skipped += 1
+                continue
+            except IntegrityError:
+                # Concurrent-duplicate race on this specific date/slot (unique
+                # index on active (dog_id, date, slot)) — someone else booked it
+                # first. With per-booking commits this can no longer roll back
+                # the whole series, so treat it like a capacity conflict: skip
+                # this one slot and keep going.
+                db.session.rollback()
                 skipped += 1
                 continue
 
@@ -437,7 +467,14 @@ def recurring_for_dog():
                 batch.add(user_id, 'booking_requested', actor_first=client_actor,
                           dog_name=dog.name, slot=slot, date=d)
 
-        db.session.flush()  # persist bookings before emitting notifications
+            # Commit per booking, not once at the end: the advisory lock
+            # create_booking() takes is transaction-scoped, so holding one open
+            # uncommitted transaction across the whole series would hold every
+            # lock in it simultaneously for the series' duration, blocking any
+            # other booking on those same (service, date, slot) combos.
+            # Committing here releases each lock within milliseconds instead.
+            db.session.commit()
+
         batch.flush()
         db.session.commit()
         return jsonify(success=True, confirmed=confirmed, requested=requested, waitlisted=waitlisted, skipped=skipped)

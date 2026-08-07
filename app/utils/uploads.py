@@ -7,6 +7,7 @@ import os
 import uuid
 from pathlib import Path
 
+import gevent
 from flask import current_app
 from PIL import Image
 from werkzeug.utils import secure_filename
@@ -35,7 +36,18 @@ def _backup_to_r2(local_path, r2_key):
             endpoint_url=endpoint,
             aws_access_key_id=key_id,
             aws_secret_access_key=secret,
-            config=Config(signature_version='s3v4'),
+            # Bounds how long a single backup attempt can run. This runs off the
+            # request path (see call sites below) so nobody's waiting on it, but
+            # an unbounded call still pins a greenlet + open socket for the
+            # botocore default (~60s connect + 60s read, plus retries) — under a
+            # sustained R2 outage that accumulates across every upload. One
+            # attempt is enough: reconcile-uploads sweeps for anything this
+            # misses, so retrying harder here wouldn't improve correctness.
+            config=Config(
+                signature_version='s3v4',
+                connect_timeout=3, read_timeout=10,
+                retries={'max_attempts': 1},
+            ),
             region_name='auto',
         )
         client.upload_file(local_path, bucket, r2_key)
@@ -106,7 +118,9 @@ def process_dog_photo(file_storage, subfolder=None):
     img.save(upload_path, fmt, **kwargs)
 
     logging.info(f"Saved dog photo ({subfolder}): {unique_filename}")
-    _backup_to_r2(upload_path, f"{subfolder}/{unique_filename}")
+    # Off the request path: the local save above is what the caller waits on;
+    # R2 is a best-effort backup and shouldn't hold up the response.
+    gevent.spawn(_backup_to_r2, upload_path, f"{subfolder}/{unique_filename}")
     return unique_filename
 
 
@@ -163,5 +177,7 @@ def process_cropped_photo(file_storage, subfolder='dogs'):
     img.save(upload_path, 'JPEG', quality=88, optimize=True)
 
     logging.info(f"Saved cropped photo ({subfolder}): {unique_filename}")
-    _backup_to_r2(upload_path, f"{subfolder}/{unique_filename}")
+    # Off the request path: the local save above is what the caller waits on;
+    # R2 is a best-effort backup and shouldn't hold up the response.
+    gevent.spawn(_backup_to_r2, upload_path, f"{subfolder}/{unique_filename}")
     return unique_filename

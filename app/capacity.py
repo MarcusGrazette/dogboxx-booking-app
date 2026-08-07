@@ -9,6 +9,14 @@ from sqlalchemy.orm import joinedload
 from app.models import WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, Booking, ServiceType, Walker, Closure
 from app import db
 
+# Shared between /recurring_booking (client) and /admin/recurring_for_dog —
+# each date/slot combination those routes create takes a transaction-scoped
+# advisory lock via acquire_booking_lock() below. 524 = the worst-case weekday
+# count in any 366-day range (262, for a Mon-Thu start) x 2 slots — i.e. the
+# client route's own "book every weekday, both slots, for a year" UI default
+# always fits under this regardless of which day of the week it starts on.
+MAX_RECURRING_SERIES = 524
+
 
 def acquire_booking_lock(service_slug: str, booking_date, slot: str | None) -> None:
     """Acquire a transaction-scoped advisory lock for a given (service, date, slot).
