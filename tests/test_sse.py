@@ -75,6 +75,49 @@ class TestInMemoryFanout:
 
 
 # ---------------------------------------------------------------------------
+# Per-user connection cap (M11)
+# ---------------------------------------------------------------------------
+
+class TestPerUserConnectionCap:
+
+    def test_eighth_subscribe_succeeds_ninth_refused(self, app):
+        with app.app_context():
+            qs = [sse.subscribe(42) for _ in range(8)]
+            assert all(q is not None for q in qs)
+            assert sse.subscribe(42) is None
+            for q in qs:
+                sse.unsubscribe(42, q)
+
+    def test_cap_is_per_user_not_global(self, app):
+        with app.app_context():
+            qs = [sse.subscribe(42) for _ in range(8)]
+            assert sse.subscribe(42) is None
+            # a different user is unaffected by user 42 being at the cap
+            other = sse.subscribe(43)
+            assert other is not None
+            for q in qs:
+                sse.unsubscribe(42, q)
+            sse.unsubscribe(43, other)
+
+    def test_unsubscribe_frees_a_slot(self, app):
+        with app.app_context():
+            qs = [sse.subscribe(42) for _ in range(8)]
+            assert sse.subscribe(42) is None
+            sse.unsubscribe(42, qs[0])
+            fresh = sse.subscribe(42)
+            assert fresh is not None
+            for q in qs[1:] + [fresh]:
+                sse.unsubscribe(42, q)
+
+    def test_custom_max_per_user(self, app):
+        with app.app_context():
+            q1 = sse.subscribe(42, max_per_user=1)
+            assert q1 is not None
+            assert sse.subscribe(42, max_per_user=1) is None
+            sse.unsubscribe(42, q1)
+
+
+# ---------------------------------------------------------------------------
 # Redis pub/sub transport (SSE_REDIS_URL set — prod, --workers > 1)
 # ---------------------------------------------------------------------------
 

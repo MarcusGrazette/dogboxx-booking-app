@@ -11,11 +11,12 @@ Covers:
 - mark_all_read() clears all unread for a user
 """
 import datetime
+import queue
 import pytest
 from werkzeug.security import generate_password_hash
 from sqlalchemy import text
 
-from app import db
+from app import db, sse
 from app.models import User, Client, Walker, Dog, DogOwner, ServiceType, Booking, Notification
 from app.utils.notifications import (
     create_notification, get_unread_count, get_recent,
@@ -368,6 +369,36 @@ class TestUnreadCountEndpoint:
         login(client, 'unread_ep_u1@test.com')
         res = client.get('/notifications/unread-count')
         assert res.get_json() == {'count': 1}
+
+
+# ---------------------------------------------------------------------------
+# M11 — /notifications/stream per-user connection cap
+# ---------------------------------------------------------------------------
+
+class TestStreamEndpoint:
+    """The SSE endpoint itself streams indefinitely, so these only exercise
+    the capped-out 429 path — never the open connection (see app/sse.py's
+    own unit tests for subscribe()/broadcast() behavior)."""
+
+    def test_returns_429_at_connection_cap(self, app, client):
+        with app.app_context():
+            user = make_user('stream_cap@test.com')
+            make_client_profile(user.id)
+            db.session.commit()
+            user_id = user.id
+
+        login(client, 'stream_cap@test.com')
+        try:
+            for _ in range(8):
+                sse._connections[user_id].append(queue.Queue(maxsize=50))
+            res = client.get('/notifications/stream')
+            assert res.status_code == 429
+        finally:
+            sse._connections.pop(user_id, None)
+
+    def test_requires_login(self, client):
+        res = client.get('/notifications/stream')
+        assert res.status_code == 302
 
 
 # ---------------------------------------------------------------------------

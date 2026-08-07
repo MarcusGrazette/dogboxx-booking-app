@@ -20,7 +20,7 @@
 
 // ── Cache config ──────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'v29';
+const CACHE_VERSION = 'v30';
 const CACHE_NAME    = `dogboxx-${CACHE_VERSION}`;
 
 /**
@@ -277,6 +277,38 @@ self.addEventListener('push', function (event) {
         }
 
         return self.registration.showNotification(title, options);
+      })
+  );
+});
+
+// ── Subscription rotation (M31) ─────────────────────────────────────────────
+//
+// The browser fires this when it rotates a push subscription on its own
+// (key rotation, expiry, etc.) — not on every subscription, and Chrome fires
+// it reliably while Safari/iOS historically doesn't, so this is a supplement
+// to the page's own re-register-on-every-load behavior (notification_bell.html),
+// not a replacement for it. Without this, the old endpoint is never reported
+// as dead — it stays valid at the push service (still returns 201) even
+// though nothing renders behind it — so it would sit orphaned until the
+// 90-day sweep instead of being cleaned up immediately.
+//
+// No CSRF token: this can fire with no Dogboxx tab open, so there's no page
+// context to read one from. push-subscribe is deliberately CSRF-exempt to
+// allow this call — see that route's docstring for the compensating controls.
+self.addEventListener('pushsubscriptionchange', function (event) {
+  event.waitUntil(
+    self.registration.pushManager.subscribe(event.oldSubscription.options)
+      .then(function (newSub) {
+        var body = newSub.toJSON();
+        body.old_endpoint = event.oldSubscription && event.oldSubscription.endpoint;
+        return fetch('/notifications/push-subscribe', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(body),
+        });
+      })
+      .catch(function (err) {
+        console.debug('[sw] pushsubscriptionchange re-registration failed:', err.message);
       })
   );
 });

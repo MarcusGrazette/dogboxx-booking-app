@@ -586,6 +586,13 @@ class PushSubscription(db.Model):
     created_at  = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at  = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
                             onupdate=lambda: datetime.now(timezone.utc))
+    # Liveness signal (M31) — set explicitly on every upsert in push_subscribe(),
+    # not left to onupdate: an identical-key upsert is a no-op UPDATE, so
+    # onupdate wouldn't fire even though the device is still genuinely active.
+    # This is the only column that distinguishes "still-alive endpoint the push
+    # service still accepts" from "endpoint the browser abandoned months ago" —
+    # the push service itself can't tell you that, it'll return 201 either way.
+    last_seen_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     user = db.relationship('User', backref=db.backref('push_subscriptions', lazy=True))
 

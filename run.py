@@ -132,6 +132,28 @@ def reconcile_uploads_cmd():
             click.echo("All volume files present in R2 with matching sizes.")
 
 
+@app.cli.command("sweep-push-subscriptions")
+def sweep_push_subscriptions_cmd():
+    """Delete push subscriptions not seen in 90+ days (M31). A still-valid
+    endpoint whose device is long gone keeps returning 201 from the push
+    service forever, so send_web_push()'s 404/410 pruning never catches it —
+    last_seen_at (set on every push-subscribe upsert) is the only real
+    liveness signal. Run from the session-cleanup Railway cron service
+    alongside `flask session_cleanup` — same shape of housekeeping, no
+    dedicated service needed."""
+    from datetime import datetime, timezone, timedelta
+    from app import db
+    from app.models import PushSubscription
+
+    with app.app_context():
+        cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+        deleted = (PushSubscription.query
+                   .filter(PushSubscription.last_seen_at < cutoff)
+                   .delete(synchronize_session=False))
+        db.session.commit()
+        click.echo(f"Swept {deleted} push subscription(s) not seen since {cutoff.date()}.")
+
+
 if __name__ == "__main__":
     # Get port from environment or default to 5000
     port = int(os.environ.get('PORT', 5000))
