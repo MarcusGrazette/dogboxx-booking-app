@@ -505,6 +505,14 @@ async function submitScheduleChange() {
             // Whole range was skipped — show the most informative reason
             const first = (data.skipped_reasons && data.skipped_reasons[0]) || 'Nothing to add.';
             setSchedStatus('Nothing added — ' + first, 'error');
+        } else if (data.conflict) {
+            setSchedStatus('', '');
+            showConfirm(data.message, function () {}, {
+                title: 'Conflicting schedule change',
+                confirmLabel: 'Got it',
+                danger: false,
+                icon: 'bi-exclamation-triangle',
+            });
         } else {
             setSchedStatus(data.message || 'Failed to save.', 'error');
         }
