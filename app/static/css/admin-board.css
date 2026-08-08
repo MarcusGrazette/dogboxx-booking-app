@@ -171,15 +171,14 @@
 }
 
 /* Portrait phones: dog name is the key info, so give it the full
-   card width. Hide the avatar and drag handle to recover horizontal
-   space, allow the card to wrap, and force the name/owner block to
-   take a full row so the pills and badges wrap to the next line. */
+   card width. Hide the avatar to recover horizontal space, allow the
+   card to wrap, and force the name/owner block to take a full row so
+   the pills and badges wrap to the next line. */
 @media (max-width: 767.98px) {
     .board-card {
         flex-wrap: wrap;
     }
-    .board-dog-img,
-    .drag-handle {
+    .board-dog-img {
         display: none;
     }
     .board-card-info {
@@ -209,18 +208,6 @@
 
 .board-col-header.header-unavailable {
     background: #856404;
-}
-
-/* ── Drag handle hint ──────────────────────────────────────────────────────── */
-.drag-handle {
-    color: #adb5bd;
-    font-size: 0.8rem;
-    cursor: grab;
-    flex-shrink: 0;
-}
-
-.drag-handle:active {
-    cursor: grabbing;
 }
 
 /* ── Slot badge on pending cards ───────────────────────────────────────────── */
@@ -267,12 +254,3 @@
     transition: opacity 0.2s;
 }
 
-/* ── Sortable ghost ────────────────────────────────────────────────────────── */
-.sortable-ghost {
-    opacity: 0.3;
-    border-style: dashed;
-}
-
-.sortable-chosen {
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-}

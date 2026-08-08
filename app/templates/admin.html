@@ -564,7 +564,6 @@ window._DASH = {
 {{ super() }}
 <!-- Board JS — used by the Assign modal embedded on the dashboard -->
 <script src="{{ url_for('static', filename='js/admin-board-core.js') }}"></script>
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
 <!-- Override form JS — used by the Schedule Override modal -->
 <script src="{{ url_for('static', filename='js/admin-override-form.js') }}"></script>
 <script nonce="{{ csp_nonce }}">
@@ -958,7 +957,6 @@ window._DASH = {
     try {
       window.createBoard({
         assignUrl:    '{{ url_for("admin.assign_walker") }}',
-        reorderUrl:   '{{ url_for("admin.reorder_pickups") }}',
         boardDataUrl: '{{ url_for("admin.board_data", date_str="DATE") }}',
         emptyIcon:    'bi-emoji-smile',
         emptyText:    'No bookings for this date',

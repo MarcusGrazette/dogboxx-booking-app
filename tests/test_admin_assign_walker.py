@@ -73,10 +73,14 @@ def _make_walker(email='walker_aw@test.com'):
     return u, w
 
 
-def _make_booking(date, slot='Morning'):
-    """Seed a minimal client + dog + service type + requested booking."""
+def _make_booking(date, slot='Morning', email='client_aw@test.com', dog_name='Buddy'):
+    """Seed a minimal client + dog + service type + requested booking.
+
+    Reuses the 'Group Walk' service type across calls within a test (idempotent
+    on slug) so a test can build several bookings for the same date/slot.
+    """
     client_u = User(
-        firstname='Client', lastname='User', email='client_aw@test.com',
+        firstname='Client', lastname='User', email=email,
         role='client', active=True,
         hashed_password=generate_password_hash('Testpass1!'),
     )
@@ -85,22 +89,24 @@ def _make_booking(date, slot='Morning'):
     db.session.add(Client(user_id=client_u.id, onboarding_completed=True))
     db.session.flush()
 
-    dog = Dog(name='Buddy', breed='Labrador')
+    dog = Dog(name=dog_name, breed='Labrador')
     db.session.add(dog)
     db.session.flush()
     db.session.add(DogOwner(dog_id=dog.id, user_id=client_u.id, role='primary'))
     db.session.flush()
 
-    st = ServiceType(
-        name='Group Walk', slug='group-walk',
-        capacity_model='walker_assigned',
-        slot_type='morning_afternoon',
-        requires_walker=True,
-        default_max_capacity=6,
-        active=True,
-    )
-    db.session.add(st)
-    db.session.flush()
+    st = ServiceType.query.filter_by(slug='group-walk').first()
+    if not st:
+        st = ServiceType(
+            name='Group Walk', slug='group-walk',
+            capacity_model='walker_assigned',
+            slot_type='morning_afternoon',
+            requires_walker=True,
+            default_max_capacity=6,
+            active=True,
+        )
+        db.session.add(st)
+        db.session.flush()
 
     booking = Booking(
         user_id=client_u.id,
@@ -205,6 +211,56 @@ class TestAssignWalkerActionLog:
             assert rows[0].from_status == 'confirmed'
             assert rows[0].to_status == 'requested'
             assert rows[0].changed_by_id == admin_id
+
+
+class TestPickupOrderOnManualAssign:
+    """Manual click-to-assign now sequences pickup_order to the end of the
+    walker's lane, mirroring the auto-confirm path in booking_service.py —
+    previously only auto-confirm ever wrote this column, so a manually
+    assigned booking's pickup_order stayed NULL forever."""
+
+    def test_first_assign_in_lane_gets_order_one(self, app, client):
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_admin()
+            _, walker = _make_walker()
+            booking = _make_booking(monday, slot='Morning')
+            db.session.add(WalkerSchedule(
+                walker_id=walker.id, day_of_week=0, slot='Morning', active=True,
+            ))
+            db.session.commit()
+            admin_email, booking_id, walker_id = admin.email, booking.id, walker.id
+
+        _login(client, admin_email)
+        resp = _post_assign(client, booking_id, walker_id)
+        assert resp.status_code == 200, resp.get_json()
+
+        with app.app_context():
+            assert db.session.get(Booking, booking_id).pickup_order == 1
+
+    def test_second_assign_in_same_lane_appends_to_end(self, app, client):
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_admin()
+            _, walker = _make_walker()
+            booking_a = _make_booking(monday, slot='Morning',
+                                       email='client_a@test.com', dog_name='Buddy')
+            booking_b = _make_booking(monday, slot='Morning',
+                                       email='client_b@test.com', dog_name='Rex')
+            db.session.add(WalkerSchedule(
+                walker_id=walker.id, day_of_week=0, slot='Morning', active=True,
+            ))
+            db.session.commit()
+            admin_email = admin.email
+            booking_a_id, booking_b_id, walker_id = booking_a.id, booking_b.id, walker.id
+
+        _login(client, admin_email)
+        assert _post_assign(client, booking_a_id, walker_id).status_code == 200
+        assert _post_assign(client, booking_b_id, walker_id).status_code == 200
+
+        with app.app_context():
+            assert db.session.get(Booking, booking_a_id).pickup_order == 1
+            assert db.session.get(Booking, booking_b_id).pickup_order == 2
 
 
 class TestUnavailabilityMessage:

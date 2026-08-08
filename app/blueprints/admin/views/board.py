@@ -65,7 +65,7 @@ def _booking_dict(b, both_slots_dog_ids=None, owners_display_map=None):
 @login_required
 @admin_required
 def board():
-    """Group walk assignment board — click-to-assign + drag-to-reorder."""
+    """Group walk assignment board — click-to-assign."""
     return render_template("admin_board.html")
 
 
@@ -326,14 +326,11 @@ def assign_walker():
         booking_id  (int)   Required. Booking to update.
         walker_id   (int)   Walker to assign. Omit or null to unassign.
         slot        (str)   'Morning' or 'Afternoon'. Overrides booking.slot if provided.
-        pickup_order (list) Optional. List of booking IDs in pickup order for this
-                            walker/date/slot — persists pickup_order on each booking.
 
     Side effects on successful assignment:
         - Sets booking.status = 'confirmed', booking.walker_id, booking.slot
         - Sends in-app notification to client (booking_confirmed)
         - Sends in-app notification to walker (walker_assigned)
-        - Persists pickup_order if provided
 
     On unassignment (walker_id = null):
         - Clears booking.walker_id, sets status back to 'requested'
@@ -455,6 +452,15 @@ def assign_walker():
         if slot:
             booking.slot = slot
 
+        # Sequence this booking to the end of the walker's lane for this slot —
+        # mirrors the auto-confirm path (booking_service.py::create_booking),
+        # which is the only other writer of pickup_order. Counts booking itself
+        # (already flushed with the new walker_id/slot above via autoflush).
+        booking.pickup_order = get_walker_slot_count(
+            walker.id, booking.date, booking.slot,
+            service_slug=booking.service_type.slug if booking.service_type else ServiceType.WALK,
+        )
+
         # Notify client + walker — label differs by service type
         date_str_fmt = booking.date.strftime('%a %-d %b')
         dog_name = booking.dog.name if booking.dog else 'your dog'
@@ -491,14 +497,6 @@ def assign_walker():
                 link=f'/walker/pickups?date={booking.date.isoformat()}',
                 sender_id=current_user.id,
             )
-
-        # Update pickup order for all bookings in this walker's slot
-        pickup_order = data.get("pickup_order")  # list of booking IDs in order
-        if pickup_order and isinstance(pickup_order, list):
-            for idx, bid in enumerate(pickup_order, start=1):
-                b = db.session.get(Booking, int(bid))
-                if b and b.walker_id == walker.id and b.date == booking.date and b.slot == booking.slot:
-                    b.pickup_order = idx
 
         db.session.commit()
 
@@ -556,44 +554,6 @@ def decline_booking(booking_id):
     except Exception as e:
         db.session.rollback()
         logging.exception('Error declining booking %s: %s', booking_id, e)
-        return jsonify(success=False, message="Server error"), 500
-
-
-@admin_bp.route("/reorder_pickups", methods=["POST"])
-@login_required
-@admin_required
-def reorder_pickups():
-    """Reorder pickup order for bookings within a walker's slot. Returns JSON."""
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify(success=False, message="Invalid request"), 400
-
-    pickup_order = data.get("pickup_order")  # list of booking IDs in desired order
-    walker_id = data.get("walker_id")
-    date_str = data.get("date")
-    slot = data.get("slot")
-
-    if not all([pickup_order, walker_id, date_str, slot]):
-        return jsonify(success=False, message="Missing required fields"), 400
-
-    if not isinstance(pickup_order, list) or len(pickup_order) == 0:
-        return jsonify(success=False, message="Invalid pickup order"), 400
-
-    try:
-        from datetime import datetime
-        selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-
-        for idx, bid in enumerate(pickup_order, start=1):
-            b = db.session.get(Booking, int(bid))
-            if b and b.walker_id == int(walker_id) and b.date == selected_date and b.slot == slot:
-                b.pickup_order = idx
-
-        db.session.commit()
-        return jsonify(success=True, message="Pickup order updated"), 200
-
-    except Exception as e:
-        db.session.rollback()
-        logging.exception(f"Error reordering pickups: {e}")
         return jsonify(success=False, message="Server error"), 500
 
 
