@@ -356,6 +356,7 @@ def assign_walker():
         if walker_id is None:
             transition_booking(booking, 'requested', actor_id=current_user.id,
                                walker_id=None)
+            booking.pickup_order = None
             db.session.commit()
 
             return jsonify(

@@ -10,7 +10,7 @@
 |---|----------|--------|--------|---------|-------|
 | 1 | P1 | L | ✅ | **Booking workflow with capacity checks** | Walker availability × max_per_walker. Waitlist when full. Auto-assigns least-loaded walker on creation — confirms immediately if capacity available. |
 | 2 | P1 | M | ✅ | **Recurring bookings (client)** | Start/end date + frequency (daily/weekly). Server expands to individual bookings. Skips weekends, duplicates. |
-| 3 | P1 | M | ✅ | **Admin booking board** | Calendar + slot view. Confirm/cancel requests. Drag-to-reorder pickup order per walker. |
+| 3 | P1 | M | ✅ | **Admin booking board** | Calendar + slot view. Confirm/cancel requests. Pickup order per walker auto-sequenced on assign/confirm. |
 | 4 | P1 | M | ✅ | **Admin dogs view** | Searchable table of all dogs. Book on owner's behalf (one-off or recurring) via modal. Same pending flow as client-initiated. |
 | 5 | P1 | M | ✅ | **Prevent duplicate bookings** | Block same dog+date+slot. Max 2 bookings per dog per day (one per slot). DB partial unique index. |
 | 6 | P1 | M | ✅ | **Password reset** | "Forgot password?" → token email → set new password. Resend API, itsdangerous token (1hr expiry, invalidated on use). |
@@ -42,7 +42,7 @@
 | 25 | P3 | L | ❌ | **Invoicing (standalone)** | Superseded by #26. |
 | 26 | P2 | L | ✅ | **Invoicing view (admin)** | /admin/invoicing: monthly summary per client. /admin/invoicing/<id>: line items + weekly breakdown. Billable cancels (<5 days notice), double-slot discount, drop-in pricing. PricingConfig history. Admin late-cancel billing override (PR #134): `Booking.bill_cancellation` (bill/waive/default) — admin cancels inside the notice window bill by default, waivable per-cancellation from the `/admin/dogs` cancel modal. |
 | 27 | P2 | L | ✅ | **Multiple clients per dog** | dog_owners join table with primary/secondary roles. Admin join/revoke modal. Secondary owners can book and view shared dogs. |
-| 29 | P2 | L | ✅ | **Drop-in service type** | Client books AM/PM drop-in visits. Admin drop-in board (assign walkers, confirm/cancel, reorder). Walker pickup list includes drop-ins. Invoicing tracks drop-ins separately at price_per_drop_in. does_drop_ins flag on walkers. |
+| 29 | P2 | L | ✅ | **Drop-in service type** | Client books AM/PM drop-in visits. Admin drop-in board (assign walkers, confirm/cancel). Walker pickup list includes drop-ins. Invoicing tracks drop-ins separately at price_per_drop_in. does_drop_ins flag on walkers. |
 | 28 | P3 | M | ✅ | **CSV client/dog import** | Upload CSV matching the create-client form fields. Bulk create client + dog records. Validation with error report on bad rows. No need to handle joined accounts — those are done manually post-import. |
 | 35 | P2 | M | ✅ | **Admin bulk booking operations** | Bulk-cancel upcoming bookings for a dog from `/admin/dogs` view (with preview modal showing dates). Service filter on the cancel modal (All / Walk / Drop In) — cancel one service without touching others. Recurring create on admin's behalf from the same view. Day-of-week filter on pause-walks. |
 | 36 | P2 | M | ✅ | **Closures** | Admin marks a date (or date range, #169) as closed — auto-cancels active bookings with client notifications. Prevents new bookings on closed dates. Preview endpoint before confirming, warns of already-closed dates within a range and skips them. Multi-date closures share a `range_id`; admin list and activity feed collapse them into one entry. |
