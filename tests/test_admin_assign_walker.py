@@ -73,10 +73,14 @@ def _make_walker(email='walker_aw@test.com'):
     return u, w
 
 
-def _make_booking(date, slot='Morning'):
-    """Seed a minimal client + dog + service type + requested booking."""
+def _make_booking(date, slot='Morning', email='client_aw@test.com', dog_name='Buddy'):
+    """Seed a minimal client + dog + service type + requested booking.
+
+    Reuses the 'Group Walk' service type across calls within a test (idempotent
+    on slug) so a test can build several bookings for the same date/slot.
+    """
     client_u = User(
-        firstname='Client', lastname='User', email='client_aw@test.com',
+        firstname='Client', lastname='User', email=email,
         role='client', active=True,
         hashed_password=generate_password_hash('Testpass1!'),
     )
@@ -85,22 +89,24 @@ def _make_booking(date, slot='Morning'):
     db.session.add(Client(user_id=client_u.id, onboarding_completed=True))
     db.session.flush()
 
-    dog = Dog(name='Buddy', breed='Labrador')
+    dog = Dog(name=dog_name, breed='Labrador')
     db.session.add(dog)
     db.session.flush()
     db.session.add(DogOwner(dog_id=dog.id, user_id=client_u.id, role='primary'))
     db.session.flush()
 
-    st = ServiceType(
-        name='Group Walk', slug='group-walk',
-        capacity_model='walker_assigned',
-        slot_type='morning_afternoon',
-        requires_walker=True,
-        default_max_capacity=6,
-        active=True,
-    )
-    db.session.add(st)
-    db.session.flush()
+    st = ServiceType.query.filter_by(slug='group-walk').first()
+    if not st:
+        st = ServiceType(
+            name='Group Walk', slug='group-walk',
+            capacity_model='walker_assigned',
+            slot_type='morning_afternoon',
+            requires_walker=True,
+            default_max_capacity=6,
+            active=True,
+        )
+        db.session.add(st)
+        db.session.flush()
 
     booking = Booking(
         user_id=client_u.id,
@@ -205,6 +211,192 @@ class TestAssignWalkerActionLog:
             assert rows[0].from_status == 'confirmed'
             assert rows[0].to_status == 'requested'
             assert rows[0].changed_by_id == admin_id
+
+
+class TestPickupOrderOnManualAssign:
+    """Manual click-to-assign now sequences pickup_order to the end of the
+    walker's lane, mirroring the auto-confirm path in booking_service.py —
+    previously only auto-confirm ever wrote this column, so a manually
+    assigned booking's pickup_order stayed NULL forever."""
+
+    def test_first_assign_in_lane_gets_order_one(self, app, client):
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_admin()
+            _, walker = _make_walker()
+            booking = _make_booking(monday, slot='Morning')
+            db.session.add(WalkerSchedule(
+                walker_id=walker.id, day_of_week=0, slot='Morning', active=True,
+            ))
+            db.session.commit()
+            admin_email, booking_id, walker_id = admin.email, booking.id, walker.id
+
+        _login(client, admin_email)
+        resp = _post_assign(client, booking_id, walker_id)
+        assert resp.status_code == 200, resp.get_json()
+
+        with app.app_context():
+            assert db.session.get(Booking, booking_id).pickup_order == 1
+
+    def test_second_assign_in_same_lane_appends_to_end(self, app, client):
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_admin()
+            _, walker = _make_walker()
+            booking_a = _make_booking(monday, slot='Morning',
+                                       email='client_a@test.com', dog_name='Buddy')
+            booking_b = _make_booking(monday, slot='Morning',
+                                       email='client_b@test.com', dog_name='Rex')
+            db.session.add(WalkerSchedule(
+                walker_id=walker.id, day_of_week=0, slot='Morning', active=True,
+            ))
+            db.session.commit()
+            admin_email = admin.email
+            booking_a_id, booking_b_id, walker_id = booking_a.id, booking_b.id, walker.id
+
+        _login(client, admin_email)
+        assert _post_assign(client, booking_a_id, walker_id).status_code == 200
+        assert _post_assign(client, booking_b_id, walker_id).status_code == 200
+
+        with app.app_context():
+            assert db.session.get(Booking, booking_a_id).pickup_order == 1
+            assert db.session.get(Booking, booking_b_id).pickup_order == 2
+
+    def test_reassign_to_different_walker_appends_to_new_lane(self, app, client):
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_admin()
+            _, walker_a = _make_walker(email='walker_a_aw@test.com')
+            _, walker_b = _make_walker(email='walker_b_aw@test.com')
+            booking_x = _make_booking(monday, slot='Morning',
+                                       email='client_x@test.com', dog_name='Buddy')
+            booking_sib = _make_booking(monday, slot='Morning',
+                                         email='client_sib@test.com', dog_name='Rex')
+            for w in (walker_a, walker_b):
+                db.session.add(WalkerSchedule(
+                    walker_id=w.id, day_of_week=0, slot='Morning', active=True,
+                ))
+            db.session.commit()
+            admin_email = admin.email
+            booking_x_id, booking_sib_id = booking_x.id, booking_sib.id
+            walker_a_id, walker_b_id = walker_a.id, walker_b.id
+
+        _login(client, admin_email)
+        # booking_x starts on walker_a's lane; booking_sib already occupies
+        # position 1 on walker_b's lane before the reassignment.
+        assert _post_assign(client, booking_x_id, walker_a_id).status_code == 200
+        assert _post_assign(client, booking_sib_id, walker_b_id).status_code == 200
+        resp = _post_assign(client, booking_x_id, walker_b_id)
+        assert resp.status_code == 200, resp.get_json()
+
+        with app.app_context():
+            assert db.session.get(Booking, booking_sib_id).pickup_order == 1
+            assert db.session.get(Booking, booking_x_id).pickup_order == 2
+
+    def test_slot_override_appends_to_new_slot_lane(self, app, client):
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_admin()
+            _, walker = _make_walker()
+            booking_x = _make_booking(monday, slot='Morning',
+                                       email='client_x@test.com', dog_name='Buddy')
+            booking_sib = _make_booking(monday, slot='Afternoon',
+                                         email='client_sib@test.com', dog_name='Rex')
+            db.session.add(WalkerSchedule(
+                walker_id=walker.id, day_of_week=0, slot='Morning', active=True,
+            ))
+            db.session.add(WalkerSchedule(
+                walker_id=walker.id, day_of_week=0, slot='Afternoon', active=True,
+            ))
+            db.session.commit()
+            admin_email = admin.email
+            booking_x_id, booking_sib_id, walker_id = booking_x.id, booking_sib.id, walker.id
+
+        _login(client, admin_email)
+        assert _post_assign(client, booking_x_id, walker_id).status_code == 200
+        assert _post_assign(client, booking_sib_id, walker_id).status_code == 200
+        # Move booking_x from Morning into the Afternoon lane, which already
+        # has booking_sib at position 1.
+        resp = _post_assign(client, booking_x_id, walker_id,
+                             slot='Afternoon', slot_override=True)
+        assert resp.status_code == 200, resp.get_json()
+
+        with app.app_context():
+            assert db.session.get(Booking, booking_sib_id).pickup_order == 1
+            assert db.session.get(Booking, booking_x_id).pickup_order == 2
+
+    def test_drop_in_service_type_gets_pickup_order(self, app, client):
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_admin()
+            _, walker = _make_walker()
+            walker.does_drop_ins = True
+            db.session.add(WalkerSchedule(
+                walker_id=walker.id, day_of_week=0, slot='Morning', active=True,
+            ))
+            db.session.add(ServiceType(
+                name='Drop In', slug=ServiceType.DROP_IN,
+                capacity_model='walker_assigned',
+                slot_type='morning_afternoon',
+                requires_walker=True,
+                default_max_capacity=6,
+                active=True,
+            ))
+            db.session.flush()
+            drop_in_st = ServiceType.query.filter_by(slug=ServiceType.DROP_IN).first()
+            booking = _make_booking(monday, slot='Morning')
+            booking.service_type_id = drop_in_st.id
+            db.session.commit()
+            admin_email, booking_id, walker_id = admin.email, booking.id, walker.id
+
+        _login(client, admin_email)
+        resp = _post_assign(client, booking_id, walker_id)
+        assert resp.status_code == 200, resp.get_json()
+
+        with app.app_context():
+            assert db.session.get(Booking, booking_id).pickup_order == 1
+
+    def test_unassign_then_reassign_still_lands_at_end(self, app, client):
+        """Unassign clears pickup_order rather than leaving it stale; a
+        reassign back into the same lane recomputes it fresh. Uses the
+        *last* booking in the lane deliberately — siblings are never
+        renumbered, so unassigning+reassigning the *first* one would collide
+        with the still-numbered survivor rather than cleanly land at the end.
+        That collision is a known, accepted limit of "append only" ordering,
+        not something this fix (or this test) tries to solve."""
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_admin()
+            _, walker = _make_walker()
+            booking_a = _make_booking(monday, slot='Morning',
+                                       email='client_a@test.com', dog_name='Buddy')
+            booking_b = _make_booking(monday, slot='Morning',
+                                       email='client_b@test.com', dog_name='Rex')
+            db.session.add(WalkerSchedule(
+                walker_id=walker.id, day_of_week=0, slot='Morning', active=True,
+            ))
+            db.session.commit()
+            admin_email = admin.email
+            booking_a_id, booking_b_id, walker_id = booking_a.id, booking_b.id, walker.id
+
+        _login(client, admin_email)
+        assert _post_assign(client, booking_a_id, walker_id).status_code == 200
+        assert _post_assign(client, booking_b_id, walker_id).status_code == 200
+
+        # Unassign booking_b (the last one in the lane) — pickup_order must
+        # be cleared, not left stale.
+        assert _post_assign(client, booking_b_id, None).status_code == 200
+        with app.app_context():
+            assert db.session.get(Booking, booking_a_id).pickup_order == 1
+            assert db.session.get(Booking, booking_b_id).pickup_order is None
+
+        # Re-assign booking_b to the same walker/slot — it should land back
+        # at the end of the lane, behind booking_a.
+        resp = _post_assign(client, booking_b_id, walker_id)
+        assert resp.status_code == 200, resp.get_json()
+        with app.app_context():
+            assert db.session.get(Booking, booking_a_id).pickup_order == 1
+            assert db.session.get(Booking, booking_b_id).pickup_order == 2
 
 
 class TestUnavailabilityMessage:

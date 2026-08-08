@@ -10,7 +10,6 @@
  *
  * config shape:
  *   assignUrl              {string}   URL for admin.assign_walker POST
- *   reorderUrl             {string}   URL for admin.reorder_pickups POST
  *   boardDataUrl           {string}   URL with 'DATE' placeholder
  *   emptyIcon              {string}   bi-* class for empty-board icon
  *   emptyText              {string}   Text for empty-board state
@@ -119,7 +118,6 @@
 
             const extraContent = cfg.makeAssignedCardBadges ? cfg.makeAssignedCardBadges(b) : '';
             el.innerHTML = `
-                <span class="drag-handle bi bi-grip-vertical"></span>
                 <img src="${imgSrc(b.dog_pic)}" class="board-dog-img"
                      onerror="this.src='/static/uploads/dogs/default-dog.png'">
                 <div class="board-card-info">
@@ -154,21 +152,6 @@
                 if (col) wrap.appendChild(col);
             });
 
-            document.querySelectorAll('.sortable-lane').forEach(el => {
-                const { walkerId, slot } = el.dataset;
-                Sortable.create(el, {
-                    animation: 150,
-                    handle: '.drag-handle',
-                    ghostClass: 'sortable-ghost',
-                    chosenClass: 'sortable-chosen',
-                    onEnd() {
-                        const ids = [...el.querySelectorAll('.board-card')]
-                            .map(c => parseInt(c.dataset.id));
-                        reorderLane(parseInt(walkerId), slot, ids);
-                    }
-                });
-            });
-
             updateSelectionUI();
         }
 
@@ -187,7 +170,7 @@
                 if (!state.pending.length || !slotPending.length) return;
                 const lane = makeLane(null, slot, false);
                 slotPending.forEach(b =>
-                    lane.querySelector('.sortable-lane').appendChild(makePendingCard(b)));
+                    lane.querySelector('.lane-cards').appendChild(makePendingCard(b)));
                 col.appendChild(lane);
             });
 
@@ -240,7 +223,7 @@
                     const isUnavail = unavailSlots.includes(slot);
                     const lane = makeLane(walker.id, slot, true, isUnavail);
                     getAssignedForLane(walker.id, slot).forEach(b =>
-                        lane.querySelector('.sortable-lane').appendChild(makeAssignedCard(b)));
+                        lane.querySelector('.lane-cards').appendChild(makeAssignedCard(b)));
                     col.appendChild(lane);
                 } else {
                     col.appendChild(makeNotScheduledLane(slot));
@@ -252,10 +235,10 @@
 
         function makeNotScheduledLane(slot) {
             // Placeholder for a slot the walker isn't scheduled for today.
-            // Not droppable, no walkerId dataset (so Sortable.create skips it),
-            // no click handler so an assignment can't drop here. Visually
-            // distinct from `lane-unavailable` (admin-override yellow) — this
-            // grey signals "not on the schedule" rather than "blocked".
+            // No walkerId dataset and no click handler, so an assignment
+            // can't target this lane. Visually distinct from
+            // `lane-unavailable` (admin-override yellow) — this grey signals
+            // "not on the schedule" rather than "blocked".
             const wrap = document.createElement('div');
             wrap.className = 'board-lane lane-not-scheduled';
 
@@ -295,7 +278,7 @@
             wrap.appendChild(hdr);
 
             const cardsEl = document.createElement('div');
-            cardsEl.className = 'sortable-lane';
+            cardsEl.className = 'lane-cards';
             if (walkerId) {
                 cardsEl.dataset.walkerId = walkerId;
                 cardsEl.dataset.slot     = slot;
@@ -463,22 +446,6 @@
                 Object.assign(state, prev);
                 render();
                 showToast(err.message || 'Could not unassign — please try again.', 'danger');
-            }
-        }
-
-        async function reorderLane(walkerId, slot, newIds) {
-            newIds.forEach((id, idx) => {
-                const b = state.assigned.find(b => b.id === id);
-                if (b) b.pickup_order = idx + 1;
-            });
-            try {
-                await fetch(cfg.reorderUrl, {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
-                    body:    JSON.stringify({ walker_id: walkerId, slot, date: state.date, pickup_order: newIds }),
-                });
-            } catch (err) {
-                console.error('Reorder failed:', err);
             }
         }
 

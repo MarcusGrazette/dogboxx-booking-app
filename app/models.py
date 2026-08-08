@@ -322,7 +322,7 @@ class Booking(db.Model):
     slot = db.Column(db.Enum('Morning', 'Afternoon', 'Full Day', 'Half Day AM', 'Half Day PM',
                              name='booking_slot'), nullable=False)
     walker_id = db.Column(db.Integer, db.ForeignKey('walkers.id'), nullable=True, index=True)
-    pickup_order = db.Column(db.Integer, nullable=True)  # set by admin drag-drop; 1 = first pickup
+    pickup_order = db.Column(db.Integer, nullable=True)  # set by assign_walker() on every confirm; 1 = first pickup
     status = db.Column(db.Enum('requested', 'confirmed', 'modified', 'rejected',
                                'cancelled', 'completed', 'waitlisted',
                                name='booking_status'),

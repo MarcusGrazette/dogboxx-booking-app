@@ -102,7 +102,6 @@
 {{ super() }}
 <script src="{{ url_for('static', filename='js/reusable-calendar.js') }}"></script>
 <script src="{{ url_for('static', filename='js/admin-board-core.js') }}"></script>
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
 <script nonce="{{ csp_nonce }}">
 (function () {
     'use strict';
@@ -241,7 +240,6 @@
     // Board (calendar-agnostic component)
     const board = createBoard({
         assignUrl:      '{{ url_for("admin.assign_walker") }}',
-        reorderUrl:     '{{ url_for("admin.reorder_pickups") }}',
         boardDataUrl:   '{{ url_for("admin.board_data", date_str="DATE") }}',
         emptyIcon:      'bi-emoji-smile',
         emptyText:      'No bookings for this date',
