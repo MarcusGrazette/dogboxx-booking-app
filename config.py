@@ -41,8 +41,10 @@ class Config:
     # Content Security Policy
     # script-src omits 'unsafe-inline' — a per-request nonce is appended in
     # add_security_headers and inline <script> tags carry nonce="{{ csp_nonce }}".
-    # script-src-attr keeps 'unsafe-inline' transitionally so onclick/onerror/onsubmit
-    # handlers in templates keep working until they're migrated to event delegation.
+    # script-src-attr keeps 'unsafe-inline' so onclick/onerror/onchange handlers in
+    # templates keep working until they're migrated to event delegation — tracked as
+    # FEATURES.md #68, not just this comment. Bleach strips event-handler attributes
+    # on every rich-text write path today, so this is a second-layer gap, not a live one.
     CSP = {
         'default-src': "'self'",
         'script-src': "'self' https://cdn.jsdelivr.net https://unpkg.com",
@@ -126,7 +128,12 @@ class TestingConfig(Config):
                                  dev DB — set TEST_DATABASE_URL to run on Postgres.
     """
     TESTING = True
-    DEBUG = True
+    # TESTING alone already gates security headers off in add_security_headers
+    # (`if not app.debug and not app.testing`) — DEBUG=True here was always
+    # redundant, and worse, it meant no test could ever assert those headers
+    # even by temporarily flipping app.testing for one request, since debug
+    # would still block it. See tests/test_security_headers.py.
+    DEBUG = False
     if os.environ.get('USE_SQLITE') == '1':
         SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
     else:

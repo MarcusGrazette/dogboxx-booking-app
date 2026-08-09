@@ -1,4 +1,5 @@
 from collections import defaultdict
+from decimal import Decimal
 from flask import request, render_template
 from flask_login import login_required
 from sqlalchemy.orm import joinedload
@@ -17,19 +18,13 @@ def invoicing():
     """Monthly invoicing summary — one row per client."""
     from datetime import date
     from calendar import monthrange
+    from app.utils.dates import parse_month_param
 
     # ── Month selection ───────────────────────────────────────────────────
     today = date.today()
     month_str = request.args.get('month', f'{today.year}-{today.month:02d}')
-    try:
-        year, month = int(month_str[:4]), int(month_str[5:7])
-        if not (1 <= month <= 12):
-            raise ValueError
-    except (ValueError, IndexError):
-        year, month = today.year, today.month
-
-    month_start = date(year, month, 1)
-    month_end   = date(year + (month // 12), (month % 12) + 1, 1)
+    month_start, month_end = parse_month_param(month_str, today)
+    year, month = month_start.year, month_start.month
 
     # Prev / next month helpers for navigation
     if month == 1:
@@ -132,6 +127,7 @@ def invoicing_detail(client_id):
     """Per-client invoice detail — line items for the selected month."""
     from datetime import date
     from itertools import groupby
+    from app.utils.dates import parse_month_param
 
     client_user = User.query.filter(
         User.client != None, User.id == client_id
@@ -139,15 +135,8 @@ def invoicing_detail(client_id):
 
     today = date.today()
     month_str = request.args.get('month', f'{today.year}-{today.month:02d}')
-    try:
-        year, month = int(month_str[:4]), int(month_str[5:7])
-        if not (1 <= month <= 12):
-            raise ValueError
-    except (ValueError, IndexError):
-        year, month = today.year, today.month
-
-    month_start = date(year, month, 1)
-    month_end   = date(year + (month // 12), (month % 12) + 1, 1)
+    month_start, month_end = parse_month_param(month_str, today)
+    year, month = month_start.year, month_start.month
 
     from app.models import PricingConfig
     from app.utils.pricing import config_for_date, build_line_items, build_double_slot_discounts
@@ -162,7 +151,7 @@ def invoicing_detail(client_id):
     if inv is None:
         inv = {'confirmed': [], 'late_cancels': [], 'all_billable': [],
                'total_walks': 0, 'total_drop_ins': 0, 'total_cancels': 0,
-               'total_billable': 0, 'doubles': 0, 'subtotal': 0.0}
+               'total_billable': 0, 'doubles': 0, 'subtotal': Decimal('0.00')}
 
     late_cancel_ids = {b.id for b in inv['late_cancels']}
     line_items = build_line_items(inv['all_billable'], late_cancel_ids, all_configs)
@@ -192,11 +181,11 @@ def invoicing_detail(client_id):
         wk_double_discount = sum(d['amount'] for d in wk_discounts)
 
         # Weekly discount: ≥5 confirmed group walks in the week
-        wk_weekly_discount = 0.0
+        wk_weekly_discount = Decimal('0.00')
         if wk_confirmed >= 5:
             cfg = config_for_date(all_configs, wk_start)
             if cfg and cfg.weekly_discount:
-                wk_weekly_discount = round(float(cfg.weekly_discount) * wk_confirmed, 2)
+                wk_weekly_discount = round(cfg.weekly_discount * wk_confirmed, 2)
                 weekly_discounts.append({
                     'week_start':  wk_start,
                     'walk_count':  wk_confirmed,

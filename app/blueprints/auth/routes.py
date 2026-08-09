@@ -123,13 +123,18 @@ def change_password():
             # Update password
             current_user.hashed_password = generate_password_hash(form.new_password.data)
             current_user.must_change_password = False
+            # Evict every other session for this account — a changed password
+            # invalidates whatever an attacker (or an old device) was holding.
+            current_user.rotate_session_token()
 
             db.session.commit()
 
             # Rotate the SID now that a privilege-relevant credential changed.
-            # The user stays logged in (session data, including _user_id, is
-            # preserved across the rotation); only the SID changes.
             current_app.session_interface.regenerate(session)
+            # Re-sync this session's own identity to the new token — otherwise
+            # the rotation above would log this browser out too on the next
+            # request, since load_user() would reject its now-stale _user_id.
+            session['_user_id'] = current_user.get_id()
 
             flash("Your password has been changed successfully.", "success")
 
@@ -271,6 +276,10 @@ def reset_password(token):
             from werkzeug.security import generate_password_hash
             user.hashed_password = generate_password_hash(form.password.data)
             user.must_change_password = False
+            # Account-recovery action: evict every existing session for this
+            # user, including whatever an attacker who compromised the
+            # account still holds. The user re-authenticates fresh below.
+            user.rotate_session_token()
             db.session.commit()
             # Rotate the anonymous SID on this privilege boundary — invalidates
             # any session cookie picked up during the reset flow before the user
@@ -289,9 +298,30 @@ def reset_password(token):
 
 # ── Newsletter unsubscribe ────────────────────────────────────────────────────
 
-@auth_bp.route("/unsubscribe/<token>")
+@auth_bp.route("/unsubscribe/<token>", methods=["GET"])
 def unsubscribe(token):
-    """One-click unsubscribe from newsletter emails."""
+    """Unsubscribe from newsletter emails — confirmation step only.
+
+    A bare GET must not mutate state: corporate link scanners (Outlook
+    SafeLinks, Proofpoint) and browser prefetch fetch every URL in an email,
+    which would silently unsubscribe clients who never clicked. The actual
+    write happens in unsubscribe_confirm() below, on POST.
+    """
+    user = User.verify_unsubscribe_token(token)
+    if not user:
+        flash("This unsubscribe link is invalid or has expired.", "error")
+        return redirect(url_for('auth.login'))
+
+    already_unsubscribed = not user.email_marketing
+    return render_template("unsubscribe_confirm.html", token=token,
+                           already_unsubscribed=already_unsubscribed)
+
+
+@auth_bp.route("/unsubscribe/<token>", methods=["POST"])
+def unsubscribe_confirm(token):
+    """Perform the actual unsubscribe — the write half of the GET/POST split
+    above. CSRF-protected, so this can only fire from the confirmation page,
+    not a bare link fetch."""
     user = User.verify_unsubscribe_token(token)
     if not user:
         flash("This unsubscribe link is invalid or has expired.", "error")

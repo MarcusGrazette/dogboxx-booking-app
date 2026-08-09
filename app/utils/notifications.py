@@ -68,19 +68,26 @@ def create_notification(recipient_id, notification_type, title,
     db.session.add(notif)
     db.session.flush()   # get an ID without committing — caller commits
 
-    # Prune oldest notifications beyond the DB cap for this user
-    oldest_ids = (
-        db.session.query(Notification.id)
-        .filter(Notification.recipient_id == recipient_id)
-        .order_by(Notification.created_at.desc())
-        .offset(NOTIF_DB_CAP)
-        .all()
-    )
-    if oldest_ids:
-        ids_to_delete = [row.id for row in oldest_ids]
-        Notification.query.filter(Notification.id.in_(ids_to_delete)).delete(
-            synchronize_session=False
+    # Prune oldest notifications beyond the DB cap for this user. The sort
+    # below is the expensive part of this function and can only matter once
+    # a user is past the cap, so gate it behind a cheap count first — every
+    # insert otherwise pays for a sort it almost never needs to act on.
+    row_count = db.session.query(Notification.id).filter(
+        Notification.recipient_id == recipient_id
+    ).count()
+    if row_count > NOTIF_DB_CAP:
+        oldest_ids = (
+            db.session.query(Notification.id)
+            .filter(Notification.recipient_id == recipient_id)
+            .order_by(Notification.created_at.desc())
+            .offset(NOTIF_DB_CAP)
+            .all()
         )
+        if oldest_ids:
+            ids_to_delete = [row.id for row in oldest_ids]
+            Notification.query.filter(Notification.id.in_(ids_to_delete)).delete(
+                synchronize_session=False
+            )
 
     # Queue SSE event — fires in the after_commit hook (app/__init__.py)
     icon, colour = get_meta(notification_type)

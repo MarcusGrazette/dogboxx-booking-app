@@ -19,6 +19,11 @@ class User(UserMixin, db.Model):
     active = db.Column(db.Boolean, default=True, nullable=False)
     hashed_password = db.Column(db.String(256), nullable=False)
     must_change_password = db.Column(db.Boolean, default=False, nullable=False)
+    # Rotated on password reset/change to revoke every other session for this
+    # user (account-recovery chokepoint) — see get_id()/rotate_session_token()
+    # and the user_loader in app/__init__.py. NULL means "never rotated": any
+    # legacy session (issued before this column existed) still resolves.
+    session_token = db.Column(db.String(64), nullable=True)
     email_marketing = db.Column(db.Boolean, default=True, nullable=False)
     phone = db.Column(db.String(20), nullable=True)
     profile_pic = db.Column(db.String(256), nullable=True)
@@ -34,6 +39,24 @@ class User(UserMixin, db.Model):
     @property
     def is_active(self):
         return self.active
+
+    def get_id(self):
+        # Encode session_token alongside the primary key so rotating it (see
+        # rotate_session_token) invalidates every session issued before the
+        # rotation, without touching other users' sessions. A user who has
+        # never rotated (session_token is None) keeps using the plain-id
+        # format — see load_user() in app/__init__.py for the matching half.
+        if self.session_token:
+            return f"{self.id}:{self.session_token}"
+        return str(self.id)
+
+    def rotate_session_token(self):
+        """Invalidate every session for this user. Called on password reset
+        and password change — the account-recovery revocation chokepoint.
+        The caller is responsible for re-syncing its own session identity
+        afterward if it wants to stay logged in (see auth/routes.py)."""
+        import secrets
+        self.session_token = secrets.token_urlsafe(32)
 
     def __repr__(self):
         return f'<User {self.email}>'
@@ -487,6 +510,13 @@ class WalkerAdHocAvailability(db.Model):
 class Notification(db.Model):
     """Persistent notification system — stores cross-user events with read audit trail."""
     __tablename__ = 'notifications'
+    __table_args__ = (
+        # Serves get_recent(), the full notifications page, and the prune
+        # scan in create_notification() — all filter on recipient_id then
+        # sort by created_at desc. Neither is served by the separate
+        # single-column indexes on those fields alone.
+        db.Index('ix_notif_recipient_created', 'recipient_id', 'created_at'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     recipient_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
@@ -666,6 +696,7 @@ class DailyMessage(db.Model):
     content = db.Column(db.Text, nullable=False)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
 
     created_by = db.relationship('User', foreign_keys=[created_by_id])
