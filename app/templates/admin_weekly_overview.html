@@ -4,6 +4,116 @@
 {% block page_title %}Weekly Overview{% endblock %}
 {% block page_subtitle %}Who's working this week, per walker — copy a summary for email or WhatsApp{% endblock %}
 
+{% block head_extra %}
+<style>
+  /* ---- Weekly overview: cards ---- */
+  .wo-card {
+    border: none;
+    border-radius: 14px;
+    box-shadow: 0 1px 2px rgba(27, 27, 27, 0.05), 0 8px 24px rgba(27, 27, 27, 0.07);
+  }
+
+  /* ---- Week nav pill ---- */
+  .wo-nav-pill {
+    background: #fff;
+    border: 1px solid var(--db-primary-subtle, #fce8f6);
+    border-radius: 999px;
+    padding: 0.25rem;
+    box-shadow: 0 1px 3px rgba(27, 27, 27, 0.06);
+  }
+  .wo-nav-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 50%;
+    color: var(--db-dark, #1B1B1B);
+    transition: background 0.15s, color 0.15s;
+  }
+  .wo-nav-btn:hover {
+    background: var(--db-primary-subtle, #fce8f6);
+    color: var(--db-primary, #E02FAC);
+  }
+  .wo-nav-btn:focus-visible {
+    outline: 2px solid var(--db-primary, #E02FAC);
+    outline-offset: 2px;
+  }
+  .wo-nav-range {
+    font-weight: 700;
+    padding: 0 0.75rem;
+    white-space: nowrap;
+  }
+
+  /* ---- AM/PM chips ---- */
+  .wo-chip {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+  }
+  .wo-chip-am {
+    background: var(--db-primary-subtle, #fce8f6);
+    color: var(--db-primary-dark, #C0258F);
+  }
+  .wo-chip-pm {
+    background: var(--db-pm-chip-bg, rgba(99, 102, 241, 0.12));
+    color: var(--db-pm-chip-text, #4338ca);
+  }
+  .wo-parts {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 0.5rem;
+  }
+  .wo-sep {
+    color: var(--db-muted, #5E5E5E);
+  }
+  .wo-empty {
+    font-size: 0.85em;
+  }
+
+  /* ---- Walker avatars ---- */
+  .wo-avatar {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 800;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+    /* Two palette colors (amber, lime) are too light for white text to
+       clear WCAG AA on their own — the shadow keeps every palette entry
+       legible without special-casing individual hex values. */
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+  }
+
+  /* ---- Zebra striping ---- */
+  .wo-list li:nth-child(even) {
+    background: var(--db-surface, #F6F6F6);
+  }
+
+  /* ---- Mobile ---- */
+  @media (max-width: 767.98px) {
+    .wo-card .card-header {
+      padding: 0.6rem 0.85rem;
+    }
+    .wo-copybtn {
+      min-height: 44px;
+    }
+    .wo-nav-range {
+      font-size: 0.9rem;
+      padding: 0 0.5rem;
+    }
+  }
+</style>
+{% endblock %}
+
 {% block main %}
 
 {# Week navigation — pill-shaped prev/next with a desktop-only "This week"
@@ -111,106 +221,4 @@
 
 {% endif %}
 
-{% endblock %}
-
-{% block scripts %}
-<style>
-  /* ---- Weekly overview: cards ---- */
-  .wo-card {
-    border: none;
-    border-radius: 14px;
-    box-shadow: 0 1px 2px rgba(27, 27, 27, 0.05), 0 8px 24px rgba(27, 27, 27, 0.07);
-  }
-
-  /* ---- Week nav pill ---- */
-  .wo-nav-pill {
-    background: #fff;
-    border: 1px solid var(--db-primary-subtle, #fce8f6);
-    border-radius: 999px;
-    padding: 0.25rem;
-    box-shadow: 0 1px 3px rgba(27, 27, 27, 0.06);
-  }
-  .wo-nav-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.25rem;
-    height: 2.25rem;
-    border-radius: 50%;
-    color: var(--db-dark, #1B1B1B);
-    transition: background 0.15s, color 0.15s;
-  }
-  .wo-nav-btn:hover {
-    background: var(--db-primary-subtle, #fce8f6);
-    color: var(--db-primary, #E02FAC);
-  }
-  .wo-nav-range {
-    font-weight: 700;
-    padding: 0 0.75rem;
-    white-space: nowrap;
-  }
-
-  /* ---- AM/PM chips ---- */
-  .wo-chip {
-    display: inline-block;
-    padding: 0.1rem 0.5rem;
-    border-radius: 999px;
-    font-size: 0.7rem;
-    font-weight: 800;
-    letter-spacing: 0.02em;
-  }
-  .wo-chip-am {
-    background: var(--db-primary-subtle, #fce8f6);
-    color: var(--db-primary-dark, #C0258F);
-  }
-  .wo-chip-pm {
-    background: rgba(99, 102, 241, 0.12);
-    color: #4338ca;
-  }
-  .wo-parts {
-    display: inline-flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.35rem 0.5rem;
-  }
-  .wo-sep {
-    color: var(--db-muted, #8a8a8f);
-  }
-  .wo-empty {
-    font-size: 0.85em;
-  }
-
-  /* ---- Walker avatars ---- */
-  .wo-avatar {
-    width: 2.25rem;
-    height: 2.25rem;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-    font-weight: 800;
-    font-size: 0.8rem;
-    flex-shrink: 0;
-  }
-
-  /* ---- Zebra striping ---- */
-  .wo-list li:nth-child(even) {
-    background: var(--db-surface, #F6F6F6);
-  }
-
-  /* ---- Mobile ---- */
-  @media (max-width: 767.98px) {
-    .wo-card .card-header {
-      padding: 0.6rem 0.85rem;
-    }
-    .wo-copybtn {
-      min-height: 44px;
-    }
-    .wo-nav-range {
-      font-size: 0.9rem;
-      padding: 0 0.5rem;
-    }
-  }
-</style>
 {% endblock %}

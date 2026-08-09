@@ -23,32 +23,6 @@ from app.utils.pricing import is_drop_in
 WEEKDAYS = 5
 WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
 
-# Stable per-walker color, keyed by walker_id % len(palette) — shared so a
-# walker shows the same avatar color everywhere (assignment board, weekly
-# overview), not a different one derived per page.
-WALKER_COLORS = [
-    '#8b5cf6',  # violet
-    '#ec4899',  # pink
-    '#f97316',  # orange
-    '#14b8a6',  # teal
-    '#3b82f6',  # blue
-    '#a855f7',  # purple
-    '#10b981',  # emerald
-    '#f59e0b',  # amber
-    '#6366f1',  # indigo
-    '#84cc16',  # lime
-]
-
-
-def walker_color(walker_id):
-    return WALKER_COLORS[walker_id % len(WALKER_COLORS)]
-
-
-def walker_initials(walker):
-    first = (walker.user.firstname or '')[:1].upper()
-    last = (walker.user.lastname or '')[:1].upper()
-    return (first + last) if last else first
-
 
 def get_week_start(d):
     """Return the Monday on/before d. Matches WalkerSchedule.day_of_week's

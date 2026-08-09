@@ -6,13 +6,13 @@ from app.utils.decorators import admin_required
 from app.models import User, Booking, Walker, WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, ServiceType, Closure
 from app import db
 from app.capacity import get_max_per_walker
-from app.utils.weekly_schedule import walker_color as _walker_color, walker_initials as _walker_initials
+from app.utils.walker_visuals import walker_color as _walker_color, walker_initials as _walker_initials
 from sqlalchemy.orm import joinedload
 from datetime import timedelta
 
 
 # ─── Dashboard helpers ────────────────────────────────────────────────────────
-# _walker_color / _walker_initials live in app.utils.weekly_schedule so the
+# _walker_color / _walker_initials live in app.utils.walker_visuals so the
 # assignment board and the weekly overview page derive the same per-walker
 # color from the same palette.
 

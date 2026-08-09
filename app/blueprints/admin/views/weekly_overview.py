@@ -24,11 +24,10 @@ from app.utils.weekly_schedule import (
     format_roster_week_text,
     day_slot_parts,
     day_walker_names,
-    walker_color,
-    walker_initials,
     WEEKDAYS,
     WEEKDAY_LABELS,
 )
+from app.utils.walker_visuals import walker_color, walker_initials
 
 
 @admin_bp.route("/weekly-overview")
