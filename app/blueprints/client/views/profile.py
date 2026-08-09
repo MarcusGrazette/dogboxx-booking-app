@@ -13,6 +13,7 @@ from app.utils.sanitize import clean_rich_text_or_none
 from app.forms import ProfileForm
 import logging
 from datetime import datetime, timezone, date as date_type
+from decimal import Decimal
 
 from app.blueprints.client import client_bp
 from app.utils.decorators import has_client_access
@@ -139,21 +140,8 @@ def profile():
                 dog.gender = form.dog_gender.data.strip()
                 dog.breed = form.dog_breed.data.strip() if form.dog_breed.data else ""
 
-            for _pd in primary_dogs:
-                # Handle photo upload
-                if 'file' in request.files and request.files['file'].filename:
-                    try:
-                        pic_filename = process_dog_photo(request.files['file'])
-                        if pic_filename:
-                            dog.pic = pic_filename
-                    except ValueError as e:
-                        flash(f"Upload error: {str(e)}", "error")
-                        return render_template("profile.html", form=form, dog=dog, primary_dogs=primary_dogs, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=datetime.now().strftime("%Y-%m-%d"))
-                    except Exception as e:
-                        logging.exception(f"Error processing uploaded file: {e}")
-                        flash("Error processing your image. Please try a different file.", "error")
-                        return render_template("profile.html", form=form, dog=dog, primary_dogs=primary_dogs, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=datetime.now().strftime("%Y-%m-%d"))
-
+            # Dog photo uploads go through the dedicated /profile/upload-dog-photo
+            # AJAX endpoint (per-dog, via dog_id) — this form has no photo field.
             db.session.commit()
             flash("Profile updated successfully!", "success")
             return redirect(url_for('client.profile'))
@@ -208,21 +196,12 @@ def monthly_summary():
     if not has_client_access(current_user):
         return redirect(url_for('client.index'))
 
+    from app.utils.dates import parse_month_param
+
     today = date_type.today()
     month_str = request.args.get('month', f'{today.year}-{today.month:02d}')
-    try:
-        year, month = int(month_str[:4]), int(month_str[5:7])
-        if not (1 <= month <= 12):
-            raise ValueError
-    except (ValueError, IndexError):
-        year, month = today.year, today.month
-
-    # Cap at current month — no peeking ahead
-    if (year, month) > (today.year, today.month):
-        year, month = today.year, today.month
-
-    month_start = date_type(year, month, 1)
-    month_end   = date_type(year + (month // 12), (month % 12) + 1, 1)
+    month_start, month_end = parse_month_param(month_str, today, cap_at_today=True)
+    year, month = month_start.year, month_start.month
 
     all_configs = (
         PricingConfig.query
@@ -236,7 +215,7 @@ def monthly_summary():
         inv = {
             'confirmed': [], 'late_cancels': [], 'all_billable': [],
             'total_walks': 0, 'total_drop_ins': 0, 'total_cancels': 0,
-            'total_billable': 0, 'doubles': 0, 'subtotal': 0.0,
+            'total_billable': 0, 'doubles': 0, 'subtotal': Decimal('0.00'),
         }
 
     late_cancel_ids = {b.id for b in inv['late_cancels']}

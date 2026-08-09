@@ -127,8 +127,12 @@ def _revenue_for_range(start, end):
             continue
         walks_by_household.setdefault(uid, []).append(r.date)
 
+    # weekly_discount_for_walks returns Decimal (pricing.py is Decimal
+    # end-to-end); this module's per-day figures are float throughout
+    # (JSON API + chart data), so convert back to float right at this one
+    # call site rather than propagating Decimal into an unrelated contract.
     weekly_discount_total = round(sum(
-        weekly_discount_for_walks(dates, all_configs)[0]
+        float(weekly_discount_for_walks(dates, all_configs)[0])
         for dates in walks_by_household.values()
     ), 2)
 

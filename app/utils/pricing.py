@@ -26,6 +26,7 @@ much as the arithmetic — that is where the two implementations drifted.
 
 from collections import defaultdict
 from datetime import date as _date
+from decimal import Decimal
 
 from app.models import ServiceType
 
@@ -50,10 +51,13 @@ def is_drop_in(booking):
 
 
 def unit_price(booking, config):
-    """Per-booking price from ``config`` — drop-in vs walk. 0.0 if no config."""
+    """Per-booking price from ``config`` — drop-in vs walk. ``Decimal('0.00')``
+    if no config. Kept as Decimal (PricingConfig's Numeric(8,2) columns already
+    hand back Decimal — this just stops the float() round-trip) so invoice
+    totals never accumulate binary float error across a month of line items."""
     if config is None:
-        return 0.0
-    return float(config.price_per_drop_in) if is_drop_in(booking) else float(config.price_per_walk)
+        return Decimal('0.00')
+    return config.price_per_drop_in if is_drop_in(booking) else config.price_per_walk
 
 
 def build_line_items(all_billable, late_cancel_ids, configs):
@@ -96,14 +100,14 @@ def weekly_discount_for_walks(walk_dates, configs):
         iso_year, iso_week, _ = d.isocalendar()
         week_counts[(iso_year, iso_week)] += 1
 
-    total = 0.0
+    total = Decimal('0.00')
     weeks = 0
     for (iso_year, iso_week), count in week_counts.items():
         if count >= 5:
             monday = _date.fromisocalendar(iso_year, iso_week, 1)
             cfg = config_for_date(configs, monday)
             if cfg and cfg.weekly_discount:
-                total += float(cfg.weekly_discount) * count
+                total += cfg.weekly_discount * count
                 weeks += 1
     return round(total, 2), weeks
 
@@ -135,5 +139,5 @@ def build_double_slot_discounts(all_billable, configs):
     for _dog_id, d in sorted(qualifying, key=lambda k: (k[1], k[0])):
         cfg = config_for_date(configs, d)
         if cfg and cfg.double_slot_discount:
-            discounts.append({'date': d, 'amount': float(cfg.double_slot_discount)})
+            discounts.append({'date': d, 'amount': cfg.double_slot_discount})
     return discounts

@@ -27,12 +27,48 @@ Required environment variables:
     APP_BASE_URL    — e.g. https://dogboxx.up.railway.app
 """
 
+import html as _htmllib
 import logging
 import os
 import re
 import requests
 
 RESEND_API_URL = "https://api.resend.com/emails"
+RESEND_BATCH_URL = "https://api.resend.com/emails/batch"
+
+# Resend's batch endpoint hard-caps at 100 messages per request — a batch
+# larger than this returns a non-2xx for the *whole* request, so anything
+# past ~100 clients would otherwise fail the entire send silently.
+RESEND_BATCH_CHUNK_SIZE = 100
+
+
+def _send_batch_chunked(batch: list, label: str) -> dict:
+    """POST `batch` to Resend's batch endpoint in chunks of
+    RESEND_BATCH_CHUNK_SIZE, aggregating sent/failed across all chunks."""
+    api_key = os.environ.get("RESEND_API_KEY")
+    sent = failed = 0
+    for i in range(0, len(batch), RESEND_BATCH_CHUNK_SIZE):
+        chunk = batch[i:i + RESEND_BATCH_CHUNK_SIZE]
+        try:
+            resp = requests.post(
+                RESEND_BATCH_URL,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=chunk,
+                timeout=30,
+            )
+            if resp.status_code in (200, 201):
+                sent += len(chunk)
+            else:
+                logging.error(f"Resend {label} batch error {resp.status_code}: {resp.text}")
+                failed += len(chunk)
+        except requests.RequestException as e:
+            logging.error(f"{label} batch send failed: {e}")
+            failed += len(chunk)
+    logging.info(f"{label} batch sent: {sent} emails, {failed} failed")
+    return {'sent': sent, 'failed': failed}
 
 
 def _mail_reply_sender() -> str:
@@ -101,8 +137,6 @@ def send_newsletter_batch(subject: str, html_template: str, recipients: list) ->
         logging.error("RESEND_API_KEY is not set — cannot send newsletter")
         return {'sent': 0, 'failed': len(recipients)}
 
-    RESEND_BATCH_URL = "https://api.resend.com/emails/batch"
-
     SHELL_TOP = """<!DOCTYPE html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
@@ -150,8 +184,11 @@ def send_newsletter_batch(subject: str, html_template: str, recipients: list) ->
     batch = []
     for r in recipients:
         html = SHELL_TOP + html_template + SHELL_BOTTOM
-        html = html.replace("{{firstname}}", r.get("firstname", ""))
-        html = html.replace("{{dog_name}}", r.get("dog_name", "your dog"))
+        # firstname/dog_name are client-editable (profile.py) — escape before
+        # interpolating into HTML. Bleach sanitized html_template itself, not
+        # these substituted values, so this is a separate escaping step.
+        html = html.replace("{{firstname}}", _htmllib.escape(r.get("firstname") or ""))
+        html = html.replace("{{dog_name}}", _htmllib.escape(r.get("dog_name") or "your dog"))
         html = html.replace("%%UNSUBSCRIBE_URL%%", r["unsubscribe_url"])
         batch.append({
             "from": mail_from,
@@ -160,26 +197,7 @@ def send_newsletter_batch(subject: str, html_template: str, recipients: list) ->
             "html": html,
         })
 
-    try:
-        resp = requests.post(
-            RESEND_BATCH_URL,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json=batch,
-            timeout=30,
-        )
-        if resp.status_code in (200, 201):
-            sent = len(batch)
-            logging.info(f"Newsletter batch sent: {sent} emails, subject: {subject!r}")
-            return {'sent': sent, 'failed': 0}
-        else:
-            logging.error(f"Resend batch error {resp.status_code}: {resp.text}")
-            return {'sent': 0, 'failed': len(batch)}
-    except requests.RequestException as e:
-        logging.error(f"Newsletter batch send failed: {e}")
-        return {'sent': 0, 'failed': len(batch)}
+    return _send_batch_chunked(batch, "Newsletter")
 
 
 def send_broadcast_batch(subject: str, body_text: str, recipients: list) -> dict:
@@ -204,8 +222,6 @@ def send_broadcast_batch(subject: str, body_text: str, recipients: list) -> dict
     if not api_key:
         logging.error("RESEND_API_KEY is not set — cannot send broadcast")
         return {'sent': 0, 'failed': len(recipients)}
-
-    RESEND_BATCH_URL = "https://api.resend.com/emails/batch"
 
     SHELL = """<!DOCTYPE html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
@@ -238,10 +254,12 @@ def send_broadcast_batch(subject: str, body_text: str, recipients: list) -> dict
 
     batch = []
     for r in recipients:
-        # Merge tags are literal text inside the sanitized HTML (bleach only
-        # touches tags/attributes), so substitution is safe post-sanitization.
-        body_html = body_text.replace("{{firstname}}", r.get("firstname") or "")
-        body_html = body_html.replace("{{dog_name}}", r.get("dog_name") or "your dog")
+        # firstname/dog_name are client-editable (profile.py) — escape before
+        # interpolating into HTML. Bleach sanitized body_text itself (tags and
+        # attributes), not these substituted values, so they need their own
+        # escaping pass here.
+        body_html = body_text.replace("{{firstname}}", _htmllib.escape(r.get("firstname") or ""))
+        body_html = body_html.replace("{{dog_name}}", _htmllib.escape(r.get("dog_name") or "your dog"))
         html = SHELL.replace("{{body}}", body_html)
         batch.append({
             "from": mail_from,
@@ -253,23 +271,4 @@ def send_broadcast_batch(subject: str, body_text: str, recipients: list) -> dict
     if not batch:
         return {'sent': 0, 'failed': 0}
 
-    try:
-        resp = requests.post(
-            RESEND_BATCH_URL,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json=batch,
-            timeout=30,
-        )
-        if resp.status_code in (200, 201):
-            sent = len(batch)
-            logging.info(f"Broadcast batch sent: {sent} emails, subject: {subject!r}")
-            return {'sent': sent, 'failed': 0}
-        else:
-            logging.error(f"Resend broadcast batch error {resp.status_code}: {resp.text}")
-            return {'sent': 0, 'failed': len(batch)}
-    except requests.RequestException as e:
-        logging.error(f"Broadcast batch send failed: {e}")
-        return {'sent': 0, 'failed': len(batch)}
+    return _send_batch_chunked(batch, "Broadcast")

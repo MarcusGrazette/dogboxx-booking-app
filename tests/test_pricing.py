@@ -7,6 +7,7 @@ sites (invoicing, admin revenue/detail, client monthly summary) can never drift.
 """
 
 from datetime import date
+from decimal import Decimal
 from types import SimpleNamespace
 
 from app.models import ServiceType
@@ -21,11 +22,15 @@ from app.utils.pricing import (
 
 
 def _cfg(effective_from, walk=10.0, drop_in=6.0, double=2.0):
+    # Decimal, not float: real PricingConfig columns are Numeric(8,2), so
+    # SQLAlchemy always hands back Decimal — these stubs mirror that (audit
+    # M15: pricing.py is Decimal end-to-end and would TypeError against a
+    # float stand-in).
     return SimpleNamespace(
         effective_from=effective_from,
-        price_per_walk=walk,
-        price_per_drop_in=drop_in,
-        double_slot_discount=double,
+        price_per_walk=Decimal(str(walk)),
+        price_per_drop_in=Decimal(str(drop_in)),
+        double_slot_discount=Decimal(str(double)),
     )
 
 
@@ -179,7 +184,7 @@ class TestDoubleSlotDiscounts:
 
 def _cfg_weekly(effective_from, weekly):
     c = _cfg(effective_from)
-    c.weekly_discount = weekly
+    c.weekly_discount = Decimal(str(weekly))
     return c
 
 

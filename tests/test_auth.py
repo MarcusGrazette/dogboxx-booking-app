@@ -355,3 +355,82 @@ class TestLoginLogout:
         }, follow_redirects=False)
         sid_after = client.get_cookie('session').value
         assert sid_after != sid_before, "SID must rotate on password reset"
+
+    def test_change_password_revokes_other_sessions(self, app, client):
+        """Regression (audit M10): changing your password must evict every
+        *other* session for the account, not just rotate this browser's SID —
+        otherwise an attacker's already-open session survives the recovery
+        action. The session that performs the change stays logged in.
+
+        Each HTTP call below runs in its own `with app.app_context():` block.
+        The autouse `db` fixture holds an app context open for the whole
+        test, and Flask reuses whatever app context is already active for a
+        request rather than pushing a fresh one (RequestContext.push skips
+        the push when the top-of-stack context is for the same app) — so
+        without this, `flask.g` (and the `current_user` it caches) would
+        leak between the two simulated browsers regardless of which
+        session cookie a given request actually carries. Pushing a fresh
+        context per call is what makes each `.get()/.post()` here behave
+        like a real, independent request."""
+        with app.app_context():
+            user = make_user('chgpw_evict@test.com', role='client')
+            make_client_profile(user.id)
+            db.session.commit()
+
+        attacker = app.test_client()
+        with app.app_context():
+            login(attacker, 'chgpw_evict@test.com')
+        with app.app_context():
+            resp = attacker.get('/profile', follow_redirects=False)
+            assert resp.status_code == 200  # attacker session live before the change
+
+        with app.app_context():
+            login(client, 'chgpw_evict@test.com')
+        with app.app_context():
+            client.post('/auth/change-password', data={
+                'current_password': 'Testpass1!',
+                'new_password': 'NewPass456!',
+                'confirm_password': 'NewPass456!',
+            }, follow_redirects=False)
+
+        # The changer's own session survives...
+        with app.app_context():
+            resp = client.get('/profile', follow_redirects=False)
+            assert resp.status_code == 200
+        # ...but the attacker's separate session is dead
+        with app.app_context():
+            resp = attacker.get('/profile', follow_redirects=False)
+            assert resp.status_code in (302, 301)
+
+    def test_reset_password_revokes_existing_sessions(self, app, client):
+        """Regression (audit M10): a password reset is an account-recovery
+        action — it must kill sessions an attacker already holds, not just
+        the anonymous SID of the browser performing the reset. See the
+        docstring on test_change_password_revokes_other_sessions for why
+        each call is wrapped in its own app context."""
+        from app.blueprints.auth.routes import _make_reset_token
+
+        with app.app_context():
+            user = make_user('reset_evict@test.com', role='client')
+            make_client_profile(user.id)
+            db.session.commit()
+            token = _make_reset_token(user)
+
+        attacker = app.test_client()
+        with app.app_context():
+            login(attacker, 'reset_evict@test.com')
+        with app.app_context():
+            resp = attacker.get('/profile', follow_redirects=False)
+            assert resp.status_code == 200  # attacker session live before the reset
+
+        with app.app_context():
+            client.get(f'/auth/reset-password/{token}')
+        with app.app_context():
+            client.post(f'/auth/reset-password/{token}', data={
+                'password': 'BrandNew789!',
+                'confirm_password': 'BrandNew789!',
+            }, follow_redirects=False)
+
+        with app.app_context():
+            resp = attacker.get('/profile', follow_redirects=False)
+            assert resp.status_code in (302, 301)

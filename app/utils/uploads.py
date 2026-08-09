@@ -16,6 +16,14 @@ ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif'}
 MAX_SIZE = (800, 800)
 CROPPED_SIZE = (400, 400)  # square output for cropper uploads
 
+# Pillow only *errors* above 2x its default limit (~178M px) and merely warns
+# in between — a ~200M-pixel PNG compresses to well under our 10MB upload cap
+# yet fully decodes to ~600MB resident, an OOM kill on a Railway container.
+# Cap well past any real phone camera (50MP) so oversized inputs raise
+# DecompressionBombError instead, which the try/excepts below already turn
+# into a clean ValueError.
+Image.MAX_IMAGE_PIXELS = 50_000_000
+
 
 def _backup_to_r2(local_path, r2_key):
     """Copy a saved file to the R2 backup bucket. Best-effort — never raises."""

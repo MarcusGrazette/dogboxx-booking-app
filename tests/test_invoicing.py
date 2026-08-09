@@ -813,3 +813,69 @@ class TestCoOwnerDualRole:
             link = DogOwner.query.filter_by(
                 dog_id=dog_id, user_id=dual_id, role='secondary').first()
             assert link is not None
+
+
+# ---------------------------------------------------------------------------
+# Decimal money math (audit M15) — pricing.py/invoicing.py switched from
+# float to Decimal for unit prices and discounts. The admin invoice detail
+# page's weekly breakdown does its own arithmetic on top of those values
+# (app/blueprints/admin/views/invoicing.py), so it's the one place a
+# Decimal/float mix could slip back in and 500 the page. These tests build a
+# week with BOTH a double-slot day AND the ≥5-walk weekly discount active,
+# so every touched line (wk_double_discount + wk_weekly_discount, wk_gross -
+# wk_discount_total, grand_total) actually executes.
+# ---------------------------------------------------------------------------
+
+class TestDecimalMoneyMath:
+    def _make_admin(self):
+        admin = User(
+            firstname='Admin', lastname='User', email='dec_admin@test.com',
+            role='walker', is_admin=True,
+            hashed_password=generate_password_hash('Testpass1!'), active=True,
+        )
+        db.session.add(admin)
+        db.session.flush()
+        return admin
+
+    def test_invoicing_detail_page_renders_with_double_and_weekly_discount(self, app, client):
+        with app.app_context():
+            self._make_admin()
+            st = make_walk_service()
+            make_pricing_config(weekly_discount=WEEKLY_DISCOUNT)
+            u, dog = make_client_with_dog('dec_client@test.com')
+
+            # Mon-Fri Morning (5 walks -> weekly discount qualifies)
+            for day in range(2, 7):
+                add_booking(u, dog, st, datetime.date(2026, 2, day), 'Morning', status='confirmed')
+            # Same-day Afternoon on the Monday -> double-slot discount too
+            add_booking(u, dog, st, MON_1, 'Afternoon', status='confirmed')
+            db.session.commit()
+
+        client.post('/auth/login',
+                    data={'email': 'dec_admin@test.com', 'password': 'Testpass1!'},
+                    follow_redirects=True)
+
+        list_resp = client.get('/admin/invoicing?month=2026-02')
+        assert list_resp.status_code == 200
+
+        with app.app_context():
+            client_id = User.query.filter_by(email='dec_client@test.com').first().id
+        detail_resp = client.get(f'/admin/invoicing/{client_id}?month=2026-02')
+        assert detail_resp.status_code == 200
+        assert b'Weekly discount' in detail_resp.data
+
+    def test_client_monthly_summary_renders_with_double_and_weekly_discount(self, app, client):
+        with app.app_context():
+            st = make_walk_service()
+            make_pricing_config(weekly_discount=WEEKLY_DISCOUNT)
+            u, dog = make_client_with_dog('dec_selfclient@test.com')
+            for day in range(2, 7):
+                add_booking(u, dog, st, datetime.date(2026, 2, day), 'Morning', status='confirmed')
+            add_booking(u, dog, st, MON_1, 'Afternoon', status='confirmed')
+            db.session.commit()
+
+        client.post('/auth/login',
+                    data={'email': 'dec_selfclient@test.com', 'password': 'Testpass1!'},
+                    follow_redirects=True)
+        resp = client.get('/monthly-summary?month=2026-02')
+        assert resp.status_code == 200

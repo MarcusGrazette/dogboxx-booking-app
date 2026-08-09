@@ -4,6 +4,7 @@ client-facing monthly summary page.
 """
 
 from collections import defaultdict
+from decimal import Decimal
 from sqlalchemy.orm import joinedload
 from app.models import DogOwner, Booking
 from app.utils.pricing import (
@@ -102,15 +103,18 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
     walk_confirmed    = [b for b in confirmed if not is_drop_in(b)]
     drop_in_confirmed = [b for b in confirmed if is_drop_in(b)]
 
-    # Calculate subtotal
-    subtotal = 0.0
+    # Calculate subtotal — kept as Decimal throughout (PricingConfig's
+    # Numeric(8,2) columns already hand back Decimal) so a month of line
+    # items plus two discount subtractions never accumulates binary float
+    # representation error before the final round().
+    subtotal = Decimal('0.00')
     for b in all_billable:
         subtotal += unit_price(b, config_for_date(all_configs, b.date))
     for (_dog_id, d), slots in dog_date_slots.items():
         if 'Morning' in slots and 'Afternoon' in slots:
             cfg = config_for_date(all_configs, d)
             if cfg:
-                subtotal -= float(cfg.double_slot_discount)
+                subtotal -= cfg.double_slot_discount
 
     # Weekly discount — confirmed group walks only, ≥5 per ISO week
     weekly_discount_total, weekly_discount_weeks = weekly_discount_for_walks(
