@@ -200,14 +200,8 @@ def monthly_summary():
 
     today = date_type.today()
     month_str = request.args.get('month', f'{today.year}-{today.month:02d}')
-    month_start, month_end = parse_month_param(month_str, today)
+    month_start, month_end = parse_month_param(month_str, today, cap_at_today=True)
     year, month = month_start.year, month_start.month
-
-    # Cap at current month — no peeking ahead
-    if (year, month) > (today.year, today.month):
-        year, month = today.year, today.month
-        month_start = date_type(year, month, 1)
-        month_end   = date_type(year + (month // 12), (month % 12) + 1, 1)
 
     all_configs = (
         PricingConfig.query
