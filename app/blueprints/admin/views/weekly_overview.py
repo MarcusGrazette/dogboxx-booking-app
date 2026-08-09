@@ -27,6 +27,7 @@ from app.utils.weekly_schedule import (
     WEEKDAYS,
     WEEKDAY_LABELS,
 )
+from app.utils.walker_visuals import walker_color, walker_initials
 
 
 @admin_bp.route("/weekly-overview")
@@ -85,6 +86,8 @@ def weekly_overview(date_str=None):
 
         walker_weeks.append({
             'walker': walker,
+            'color': walker_color(walker.id),
+            'initials': walker_initials(walker),
             'day_rows': day_rows,
             'total_dogs': total_dogs,
             'copy_text': format_walker_week_text(walker, days, week_start),
@@ -94,6 +97,7 @@ def weekly_overview(date_str=None):
         "admin_weekly_overview.html",
         week_start=week_start,
         week_end=week_end,
+        at_current_week=(week_start == get_week_start(today)),
         roster_by_day=roster_by_day,
         roster_copy_text=roster_copy_text,
         walker_weeks=walker_weeks,

@@ -19,6 +19,12 @@
   --db-surface:              #F6F6F6;
   --db-muted:                #5E5E5E;
 
+  /* PM indicator — the only indigo on the site, reserved for AM/PM
+     contrast (e.g. weekly overview chips); pick this up for any future
+     PM-style badge so it isn't a one-off. */
+  --db-pm-chip-bg:           rgba(99, 102, 241, 0.12);
+  --db-pm-chip-text:         #4338ca;
+
   /* Override body */
   --bs-body-bg:              #F6F6F6;
   --bs-body-color:           #1B1B1B;

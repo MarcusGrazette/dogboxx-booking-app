@@ -6,34 +6,15 @@ from app.utils.decorators import admin_required
 from app.models import User, Booking, Walker, WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, ServiceType, Closure
 from app import db
 from app.capacity import get_max_per_walker
+from app.utils.walker_visuals import walker_color as _walker_color, walker_initials as _walker_initials
 from sqlalchemy.orm import joinedload
 from datetime import timedelta
 
 
 # ─── Dashboard helpers ────────────────────────────────────────────────────────
-
-_WALKER_COLORS = [
-    '#8b5cf6',  # violet
-    '#ec4899',  # pink
-    '#f97316',  # orange
-    '#14b8a6',  # teal
-    '#3b82f6',  # blue
-    '#a855f7',  # purple
-    '#10b981',  # emerald
-    '#f59e0b',  # amber
-    '#6366f1',  # indigo
-    '#84cc16',  # lime
-]
-
-
-def _walker_color(walker_id):
-    return _WALKER_COLORS[walker_id % len(_WALKER_COLORS)]
-
-
-def _walker_initials(walker):
-    first = (walker.user.firstname or '')[:1].upper()
-    last  = (walker.user.lastname  or '')[:1].upper()
-    return (first + last) if last else first
+# _walker_color / _walker_initials live in app.utils.walker_visuals so the
+# assignment board and the weekly overview page derive the same per-walker
+# color from the same palette.
 
 
 def _slot_state(walker_id, slot, dow, schedule_map, adhoc_slots, unavail_slots):
