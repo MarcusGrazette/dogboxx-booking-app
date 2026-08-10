@@ -30,7 +30,13 @@ class TestWeeklyOverviewAccess:
 
     def test_client_cannot_access(self, app, client, client_user):
         login(client, client_user.email)
-        resp = client.get('/walker/weekly', follow_redirects=False)
+        # Simulate a real browser navigation so walker_required returns the HTML
+        # redirect path rather than the JSON 403 branch it serves to fetch callers.
+        resp = client.get(
+            '/walker/weekly',
+            headers={'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'},
+            follow_redirects=False,
+        )
         assert resp.status_code == 302  # walker_required bounces non-walkers away
 
     def test_walker_can_access(self, logged_in_walker):

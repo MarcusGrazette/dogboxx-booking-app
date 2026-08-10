@@ -85,6 +85,12 @@ class Config:
     # can only be mounted to one service.
     INTERNAL_API_SECRET = os.environ.get('INTERNAL_API_SECRET')
 
+    # Default Postgres per-statement timeout for app connections (ms). Bounded
+    # so a runaway query releases its pooled connection instead of holding it
+    # until gunicorn's --timeout kills the entire worker. Migrations bypass this
+    # in migrations/env.py (see run_migrations_online).
+    STATEMENT_TIMEOUT_MS = int(os.environ.get('PG_STATEMENT_TIMEOUT_MS', '15000'))
+
 
 class DevelopmentConfig(Config):
     """Development configuration."""
@@ -141,6 +147,13 @@ class TestingConfig(Config):
             'TEST_DATABASE_URL',
             'postgresql://dogboxx:dogboxx@localhost:5432/dogboxx_test',
         )
+        # Postgres-only: a runaway query cancels itself instead of holding a
+        # pooled connection (and any lock it's waiting on) forever. See
+        # ProductionConfig for the full rationale.
+        SQLALCHEMY_ENGINE_OPTIONS = {
+            "pool_pre_ping": True,
+            "connect_args": {"options": f"-c statement_timeout={Config.STATEMENT_TIMEOUT_MS}"},
+        }
     WTF_CSRF_ENABLED = False
     RATELIMIT_ENABLED = False
     SSE_REDIS_URL = None  # tests always use the in-memory SSE fan-out
@@ -156,7 +169,21 @@ class ProductionConfig(Config):
     """Production configuration."""
     DEBUG = False
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
-    
+
+    # Postgres has no default ceiling on how long a single statement may run.
+    # Without one, a pathological query (missing index, unbounded scan, a
+    # lock wait behind another slow transaction) holds a pooled connection —
+    # and whatever locks it's waiting on — indefinitely, starving unrelated
+    # requests until gunicorn's 120s worker timeout kills the *entire* worker
+    # (scripts/start.sh --timeout 120), dropping every other in-flight request
+    # on it too. 15s gives Postgres its own much cheaper, surgical cutoff:
+    # only the offending request fails (as OperationalError/QueryCanceled),
+    # the connection is released, and the worker keeps serving everyone else.
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "connect_args": {"options": f"-c statement_timeout={Config.STATEMENT_TIMEOUT_MS}"},
+    }
+
     # HTTPS enforcement in production
     SESSION_COOKIE_SECURE = True  # Only send cookies over HTTPS
     REMEMBER_COOKIE_SECURE = True  # For remember me cookies

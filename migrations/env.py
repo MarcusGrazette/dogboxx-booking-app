@@ -97,6 +97,31 @@ def run_migrations_online():
     connectable = get_engine()
 
     with connectable.connect() as connection:
+        # Migrations bypass the app-level statement_timeout. DDL like ALTER TABLE
+        # that rewrites a column (e.g. enum narrowing) and CREATE INDEX CONCURRENTLY
+        # on a populated table can legitimately run longer than the app's 15s cap,
+        # and a failure here blocks the deploy before gunicorn even starts. We
+        # apply migrations serially under this connection, so a slow migration
+        # blocks only itself, not unrelated traffic. Guarded to Postgres only —
+        # SQLite (local dev fallback) doesn't support this GUC.
+        if connection.dialect.name == 'postgresql':
+            from sqlalchemy import text as _text
+            connection.execute(_text("SET statement_timeout = 0"))
+            # SQLAlchemy 2.x autobegins a transaction on that execute(). If left
+            # open, MigrationContext sees the connection as already "in a
+            # transaction" (_get_connection_in_transaction) and sets
+            # _in_external_transaction=True, which makes begin_transaction() a
+            # no-op — Alembic then assumes *we* own commit/rollback. We don't:
+            # this `with` block only closes the connection, which rolls back
+            # any uncommitted transaction. Every migration would appear to run
+            # (the DDL executes, logs show success) but silently vanish on
+            # close, leaving `flask db upgrade` reporting success against an
+            # unchanged database. Commit here so the SET is finalized and the
+            # connection goes into context.configure() transaction-free, so
+            # Alembic's own begin/commit around run_migrations() is what
+            # actually persists the migrations.
+            connection.commit()
+
         context.configure(
             connection=connection,
             target_metadata=get_metadata(),

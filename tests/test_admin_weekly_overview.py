@@ -31,7 +31,13 @@ class TestWeeklyOverviewAccess:
 
     def test_non_admin_cannot_access(self, app, client, walker_user):
         login(client, walker_user.email)
-        resp = client.get('/admin/weekly-overview', follow_redirects=False)
+        # Simulate a real browser navigation so admin_required returns the HTML
+        # redirect path rather than the JSON 403 branch it serves to fetch callers.
+        resp = client.get(
+            '/admin/weekly-overview',
+            headers={'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'},
+            follow_redirects=False,
+        )
         assert resp.status_code == 302  # admin_required bounces non-admins away
 
     def test_admin_can_access(self, logged_in_admin):

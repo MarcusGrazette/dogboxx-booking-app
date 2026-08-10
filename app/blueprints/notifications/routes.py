@@ -7,6 +7,7 @@ from . import notifications_bp
 from app.utils.notifications import mark_read, mark_all_read, get_recent
 from app.models import Notification, PushSubscription
 from app.utils.notifications import get_meta
+from app.utils.http import wants_json
 from app import db, limiter, csrf
 
 
@@ -117,15 +118,10 @@ def mark_all():
     """Mark all notifications read for current user."""
     mark_all_read(current_user.id)
     # Support both AJAX and regular form POST
-    if _wants_json():
+    if wants_json():
         return jsonify({'ok': True})
     from flask import redirect, url_for
     return redirect(url_for('notifications.index'))
-
-
-def _wants_json():
-    return (request.accept_mimetypes.best == 'application/json'
-            or request.headers.get('X-Requested-With') == 'XMLHttpRequest')
 
 
 # ── Web Push subscription management ─────────────────────────────────────────
