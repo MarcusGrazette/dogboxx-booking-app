@@ -370,17 +370,11 @@ def create_app(config_name=None):
     def ratelimit_handler(e):
         # API/fetch callers expect JSON — returning the HTML error page makes
         # their res.json() throw "unexpected token '<'" and surfaces a cryptic
-        # toast instead of a usable message. Detect non-navigation requests the
-        # same way the CSRF handler and the role decorators do (is_json / XHR),
-        # plus an Accept-header check to catch fetch() GETs that send Accept: */*.
+        # toast instead of a usable message. wants_json() covers fetch()'s
+        # default Accept: */* along with is_json / XHR.
         from flask import jsonify
-        accepts = request.headers.get('Accept') or ''
-        wants_json = (
-            request.is_json
-            or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-            or 'text/html' not in accepts
-        )
-        if wants_json:
+        from app.utils.http import wants_json
+        if wants_json():
             return jsonify(
                 success=False,
                 message="You're doing that too quickly — please wait a moment and try again.",
@@ -415,6 +409,10 @@ def create_app(config_name=None):
     @app.errorhandler(500)
     def internal_error(e):
         db.session.rollback()
+        from flask import jsonify
+        from app.utils.http import wants_json
+        if wants_json():
+            return jsonify(success=False, message="Something went wrong. Please try again."), 500
         return render_template('500.html'), 500
 
     @app.context_processor
@@ -564,7 +562,8 @@ def create_app(config_name=None):
     def handle_csrf_error(e):
         from flask import flash, redirect, request, url_for, jsonify
         from urllib.parse import urlparse
-        if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        from app.utils.http import wants_json
+        if wants_json():
             return jsonify(success=False, message="Session timed out — please refresh."), 400
         flash("Your session timed out — please try again.", "warning")
         # request.referrer is attacker-controllable (an arbitrary Referer header
