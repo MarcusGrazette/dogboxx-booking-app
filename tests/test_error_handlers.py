@@ -45,10 +45,12 @@ def test_500_returns_html_for_browser_navigation(app, client, crash_next_request
     assert b'500' in resp.data or b'Something went wrong' in resp.data
 
 
-def test_500_handler_logs_warning(app, client, crash_next_request, caplog):
-    """The 500 handler must emit a WARNING with the exception so ops can see
-    which path failed, not just 'we got a 500'."""
-    caplog.set_level(logging.WARNING)
+def test_500_logs_exception_once(app, client, crash_next_request, caplog):
+    """Flask's own handle_exception() logs the path/method/traceback at ERROR
+    before dispatching to our handler (see internal_error's comment) — assert
+    that still happens, and that our handler doesn't add a second, duplicate
+    log line on top of it."""
+    caplog.set_level(logging.INFO)
 
     resp = _request_expecting_500(
         client, app,
@@ -56,8 +58,8 @@ def test_500_handler_logs_warning(app, client, crash_next_request, caplog):
     )
     assert resp.status_code == 500
 
-    assert any(
-        r.levelno == logging.WARNING
-        and f'500 on GET {_ERROR_TEST_PATH}' in r.message
-        for r in caplog.records
-    )
+    matches = [
+        r for r in caplog.records
+        if r.levelno == logging.ERROR and f'Exception on {_ERROR_TEST_PATH}' in r.message
+    ]
+    assert len(matches) == 1

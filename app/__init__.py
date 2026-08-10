@@ -408,15 +408,10 @@ def create_app(config_name=None):
 
     @app.errorhandler(500)
     def internal_error(e):
-        # Log at WARNING (not ERROR) so we don't double-fire Sentry for
-        # exceptions that the originating route already logged with ERROR.
-        # The request path + exception type are enough for ops to correlate
-        # statement_timeout-style 500s with the endpoint that triggered them.
-        app.logger.warning(
-            '500 on %s %s — %s: %s',
-            request.method, request.path, type(e).__name__, e,
-            exc_info=True,
-        )
+        # No logging here — Flask's own handle_exception() already logs this
+        # at ERROR with the request path/method and full traceback
+        # (log_exception(), called unconditionally before this handler runs).
+        # A second call here would just duplicate that line at a lower level.
         db.session.rollback()
         from flask import jsonify
         from app.utils.http import wants_json
