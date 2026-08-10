@@ -7,13 +7,15 @@ from functools import wraps
 from flask import current_app, flash, redirect, url_for, jsonify, request
 from flask_login import current_user
 
+from app.utils.http import wants_json
+
 
 def admin_required(f):
     """Decorator that restricts access to admin users only."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not current_user.is_admin:
-            if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            if wants_json():
                 return jsonify(success=False, message="Forbidden"), 403
             flash("Only admins can access this page.", "error")
             return redirect(url_for("client.index"))
@@ -26,7 +28,7 @@ def walker_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if current_user.role != 'walker' and not current_user.is_admin:
-            if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            if wants_json():
                 return jsonify(success=False, message="Forbidden"), 403
             flash("Only walkers can access this page.", "error")
             return redirect(url_for("client.index"))

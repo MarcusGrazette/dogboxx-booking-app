@@ -16,13 +16,43 @@ from app.models import User, Client, Dog, DogOwner, Walker, ServiceType, Booking
 # App / DB fixtures
 # ---------------------------------------------------------------------------
 
+# Internal route used by tests/test_error_handlers.py. Registered here (in the
+# session-scoped app fixture) because Flask forbids adding routes after the app
+# has handled its first request. It only raises when the flag below is toggled.
+_ERROR_TEST_PATH = '/__test_error_handlers_500__'
+_raise_on_next_error_test_request = False
+
+
+def _error_test_crash_view():
+    """View function for the internal error-handler test route."""
+    from sqlalchemy import text as sql_text
+    _db.session.execute(sql_text('SELECT 1'))
+    if _raise_on_next_error_test_request:
+        raise RuntimeError('boom')
+    return 'ok'
+
+
 @pytest.fixture(scope='session')
 def app():
     """Create application with testing config (in-memory SQLite)."""
     application = create_app('testing')
     # Disable rate limiter in tests
     application.config['RATELIMIT_ENABLED'] = False
+    application.add_url_rule(
+        _ERROR_TEST_PATH,
+        endpoint='_test_error_handler_crash',
+        view_func=_error_test_crash_view,
+    )
     return application
+
+
+@pytest.fixture
+def crash_next_request():
+    """Set the flag so the next request to the internal error-test route raises."""
+    global _raise_on_next_error_test_request
+    _raise_on_next_error_test_request = True
+    yield
+    _raise_on_next_error_test_request = False
 
 
 @pytest.fixture(autouse=True)

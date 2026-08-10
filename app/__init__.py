@@ -408,11 +408,20 @@ def create_app(config_name=None):
 
     @app.errorhandler(500)
     def internal_error(e):
+        # Log at WARNING (not ERROR) so we don't double-fire Sentry for
+        # exceptions that the originating route already logged with ERROR.
+        # The request path + exception type are enough for ops to correlate
+        # statement_timeout-style 500s with the endpoint that triggered them.
+        app.logger.warning(
+            '500 on %s %s — %s: %s',
+            request.method, request.path, type(e).__name__, e,
+            exc_info=True,
+        )
         db.session.rollback()
         from flask import jsonify
         from app.utils.http import wants_json
         if wants_json():
-            return jsonify(success=False, message="Something went wrong. Please try again."), 500
+            return jsonify(success=False, message="Something went wrong on our end. Please try again in a moment."), 500
         return render_template('500.html'), 500
 
     @app.context_processor

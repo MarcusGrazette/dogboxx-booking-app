@@ -85,6 +85,12 @@ class Config:
     # can only be mounted to one service.
     INTERNAL_API_SECRET = os.environ.get('INTERNAL_API_SECRET')
 
+    # Default Postgres per-statement timeout for app connections (ms). Bounded
+    # so a runaway query releases its pooled connection instead of holding it
+    # until gunicorn's --timeout kills the entire worker. Migrations bypass this
+    # in migrations/env.py (see run_migrations_online).
+    STATEMENT_TIMEOUT_MS = int(os.environ.get('PG_STATEMENT_TIMEOUT_MS', '15000'))
+
 
 class DevelopmentConfig(Config):
     """Development configuration."""
@@ -146,7 +152,7 @@ class TestingConfig(Config):
         # ProductionConfig for the full rationale.
         SQLALCHEMY_ENGINE_OPTIONS = {
             "pool_pre_ping": True,
-            "connect_args": {"options": "-c statement_timeout=15000"},
+            "connect_args": {"options": f"-c statement_timeout={Config.STATEMENT_TIMEOUT_MS}"},
         }
     WTF_CSRF_ENABLED = False
     RATELIMIT_ENABLED = False
@@ -175,7 +181,7 @@ class ProductionConfig(Config):
     # the connection is released, and the worker keeps serving everyone else.
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,
-        "connect_args": {"options": "-c statement_timeout=15000"},
+        "connect_args": {"options": f"-c statement_timeout={Config.STATEMENT_TIMEOUT_MS}"},
     }
 
     # HTTPS enforcement in production
