@@ -97,6 +97,17 @@ def run_migrations_online():
     connectable = get_engine()
 
     with connectable.connect() as connection:
+        # Migrations bypass the app-level statement_timeout. DDL like ALTER TABLE
+        # that rewrites a column (e.g. enum narrowing) and CREATE INDEX CONCURRENTLY
+        # on a populated table can legitimately run longer than the app's 15s cap,
+        # and a failure here blocks the deploy before gunicorn even starts. We
+        # apply migrations serially under this connection, so a slow migration
+        # blocks only itself, not unrelated traffic. Guarded to Postgres only —
+        # SQLite (local dev fallback) doesn't support this GUC.
+        if connection.dialect.name == 'postgresql':
+            from sqlalchemy import text as _text
+            connection.execute(_text("SET statement_timeout = 0"))
+
         context.configure(
             connection=connection,
             target_metadata=get_metadata(),
