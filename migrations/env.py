@@ -107,6 +107,20 @@ def run_migrations_online():
         if connection.dialect.name == 'postgresql':
             from sqlalchemy import text as _text
             connection.execute(_text("SET statement_timeout = 0"))
+            # SQLAlchemy 2.x autobegins a transaction on that execute(). If left
+            # open, MigrationContext sees the connection as already "in a
+            # transaction" (_get_connection_in_transaction) and sets
+            # _in_external_transaction=True, which makes begin_transaction() a
+            # no-op — Alembic then assumes *we* own commit/rollback. We don't:
+            # this `with` block only closes the connection, which rolls back
+            # any uncommitted transaction. Every migration would appear to run
+            # (the DDL executes, logs show success) but silently vanish on
+            # close, leaving `flask db upgrade` reporting success against an
+            # unchanged database. Commit here so the SET is finalized and the
+            # connection goes into context.configure() transaction-free, so
+            # Alembic's own begin/commit around run_migrations() is what
+            # actually persists the migrations.
+            connection.commit()
 
         context.configure(
             connection=connection,
