@@ -1,4 +1,20 @@
-from datetime import date
+from datetime import date, timezone
+from zoneinfo import ZoneInfo
+
+LOCAL_TZ = ZoneInfo('Europe/London')
+
+
+def to_local_time(dt):
+    """Convert a UTC datetime to Europe/London (correctly handling BST).
+
+    `db.DateTime` columns are TIMESTAMP WITHOUT TIME ZONE — even though every
+    row is written via `datetime.now(timezone.utc)`, SQLAlchemy hands back a
+    naive datetime on read. Treat a naive value as UTC before converting."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(LOCAL_TZ)
 
 
 def _month_bounds(year, month):

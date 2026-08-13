@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
-from flask import render_template, request, jsonify, Response, stream_with_context, current_app
+from flask import render_template, request, jsonify, Response, stream_with_context, current_app, redirect, url_for
 from flask_login import login_required, current_user
 from . import notifications_bp
 from app.utils.notifications import mark_read, mark_all_read, get_recent
@@ -120,7 +120,6 @@ def mark_all():
     # Support both AJAX and regular form POST
     if wants_json():
         return jsonify({'ok': True})
-    from flask import redirect, url_for
     return redirect(url_for('notifications.index'))
 
 

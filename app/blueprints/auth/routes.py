@@ -62,7 +62,7 @@ def login():
         # Track failed login attempts with redis-based rate limiting
         if not password_ok:
             # Log the failed attempt (for security auditing)
-            logging.warning(f"Failed login attempt for email: {email} from IP: {request.remote_addr}")
+            logging.warning("Failed login attempt for email: %r from IP: %s", email, request.remote_addr)
 
             # Show generic error message (don't reveal if email exists)
             flash("Invalid email or password", "error")

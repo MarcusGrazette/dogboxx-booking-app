@@ -670,3 +670,44 @@ class TestFeedClustering:
         # as selectors, so check the class= attribute form which only appears in rows)
         assert b'class="activity-row cluster-header' not in resp.data
         assert b'class="cluster-child' not in resp.data
+
+
+# ---------------------------------------------------------------------------
+# Timestamp localisation — feed times must render in Europe/London, not raw
+# UTC. Regression: BookingStatusChange.created_at is stored naive-UTC
+# (TIMESTAMP WITHOUT TIME ZONE); the template used to strftime it directly,
+# which is off by an hour for the ~7 months/year the UK is on BST.
+# ---------------------------------------------------------------------------
+
+class TestFeedTimestampLocalisation:
+
+    def test_bst_timestamp_renders_as_local_not_utc(self, app, client):
+        """23:30 UTC on 15 Jul (BST, UTC+1) must render as 00:30 on 16 Jul —
+        both the time AND the date must shift across the BST offset."""
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_user('af_tz_admin@test.com', role='walker', is_admin=True)
+            client_u = _make_user('af_tz_client@test.com', role='client')
+            db.session.add(Client(user_id=client_u.id, onboarding_completed=True))
+            st = _make_service()
+            dog = _make_dog(client_u.id)
+            booking = Booking(user_id=client_u.id, dog_id=dog.id,
+                              service_type_id=st.id, date=monday,
+                              slot='Morning', status='requested')
+            db.session.add(booking)
+            db.session.flush()
+            record_booking_created(booking, actor_id=client_u.id)
+            db.session.commit()
+
+            bsc = BookingStatusChange.query.filter_by(booking_id=booking.id).one()
+            # Naive value, as SQLAlchemy hands back on read — represents UTC.
+            bsc.created_at = datetime.datetime(2026, 7, 15, 23, 30)
+            db.session.commit()
+
+        _login(client, 'af_tz_admin@test.com')
+        resp = _get_feed(client, '2026-07')
+        assert resp.status_code == 200
+        assert b'00:30' in resp.data
+        assert b'Thu 16 Jul' in resp.data
+        assert b'23:30' not in resp.data
+        assert b'Wed 15 Jul' not in resp.data

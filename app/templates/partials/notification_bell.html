@@ -53,9 +53,7 @@
                 <div class="text-muted text-truncate" style="font-size:0.75rem;">{{ n.body }}</div>
                 {% endif %}
                 <div class="text-muted notif-time" style="font-size:0.7rem;"
-                     data-ts="{{ n.created_at.isoformat() }}">
-                    {{ n.created_at.strftime('%d %b %H:%M') }}
-                </div>
+                     data-ts="{{ n.created_at.isoformat() }}"></div>
             </div>
             {% if n.is_unread %}
             <div class="flex-shrink-0 mt-2">

@@ -11,6 +11,7 @@ import re as _re
 
 import bleach
 from bleach.css_sanitizer import CSSSanitizer
+from bleach.html5lib_shim import Filter
 
 RICH_TEXT_TAGS = list(bleach.sanitizer.ALLOWED_TAGS) + [
     'p', 'br', 'h1', 'h2', 'h3', 'ul', 'ol', 'li', 'strong', 'em',
@@ -26,14 +27,31 @@ RICH_TEXT_ATTRS = {
 _CSS_SANITIZER = CSSSanitizer(allowed_css_properties=['color'])
 
 
+class _ForceNoopenerFilter(Filter):
+    """Stamp rel="noopener noreferrer" on any <a target=...> — client-authored
+    pickup_instructions render to admins/walkers, and a same-origin `rel` from
+    the author shouldn't be trusted to keep window.opener locked down."""
+
+    def __iter__(self):
+        for token in Filter.__iter__(self):
+            if token.get('type') in ('StartTag', 'EmptyTag') and token.get('name') == 'a':
+                data = token.get('data', {})
+                if (None, 'target') in data:
+                    data[(None, 'rel')] = 'noopener noreferrer'
+            yield token
+
+
+_CLEANER = bleach.sanitizer.Cleaner(
+    tags=RICH_TEXT_TAGS,
+    attributes=RICH_TEXT_ATTRS,
+    css_sanitizer=_CSS_SANITIZER,
+    filters=[_ForceNoopenerFilter],
+)
+
+
 def sanitize_rich_text(html):
     """Clean Quill-authored HTML down to the shared rich-text allowlist."""
-    return bleach.clean(
-        html or '',
-        tags=RICH_TEXT_TAGS,
-        attributes=RICH_TEXT_ATTRS,
-        css_sanitizer=_CSS_SANITIZER,
-    )
+    return _CLEANER.clean(html or '')
 
 
 def clean_rich_text_or_none(html):
