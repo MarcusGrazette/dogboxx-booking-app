@@ -595,4 +595,25 @@ def create_app(config_name=None):
         resp.headers['Cache-Control'] = 'no-cache'
         return resp
 
+    # Browsers/OSes/crawlers probe these paths at the root by convention,
+    # regardless of the <link> tags in base.html pointing at /static/... —
+    # serve them directly so those probes don't log as 404s.
+    @app.route('/robots.txt')
+    def robots_txt():
+        # Everything here is login-gated (client_bp mounts at root '/' — there's
+        # no separate public marketing area to selectively allow), so block
+        # crawling outright rather than trying to enumerate prefixes.
+        resp = make_response("User-agent: *\nDisallow: /\n")
+        resp.headers['Content-Type'] = 'text/plain'
+        return resp
+
+    @app.route('/favicon.ico')
+    def favicon_root():
+        return send_from_directory(os.path.join(app.root_path, 'static'), 'favicon.ico')
+
+    @app.route('/apple-touch-icon.png')
+    @app.route('/apple-touch-icon-precomposed.png')
+    def apple_touch_icon_root():
+        return send_from_directory(os.path.join(app.root_path, 'static'), 'apple-touch-icon.png')
+
     return app
