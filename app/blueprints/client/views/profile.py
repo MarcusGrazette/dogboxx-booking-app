@@ -264,7 +264,10 @@ def upload_dog_photo():
             user_id=current_user.id, dog_id=dog_id_param, role='primary'
         ).first()
     else:
-        dog_owner = DogOwner.query.filter_by(user_id=current_user.id, role='primary').first()
+        primary_owners = DogOwner.query.filter_by(user_id=current_user.id, role='primary').all()
+        if len(primary_owners) > 1:
+            return jsonify(success=False, error="Please specify which dog."), 400
+        dog_owner = primary_owners[0] if primary_owners else None
     dog = db.session.get(Dog, dog_owner.dog_id) if dog_owner else None
     if not dog:
         return jsonify(success=False, error="Dog profile not found"), 404

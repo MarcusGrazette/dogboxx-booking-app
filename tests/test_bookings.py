@@ -1273,3 +1273,82 @@ class TestConcurrentDuplicateGraceful409:
         with app.app_context():
             assert Booking.query.count() == 0, \
                 f'{endpoint}: conflicting booking should have been rolled back'
+
+
+# ---------------------------------------------------------------------------
+# L24 — _resolve_dog() must not silently pick a dog when the caller owns more
+# than one and omits dog_id. Regression: a stale/buggy JS payload used to book
+# whichever dog happened to sort first, with a 200 and no error.
+# ---------------------------------------------------------------------------
+
+class TestResolveDogRequiresSelectionWhenAmbiguous:
+
+    def _setup_two_dogs(self, app):
+        tom = tomorrow()
+        with app.app_context():
+            make_walker_with_schedule(f'w_am_{id(self)}@t.com', tom.weekday(), 'Morning')
+            make_service()
+            user = make_user(f'cl_multidog_{id(self)}@t.com')
+            make_client_profile(user.id)
+            dog_a = make_dog('DogA')
+            dog_b = make_dog('DogB')
+            attach_dog(dog_a.id, user.id)
+            attach_dog(dog_b.id, user.id)
+            db.session.commit()
+            return user.email, dog_a.id, dog_b.id
+
+    @pytest.mark.parametrize('endpoint,extra', [
+        ('/book',         {'slot': 'Morning'}),
+        ('/book_drop_in', {'slot': 'Morning'}),
+        ('/book_both',    {}),
+    ])
+    def test_omitted_dog_id_with_two_dogs_returns_400(self, app, client, endpoint, extra):
+        email, dog_a_id, dog_b_id = self._setup_two_dogs(app)
+        with app.app_context():
+            make_drop_in_service()
+            db.session.commit()
+
+        login(client, email)
+        payload = {'date': tomorrow().isoformat(), **extra}
+        resp = client.post(endpoint, data=json.dumps(payload), content_type='application/json')
+
+        assert resp.status_code == 400, \
+            f'{endpoint}: ambiguous dog selection must 400, got {resp.status_code}'
+        data = resp.get_json()
+        assert data['success'] is False
+        assert 'select a dog' in data['message'].lower()
+        with app.app_context():
+            assert Booking.query.count() == 0
+
+    def test_explicit_dog_id_with_two_dogs_books_the_requested_one(self, app, client):
+        email, dog_a_id, dog_b_id = self._setup_two_dogs(app)
+
+        login(client, email)
+        payload = {'date': tomorrow().isoformat(), 'slot': 'Morning', 'dog_id': dog_b_id}
+        resp = client.post('/book', data=json.dumps(payload), content_type='application/json')
+
+        assert resp.status_code == 200
+        with app.app_context():
+            booking = Booking.query.one()
+            assert booking.dog_id == dog_b_id
+
+    def test_omitted_dog_id_with_one_dog_still_auto_resolves(self, app, client):
+        tom = tomorrow()
+        with app.app_context():
+            make_walker_with_schedule(f'w_am_single_{id(self)}@t.com', tom.weekday(), 'Morning')
+            make_service()
+            user = make_user(f'cl_singledog_{id(self)}@t.com')
+            make_client_profile(user.id)
+            dog = make_dog('OnlyDog')
+            attach_dog(dog.id, user.id)
+            db.session.commit()
+            email, dog_id = user.email, dog.id
+
+        login(client, email)
+        payload = {'date': tomorrow().isoformat(), 'slot': 'Morning'}
+        resp = client.post('/book', data=json.dumps(payload), content_type='application/json')
+
+        assert resp.status_code == 200, resp.get_json()
+        with app.app_context():
+            booking = Booking.query.one()
+            assert booking.dog_id == dog_id

@@ -456,3 +456,48 @@ class TestDualRoleProfileEdits:
         assert resp.get_json()['success'] is True
         with app.app_context():
             assert db.session.get(Booking, booking_id).client_notes == 'Bring the long lead today'
+
+
+# ---------------------------------------------------------------------------
+# L24 — upload_dog_photo() must not silently pick a primary dog when a
+# multi-dog client omits dog_id. Regression: it used to fall back to
+# DogOwner.query.filter_by(role='primary').first() with no ordering — an
+# arbitrary dog got the photo, with a 200 and no error.
+# ---------------------------------------------------------------------------
+
+class TestUploadDogPhotoRequiresSelectionWhenAmbiguous:
+
+    def test_omitted_dog_id_with_two_dogs_returns_400(self, app, db, client):
+        with app.app_context():
+            user = make_client_user(email='twodogs_photo@test.org')
+            dog_a = make_dog('PhotoA')
+            dog_b = make_dog('PhotoB')
+            make_primary_ownership(dog_a, user)
+            make_primary_ownership(dog_b, user)
+            db.session.commit()
+            user_email = user.email
+
+        login(client, user_email)
+        resp = client.post('/profile/upload-dog-photo')
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert data['success'] is False
+        assert 'specify which dog' in data['error'].lower()
+
+    def test_omitted_dog_id_with_one_dog_still_resolves(self, app, db, client):
+        with app.app_context():
+            user = make_client_user(email='onedog_photo@test.org')
+            dog = make_dog('PhotoOnly')
+            make_primary_ownership(dog, user)
+            db.session.commit()
+            user_email = user.email
+
+        login(client, user_email)
+        # No 'file' in the request — dog resolution must succeed and the
+        # request must fail *later*, on the missing-file check, not on
+        # ambiguous dog selection.
+        resp = client.post('/profile/upload-dog-photo')
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert data['success'] is False
+        assert data['error'] == 'No file provided'

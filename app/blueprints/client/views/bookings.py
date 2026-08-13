@@ -136,6 +136,8 @@ def _resolve_dog(user_dogs, requested_id):
         if dog is None:
             raise ValueError("Dog not found on your account.")
         return dog
+    if len(user_dogs) > 1:
+        raise ValueError("Please select a dog.")
     return user_dogs[0]
 
 
