@@ -185,12 +185,6 @@ class Dog(db.Model):
         }
 
     @property
-    def primary_owner(self):
-        """Return the primary owner's User record."""
-        do = DogOwner.query.filter_by(dog_id=self.id, role='primary').first()
-        return do.user if do else None
-
-    @property
     def owners_display(self):
         """Return owners' first names joined with ' & ', primary first.
         E.g. 'Hugh' for a single owner, 'Hugh & Gillian' for two owners."""

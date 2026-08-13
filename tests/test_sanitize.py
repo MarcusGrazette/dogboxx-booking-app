@@ -57,6 +57,23 @@ class TestSanitizeRichText:
     def test_none_input_returns_empty_string(self):
         assert sanitize_rich_text(None) == ''
 
+    def test_target_blank_link_gets_noopener_noreferrer(self):
+        """L28: a target link without rel must not rely on the author to set it."""
+        result = sanitize_rich_text('<a href="https://example.com" target="_blank">link</a>')
+        assert 'rel="noopener noreferrer"' in result
+
+    def test_target_blank_link_with_other_rel_is_overridden(self):
+        """An author-supplied rel that omits noopener must still be forced."""
+        result = sanitize_rich_text(
+            '<a href="https://example.com" target="_blank" rel="nofollow">link</a>'
+        )
+        assert 'rel="noopener noreferrer"' in result
+        assert 'nofollow' not in result
+
+    def test_link_without_target_is_unaffected(self):
+        result = sanitize_rich_text('<a href="https://example.com">link</a>')
+        assert 'rel=' not in result
+
 
 class TestCleanRichTextOrNone:
 
