@@ -489,6 +489,31 @@ class TestCancel:
             assert rows[0].changed_by_id == admin_id
             assert db.session.get(Booking, bid).cancelled_by == 'admin'
 
+    def test_cancel_with_no_body_returns_400_not_500(self, app, client):
+        """Regression for L23: request.json used to raise UnsupportedMediaType
+        on a bodyless POST, and the broad except turned that into a 500."""
+        with app.app_context():
+            b, user = seed_booking(status='confirmed')
+            db.session.commit()
+            email = user.email
+
+        login(client, email)
+        resp = client.post('/cancel_booking')
+        assert resp.status_code == 400
+
+    def test_cancel_with_json_array_body_returns_400_not_500(self, app, client):
+        """Regression for L23: a JSON array body made request.json.get(...)
+        raise AttributeError (lists have no .get), also swallowed into a 500."""
+        with app.app_context():
+            b, user = seed_booking(status='confirmed')
+            db.session.commit()
+            email = user.email
+
+        login(client, email)
+        resp = client.post('/cancel_booking', data=json.dumps([1, 2, 3]),
+                           content_type='application/json')
+        assert resp.status_code == 400
+
 
 class TestReset:
 

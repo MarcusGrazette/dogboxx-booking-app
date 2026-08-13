@@ -992,7 +992,9 @@ def cancel_booking():
     No early role gate (used to reject dual-role walkers incorrectly).
     """
     try:
-        booking_id = request.form.get("booking_id") or request.json.get("booking_id")
+        json_data = request.get_json(silent=True)
+        data = request.form or (json_data if isinstance(json_data, dict) else {})
+        booking_id = data.get("booking_id")
         if not booking_id:
             return jsonify(success=False, message="No booking ID provided"), 400
 
