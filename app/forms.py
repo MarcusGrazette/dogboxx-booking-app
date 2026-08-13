@@ -105,11 +105,6 @@ class BookingForm(FlaskForm):
             tomorrow = (datetime.now(timezone.utc) + timedelta(days=1)).date()
             if field.data < tomorrow:
                 raise ValidationError('Booking date must be at least tomorrow.')
-            
-            # Keep the 3-month limit validation here too
-            max_date = (datetime.now(timezone.utc) + timedelta(days=90)).date()
-            if field.data > max_date:
-                raise ValidationError('Booking date cannot be more than 3 months in the future.')
 
 
 class ProfileForm(FlaskForm):
