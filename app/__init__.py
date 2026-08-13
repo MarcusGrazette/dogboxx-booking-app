@@ -461,6 +461,12 @@ def create_app(config_name=None):
             suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
         return f'{n}{suffix}'
 
+    @app.template_filter('local_time')
+    def local_time_filter(dt):
+        """Convert a stored UTC datetime to Europe/London for display."""
+        from app.utils.dates import to_local_time
+        return to_local_time(dt)
+
     @app.context_processor
     def inject_device_info():
         """Expose UA device flags to all templates.
