@@ -112,9 +112,7 @@ def rich_text_to_plain(html):
 
     Unescapes entities after stripping: nh3.clean's output is HTML source
     (e.g. "Fish &amp; Chips"), but a plain-text summary should read as plain
-    text ("Fish & Chips") — this also keeps a disallowed tag that
-    sanitize_rich_text already escaped (e.g. a stray "&lt;script&gt;") from
-    surfacing as literal entity gibberish instead of being dropped as text.
+    text ("Fish & Chips").
     """
     spaced = _BLOCK_BOUNDARY_RE.sub(' ', html or '')
     text = nh3.clean(spaced, tags=set())
