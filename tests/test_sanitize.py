@@ -1,5 +1,5 @@
 """
-Tests for app.utils.sanitize — the shared bleach allowlist used by Daily
+Tests for app.utils.sanitize — the shared nh3 allowlist used by Daily
 Messages, pickup notes, broadcasts, and the newsletter.
 
 Covers:

@@ -390,11 +390,11 @@ class TestBroadcastSend:
         assert '<h1>Heads up</h1>' in email_body
         assert '{{firstname}}' in email_body
 
-    def test_disallowed_tag_escaped_in_db_and_email_html(
+    def test_disallowed_tag_stripped_in_db_and_email_html(
             self, app, client, captured_broadcasts):
         """A <script> tag in the submitted body must never survive as live,
         renderable markup in the DB audit row or the outgoing email HTML —
-        sanitize_rich_text escapes it to inert text."""
+        sanitize_rich_text strips the disallowed tag and its content."""
         with app.app_context():
             admin = _user('admin@bx-bcast.test.com', role='walker', is_admin=True)
             st = _service_type()
@@ -417,19 +417,20 @@ class TestBroadcastSend:
         with app.app_context():
             b = Broadcast.query.one()
             assert '<script>' not in b.body
-            assert '&lt;script&gt;' in b.body
+            assert 'alert(1)' not in b.body
+            assert b.body == '<p>Hi</p>'
 
         email_body = captured_broadcasts[0]['body']
         assert '<script>' not in email_body
-        assert '&lt;script&gt;' in email_body
+        assert 'alert(1)' not in email_body
 
-    def test_bell_plain_text_summary_is_html_escaped_when_rendered(
+    def test_bell_plain_text_summary_never_contains_stripped_script(
             self, app, client):
-        """The bell body is stored as plain text (via rich_text_to_plain),
-        which may legitimately contain literal '<'/'>' characters recovered
-        from an originally-escaped disallowed tag. The safety guarantee is
-        downstream: the template that renders n.body auto-escapes it — this
-        test drives that actual render path rather than the raw DB value."""
+        """The bell body is stored as plain text (via rich_text_to_plain).
+        sanitize_rich_text already strips a disallowed tag and its content
+        before rich_text_to_plain ever sees it, so the script never reaches
+        the summary — this test drives the actual bell render path (not just
+        the raw DB value) to confirm that end-to-end."""
         with app.app_context():
             admin = _user('admin@bp-bcast.test.com', role='walker', is_admin=True)
             st = _service_type()
@@ -455,7 +456,7 @@ class TestBroadcastSend:
         _login(client, c1_email)
         page = client.get('/').data.decode()
         assert '<script>alert(1)</script>' not in page
-        assert '&lt;script&gt;alert(1)&lt;/script&gt;' in page
+        assert 'alert(1)' not in page
 
     def test_send_bell_only_skips_email_batch(
             self, app, client, captured_broadcasts):

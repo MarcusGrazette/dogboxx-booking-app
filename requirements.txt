@@ -32,8 +32,7 @@ mdurl==0.1.2
 msgspec==0.19.0
 ordered-set==4.1.0
 packaging==25.0
-bleach==6.4.0
-tinycss2==1.5.1
+nh3==0.3.6
 boto3==1.37.28
 pillow==12.3.0
 psycogreen==1.0.2
