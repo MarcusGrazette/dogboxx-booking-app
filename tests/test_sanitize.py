@@ -1,11 +1,11 @@
 """
-Tests for app.utils.sanitize — the shared bleach allowlist used by Daily
+Tests for app.utils.sanitize — the shared nh3 allowlist used by Daily
 Messages, pickup notes, broadcasts, and the newsletter.
 
 Covers:
 - sanitize_rich_text: allowed formatting tags survive, disallowed tags/attrs
-  (script, event handlers, javascript: hrefs) are stripped/escaped, and the
-  Quill color picker's inline style survives via the scoped CSS sanitizer.
+  (script, event handlers, javascript: hrefs) are stripped, and the Quill
+  color picker's inline style survives via the scoped CSS sanitizer.
 - clean_rich_text_or_none: collapses an "empty" Quill editor (whose innerHTML
   is markup like <p><br></p>, not an empty string) down to None.
 - rich_text_to_plain: produces a readable, single-line summary for surfaces

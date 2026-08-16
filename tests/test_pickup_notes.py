@@ -30,7 +30,7 @@ class TestPickupNotesSanitizeOnSave:
             refreshed = db.session.get(Dog, dog_id)
             assert refreshed.pickup_instructions == '<h1>Gate code</h1><p><strong>1234</strong></p>'
 
-    def test_script_tag_is_escaped_not_stored_live(self, app, client, client_user, dog):
+    def test_script_tag_is_stripped_not_stored_live(self, app, client, client_user, dog):
         with app.app_context():
             email = client_user.email
             dog_id = dog.id
@@ -44,7 +44,8 @@ class TestPickupNotesSanitizeOnSave:
         with app.app_context():
             refreshed = db.session.get(Dog, dog_id)
             assert '<script>' not in refreshed.pickup_instructions
-            assert '&lt;script&gt;' in refreshed.pickup_instructions
+            assert 'alert(1)' not in refreshed.pickup_instructions
+            assert refreshed.pickup_instructions == '<p>Hi</p>'
 
     def test_empty_quill_markup_saves_as_none(self, app, client, client_user, dog):
         """An empty Quill editor's innerHTML is <p><br></p>, not '' — must
@@ -100,9 +101,10 @@ class TestPickupNotesSafeRendering:
         # Allowed formatting tags render as live markup.
         assert '<h1>Gate</h1>' in html
         assert '<strong>1234</strong>' in html
-        # The script tag never renders as live, executable markup.
+        # The script tag never renders as live, executable markup — it's
+        # stripped by sanitize_rich_text before storage, not present at all.
         assert '<script>alert(1)</script>' not in html
-        assert '&lt;script&gt;alert(1)&lt;/script&gt;' in html
+        assert 'alert(1)' not in html
 
 
 class TestAdminClientDetailPickupEditView:

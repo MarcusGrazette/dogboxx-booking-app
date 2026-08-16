@@ -185,8 +185,8 @@ def send_newsletter_batch(subject: str, html_template: str, recipients: list) ->
     for r in recipients:
         html = SHELL_TOP + html_template + SHELL_BOTTOM
         # firstname/dog_name are client-editable (profile.py) — escape before
-        # interpolating into HTML. Bleach sanitized html_template itself, not
-        # these substituted values, so this is a separate escaping step.
+        # interpolating into HTML. sanitize_rich_text sanitized html_template
+        # itself, not these substituted values, so this is a separate escaping step.
         html = html.replace("{{firstname}}", _htmllib.escape(r.get("firstname") or ""))
         html = html.replace("{{dog_name}}", _htmllib.escape(r.get("dog_name") or "your dog"))
         html = html.replace("%%UNSUBSCRIBE_URL%%", r["unsubscribe_url"])
@@ -255,9 +255,9 @@ def send_broadcast_batch(subject: str, body_text: str, recipients: list) -> dict
     batch = []
     for r in recipients:
         # firstname/dog_name are client-editable (profile.py) — escape before
-        # interpolating into HTML. Bleach sanitized body_text itself (tags and
-        # attributes), not these substituted values, so they need their own
-        # escaping pass here.
+        # interpolating into HTML. sanitize_rich_text sanitized body_text itself
+        # (tags and attributes), not these substituted values, so they need
+        # their own escaping pass here.
         body_html = body_text.replace("{{firstname}}", _htmllib.escape(r.get("firstname") or ""))
         body_html = body_html.replace("{{dog_name}}", _htmllib.escape(r.get("dog_name") or "your dog"))
         html = SHELL.replace("{{body}}", body_html)

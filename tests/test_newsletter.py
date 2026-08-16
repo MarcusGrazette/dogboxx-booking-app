@@ -131,7 +131,7 @@ class TestNewsletterSend:
                                                 captured_newsletters):
         """The newsletter's Quill HTML used to reach send_newsletter_batch
         (and the outgoing email) completely unsanitized. It must now go
-        through the same shared bleach allowlist as Daily Messages/broadcasts."""
+        through the same shared rich-text allowlist as Daily Messages/broadcasts."""
         with app.app_context():
             admin = _make_user('admin5@nl-test.com', role='walker', is_admin=True)
             c1 = _make_user('c1@nl-test.com')
