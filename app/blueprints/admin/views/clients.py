@@ -657,6 +657,30 @@ def activate_client(client_id):
         return jsonify(success=False, message="Error activating client"), 500
 
 
+@admin_bp.route("/clients/<int:client_id>/unlock", methods=["POST"])
+@login_required
+@admin_required
+def unlock_client(client_id):
+    """Clear a login lockout (issue #136) so a client who's locked themselves
+    out doesn't have to wait out the 15-minute self-expiry."""
+    try:
+        user = User.query.filter(User.client != None, User.id == client_id).first()  # noqa: E711
+        if not user:
+            return jsonify(success=False, message="Client not found"), 404
+
+        user.failed_login_attempts = 0
+        user.locked_until = None
+        db.session.commit()
+
+        logging.info(f"Admin {current_user.id} unlocked login for client {user.id}")
+        return jsonify(success=True, message="Client unlocked successfully")
+
+    except Exception as e:
+        db.session.rollback()
+        logging.exception(f"Error unlocking client {client_id}: {e}")
+        return jsonify(success=False, message="Error unlocking client"), 500
+
+
 @admin_bp.route("/clients/<int:client_id>/pickup-details", methods=["POST"])
 @login_required
 @admin_required

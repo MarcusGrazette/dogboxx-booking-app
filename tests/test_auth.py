@@ -10,6 +10,7 @@ Covers:
 - Client can access client routes; walker cannot
 """
 import pytest
+from datetime import datetime, timezone, timedelta
 from werkzeug.security import generate_password_hash
 
 from app import db
@@ -434,3 +435,138 @@ class TestLoginLogout:
         with app.app_context():
             resp = attacker.get('/profile', follow_redirects=False)
             assert resp.status_code in (302, 301)
+
+
+# ---------------------------------------------------------------------------
+# Issue #136 — per-email login lockout after 3 failed attempts
+# ---------------------------------------------------------------------------
+
+class TestLoginLockout:
+
+    def test_first_failed_attempt_shows_generic_message(self, app, client):
+        with app.app_context():
+            make_user('lockout1@test.com')
+            db.session.commit()
+
+        resp = login(client, 'lockout1@test.com', password='WrongPassword!')
+        assert b'invalid email or password' in resp.data.lower()
+        assert b'third incorrect attempt' not in resp.data.lower()
+
+    def test_second_failed_attempt_warns_of_upcoming_lockout(self, app, client):
+        with app.app_context():
+            make_user('lockout2@test.com')
+            db.session.commit()
+
+        login(client, 'lockout2@test.com', password='WrongPassword!')
+        resp = login(client, 'lockout2@test.com', password='WrongPassword!')
+        assert b'third incorrect attempt' in resp.data.lower()
+        assert b'15 minutes' in resp.data.lower()
+
+    def test_third_failed_attempt_locks_account(self, app, client):
+        with app.app_context():
+            user = make_user('lockout3@test.com')
+            db.session.commit()
+            user_id = user.id
+
+        for _ in range(3):
+            resp = login(client, 'lockout3@test.com', password='WrongPassword!')
+        assert b'wait 15 mins before trying again' in resp.data.lower()
+
+        with app.app_context():
+            locked_user = db.session.get(User, user_id)
+            assert locked_user.failed_login_attempts == 3
+            assert locked_user.is_locked_out
+
+    def test_locked_account_rejects_correct_password(self, app, client):
+        """Regression: a lockout must deny login even with the right password —
+        otherwise the lockout has no teeth against a lucky/brute-forced guess."""
+        with app.app_context():
+            make_user('lockout4@test.com')
+            db.session.commit()
+
+        for _ in range(3):
+            login(client, 'lockout4@test.com', password='WrongPassword!')
+
+        resp = login(client, 'lockout4@test.com')  # correct password
+        assert b'wait 15 mins before trying again' in resp.data.lower()
+
+        resp = client.get('/profile', follow_redirects=False)
+        assert resp.status_code in (302, 301)  # never actually logged in
+
+    def test_successful_login_resets_failed_attempt_counter(self, app, client):
+        with app.app_context():
+            user = make_user('lockout5@test.com')
+            db.session.commit()
+            user_id = user.id
+
+        login(client, 'lockout5@test.com', password='WrongPassword!')
+        login(client, 'lockout5@test.com')  # correct password
+
+        with app.app_context():
+            fresh_user = db.session.get(User, user_id)
+            assert fresh_user.failed_login_attempts == 0
+            assert fresh_user.locked_until is None
+
+    def test_lockout_self_expires_and_resets_scoring(self, app, client):
+        with app.app_context():
+            user = make_user('lockout6@test.com')
+            db.session.commit()
+            user_id = user.id
+
+        for _ in range(3):
+            login(client, 'lockout6@test.com', password='WrongPassword!')
+
+        with app.app_context():
+            expired_user = db.session.get(User, user_id)
+            assert expired_user.is_locked_out
+            # Simulate the 15-minute window having already passed.
+            expired_user.locked_until = datetime.now(timezone.utc) - timedelta(minutes=1)
+            db.session.commit()
+
+        # The lock has expired, so this counts as a fresh attempt 1, not
+        # still-locked — generic message, no lockout state left behind.
+        resp = login(client, 'lockout6@test.com', password='WrongPassword!')
+        assert b'invalid email or password' in resp.data.lower()
+        assert b'wait 15 mins' not in resp.data.lower()
+
+        with app.app_context():
+            reset_user = db.session.get(User, user_id)
+            assert reset_user.failed_login_attempts == 1
+            assert reset_user.locked_until is None
+
+    def test_unknown_email_never_locks_out(self, app, client):
+        """No User row exists to hold lockout state for an unknown email —
+        confirms the dummy-hash timing path (SECURITY_REVIEW.md #3) still
+        runs unmodified and never raises trying to touch lockout fields."""
+        for _ in range(5):
+            resp = login(client, 'nobody-here@test.com', password='WrongPassword!')
+        assert b'invalid email or password' in resp.data.lower()
+
+
+class TestAdminUnlockClient:
+
+    def test_admin_can_unlock_a_locked_client(self, app, client, admin_user):
+        with app.app_context():
+            user = make_user('lockout_admin@test.com')
+            make_client_profile(user.id)
+            db.session.commit()
+            user_id = user.id
+
+        for _ in range(3):
+            login(client, 'lockout_admin@test.com', password='WrongPassword!')
+        with app.app_context():
+            assert db.session.get(User, user_id).is_locked_out
+
+        login(client, admin_user.email)
+        resp = client.post(f'/admin/clients/{user_id}/unlock')
+        assert resp.status_code == 200
+        assert resp.get_json()['success'] is True
+
+        with app.app_context():
+            unlocked_user = db.session.get(User, user_id)
+            assert not unlocked_user.is_locked_out
+            assert unlocked_user.failed_login_attempts == 0
+
+        client.post('/auth/logout')
+        resp = login(client, 'lockout_admin@test.com')
+        assert b'wait 15 mins' not in resp.data.lower()

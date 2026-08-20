@@ -31,6 +31,13 @@ class User(UserMixin, db.Model):
         db.Enum('email', name='notification_pref'),
         nullable=False, default='email'
     )
+    # Per-email login lockout (issue #136) — separate from the per-IP/per-email
+    # Flask-Limiter rate limits in auth/routes.py. Kept as DB state rather than
+    # limiter state so it's consistent across gunicorn workers without Redis
+    # and testable without flipping RATELIMIT_ENABLED. Self-expiring only, no
+    # admin unlock override in the schema itself — see is_locked_out below.
+    failed_login_attempts = db.Column(db.Integer, default=0, nullable=False)
+    locked_until = db.Column(db.DateTime, nullable=True)
 
     # Flask-Login reads is_active as an ATTRIBUTE (never calls it) — it must be
     # a property, not a method: a bound method is always truthy, which silently
@@ -39,6 +46,20 @@ class User(UserMixin, db.Model):
     @property
     def is_active(self):
         return self.active
+
+    @property
+    def is_locked_out(self):
+        """True while a login lockout (issue #136) is still in effect.
+
+        locked_until is written aware-UTC but round-trips naive from Postgres
+        (TIMESTAMP WITHOUT TIME ZONE) — same convention as every other
+        timestamp column, see app/utils/dates.py::to_local_time."""
+        if not self.locked_until:
+            return False
+        locked_until = self.locked_until
+        if locked_until.tzinfo is None:
+            locked_until = locked_until.replace(tzinfo=timezone.utc)
+        return locked_until > datetime.now(timezone.utc)
 
     def get_id(self):
         # Encode session_token alongside the primary key so rotating it (see

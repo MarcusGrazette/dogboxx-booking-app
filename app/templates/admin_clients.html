@@ -74,6 +74,9 @@
                                     {% if not client.active %}
                                     <span class="badge bg-secondary fw-normal" style="font-size:0.65rem;">Inactive</span>
                                     {% endif %}
+                                    {% if client.is_locked_out %}
+                                    <span class="badge bg-warning text-dark fw-normal" style="font-size:0.65rem;">Locked</span>
+                                    {% endif %}
                                 </div>
                             </td>
                             <td class="align-middle text-muted small d-none d-md-table-cell">{{ client.email }}</td>
@@ -83,6 +86,13 @@
                                    class="btn btn-sm btn-outline-secondary me-1">
                                     <i class="bi bi-pencil me-1"></i>Edit
                                 </a>
+                                {% if client.is_locked_out %}
+                                <button class="btn btn-sm btn-outline-warning me-1"
+                                        onclick="confirmToggle({{ client.id }}, 'unlock', '{{ client.full_name | e }}')"
+                                        title="Unlock login">
+                                    <i class="bi bi-unlock"></i>
+                                </button>
+                                {% endif %}
                                 {% if client.id != current_user.id %}
                                 {% if client.active %}
                                 <button class="btn btn-sm btn-outline-danger"
@@ -159,19 +169,39 @@ let pendingId     = null;
 let pendingAction = null;
 let pendingName   = null;
 
+const TOGGLE_ACTION_COPY = {
+    deactivate: {
+        title: 'Deactivate client',
+        body: name => `Deactivate ${name}? They will no longer be able to log in.`,
+        confirmLabel: 'Deactivate',
+        confirmClass: 'btn btn-danger fw-semibold',
+        pastTense: 'deactivated',
+    },
+    activate: {
+        title: 'Activate client',
+        body: name => `Activate ${name}? They will be able to log in again.`,
+        confirmLabel: 'Activate',
+        confirmClass: 'btn btn-success fw-semibold',
+        pastTense: 'activated',
+    },
+    unlock: {
+        title: 'Unlock login',
+        body: name => `Unlock ${name}'s account? They'll be able to try logging in again immediately.`,
+        confirmLabel: 'Unlock',
+        confirmClass: 'btn btn-warning fw-semibold',
+        pastTense: 'unlocked',
+    },
+};
+
 function confirmToggle(clientId, action, name) {
     pendingId     = clientId;
     pendingAction = action;
     pendingName   = name;
-    const isDeactivate = action === 'deactivate';
-    toggleTitle.textContent   = isDeactivate ? 'Deactivate client' : 'Activate client';
-    toggleBody.textContent    = isDeactivate
-        ? `Deactivate ${name}? They will no longer be able to log in.`
-        : `Activate ${name}? They will be able to log in again.`;
-    toggleConfirm.textContent = isDeactivate ? 'Deactivate' : 'Activate';
-    toggleConfirm.className   = isDeactivate
-        ? 'btn btn-danger fw-semibold'
-        : 'btn btn-success fw-semibold';
+    const copy = TOGGLE_ACTION_COPY[action];
+    toggleTitle.textContent   = copy.title;
+    toggleBody.textContent    = copy.body(name);
+    toggleConfirm.textContent = copy.confirmLabel;
+    toggleConfirm.className   = copy.confirmClass;
     toggleModal.show();
 }
 
@@ -186,7 +216,7 @@ toggleConfirm.addEventListener('click', function () {
             toggleConfirm.disabled = false;
             toggleConfirm.innerHTML = original;
             if (data.success) {
-                const verb = action === 'deactivate' ? 'deactivated' : 'activated';
+                const verb = TOGGLE_ACTION_COPY[action].pastTense;
                 // Reload on close so the row's status badge + buttons refresh.
                 showConfirmed(`${name} ${verb}.`,
                               toggleModal, document.getElementById('toggleModal'),
