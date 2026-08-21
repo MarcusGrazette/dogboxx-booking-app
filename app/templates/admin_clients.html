@@ -51,7 +51,7 @@
                     </thead>
                     <tbody>
                         {% for client in clients %}
-                        <tr class="client-row" style="cursor:pointer;"
+                        <tr class="client-row{{ ' table-warning' if client.is_locked_out else '' }}" style="cursor:pointer;"
                             data-href="{{ url_for('admin.client_detail', client_id=client.id) }}"
                             data-search="{{ (client.full_name ~ ' ' ~ client.email) | lower }}">
                             <td class="ps-3 align-middle">
@@ -74,18 +74,11 @@
                                     {% if not client.active %}
                                     <span class="badge bg-secondary fw-normal" style="font-size:0.65rem;">Inactive</span>
                                     {% endif %}
-                                    {% if client.is_locked_out %}
-                                    <span class="badge bg-warning text-dark fw-normal" style="font-size:0.65rem;">Locked</span>
-                                    {% endif %}
                                 </div>
                             </td>
                             <td class="align-middle text-muted small d-none d-md-table-cell">{{ client.email }}</td>
                             <td class="align-middle text-muted small d-none d-md-table-cell">{{ client.created_at.strftime('%d %b %Y') if client.created_at else '—' }}</td>
                             <td class="text-end pe-3 align-middle" onclick="event.stopPropagation()">
-                                <a href="{{ url_for('admin.edit_client', client_id=client.id) }}"
-                                   class="btn btn-sm btn-outline-secondary me-1" title="Edit">
-                                    <i class="bi bi-pencil"></i><span class="d-none d-sm-inline ms-1">Edit</span>
-                                </a>
                                 {% if client.is_locked_out %}
                                 <button class="btn btn-sm btn-outline-warning me-1"
                                         onclick="confirmToggle({{ client.id }}, 'unlock', '{{ client.full_name | e }}')"
@@ -93,6 +86,10 @@
                                     <i class="bi bi-unlock"></i>
                                 </button>
                                 {% endif %}
+                                <a href="{{ url_for('admin.edit_client', client_id=client.id) }}"
+                                   class="btn btn-sm btn-outline-secondary me-1" title="Edit">
+                                    <i class="bi bi-pencil"></i><span class="d-none d-sm-inline ms-1">Edit</span>
+                                </a>
                                 {% if client.id != current_user.id %}
                                 {% if client.active %}
                                 <button class="btn btn-sm btn-outline-danger"
