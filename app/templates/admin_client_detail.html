@@ -175,7 +175,10 @@
                             </a>
                         </div>
                         <button class="btn btn-sm btn-outline-danger"
-                                onclick="revokeAccess({{ client.id }}, {{ dog.id }}, {{ secondary_user.id }}, '{{ secondary_user.full_name|e }}', 'shared-row-{{ dog.id }}-{{ secondary_user.id }}')">
+                                data-primary-client-id="{{ client.id }}" data-dog-id="{{ dog.id }}"
+                                data-secondary-user-id="{{ secondary_user.id }}" data-user-name="{{ secondary_user.full_name|e }}"
+                                data-row-id="shared-row-{{ dog.id }}-{{ secondary_user.id }}"
+                                onclick="revokeAccess(this)">
                             <i class="bi bi-person-dash me-1"></i>Revoke
                         </button>
                     </li>
@@ -237,7 +240,9 @@
                 <i class="bi bi-heart-fill me-2" style="color:#E02FAC;"></i>{{ dog.name }}
                 {% if primary_owner %}
                 <button class="btn btn-sm btn-outline-danger ms-auto"
-                        onclick="revokeAccess({{ primary_owner.id }}, {{ dog.id }}, {{ client.id }}, '{{ client.full_name|e }}', null)">
+                        data-primary-client-id="{{ primary_owner.id }}" data-dog-id="{{ dog.id }}"
+                        data-secondary-user-id="{{ client.id }}" data-user-name="{{ client.full_name|e }}"
+                        onclick="revokeAccess(this)">
                     <i class="bi bi-person-dash me-1"></i>Revoke access
                 </button>
                 {% endif %}
@@ -672,7 +677,16 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // ── Revoke access ───────────────────────────────────────────────────────
-    window.revokeAccess = function (primaryClientId, dogId, secondaryUserId, userName, rowId) {
+    window.revokeAccess = function (btn) {
+        // Read off data-* attributes rather than an inline onclick JS string
+        // — HTML-attribute escaping (|e) isn't JS-string escaping, so a name
+        // with an apostrophe would close the string early. data-* values
+        // only ever need HTML-attribute decoding, never a second pass as JS.
+        const primaryClientId = btn.dataset.primaryClientId;
+        const dogId = btn.dataset.dogId;
+        const secondaryUserId = btn.dataset.secondaryUserId;
+        const userName = btn.dataset.userName;
+        const rowId = btn.dataset.rowId;  // undefined on the primary-owner button — falsy, same as the old `null` arg
         showConfirm(`Remove ${userName}'s access to this dog?`, function () {
             fetch(`/admin/clients/${primaryClientId}/revoke-access`, {
                 method: 'POST',

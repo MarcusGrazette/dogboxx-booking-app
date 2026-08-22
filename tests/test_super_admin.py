@@ -141,3 +141,28 @@ class TestSuperAdminToggle:
         with app.app_context():
             assert db.session.get(User, second_owner.id).is_super_admin is True
             assert db.session.get(User, second_owner.id).is_admin is True
+
+
+class TestAdminWalkersListRendering:
+
+    def test_action_buttons_survive_apostrophe_in_name(self, app, client, super_admin):
+        """Regression: the deactivate/activate/remove-role buttons used to
+        interpolate the walker's name straight into an inline onclick JS
+        string (confirmWalkerToggle(1, 'deactivate', '{{ name|e }}')).
+        HTML-attribute escaping (|e) isn't JS-string escaping — a name like
+        O'Brien survives |e as O&#39;Brien, which the browser HTML-decodes
+        back to a literal apostrophe before treating the attribute as JS
+        source, closing the string early. Buttons must pass the name via a
+        data-* attribute instead, read off `this` in the click handler."""
+        walker = make_walker('obrien.walker@dogboxx.org')
+        walker.lastname = "O'Brien"
+        db.session.commit()
+        walker_id = walker.id
+
+        login(client, super_admin.email)
+        resp = client.get('/admin/walkers')
+        html = resp.data.decode()
+
+        assert "O&#39;Brien" in html  # name survives HTML-attribute escaping intact
+        assert 'onclick="confirmWalkerToggle(this)"' in html
+        assert f"confirmWalkerToggle({walker_id}," not in html  # old vulnerable positional-arg call

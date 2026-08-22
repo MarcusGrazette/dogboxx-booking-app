@@ -278,6 +278,29 @@ class TestAdminJoinRevoke:
             ).first()
             assert record is None
 
+    def test_client_detail_revoke_button_survives_apostrophe_in_name(self, app, db, client):
+        """Regression: the co-owner "Revoke" button used to interpolate the
+        secondary user's name straight into an inline onclick JS string
+        (revokeAccess(1, 2, 3, '{{ name|e }}', 'row-id')). HTML-attribute
+        escaping (|e) isn't JS-string escaping — a name like O'Brien survives
+        |e as O&#39;Brien, which the browser HTML-decodes back to a literal
+        apostrophe before treating the attribute as JS source, closing the
+        string early. The button must pass the name via a data-* attribute
+        instead, read off `this` in the click handler."""
+        with app.app_context():
+            admin, primary, secondary, dog = self._setup(app)
+            secondary.lastname = "O'Brien"
+            make_secondary_ownership(dog, secondary)
+            db.session.commit()
+            login(client, admin.email)
+
+            resp = client.get(f'/admin/clients/{primary.id}')
+            html = resp.data.decode()
+
+            assert "O&#39;Brien" in html  # name survives HTML-attribute escaping intact
+            assert 'onclick="revokeAccess(this)"' in html
+            assert f"revokeAccess({secondary.id}," not in html  # old vulnerable positional-arg call
+
     def test_revoke_nonexistent_returns_404(self, app, db, client):
         with app.app_context():
             admin, primary, secondary, dog = self._setup(app)

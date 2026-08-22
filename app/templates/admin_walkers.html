@@ -173,13 +173,15 @@
                                 {% if walker.active %}
                                 {% if walker.id != current_user.id %}
                                 <button class="btn btn-sm btn-outline-danger me-1"
-                                        onclick="confirmWalkerToggle({{ walker.id }}, 'deactivate', '{{ walker.full_name | e }}')"
+                                        data-walker-id="{{ walker.id }}" data-walker-name="{{ walker.full_name | e }}" data-action="deactivate"
+                                        onclick="confirmWalkerToggle(this)"
                                         title="Deactivate">
                                     <i class="bi bi-x-circle"></i>
                                 </button>
                                 {% if walker.client %}
                                 <button class="btn btn-sm btn-outline-warning"
-                                        onclick="removeWalkerRole({{ walker.id }}, '{{ walker.full_name | e }}')"
+                                        data-walker-id="{{ walker.id }}" data-walker-name="{{ walker.full_name | e }}"
+                                        onclick="removeWalkerRole(this)"
                                         title="Remove walker role — keeps client access">
                                     <i class="bi bi-person-dash"></i>
                                 </button>
@@ -187,7 +189,8 @@
                                 {% endif %}
                                 {% else %}
                                 <button class="btn btn-sm btn-outline-success"
-                                        onclick="confirmWalkerToggle({{ walker.id }}, 'activate', '{{ walker.full_name | e }}')"
+                                        data-walker-id="{{ walker.id }}" data-walker-name="{{ walker.full_name | e }}" data-action="activate"
+                                        onclick="confirmWalkerToggle(this)"
                                         title="Activate">
                                     <i class="bi bi-check-circle"></i>
                                 </button>
@@ -379,9 +382,13 @@ var clientOnlyModalBody  = document.getElementById('client-only-modal-body');
 var clientOnlyConfirmBtn = document.getElementById('client-only-confirm-btn');
 var pendingClientOnlyId  = null;
 
-function removeWalkerRole(walkerId, name) {
-    pendingClientOnlyId = walkerId;
-    clientOnlyModalBody.textContent = name + ' will keep client access and can still log in and book walks. Their future assigned walks will be moved back to pending.';
+function removeWalkerRole(btn) {
+    // Read off data-* attributes rather than an inline onclick JS string —
+    // HTML-attribute escaping (|e) isn't JS-string escaping, so a name with
+    // an apostrophe would close the string early. data-* values only ever
+    // need HTML-attribute decoding, never a second pass as JS.
+    pendingClientOnlyId = btn.dataset.walkerId;
+    clientOnlyModalBody.textContent = btn.dataset.walkerName + ' will keep client access and can still log in and book walks. Their future assigned walks will be moved back to pending.';
     clientOnlyModal.show();
 }
 
@@ -412,11 +419,13 @@ var pendingToggleId        = null;
 var pendingToggleAction    = null;
 var pendingToggleName      = null;
 
-function confirmWalkerToggle(walkerId, action, name) {
-    pendingToggleId     = walkerId;
-    pendingToggleAction = action;
-    pendingToggleName   = name;
-    var isDeactivate    = action === 'deactivate';
+function confirmWalkerToggle(btn) {
+    var name             = btn.dataset.walkerName;
+    var action           = btn.dataset.action;
+    pendingToggleId      = btn.dataset.walkerId;
+    pendingToggleAction  = action;
+    pendingToggleName    = name;
+    var isDeactivate     = action === 'deactivate';
     walkerToggleTitle.textContent      = isDeactivate ? 'Deactivate walker' : 'Activate walker';
     walkerToggleBody.textContent       = isDeactivate
         ? name + ' will no longer be able to log in as a walker. Their future assigned walks will be moved back to pending.'
