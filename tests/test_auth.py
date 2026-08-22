@@ -570,3 +570,31 @@ class TestAdminUnlockClient:
         client.post('/auth/logout')
         resp = login(client, 'lockout_admin@test.com')
         assert b'wait 15 mins' not in resp.data.lower()
+
+    def test_client_list_action_buttons_survive_apostrophe_in_name(self, app, client, admin_user):
+        """Regression (PR #187 review): the unlock/deactivate/activate buttons
+        used to interpolate the client's name straight into an inline
+        onclick JS string (`confirmToggle(1, 'unlock', '{{ name|e }}')`).
+        HTML-attribute escaping and JS-string escaping aren't the same thing
+        — a name like O'Brien survives |e as O&#39;Brien, which the browser
+        HTML-decodes back to a literal apostrophe before treating the
+        attribute as JS source, closing the string early. Buttons must pass
+        the name through a data-* attribute instead, which only ever needs
+        HTML-attribute decoding, never a second pass as JS."""
+        with app.app_context():
+            user = make_user("obrien@test.com")
+            user.lastname = "O'Brien"
+            make_client_profile(user.id)
+            db.session.commit()
+            user_id = user.id
+
+        for _ in range(3):
+            login(client, "obrien@test.com", password="WrongPassword!")
+
+        login(client, admin_user.email)
+        resp = client.get('/admin/clients')
+        html = resp.data.decode()
+
+        assert "O&#39;Brien" in html  # name survives HTML-attribute escaping intact
+        assert 'onclick="confirmToggle(this)"' in html
+        assert f"confirmToggle({user_id}," not in html  # old vulnerable positional-arg call
