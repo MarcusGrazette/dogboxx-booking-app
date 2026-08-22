@@ -10,6 +10,7 @@ from flask import request, redirect, render_template, flash, url_for, current_ap
 from flask_login import login_required, current_user, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
+from flask_limiter.util import get_remote_address
 from app.models import User, Client
 from app import db, limiter
 from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
@@ -17,7 +18,7 @@ from app.forms import LoginForm, PasswordChangeForm
 import hashlib
 import logging
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from app.blueprints.auth import auth_bp
 
@@ -31,9 +32,25 @@ from app.blueprints.auth import auth_bp
 # the same algorithm/cost params as live hashes (a hardcoded string could drift).
 _DUMMY_PASSWORD_HASH = generate_password_hash("dogboxx-login-timing-equalizer")
 
+# Issue #136: per-email login lockout. 3 failed attempts locks the account for
+# this long — self-expiring, no admin/reset override (deliberately simple).
+LOGIN_LOCKOUT_THRESHOLD = 3
+LOGIN_LOCKOUT_MINUTES = 15
+
+
+def _login_email_key():
+    """Rate-limit key for /login, normalized to match the lookup in login()
+    below (.strip().lower()) — a raw request.form key would let an attacker
+    rotate case/whitespace on the email to dodge the per-email bucket while
+    hitting the same account. Falls back to IP on a malformed request with no
+    email field, so those don't all pile into one empty-string bucket."""
+    email = request.form.get("email", "").strip().lower()
+    return email or get_remote_address()
+
 
 @auth_bp.route("/login", methods=["GET", "POST"])
-@limiter.limit("5 per minute")  # Limit login attempts
+@limiter.limit("5 per minute")  # Limit login attempts per IP
+@limiter.limit("10 per hour", key_func=_login_email_key)  # ...and per email, IP-rotation-proof
 def login():
     """Log user in"""
     # Redirect if user is already authenticated
@@ -52,26 +69,79 @@ def login():
 
         # Verify the password. When the email is unknown, hash against a dummy so
         # both paths cost the same scrypt work — closes the user-enumeration timing
-        # oracle (SECURITY_REVIEW.md #3). Don't short-circuit on `not user`.
+        # oracle (SECURITY_REVIEW.md #3). This always runs, and runs before the
+        # lockout check below — a locked-out account must not skip the hash, or
+        # it becomes distinguishable from a normal wrong-password reject by timing.
         if user:
             password_ok = check_password_hash(user.hashed_password, password)
         else:
             check_password_hash(_DUMMY_PASSWORD_HASH, password)  # spend the time, discard
             password_ok = False
 
-        # Track failed login attempts with redis-based rate limiting
+        # Issue #136: per-email lockout after LOGIN_LOCKOUT_THRESHOLD failures,
+        # self-expiring after LOGIN_LOCKOUT_MINUTES (no admin/reset override).
+        # Still locked → generic-looking reject regardless of password_ok, so a
+        # correct password on a locked account isn't distinguishable from a
+        # wrong one. Expired → clear it here so this attempt scores fresh.
+        if user and user.is_locked_out:
+            flash(f"Wait {LOGIN_LOCKOUT_MINUTES} mins before trying again", "error")
+            return render_template("login.html", form=form)
+        elif user and user.locked_until:
+            user.failed_login_attempts = 0
+            user.locked_until = None
+            try:
+                db.session.commit()
+            except SQLAlchemyError:
+                db.session.rollback()
+                logging.exception("Error clearing expired lockout for %r", email)
+
         if not password_ok:
             # Log the failed attempt (for security auditing)
             logging.warning("Failed login attempt for email: %r from IP: %s", email, request.remote_addr)
 
-            # Show generic error message (don't reveal if email exists)
-            flash("Invalid email or password", "error")
+            if user:
+                new_count = user.failed_login_attempts + 1
+                will_lock = new_count >= LOGIN_LOCKOUT_THRESHOLD
+                try:
+                    user.failed_login_attempts = new_count
+                    if will_lock:
+                        user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=LOGIN_LOCKOUT_MINUTES)
+                        logging.warning("Account locked after %d failed attempts: %r", new_count, email)
+                    db.session.commit()
+                except SQLAlchemyError:
+                    db.session.rollback()
+                    logging.exception("Error recording failed login attempt for %r", email)
+
+                if will_lock:
+                    message = f"Wait {LOGIN_LOCKOUT_MINUTES} mins before trying again"
+                elif new_count == 2:
+                    message = (
+                        "Invalid email or password. A third incorrect attempt "
+                        f"will lock you out for {LOGIN_LOCKOUT_MINUTES} minutes."
+                    )
+                else:
+                    message = "Invalid email or password"
+            else:
+                # Unknown email — no per-account state to escalate against.
+                message = "Invalid email or password"
+
+            flash(message, "error")
             return render_template("login.html", form=form)
 
         # Check if user account is active
         if not user.is_active:
             flash("Your account has been deactivated. Please contact DogBoxx.", "error")
             return render_template("login.html", form=form)
+
+        # Successful login — clear any accumulated failure state.
+        if user.failed_login_attempts or user.locked_until:
+            user.failed_login_attempts = 0
+            user.locked_until = None
+            try:
+                db.session.commit()
+            except SQLAlchemyError:
+                db.session.rollback()
+                logging.exception("Error clearing lockout state on successful login for %r", email)
 
         # Rotate the session ID before associating the session with this user.
         # Defeats session-fixation: any pre-planted SID cookie is now a dead row.
