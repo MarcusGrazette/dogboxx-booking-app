@@ -164,5 +164,6 @@ class TestAdminWalkersListRendering:
         html = resp.data.decode()
 
         assert "O&#39;Brien" in html  # name survives HTML-attribute escaping intact
-        assert 'onclick="confirmWalkerToggle(this)"' in html
+        assert 'js-confirm-walker-toggle' in html
+        assert 'onclick="confirmWalkerToggle(this)"' not in html  # migrated to event delegation (FEATURES.md #68)
         assert f"confirmWalkerToggle({walker_id}," not in html  # old vulnerable positional-arg call

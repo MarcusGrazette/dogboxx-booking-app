@@ -596,5 +596,6 @@ class TestAdminUnlockClient:
         html = resp.data.decode()
 
         assert "O&#39;Brien" in html  # name survives HTML-attribute escaping intact
-        assert 'onclick="confirmToggle(this)"' in html
+        assert 'js-confirm-toggle' in html
+        assert 'onclick="confirmToggle(this)"' not in html  # migrated to event delegation (FEATURES.md #68)
         assert f"confirmToggle({user_id}," not in html  # old vulnerable positional-arg call

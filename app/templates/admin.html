@@ -667,13 +667,12 @@ window._DASH = {
         `</span>`
       : '';
 
-    return `<div class="${cls}" data-date="${date_str}" onclick="window._selectDay('${date_str}')">` +
+    return `<div class="${cls} cal-cell--clickable" data-date="${date_str}">` +
       `<div class="cal-cell-top">` +
         `<span class="cal-day-num">${day_num}</span>` +
         `<div class="cal-cell-actions">` +
           pendingBadge +
           `<button type="button" class="cal-assign-btn" data-date="${date_str}" ` +
-                  `onclick="event.stopPropagation(); window._openAssignModal('${date_str}')" ` +
                   `title="Assign walks for this day">` +
             `Assign<i class="bi bi-arrow-right-circle-fill"></i>` +
           `</button>` +
@@ -767,9 +766,15 @@ window._DASH = {
       const countHtml = countParts.length
         ? `<div class="detail-walker-bookings">${countParts.join(' · ')}</div>`
         : '';
+      // data-* attributes only ever need HTML-attribute decoding, not a
+      // second pass as JS source — unlike the inline click handler this
+      // replaced, which built '_openOverrideModal(id, name)' as a JS-string
+      // literal. esc() (HTML-escaping only, no apostrophe handling) was safe
+      // for the title="..." attribute but not for a name embedded inside a
+      // single-quoted JS string.
       const gearBtn = overrideAllowed
         ? `<button type="button" class="detail-walker-gear" ` +
-                  `onclick="window._openOverrideModal(${w.walker_id}, '${esc(w.name)}')" ` +
+                  `data-walker-id="${w.walker_id}" data-walker-name="${esc(w.name)}" ` +
                   `title="Add schedule override for ${esc(w.name)}">` +
             `<i class="bi bi-gear"></i>` +
           `</button>`
@@ -827,6 +832,27 @@ window._DASH = {
   }
   paint();
 
+  // Delegated on the wrapper elements (not document) since #calGridWrap and
+  // #dayDetail get their innerHTML replaced wholesale on every repaint —
+  // the wrapper itself never gets swapped, so one listener here survives
+  // across renders instead of needing to be re-attached each time.
+  document.getElementById('calGridWrap').addEventListener('click', function (e) {
+    const assignBtn = e.target.closest('.cal-assign-btn');
+    if (assignBtn) {
+      e.stopPropagation();
+      _openAssignModal(assignBtn.dataset.date);
+      return;
+    }
+    const cell = e.target.closest('.cal-cell--clickable');
+    if (cell) _selectDay(cell.dataset.date);
+  });
+
+  document.getElementById('dayDetail').addEventListener('click', function (e) {
+    const gearBtn = e.target.closest('.detail-walker-gear');
+    if (!gearBtn) return;
+    _openOverrideModal(parseInt(gearBtn.dataset.walkerId, 10), gearBtn.dataset.walkerName);
+  });
+
   /* ── Month navigation ───────────────────────────────────────────────── */
   async function loadMonth(year, month) {
     try {
@@ -855,7 +881,7 @@ window._DASH = {
   });
 
   /* ── Day selection ──────────────────────────────────────────────────── */
-  window._selectDay = async function (dateStr) {
+  async function _selectDay(dateStr) {
     selectedDate = dateStr;
     // Move selection border immediately
     document.getElementById('calGridWrap').innerHTML = renderGrid(currentMonthData, selectedDate);
@@ -922,7 +948,7 @@ window._DASH = {
     }
   }
 
-  window._openAssignModal = async function (dateStr) {
+  async function _openAssignModal(dateStr) {
     document.getElementById('assign-modal-title').textContent =
       `Assign walks — ${fmtDateLabel(dateStr)}`;
     document.getElementById('assign-modal-body').innerHTML =
@@ -994,7 +1020,7 @@ window._DASH = {
   const overrideModal   = new bootstrap.Modal(overrideModalEl);
   let   overrideDirty   = false;
 
-  window._openOverrideModal = async function (walkerId, walkerName) {
+  async function _openOverrideModal(walkerId, walkerName) {
     document.getElementById('override-modal-title').textContent =
       `Schedule override — ${walkerName}`;
     document.getElementById('override-modal-body').innerHTML =

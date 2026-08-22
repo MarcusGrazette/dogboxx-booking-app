@@ -285,8 +285,11 @@ class TestAdminJoinRevoke:
         escaping (|e) isn't JS-string escaping — a name like O'Brien survives
         |e as O&#39;Brien, which the browser HTML-decodes back to a literal
         apostrophe before treating the attribute as JS source, closing the
-        string early. The button must pass the name via a data-* attribute
-        instead, read off `this` in the click handler."""
+        string early. The button passes the name via a data-* attribute
+        instead, read off `this` by a delegated click listener (FEATURES.md
+        #68 later dropped the inline onclick attribute entirely in favour of
+        that same listener, but the data-* attribute — the actual fix — is
+        unchanged)."""
         with app.app_context():
             admin, primary, secondary, dog = self._setup(app)
             secondary.lastname = "O'Brien"
@@ -298,7 +301,8 @@ class TestAdminJoinRevoke:
             html = resp.data.decode()
 
             assert "O&#39;Brien" in html  # name survives HTML-attribute escaping intact
-            assert 'onclick="revokeAccess(this)"' in html
+            assert 'js-revoke-access' in html
+            assert 'onclick="revokeAccess(this)"' not in html  # migrated to event delegation (#68)
             assert f"revokeAccess({secondary.id}," not in html  # old vulnerable positional-arg call
 
     def test_revoke_nonexistent_returns_404(self, app, db, client):

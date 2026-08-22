@@ -78,11 +78,10 @@
                             </td>
                             <td class="align-middle text-muted small d-none d-md-table-cell">{{ client.email }}</td>
                             <td class="align-middle text-muted small d-none d-md-table-cell">{{ client.created_at.strftime('%d %b %Y') if client.created_at else '—' }}</td>
-                            <td class="text-end pe-3 align-middle" onclick="event.stopPropagation()">
+                            <td class="text-end pe-3 align-middle client-actions-cell">
                                 {% if client.is_locked_out %}
-                                <button class="btn btn-sm btn-outline-warning me-1"
+                                <button class="btn btn-sm btn-outline-warning me-1 js-confirm-toggle"
                                         data-action="unlock" data-client-id="{{ client.id }}" data-client-name="{{ client.full_name | e }}"
-                                        onclick="confirmToggle(this)"
                                         title="Unlock login">
                                     <i class="bi bi-unlock"></i>
                                 </button>
@@ -93,16 +92,14 @@
                                 </a>
                                 {% if client.id != current_user.id %}
                                 {% if client.active %}
-                                <button class="btn btn-sm btn-outline-danger"
+                                <button class="btn btn-sm btn-outline-danger js-confirm-toggle"
                                         data-action="deactivate" data-client-id="{{ client.id }}" data-client-name="{{ client.full_name | e }}"
-                                        onclick="confirmToggle(this)"
                                         title="Deactivate">
                                     <i class="bi bi-x-circle"></i>
                                 </button>
                                 {% else %}
-                                <button class="btn btn-sm btn-outline-success"
+                                <button class="btn btn-sm btn-outline-success js-confirm-toggle"
                                         data-action="activate" data-client-id="{{ client.id }}" data-client-name="{{ client.full_name | e }}"
-                                        onclick="confirmToggle(this)"
                                         title="Activate">
                                     <i class="bi bi-check-circle"></i>
                                 </button>
@@ -245,6 +242,15 @@ document.querySelectorAll('tr.client-row').forEach(row => {
     row.addEventListener('click', function () {
         window.location.href = this.dataset.href;
     });
+});
+
+// Stop the actions cell's buttons from also triggering the row click above.
+document.querySelectorAll('td.client-actions-cell').forEach(td => {
+    td.addEventListener('click', e => e.stopPropagation());
+});
+
+document.querySelectorAll('.js-confirm-toggle').forEach(btn => {
+    btn.addEventListener('click', function () { confirmToggle(this); });
 });
 
 // ── Live filter ─────────────────────────────────────────────────────────────

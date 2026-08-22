@@ -115,10 +115,9 @@
         <div class="card mb-4">
             <div class="card-header d-flex align-items-center">
                 <i class="bi bi-heart-fill me-2" style="color:#E02FAC;"></i>{{ dog.name }}
-                <button class="btn btn-sm btn-outline-success ms-auto"
+                <button class="btn btn-sm btn-outline-success ms-auto js-open-join-modal"
                         data-dog-id="{{ dog.id }}"
-                        data-dog-name="{{ dog.name }}"
-                        onclick="openJoinModal(this)">
+                        data-dog-name="{{ dog.name }}">
                     <i class="bi bi-person-plus me-1"></i>Share access
                 </button>
             </div>
@@ -127,9 +126,9 @@
                 {# Dog avatar + name row #}
                 <div class="d-flex align-items-center gap-3 mb-3">
                     <img src="{{ '/static/uploads/dogs/' + dog.pic if dog.pic else '/static/uploads/dogs/default-dog.png' }}"
-                         class="rounded-circle flex-shrink-0"
+                         class="rounded-circle flex-shrink-0 img-fallback-default-dog"
                          width="52" height="52" style="object-fit:cover;" alt="{{ dog.name }}"
-                         onerror="this.onerror=null;this.src='/static/uploads/dogs/default-dog.png'">
+                         data-fallback="/static/uploads/dogs/default-dog.png">
                     <div>
                         {% if dog.breed %}<div class="text-muted small">{{ dog.breed }}</div>{% endif %}
                         <div class="d-flex gap-2 flex-wrap mt-1">
@@ -174,11 +173,10 @@
                                 <i class="bi bi-box-arrow-up-right"></i>
                             </a>
                         </div>
-                        <button class="btn btn-sm btn-outline-danger"
+                        <button class="btn btn-sm btn-outline-danger js-revoke-access"
                                 data-primary-client-id="{{ client.id }}" data-dog-id="{{ dog.id }}"
                                 data-secondary-user-id="{{ secondary_user.id }}" data-user-name="{{ secondary_user.full_name|e }}"
-                                data-row-id="shared-row-{{ dog.id }}-{{ secondary_user.id }}"
-                                onclick="revokeAccess(this)">
+                                data-row-id="shared-row-{{ dog.id }}-{{ secondary_user.id }}">
                             <i class="bi bi-person-dash me-1"></i>Revoke
                         </button>
                     </li>
@@ -239,10 +237,9 @@
             <div class="card-header d-flex align-items-center">
                 <i class="bi bi-heart-fill me-2" style="color:#E02FAC;"></i>{{ dog.name }}
                 {% if primary_owner %}
-                <button class="btn btn-sm btn-outline-danger ms-auto"
+                <button class="btn btn-sm btn-outline-danger ms-auto js-revoke-access"
                         data-primary-client-id="{{ primary_owner.id }}" data-dog-id="{{ dog.id }}"
-                        data-secondary-user-id="{{ client.id }}" data-user-name="{{ client.full_name|e }}"
-                        onclick="revokeAccess(this)">
+                        data-secondary-user-id="{{ client.id }}" data-user-name="{{ client.full_name|e }}">
                     <i class="bi bi-person-dash me-1"></i>Revoke access
                 </button>
                 {% endif %}
@@ -252,9 +249,9 @@
                 {# Dog avatar + name row #}
                 <div class="d-flex align-items-center gap-3 mb-3">
                     <img src="{{ '/static/uploads/dogs/' + dog.pic if dog.pic else '/static/uploads/dogs/default-dog.png' }}"
-                         class="rounded-circle flex-shrink-0"
+                         class="rounded-circle flex-shrink-0 img-fallback-default-dog"
                          width="52" height="52" style="object-fit:cover;" alt="{{ dog.name }}"
-                         onerror="this.onerror=null;this.src='/static/uploads/dogs/default-dog.png'">
+                         data-fallback="/static/uploads/dogs/default-dog.png">
                     <div>
                         {% if dog.breed %}<div class="text-muted small">{{ dog.breed }}</div>{% endif %}
                         <div class="d-flex gap-2 flex-wrap mt-1">
@@ -628,14 +625,18 @@ document.addEventListener('DOMContentLoaded', function () {
     const joinSelect  = document.getElementById('join-client-select');
     const joinError   = document.getElementById('join-modal-error');
 
-    window.openJoinModal = function (btn) {
+    function openJoinModal(btn) {
         activeDogId = btn.dataset.dogId;
         document.getElementById('modal-dog-name').textContent = btn.dataset.dogName;
         if (joinSelect) joinSelect.value = '';
         joinError.classList.add('d-none');
         joinError.textContent = '';
         joinModal.show();
-    };
+    }
+
+    document.querySelectorAll('.js-open-join-modal').forEach(function (btn) {
+        btn.addEventListener('click', function () { openJoinModal(this); });
+    });
 
     if (joinConfirm) {
         joinConfirm.addEventListener('click', () => {
@@ -677,7 +678,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // ── Revoke access ───────────────────────────────────────────────────────
-    window.revokeAccess = function (btn) {
+    function revokeAccess(btn) {
         // Read off data-* attributes rather than an inline onclick JS string
         // — HTML-attribute escaping (|e) isn't JS-string escaping, so a name
         // with an apostrophe would close the string early. data-* values
@@ -708,8 +709,21 @@ document.addEventListener('DOMContentLoaded', function () {
             })
             .catch(() => showToast('Network error — please try again.', 'danger'));
         }, { confirmLabel: 'Remove' });
-    };
+    }
+
+    document.querySelectorAll('.js-revoke-access').forEach(function (btn) {
+        btn.addEventListener('click', function () { revokeAccess(this); });
+    });
 
 })();
+
+// 'error' doesn't bubble, so this has to be a capture-phase listener on
+// document rather than delegated the usual way.
+document.addEventListener('error', function (e) {
+    if (e.target.matches && e.target.matches('.img-fallback-default-dog')) {
+        e.target.onerror = null;
+        e.target.src = e.target.dataset.fallback;
+    }
+}, true);
 </script>
 {% endblock %}
