@@ -17,7 +17,7 @@
             <form method="get" id="month-form" class="d-flex align-items-center gap-2">
               <label class="text-muted small mb-0 text-nowrap" for="month-select">Month</label>
               <select id="month-select" name="month" class="form-select form-select-sm"
-                      style="min-width:140px;" onchange="document.getElementById('month-form').submit()">
+                      style="min-width:140px;">
                 {% for mo in month_options %}
                 <option value="{{ mo.strftime('%Y-%m') }}"
                         {% if mo.strftime('%Y-%m') == month_start.strftime('%Y-%m') %}selected{% endif %}>
@@ -277,8 +277,16 @@
   const prevBtn    = document.getElementById('activity-prev-btn');
   const nextBtn    = document.getElementById('activity-next-btn');
   const pageLabel  = document.getElementById('activity-page-label');
+  const monthSelect = document.getElementById('month-select');
 
   let currentPage = 1;
+
+  // ── Month select (server-side reload) ────────────────────────────────────
+  if (monthSelect) {
+    monthSelect.addEventListener('change', function () {
+      document.getElementById('month-form').submit();
+    });
+  }
 
   // ── Cluster expand/collapse ──────────────────────────────────────────────
   document.querySelectorAll('.cluster-toggle').forEach(function (btn) {

@@ -18,8 +18,7 @@
         <div class="card">
             <div class="card-body d-flex align-items-center gap-3 flex-wrap">
                 <label class="fw-semibold mb-0" for="walker-select">Walker:</label>
-                <select id="walker-select" class="form-select" style="max-width:280px;"
-                        onchange="location.href='{{ url_for('admin.walker_overrides') }}?walker_id=' + this.value">
+                <select id="walker-select" class="form-select" style="max-width:280px;">
                     {% for w in active_walkers %}
                     <option value="{{ w.id }}"
                         {% if selected_walker and w.id == selected_walker.id %}selected{% endif %}>
@@ -63,6 +62,16 @@
 
 {% block scripts %}
 {{ super() }}
+<script nonce="{{ csp_nonce }}">
+document.addEventListener('DOMContentLoaded', function () {
+    const walkerSelect = document.getElementById('walker-select');
+    if (walkerSelect) {
+        walkerSelect.addEventListener('change', function () {
+            location.href = '{{ url_for("admin.walker_overrides") }}?walker_id=' + this.value;
+        });
+    }
+});
+</script>
 {% if selected_walker %}
 <script src="{{ url_for('static', filename='js/admin-override-form.js') }}"></script>
 <script nonce="{{ csp_nonce }}">
