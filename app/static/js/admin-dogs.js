@@ -290,6 +290,8 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // ── Row click → view modal ──────────────────────────────────────────────
+    // Depends on the td.dog-actions-cell stopPropagation listener below —
+    // without it, clicking Book/Cancel would also open the view modal.
     document.querySelectorAll('tr.dog-row').forEach(row => {
         row.addEventListener('click', function () {
             const target = this.dataset.viewModal;

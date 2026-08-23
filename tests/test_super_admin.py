@@ -153,7 +153,14 @@ class TestAdminWalkersListRendering:
         O'Brien survives |e as O&#39;Brien, which the browser HTML-decodes
         back to a literal apostrophe before treating the attribute as JS
         source, closing the string early. Buttons must pass the name via a
-        data-* attribute instead, read off `this` in the click handler."""
+        data-* attribute instead, read off `this` in the click handler.
+
+        The onclick attribute was later dropped entirely in favour of that
+        same data-*-driven click handler, now wired up via event delegation
+        rather than an inline attribute (FEATURES.md #68 — migrating admin
+        templates off script-src-attr: 'unsafe-inline'). The data-* attribute
+        is still the load-bearing part of this fix; the assertions below
+        just track where that fix currently lives."""
         walker = make_walker('obrien.walker@dogboxx.org')
         walker.lastname = "O'Brien"
         db.session.commit()
@@ -167,3 +174,39 @@ class TestAdminWalkersListRendering:
         assert 'js-confirm-walker-toggle' in html
         assert 'onclick="confirmWalkerToggle(this)"' not in html  # migrated to event delegation (FEATURES.md #68)
         assert f"confirmWalkerToggle({walker_id}," not in html  # old vulnerable positional-arg call
+
+    def test_dashboard_walker_override_button_builds_no_inline_onclick(self, app, client, super_admin, service_type):
+        """Regression: the dashboard calendar's walker-override gear button
+        (admin.html) had the exact same bug class as
+        test_action_buttons_survive_apostrophe_in_name above — just missed
+        by the PR #187 audit since that audit only looked at Jinja
+        templates, and this button is rendered by client-side JS instead.
+        It built its onclick via a JS template literal,
+        `onclick="_openOverrideModal(id, '${esc(w.name)}')"`, where esc()
+        only HTML-escapes (&, <, >, "), never an apostrophe — a walker named
+        O'Brien would break the JS string mid-attribute.
+
+        A Flask test client can't execute renderDetail()/esc() to check the
+        resulting DOM the way the Jinja-rendered tests above check rendered
+        HTML directly, so this instead asserts the vulnerable *shape* is
+        gone from the shipped JS source: no admin.html script builds an
+        onclick="..." attribute string by concatenating untrusted data, and
+        the gear button carries the walker's name via data-walker-name
+        instead. Also spot-checks that the name reaches the browser safely
+        even through the earlier server-side hop: Jinja's tojson unicode-
+        escapes the apostrophe (\\u0027) for safe embedding inside the
+        <script> tag's JSON payload — a different mechanism than the |e
+        HTML-attribute escaping the other tests check, and not the bug this
+        migration fixed, but worth confirming it still holds."""
+        walker = make_walker('obrien.dashboard@dogboxx.org')
+        walker.firstname = "O'Brien"  # the dashboard displays w.user.firstname, not lastname
+        db.session.commit()
+
+        login(client, super_admin.email)
+        resp = client.get('/admin/')
+        html = resp.data.decode()
+
+        assert "O\\u0027Brien" in html  # name survives tojson's script-context escaping intact
+        assert 'detail-walker-gear' in html
+        assert 'data-walker-name' in html  # the replacement mechanism is present
+        assert 'onclick="' not in html  # no admin.html script builds an onclick attribute string at all

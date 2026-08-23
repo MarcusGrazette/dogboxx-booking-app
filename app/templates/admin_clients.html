@@ -238,6 +238,9 @@ toggleConfirm.addEventListener('click', function () {
 });
 
 // ── Row click → client detail ───────────────────────────────────────────────
+// Depends on the td.client-actions-cell stopPropagation listener below —
+// without it, clicking a button in the actions cell would also navigate
+// via this row-level handler.
 document.querySelectorAll('tr.client-row').forEach(row => {
     row.addEventListener('click', function () {
         window.location.href = this.dataset.href;

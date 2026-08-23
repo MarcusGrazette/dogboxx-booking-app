@@ -580,7 +580,14 @@ class TestAdminUnlockClient:
         HTML-decodes back to a literal apostrophe before treating the
         attribute as JS source, closing the string early. Buttons must pass
         the name through a data-* attribute instead, which only ever needs
-        HTML-attribute decoding, never a second pass as JS."""
+        HTML-attribute decoding, never a second pass as JS.
+
+        The onclick attribute was later dropped entirely in favour of that
+        same data-*-driven click handler, now wired up via event delegation
+        rather than an inline attribute (FEATURES.md #68 — migrating admin
+        templates off script-src-attr: 'unsafe-inline'). The data-*
+        attribute is still the load-bearing part of this fix; the
+        assertions below just track where that fix currently lives."""
         with app.app_context():
             user = make_user("obrien@test.com")
             user.lastname = "O'Brien"
