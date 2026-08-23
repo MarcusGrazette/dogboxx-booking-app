@@ -12,6 +12,19 @@
         if (el) el.textContent = greeting + ', ' + PAGE_CONFIG.userFirstname + '.';
     })();
 
+    // 'error' doesn't bubble, so this has to be a capture-phase listener on
+    // document rather than delegated the usual way; registered outside the
+    // DOMContentLoaded block below (but still inside this IIFE, so it runs as
+    // soon as this script tag parses) so it's live before any dog photo's
+    // network fetch resolves — see the matching listener + comment in
+    // admin-dogs.js for the same pattern.
+    document.addEventListener('error', function (e) {
+        if (e.target.matches && e.target.matches('.img-fallback-default-dog')) {
+            e.target.onerror = null;
+            e.target.src = e.target.dataset.fallback;
+        }
+    }, true);
+
     document.addEventListener('DOMContentLoaded', function () {
 
         // ─── State ───────────────────────────────────────────────

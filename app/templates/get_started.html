@@ -108,10 +108,10 @@
     {# ── Platform toggle ── #}
     <div class="d-flex justify-content-center mb-4">
         <div class="btn-group platform-toggle" role="group" aria-label="Platform">
-            <button type="button" id="btn-ios" class="btn btn-primary" onclick="switchPlatform('ios')">
+            <button type="button" id="btn-ios" class="btn btn-primary">
                 <i class="bi bi-apple me-1"></i>iOS
             </button>
-            <button type="button" id="btn-android" class="btn btn-outline-primary" onclick="switchPlatform('android')">
+            <button type="button" id="btn-android" class="btn btn-outline-primary">
                 <i class="bi bi-android2 me-1"></i>Android
             </button>
         </div>
@@ -221,7 +221,7 @@
         }
     };
 
-    window.switchPlatform = function (platform) {
+    function switchPlatform(platform) {
         var data = PLATFORMS[platform];
 
         // Update hero title
@@ -262,7 +262,10 @@
         // Toggle buttons
         document.getElementById('btn-ios').className = 'btn ' + (platform === 'ios' ? 'btn-primary' : 'btn-outline-primary');
         document.getElementById('btn-android').className = 'btn ' + (platform === 'android' ? 'btn-primary' : 'btn-outline-primary');
-    };
+    }
+
+    document.getElementById('btn-ios').addEventListener('click', function () { switchPlatform('ios'); });
+    document.getElementById('btn-android').addEventListener('click', function () { switchPlatform('android'); });
 
     // Init
     switchPlatform('ios');

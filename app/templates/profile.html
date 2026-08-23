@@ -202,7 +202,8 @@
                         <div class="dog-photo-wrap" id="dog-photo-clickable-{{ dog.id }}" title="Update photo"
                              data-upload-url="{{ url_for('client.upload_dog_photo', dog_id=dog.id) }}">
                             <img src="{{ url_for('static', filename='uploads/dogs/' + dog.pic) if dog.pic else url_for('static', filename='uploads/dogs/default-dog.png') }}"
-                                 onerror="this.onerror=null;this.src='{{ url_for('static', filename='uploads/dogs/default-dog.png') }}'"
+                                 data-fallback="{{ url_for('static', filename='uploads/dogs/default-dog.png') }}"
+                                 class="img-fallback-default-dog"
                                  alt="{{ dog.name }}" id="dog-photo-preview-{{ dog.id }}">
                             <div class="dog-photo-edit-overlay">
                                 <i class="bi bi-pencil-fill"></i>
@@ -275,7 +276,8 @@
                         {# Photo — no click handler, read-only #}
                         <div class="profile-avatar">
                             <img src="{{ url_for('static', filename='uploads/dogs/' + sdog.pic) if sdog.pic else url_for('static', filename='uploads/dogs/default-dog.png') }}"
-                                 onerror="this.onerror=null;this.src='{{ url_for('static', filename='uploads/dogs/default-dog.png') }}'"
+                                 data-fallback="{{ url_for('static', filename='uploads/dogs/default-dog.png') }}"
+                                 class="img-fallback-default-dog"
                                  alt="{{ sdog.name }}"
                                  style="width:64px; height:64px; border-radius:50%; object-fit:cover; border:3px solid #E02FAC; display:block;">
                         </div>
@@ -511,6 +513,18 @@
 <script nonce="{{ csp_nonce }}">
 (function () {
     'use strict';
+
+    // 'error' doesn't bubble, so this has to be a capture-phase listener on
+    // document rather than delegated the usual way; registered as early as
+    // possible in this script (no DOMContentLoaded wrapper on this page) so
+    // it's live before any dog photo's network fetch resolves — see the
+    // matching listener + comment in admin-dogs.js for the same pattern.
+    document.addEventListener('error', function (e) {
+        if (e.target.matches && e.target.matches('.img-fallback-default-dog')) {
+            e.target.onerror = null;
+            e.target.src = e.target.dataset.fallback;
+        }
+    }, true);
 
     // ── Per-dog AJAX save ────────────────────────────────────────────────────
     document.querySelectorAll('.save-dog-btn').forEach(function (btn) {
