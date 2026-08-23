@@ -98,8 +98,7 @@
     <i class="bi bi-info-circle me-1"></i>
     Rows with errors will be skipped. Duplicate emails are always skipped.
   </span>
-  <button type="button" class="btn btn-primary fw-semibold ms-auto"
-          onclick="document.getElementById('confirm-modal-trigger').click()">
+  <button type="button" id="open-confirm-import-btn" class="btn btn-primary fw-semibold ms-auto">
     <i class="bi bi-cloud-upload me-2"></i>Import {{ valid_count }} client{{ 's' if valid_count != 1 }}
   </button>
 </div>
@@ -144,12 +143,31 @@
       </div>
       <div class="modal-footer border-0 pt-0">
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-primary fw-semibold"
-                onclick="document.getElementById('confirm-form').submit()">
+        <button type="button" id="confirm-import-btn" class="btn btn-primary fw-semibold">
           <i class="bi bi-cloud-upload me-2"></i>Import now
         </button>
       </div>
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script nonce="{{ csp_nonce }}">
+document.addEventListener('DOMContentLoaded', function () {
+  const openBtn = document.getElementById('open-confirm-import-btn');
+  if (openBtn) {
+    openBtn.addEventListener('click', function () {
+      document.getElementById('confirm-modal-trigger').click();
+    });
+  }
+  const confirmBtn = document.getElementById('confirm-import-btn');
+  if (confirmBtn) {
+    confirmBtn.addEventListener('click', function () {
+      document.getElementById('confirm-form').submit();
+    });
+  }
+});
+</script>
 {% endblock %}

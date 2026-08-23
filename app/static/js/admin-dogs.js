@@ -1,6 +1,17 @@
 /* Admin dogs page — booking, edit, cancel modals + live filter.
  * URL endpoints are injected by the template via <script id="page-config" type="application/json">.
  */
+
+// 'error' doesn't bubble, so this has to be a capture-phase listener on
+// document rather than delegated the usual way; registered outside
+// DOMContentLoaded so it's live before any dog photo's network fetch resolves.
+document.addEventListener('error', function (e) {
+    if (e.target.matches && e.target.matches('.img-fallback-default-dog')) {
+        e.target.onerror = null;
+        e.target.src = e.target.dataset.fallback;
+    }
+}, true);
+
 document.addEventListener('DOMContentLoaded', function () {
     const PAGE_URLS = JSON.parse(document.getElementById('page-config').textContent);
 
@@ -279,11 +290,19 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // ── Row click → view modal ──────────────────────────────────────────────
+    // Depends on the td.dog-actions-cell stopPropagation listener below —
+    // without it, clicking Book/Cancel would also open the view modal.
     document.querySelectorAll('tr.dog-row').forEach(row => {
         row.addEventListener('click', function () {
             const target = this.dataset.viewModal;
             if (target) bootstrap.Modal.getOrCreateInstance(document.querySelector(target)).show();
         });
+    });
+
+    // Stop the actions cell's Book/Cancel buttons from also triggering the
+    // row click above (which would open the view modal on top of them).
+    document.querySelectorAll('td.dog-actions-cell').forEach(td => {
+        td.addEventListener('click', e => e.stopPropagation());
     });
 
     // ── Edit dog modal ──────────────────────────────────────────────────────
