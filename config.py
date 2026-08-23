@@ -41,14 +41,14 @@ class Config:
     # Content Security Policy
     # script-src omits 'unsafe-inline' — a per-request nonce is appended in
     # add_security_headers and inline <script> tags carry nonce="{{ csp_nonce }}".
-    # script-src-attr keeps 'unsafe-inline' so onclick/onerror/onchange handlers in
-    # templates keep working until they're migrated to event delegation — tracked as
-    # FEATURES.md #68, not just this comment. sanitize_rich_text strips event-handler
-    # attributes on every rich-text write path today, so this is a second-layer gap, not a live one.
+    # script-src-attr is intentionally absent — with no directive of its own it falls
+    # back to script-src, so inline event-handler attributes (onclick/onerror/onchange)
+    # are blocked. All templates were migrated off them to event delegation —
+    # see FEATURES.md #68; don't reintroduce an inline handler without re-adding
+    # this directive.
     CSP = {
         'default-src': "'self'",
         'script-src': "'self' https://cdn.jsdelivr.net https://unpkg.com",
-        'script-src-attr': "'unsafe-inline'",
         'style-src': "'self' https://cdn.jsdelivr.net https://unpkg.com https://fonts.googleapis.com 'unsafe-inline'",
         'img-src': "'self' data:",
         'font-src': "'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com",

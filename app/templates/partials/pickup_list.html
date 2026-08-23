@@ -25,9 +25,9 @@
                     <div class="flex-shrink-0 d-flex flex-column align-items-center gap-1" style="width:64px;">
                         <div class="position-relative" style="width:64px;height:64px;">
                             <img src="{{ '/static/uploads/dogs/' + b.dog.pic if b.dog and b.dog.pic else '/static/uploads/dogs/default-dog.png' }}"
-                                 class="rounded-circle" width="64" height="64" style="object-fit:cover;"
-                                 alt="{{ b.dog.name if b.dog else 'Dog' }}"
-                                 onerror="this.onerror=null; this.src='/static/uploads/dogs/default-dog.png'">
+                                 data-fallback="/static/uploads/dogs/default-dog.png"
+                                 class="rounded-circle img-fallback-default-dog" width="64" height="64" style="object-fit:cover;"
+                                 alt="{{ b.dog.name if b.dog else 'Dog' }}">
                         </div>
                         {% if client and client.maps_url %}
                         <a href="{{ client.maps_url }}" target="_blank" rel="noopener"

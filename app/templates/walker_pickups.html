@@ -50,6 +50,20 @@
 
 <script src="{{ url_for('static', filename='js/reusable-calendar.js') }}"></script>
 <script nonce="{{ csp_nonce }}">
+// 'error' doesn't bubble, so this has to be a capture-phase listener on
+// document rather than delegated the usual way; registered outside the IIFE
+// below (module scope, runs as soon as this script tag parses) so it's live
+// before any dog photo's network fetch resolves — see the matching listener
+// + comment in admin-dogs.js for the same pattern. A document-level listener
+// also survives #pickup-list-container being re-rendered via the date-change
+// AJAX fetch below, since it isn't tied to any specific image element.
+document.addEventListener('error', function (e) {
+    if (e.target.matches && e.target.matches('.img-fallback-default-dog')) {
+        e.target.onerror = null;
+        e.target.src = e.target.dataset.fallback;
+    }
+}, true);
+
 (function () {
     const todayStr = '{{ today.strftime("%Y-%m-%d") }}';
     const initialDate = '{{ selected_date.strftime("%Y-%m-%d") }}';
