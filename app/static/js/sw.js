@@ -16,12 +16,24 @@
  * ⚠️  When deploying CSS/JS changes, bump CACHE_VERSION below.
  *     The activate handler will delete the old cache and force clients to
  *     re-fetch updated assets.
+ *
+ * Two caches, deliberately separate:
+ *   CACHE_NAME      — the app shell (CSS/JS/images/CDN bundle). Not
+ *                      user-specific; persists across logins.
+ *   PAGE_CACHE_NAME — rendered HTML pages (dashboard, pickup lists, dog
+ *                      profiles). These carry per-user data, so this cache
+ *                      is wiped via CLEAR_PAGE_CACHE whenever the login page
+ *                      is reached — see login.html — so the next person on a
+ *                      shared device (e.g. walkers handing off a shared
+ *                      phone at shift change) can't get served a stale
+ *                      offline page containing the previous user's data.
  */
 
 // ── Cache config ──────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'v31';
-const CACHE_NAME    = `dogboxx-${CACHE_VERSION}`;
+const CACHE_VERSION   = 'v32';
+const CACHE_NAME      = `dogboxx-${CACHE_VERSION}`;
+const PAGE_CACHE_NAME = `dogboxx-pages-${CACHE_VERSION}`;
 
 /**
  * Assets pre-fetched and cached at install time (the "app shell").
@@ -86,7 +98,7 @@ self.addEventListener('activate', function (event) {
         .then(function (keys) {
           return Promise.all(
             keys
-              .filter(function (key) { return key !== CACHE_NAME; })
+              .filter(function (key) { return key !== CACHE_NAME && key !== PAGE_CACHE_NAME; })
               .map(function (key) {
                 console.log('[SW] Removing old cache:', key);
                 return caches.delete(key);
@@ -203,7 +215,7 @@ self.addEventListener('fetch', function (event) {
           if (preloaded) {
             // Cache the preloaded response for offline fallback
             var clone = preloaded.clone();
-            caches.open(CACHE_NAME).then(function (cache) { cache.put(req, clone); });
+            caches.open(PAGE_CACHE_NAME).then(function (cache) { cache.put(req, clone); });
             return preloaded;
           }
           // No preload — fall back to normal fetch
@@ -211,7 +223,7 @@ self.addEventListener('fetch', function (event) {
             .then(function (response) {
               if (response.ok) {
                 var clone = response.clone();
-                caches.open(CACHE_NAME).then(function (cache) { cache.put(req, clone); });
+                caches.open(PAGE_CACHE_NAME).then(function (cache) { cache.put(req, clone); });
               }
               return response;
             });
@@ -313,23 +325,36 @@ self.addEventListener('pushsubscriptionchange', function (event) {
   );
 });
 
-// ── Badge updates from page context ──────────────────────────────────────────
+// ── Messages from page context ───────────────────────────────────────────────
 //
-// iOS only honours setAppBadge/clearAppBadge when called from the service
-// worker context, not from a page window. Page JS posts a SET_BADGE message
-// here so all badge API calls go through SW, where they're known to work.
+// SET_BADGE: iOS only honours setAppBadge/clearAppBadge when called from the
+//   service worker context, not from a page window. Page JS posts this
+//   message so all badge API calls go through SW, where they're known to work.
+// CLEAR_PAGE_CACHE: see PAGE_CACHE_NAME comment at the top of this file.
 
 self.addEventListener('message', function (event) {
-  if (!event.data || event.data.type !== 'SET_BADGE') return;
-  var count = parseInt(event.data.count, 10) || 0;
-  if (count <= 0) {
-    if ('clearAppBadge' in navigator) {
-      navigator.clearAppBadge().catch(function () {});
+  if (!event.data) return;
+
+  if (event.data.type === 'SET_BADGE') {
+    var count = parseInt(event.data.count, 10) || 0;
+    if (count <= 0) {
+      if ('clearAppBadge' in navigator) {
+        navigator.clearAppBadge().catch(function () {});
+      }
+    } else {
+      if ('setAppBadge' in navigator) {
+        navigator.setAppBadge(count).catch(function () {});
+      }
     }
-  } else {
-    if ('setAppBadge' in navigator) {
-      navigator.setAppBadge(count).catch(function () {});
-    }
+    return;
+  }
+
+  if (event.data.type === 'CLEAR_PAGE_CACHE') {
+    // Wipe cached HTML pages (dashboard, pickup lists, dog profiles) so a
+    // shared device (e.g. walkers handing off a phone at shift change)
+    // can't fall back to the previous user's cached page while offline.
+    // The app shell (CACHE_NAME) is untouched — it isn't user-specific.
+    event.waitUntil(caches.delete(PAGE_CACHE_NAME));
   }
 });
 
