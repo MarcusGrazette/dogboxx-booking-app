@@ -88,8 +88,7 @@
             const slotColor = b.slot === 'Morning' ? 'success' : 'danger';
             const extraBadges = cfg.makePendingCardBadges ? cfg.makePendingCardBadges(b) : '';
             el.innerHTML = `
-                <img src="${imgSrc(b.dog_pic)}" class="board-dog-img"
-                     onerror="this.src='/static/uploads/dogs/default-dog.png'">
+                <img src="${imgSrc(b.dog_pic)}" class="board-dog-img">
                 <div class="board-card-info">
                     <div class="board-card-name">${b.dog_name}</div>
                     <div class="board-card-owner">${b.owner_name}</div>
@@ -101,11 +100,24 @@
                     <button class="btn btn-link p-0 ms-1 text-muted decline-btn"
                             data-id="${b.id}" data-dog="${escHtml(b.dog_name)}" data-slot="${b.slot}"
                             title="Decline booking"
-                            style="font-size:0.9rem; opacity:0.55; line-height:1;"
-                            onclick="event.stopPropagation(); openDeclineModal(this)">
+                            style="font-size:0.9rem; opacity:0.55; line-height:1;">
                         <i class="bi bi-x-circle"></i>
                     </button>
                 </div>`;
+
+            // el is a freshly created node not yet inserted into the DOM, so these
+            // listeners are attached once per card instance directly — no CSP-inline-
+            // handler-attribute concern (that only applies to onclick=/onerror=
+            // string attributes) and no delegation needed (unlike a persistent
+            // wrapper whose innerHTML gets reassigned repeatedly).
+            el.querySelector('.board-dog-img').addEventListener('error', function () {
+                this.src = '/static/uploads/dogs/default-dog.png';
+            });
+            const declineBtn = el.querySelector('.decline-btn');
+            declineBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                openDeclineModal(declineBtn);
+            });
 
             el.addEventListener('click', () => selectBooking(b.id));
             return el;
@@ -118,13 +130,16 @@
 
             const extraContent = cfg.makeAssignedCardBadges ? cfg.makeAssignedCardBadges(b) : '';
             el.innerHTML = `
-                <img src="${imgSrc(b.dog_pic)}" class="board-dog-img"
-                     onerror="this.src='/static/uploads/dogs/default-dog.png'">
+                <img src="${imgSrc(b.dog_pic)}" class="board-dog-img">
                 <div class="board-card-info">
                     <div class="board-card-name">${b.dog_name}</div>
                     <div class="board-card-owner">${b.owner_name}</div>
                 </div>
                 ${extraContent}`;
+
+            el.querySelector('.board-dog-img').addEventListener('error', function () {
+                this.src = '/static/uploads/dogs/default-dog.png';
+            });
 
             el.addEventListener('click', () => selectBooking(b.id));
             return el;
@@ -491,9 +506,6 @@
                 `Decline ${dog}'s ${slot.toLowerCase()} ${cfg.declineLabel} on ${date}?`;
             declineModal.show();
         }
-
-        // Expose for inline onclick attributes on dynamically generated cards.
-        global.openDeclineModal = openDeclineModal;
 
         document.getElementById('decline-confirm-btn').addEventListener('click', async () => {
             if (!_declineBookingId) return;
