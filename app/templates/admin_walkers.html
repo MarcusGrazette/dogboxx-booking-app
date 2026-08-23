@@ -172,25 +172,22 @@
                                 {% endif %}
                                 {% if walker.active %}
                                 {% if walker.id != current_user.id %}
-                                <button class="btn btn-sm btn-outline-danger me-1"
+                                <button class="btn btn-sm btn-outline-danger me-1 js-confirm-walker-toggle"
                                         data-walker-id="{{ walker.id }}" data-walker-name="{{ walker.full_name | e }}" data-action="deactivate"
-                                        onclick="confirmWalkerToggle(this)"
                                         title="Deactivate">
                                     <i class="bi bi-x-circle"></i>
                                 </button>
                                 {% if walker.client %}
-                                <button class="btn btn-sm btn-outline-warning"
+                                <button class="btn btn-sm btn-outline-warning js-remove-walker-role"
                                         data-walker-id="{{ walker.id }}" data-walker-name="{{ walker.full_name | e }}"
-                                        onclick="removeWalkerRole(this)"
                                         title="Remove walker role — keeps client access">
                                     <i class="bi bi-person-dash"></i>
                                 </button>
                                 {% endif %}
                                 {% endif %}
                                 {% else %}
-                                <button class="btn btn-sm btn-outline-success"
+                                <button class="btn btn-sm btn-outline-success js-confirm-walker-toggle"
                                         data-walker-id="{{ walker.id }}" data-walker-name="{{ walker.full_name | e }}" data-action="activate"
-                                        onclick="confirmWalkerToggle(this)"
                                         title="Activate">
                                     <i class="bi bi-check-circle"></i>
                                 </button>
@@ -482,6 +479,14 @@ document.getElementById('scheduleModal').addEventListener('hidden.bs.modal', fun
     scheduleSaveBtn.disabled      = false;
     scheduleSaveBtn.innerHTML     = '<i class="bi bi-check-lg me-1"></i>Save schedule';
     document.getElementById('schedule-cancel-btn').textContent = 'Cancel';
+});
+
+document.querySelectorAll('.js-confirm-walker-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () { confirmWalkerToggle(this); });
+});
+
+document.querySelectorAll('.js-remove-walker-role').forEach(function (btn) {
+    btn.addEventListener('click', function () { removeWalkerRole(this); });
 });
 
 document.querySelectorAll('.schedule-btn').forEach(function (btn) {
