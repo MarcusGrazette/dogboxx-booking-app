@@ -385,8 +385,20 @@ def assign_walker():
         # ad-hoc override for the walker would still be blocked, and a walker marked
         # unavailable for a slot could still be assigned to it without a clear warning.
         assign_slot = slot or booking.slot
+        service_slug = booking.service_type.slug if booking.service_type else ServiceType.WALK
+
+        # Same (service, date, slot) advisory lock create_booking() takes before its own
+        # capacity check — without it, this manual assignment races auto_assign_walker()
+        # (invoked from create_booking() when a client's booking auto-confirms): both can
+        # read the same_slot_bookings count below before either commits, over-filling the
+        # walker. Transaction-scoped; released on commit/rollback at the end of this route.
+        # Refresh the in-memory booking afterwards so booking.status/walker_id — read below
+        # by the capacity check and by transition_booking()'s from_status snapshot — reflect
+        # any commit that landed while we were waiting on the lock, not a stale pre-lock read.
+        acquire_booking_lock(service_slug, booking.date, assign_slot)
+        db.session.refresh(booking)
+
         if not slot_override:
-            service_slug = booking.service_type.slug if booking.service_type else ServiceType.WALK
             is_drop_in = (service_slug == ServiceType.DROP_IN)
             available_walkers = get_available_walkers(
                 booking.date, assign_slot, drop_in=is_drop_in
@@ -409,7 +421,6 @@ def assign_walker():
         #   A→A (same walker, slot_override): booking IS on A for the old slot, so
         #     excluding it correctly avoids counting it when checking A's new-slot capacity.
         if slot:
-            service_slug = booking.service_type.slug if booking.service_type else ServiceType.WALK
             max_capacity = get_max_per_walker(service_slug)
             same_slot_bookings = Booking.query.join(ServiceType).filter(
                 Booking.walker_id == walker.id,

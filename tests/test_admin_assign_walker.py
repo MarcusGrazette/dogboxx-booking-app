@@ -13,11 +13,14 @@ Two bugs, one fix (delegating to get_available_walkers()):
 """
 import datetime
 import json
+import threading
+import time
 import pytest
 from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 
 from app import db
+from app.blueprints.admin.views import board as board_module
 from app.models import (
     Booking, BookingStatusChange, Client, Dog, DogOwner, ServiceType, User, Walker,
     WalkerAdHocAvailability, WalkerSchedule, WalkerUnavailability,
@@ -501,3 +504,104 @@ class TestSlotOverrideJsonOnly:
         assert resp.status_code == 400
         assert data['success'] is False
         assert 'No booking ID' in data['message']
+
+
+class TestAssignWalkerConcurrencyRace:
+    """Regression for the code-review finding (2026-08-23): assign_walker's
+    capacity check (same_slot_bookings >= max_capacity) had no advisory lock,
+    unlike create_booking(). Two concurrent assignments to the same walker
+    could both read the count before either committed, over-filling capacity.
+
+    Fixed by acquiring the same (service, date, slot) advisory lock
+    create_booking() takes, right before the capacity check. This test drives
+    two real concurrent requests through the actual view and asserts Postgres
+    genuinely serializes them — not just that the lock function is called.
+    """
+
+    def test_concurrent_assign_calls_do_not_overfill_walker(self, app):
+        if db.engine.dialect.name != 'postgresql':
+            pytest.skip('advisory lock is a no-op on SQLite — race cannot be exercised')
+
+        monday = _next_weekday(0)
+        with app.app_context():
+            # Capacity 1 so a second assignment to the same walker/slot must
+            # be rejected — any overfill shows up as 2 confirmed bookings.
+            st = ServiceType(
+                name='Group Walk', slug='group-walk',
+                capacity_model='walker_assigned', slot_type='morning_afternoon',
+                requires_walker=True, default_max_capacity=1, active=True,
+            )
+            db.session.add(st)
+            db.session.flush()
+
+            admin = _make_admin()
+            _, walker = _make_walker()
+            db.session.add(WalkerSchedule(
+                walker_id=walker.id, day_of_week=0, slot='Morning', active=True,
+            ))
+            db.session.commit()
+
+            # _make_booking() reuses the 'group-walk' ServiceType created above
+            # (capacity 1) rather than creating its own default-capacity-6 one.
+            booking_a = _make_booking(monday, slot='Morning', email='race_a@test.com', dog_name='DogA')
+            booking_b = _make_booking(monday, slot='Morning', email='race_b@test.com', dog_name='DogB')
+
+            admin_email, walker_id = admin.email, walker.id
+            booking_a_id, booking_b_id = booking_a.id, booking_b.id
+
+        # Pause thread A after it has acquired the advisory lock and passed
+        # its own capacity check, but before it commits — so the lock (and
+        # the uncommitted booking_a.status='confirmed') is still held while
+        # thread B tries to run the same check.
+        entered_lock = threading.Event()
+        release_lock = threading.Event()
+        orig_get_walker_slot_count = board_module.get_walker_slot_count
+
+        def _paused_get_walker_slot_count(*a, **kw):
+            entered_lock.set()
+            release_lock.wait(timeout=5)
+            return orig_get_walker_slot_count(*a, **kw)
+
+        board_module.get_walker_slot_count = _paused_get_walker_slot_count
+
+        results = {}
+
+        def _run(name, booking_id):
+            c = app.test_client()
+            _login(c, admin_email)
+            resp = _post_assign(c, booking_id, walker_id, slot='Morning')
+            results[name] = (resp.status_code, resp.get_json())
+
+        try:
+            t_a = threading.Thread(target=_run, args=('a', booking_a_id))
+            t_a.start()
+            assert entered_lock.wait(timeout=5), 'thread A never reached the locked section'
+
+            t_b = threading.Thread(target=_run, args=('b', booking_b_id))
+            t_b.start()
+            # Give B's request time to actually reach and block inside Postgres
+            # on the advisory lock — that blocking happens in the DB call, not
+            # observable via a Python-level signal.
+            time.sleep(0.3)
+
+            release_lock.set()
+            t_a.join(timeout=5)
+            t_b.join(timeout=5)
+        finally:
+            board_module.get_walker_slot_count = orig_get_walker_slot_count
+
+        assert not t_a.is_alive() and not t_b.is_alive(), 'a thread never finished — deadlock?'
+
+        status_a, body_a = results['a']
+        status_b, body_b = results['b']
+        assert status_a == 200, body_a
+        assert status_b == 400, body_b
+        assert 'maximum bookings' in body_b['message'], body_b
+
+        with app.app_context():
+            confirmed = Booking.query.filter(
+                Booking.walker_id == walker_id, Booking.date == monday,
+                Booking.slot == 'Morning', Booking.status == 'confirmed',
+            ).count()
+            assert confirmed == 1, \
+                f'walker over capacity: expected 1 confirmed booking, found {confirmed}'
