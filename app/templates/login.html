@@ -125,5 +125,18 @@
         if (reg.active) reg.active.postMessage({ type: 'SET_BADGE', count: 0 });
     }).catch(function () {});
 }());
+
+// Purge the SW's cached HTML pages whenever the login page is reached — same
+// rationale as the badge clear above (covers explicit logout and silent
+// session expiry, and can't race page unload the way clearing from the
+// logout form's submit handler would). Without this, a shared device (e.g.
+// walkers handing off a phone at shift change) can fall back to the
+// previous user's cached dashboard/pickup-list page while offline.
+(function () {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.ready.then(function (reg) {
+        if (reg.active) reg.active.postMessage({ type: 'CLEAR_PAGE_CACHE' });
+    }).catch(function () {});
+}());
 </script>
 {% endblock %}
