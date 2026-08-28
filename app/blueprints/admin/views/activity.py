@@ -8,6 +8,7 @@ from app.utils.decorators import admin_required
 from app.models import (
     User, Booking, BookingStatusChange, Walker, WalkerUnavailability,
     WalkerAdHocAvailability, ServiceType, Closure, Broadcast,
+    AdminActionLog, DailyMessage,
 )
 from app import db
 
@@ -19,8 +20,10 @@ def activity_feed():
     """Admin activity feed — rebuilt from the action log (§9.6, Session 4).
 
     Sources: BookingStatusChange (every booking transition), WalkerUnavailability,
-    WalkerAdHocAvailability, Closure, Broadcast. Actor attribution read from each
-    row's actor FK — never inferred from booking ownership (P2).
+    WalkerAdHocAvailability, Closure, Broadcast, AdminActionLog (client/dog/walker
+    CRUD, schedule/pricing/newsletter — see app/utils/admin_audit.py), DailyMessage.
+    Actor attribution read from each row's actor FK — never inferred from booking
+    ownership (P2).
     """
     from datetime import date as date_type
     from sqlalchemy import func
@@ -55,6 +58,13 @@ def activity_feed():
         'available':   ('Available',   'bi-calendar-check-fill', '#13877c', 'rgba(20,184,166,0.11)'),
         'closure':     ('Closed',      'bi-shop-window',         '#bb2d3b', 'rgba(220,53,69,0.11)'),
         'broadcast':   ('Broadcast',   'bi-megaphone-fill',      '#0d6efd', 'rgba(13,110,253,0.11)'),
+        'admin_client':     ('Client',      'bi-person-lines-fill',  '#495057', 'rgba(73,80,87,0.11)'),
+        'admin_dog':        ('Dog',         'bi-clipboard2-pulse',   '#495057', 'rgba(73,80,87,0.11)'),
+        'admin_walker':     ('Walker',      'bi-person-badge-fill',  '#495057', 'rgba(73,80,87,0.11)'),
+        'admin_schedule':   ('Schedule',    'bi-calendar-week-fill', '#495057', 'rgba(73,80,87,0.11)'),
+        'admin_pricing':    ('Pricing',     'bi-tag-fill',           '#495057', 'rgba(73,80,87,0.11)'),
+        'admin_newsletter': ('Newsletter',  'bi-envelope-fill',      '#495057', 'rgba(73,80,87,0.11)'),
+        'daily_message':    ('Message',     'bi-chat-square-text-fill', '#495057', 'rgba(73,80,87,0.11)'),
     }
 
     def _actor_type(user):
@@ -420,6 +430,64 @@ def activity_feed():
             link=url_for('admin.broadcasts'),
         ))
 
+    # ── Admin action log (client/dog/walker CRUD, schedule/pricing/newsletter) ─
+    # `summary` is pre-rendered at write time (app/utils/admin_audit.py) so no
+    # live join is needed to build description text — but actor identity still
+    # comes from a live row, so the same defensive skip as every other source
+    # applies if the actor has since been deleted.
+    ADMIN_BADGE_BY_ENTITY = {
+        'client': 'admin_client',
+        'dog': 'admin_dog',
+        'walker': 'admin_walker',
+        'walker_schedule': 'admin_schedule',
+        'pricing': 'admin_pricing',
+        'newsletter': 'admin_newsletter',
+    }
+    ADMIN_LINK_BY_ENTITY = {
+        'client': url_for('admin.clients'),
+        'dog': url_for('admin.clients'),
+        'walker': url_for('admin.walkers'),
+        'walker_schedule': url_for('admin.walkers'),
+        'pricing': url_for('admin.revenue'),
+        'newsletter': url_for('admin.newsletter'),
+    }
+    for log in (AdminActionLog.query
+                .options(joinedload(AdminActionLog.actor))
+                .filter(AdminActionLog.created_at >= dt_start,
+                        AdminActionLog.created_at < dt_end)
+                .all()):
+        if not log.actor:
+            continue
+        events.append(_make_event(
+            ts=log.created_at, actor_type=_actor_type(log.actor),
+            actor_name=log.actor.full_name, actor_id=log.actor.id,
+            description=log.summary,
+            badge=ADMIN_BADGE_BY_ENTITY.get(log.entity_type, 'admin_client'),
+            activity_type='admin',
+            link=ADMIN_LINK_BY_ENTITY.get(log.entity_type, url_for('admin.index')),
+        ))
+
+    # ── Daily messages (admin-authored walker announcements) ───────────────────
+    # Live read, not a baked summary — a hard-deleted DailyMessage retroactively
+    # erases its own creation event from the feed too. See FEATURES.md / the
+    # activity-feed plan's "Out of scope" note before relying on this for a
+    # message that may later be deleted.
+    for dm in (DailyMessage.query
+               .options(joinedload(DailyMessage.created_by))
+               .filter(DailyMessage.created_at >= dt_start,
+                       DailyMessage.created_at < dt_end)
+               .all()):
+        if not dm.created_by:
+            continue
+        msg_date = dm.date.strftime('%a %-d %b') if dm.date else '?'
+        events.append(_make_event(
+            ts=dm.created_at, actor_type=_actor_type(dm.created_by),
+            actor_name=dm.created_by.full_name, actor_id=dm.created_by.id,
+            description=f"Posted a daily message for {msg_date}",
+            badge='daily_message', activity_type='admin',
+            link=url_for('admin.daily_messages'),
+        ))
+
     events = _cluster_events(events)
 
     # Month dropdown — earliest event across all log sources
@@ -429,6 +497,8 @@ def activity_feed():
         db.session.query(func.min(WalkerAdHocAvailability.created_at)).scalar(),
         db.session.query(func.min(Closure.created_at)).scalar(),
         db.session.query(func.min(Broadcast.sent_at)).scalar(),
+        db.session.query(func.min(AdminActionLog.created_at)).scalar(),
+        db.session.query(func.min(DailyMessage.created_at)).scalar(),
     ]
     earliest = None
     for ts in candidates:
