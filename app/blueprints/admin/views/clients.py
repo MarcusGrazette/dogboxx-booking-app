@@ -13,8 +13,19 @@ from app import db
 from app.forms import ClientCreateForm
 from app.utils.uploads import process_dog_photo
 from app.utils.sanitize import clean_rich_text_or_none
+from app.utils.admin_audit import record_admin_action, diff_fields
 from werkzeug.security import generate_password_hash
 import secrets
+
+# Field sets diffed by admin_audit.diff_fields — see app/utils/admin_audit.py
+# for REDACTED_FIELDS (street_address/postal_code/maps_url/pickup_instructions
+# never store real old/new values, only that they changed).
+USER_AUDIT_FIELDS = ['firstname', 'lastname', 'email', 'phone', 'email_marketing']
+CLIENT_AUDIT_FIELDS = ['street_address', 'postal_code', 'maps_url']
+DOG_AUDIT_FIELDS = [
+    'name', 'gender', 'breed', 'allergies', 'date_of_birth',
+    'whatsapp_group_url', 'pickup_instructions', 'hold_key',
+]
 
 
 @admin_bp.route("/clients")
@@ -180,6 +191,10 @@ def join_dog_access(client_id):
             secondary_client.onboarding_completed = True
             secondary_client.onboarding_completed_at = datetime.now(timezone.utc)
 
+        record_admin_action(
+            'dog', dog_id, 'created', actor_id=current_user.id,
+            summary=f"Granted {secondary_user.full_name} access to {ownership.dog.name}",
+        )
         db.session.commit()
         logging.info(
             f"Admin {current_user.id} granted {secondary_user.email} secondary access "
@@ -222,7 +237,16 @@ def revoke_dog_access(client_id):
     dog = db.session.get(Dog, dog_id)
 
     try:
+        # Capture the display name before the delete — record_admin_action's
+        # summary must be fully rendered now since the row it describes won't
+        # exist to join against once this commits.
+        secondary_name = secondary_user.full_name if secondary_user else secondary_user_id
+        dog_name = dog.name if dog else dog_id
         db.session.delete(record)
+        record_admin_action(
+            'dog', dog_id, 'removed', actor_id=current_user.id,
+            summary=f"Removed {secondary_name}'s access to {dog_name}",
+        )
         db.session.commit()
         logging.info(
             f"Admin {current_user.id} revoked secondary access for user {secondary_user_id} "
@@ -323,6 +347,16 @@ def new_client():
                 client.onboarding_completed = True
                 client.onboarding_completed_at = datetime.now(timezone.utc)
 
+            record_admin_action(
+                'client', user.id, 'created', actor_id=current_user.id,
+                summary=f"Added client {user.full_name}",
+            )
+            if has_dog:
+                record_admin_action(
+                    'dog', new_dog.id, 'created', actor_id=current_user.id,
+                    summary=f"Added dog {new_dog.name} for {user.full_name}",
+                )
+
             db.session.commit()
 
             logging.info(f"Admin {current_user.id} created client account for {user.email} "
@@ -363,6 +397,13 @@ def edit_client(client_id):
 
     if form.validate_on_submit():
         try:
+            # Snapshots for admin_audit.diff_fields — captured via getattr()
+            # on the live objects before any mutation below, per the
+            # chokepoint's contract (a serialized/form-dict snapshot would
+            # produce false-positive Decimal/date diffs).
+            before_user = {f: getattr(user, f) for f in USER_AUDIT_FIELDS}
+            dog_before = {f: getattr(dog, f) for f in DOG_AUDIT_FIELDS} if dog else None
+
             # Normalise and apply an email change if any. Lowercased to match
             # the login flow (auth/routes.py:35); a unique constraint on
             # User.email guards against collisions — the IntegrityError handler
@@ -386,6 +427,9 @@ def edit_client(client_id):
             if not client:
                 client = Client(user_id=user.id)
                 db.session.add(client)
+                before_client = {f: None for f in CLIENT_AUDIT_FIELDS}
+            else:
+                before_client = {f: getattr(client, f) for f in CLIENT_AUDIT_FIELDS}
 
             has_address = bool(form.address_line_1.data and form.address_line_1.data.strip())
             if has_address:
@@ -426,6 +470,10 @@ def edit_client(client_id):
                     db.session.add(new_dog)
                     db.session.flush()
                     db.session.add(DogOwner(dog_id=new_dog.id, user_id=user.id, role='primary'))
+                    record_admin_action(
+                        'dog', new_dog.id, 'created', actor_id=current_user.id,
+                        summary=f"Added dog {new_dog.name} for {user.full_name}",
+                    )
 
             # Additional dogs (rendered with raw name="dog_<field>_<id>" inputs)
             import re as _re
@@ -437,6 +485,7 @@ def edit_client(client_id):
                 extra_dog = db.session.get(Dog, did)
                 if not extra_dog:
                     continue
+                extra_dog_before = {f: getattr(extra_dog, f) for f in DOG_AUDIT_FIELDS}
                 extra_name = request.form.get(f'dog_name_{did}', '').strip()
                 if extra_name:
                     extra_dog.name = extra_name
@@ -456,11 +505,38 @@ def edit_client(client_id):
                 )
                 extra_dog.whatsapp_group_url = request.form.get(f'dog_whatsapp_{did}', '').strip() or None
                 extra_dog.hold_key = bool(request.form.get(f'dog_hold_key_{did}'))
+                extra_dog_changes = diff_fields(extra_dog_before, extra_dog, DOG_AUDIT_FIELDS)
+                if extra_dog_changes:
+                    record_admin_action(
+                        'dog', extra_dog.id, 'updated', actor_id=current_user.id,
+                        summary=f"Updated details for {extra_dog.name}", changes=extra_dog_changes,
+                    )
 
             # Auto-complete onboarding when we now have the full picture
             if has_address and has_dog and not client.onboarding_completed:
                 client.onboarding_completed = True
                 client.onboarding_completed_at = datetime.now(timezone.utc)
+
+            # User + Client are one logical "client" entity from the admin's
+            # perspective (see ADMIN_BADGE_BY_ENTITY in activity.py — there's
+            # no separate 'user' bucket), so their diffs are merged into one
+            # row rather than logged as two independent entities.
+            client_changes = {}
+            client_changes.update(diff_fields(before_user, user, USER_AUDIT_FIELDS))
+            client_changes.update(diff_fields(before_client, client, CLIENT_AUDIT_FIELDS))
+            if client_changes:
+                record_admin_action(
+                    'client', user.id, 'updated', actor_id=current_user.id,
+                    summary=f"Updated contact details for {user.full_name}", changes=client_changes,
+                )
+
+            if dog and dog_before is not None:
+                dog_changes = diff_fields(dog_before, dog, DOG_AUDIT_FIELDS)
+                if dog_changes:
+                    record_admin_action(
+                        'dog', dog.id, 'updated', actor_id=current_user.id,
+                        summary=f"Updated details for {dog.name}", changes=dog_changes,
+                    )
 
             db.session.commit()
             flash("Client details updated successfully.", "success")
@@ -541,6 +617,10 @@ def add_dog(client_id):
             db.session.add(new_dog)
             db.session.flush()
             db.session.add(DogOwner(dog_id=new_dog.id, user_id=user.id, role='primary'))
+            record_admin_action(
+                'dog', new_dog.id, 'created', actor_id=current_user.id,
+                summary=f"Added dog {new_dog.name} for {user.full_name}",
+            )
             db.session.commit()
             flash(f"{new_dog.name} added successfully.", "success")
         except Exception as e:
@@ -623,7 +703,14 @@ def deactivate_client(client_id):
         if user.id == current_user.id:
             return jsonify(success=False, message="You cannot deactivate your own account"), 400
 
+        before = {'active': user.active}
         user.active = False
+        changes = diff_fields(before, user, ['active'])
+        if changes:
+            record_admin_action(
+                'client', user.id, 'updated', actor_id=current_user.id,
+                summary=f"Deactivated client {user.full_name}", changes=changes,
+            )
         db.session.commit()
 
         logging.info(f"Admin {current_user.id} deactivated client {user.id}")
@@ -645,7 +732,14 @@ def activate_client(client_id):
         if not user:
             return jsonify(success=False, message="Client not found"), 404
 
+        before = {'active': user.active}
         user.active = True
+        changes = diff_fields(before, user, ['active'])
+        if changes:
+            record_admin_action(
+                'client', user.id, 'updated', actor_id=current_user.id,
+                summary=f"Activated client {user.full_name}", changes=changes,
+            )
         db.session.commit()
 
         logging.info(f"Admin {current_user.id} activated client {user.id}")
@@ -700,6 +794,7 @@ def update_client_pickup_details(client_id):
     if pickup_instructions and len(pickup_instructions) > 20000:
         return jsonify(success=False, message="Instructions too long"), 400
 
+    before_client_maps_url = client.maps_url
     if 'maps_url' in data:
         maps_url = (data.get('maps_url') or '').strip() or None
         if maps_url and len(maps_url) > 2048:
@@ -712,7 +807,25 @@ def update_client_pickup_details(client_id):
     dog = db.session.get(Dog, dog_owner.dog_id) if dog_owner else None
     if not dog:
         return jsonify(success=False, message="No dog record found — add a dog first before saving pickup notes"), 404
+    before_dog_pickup = dog.pickup_instructions
     dog.pickup_instructions = pickup_instructions
+
+    # maps_url and pickup_instructions are both in REDACTED_FIELDS — `changes`
+    # records that they changed, never the address/instructions text itself.
+    if 'maps_url' in data:
+        client_changes = diff_fields({'maps_url': before_client_maps_url}, client, ['maps_url'])
+        if client_changes:
+            record_admin_action(
+                'client', user.id, 'updated', actor_id=current_user.id,
+                summary=f"Updated contact details for {user.full_name}", changes=client_changes,
+            )
+    dog_changes = diff_fields({'pickup_instructions': before_dog_pickup}, dog, ['pickup_instructions'])
+    if dog_changes:
+        record_admin_action(
+            'dog', dog.id, 'updated', actor_id=current_user.id,
+            summary=f"Updated pickup details for {dog.name}", changes=dog_changes,
+        )
+
     db.session.commit()
     return jsonify(success=True)
 
@@ -740,7 +853,13 @@ def upload_client_pickup_photo(client_id):
         if not filename:
             return jsonify(success=False, message="Empty file"), 400
 
+        old_filename = dog.pickup_notes_photo
         dog.pickup_notes_photo = filename
+        record_admin_action(
+            'dog', dog.id, 'updated', actor_id=current_user.id,
+            summary=f"Updated pickup photo for {dog.name}",
+            changes={'pickup_notes_photo': [old_filename, filename]},
+        )
         db.session.commit()
 
         url = url_for('static', filename=f'uploads/pickup_notes/{filename}')
