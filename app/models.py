@@ -463,6 +463,29 @@ class BookingStatusChange(db.Model):
         }
 
 
+class AdminActionLog(db.Model):
+    """Audit trail for admin-initiated mutations outside the booking lifecycle
+    (client/dog/walker CRUD, schedule edits, pricing changes, newsletter sends).
+    Append-only — mirrors BookingStatusChange's chokepoint pattern. Unlike BSC,
+    `summary` is fully rendered at write time so the feed row survives the
+    underlying entity being deleted later (see app/utils/admin_audit.py)."""
+    __tablename__ = 'admin_action_logs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    entity_type = db.Column(db.String(30), nullable=False, index=True)
+    # Stable parent entity (e.g. dog_id for a DogOwner revoke, walker_id for a
+    # schedule edit) — never a child join-row's own id. Nullable: newsletter
+    # sends have no row to point at.
+    entity_id = db.Column(db.Integer, nullable=True, index=True)
+    action = db.Column(db.String(20), nullable=False)  # created / updated / removed / sent
+    actor_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    summary = db.Column(db.Text, nullable=False)
+    changes = db.Column(db.JSON, nullable=True)  # {field: [old, new]}
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+    actor = db.relationship('User')
+
+
 class WalkerUnavailability(db.Model):
     """Date-specific exceptions to a walker's default schedule."""
     __tablename__ = 'walker_unavailabilities'

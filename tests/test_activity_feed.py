@@ -16,11 +16,12 @@ from werkzeug.security import generate_password_hash
 
 from app import db
 from app.models import (
-    Booking, BookingStatusChange, Broadcast, Client, Closure, Dog, DogOwner,
-    ServiceType, User, Walker, WalkerAdHocAvailability, WalkerSchedule,
-    WalkerUnavailability,
+    AdminActionLog, Booking, BookingStatusChange, Broadcast, Client, Closure,
+    DailyMessage, Dog, DogOwner, ServiceType, User, Walker,
+    WalkerAdHocAvailability, WalkerSchedule, WalkerUnavailability,
 )
 from app.utils.booking_status import transition_booking, record_booking_created
+from app.utils.admin_audit import record_admin_action
 
 
 def _next_weekday(target_dow):
@@ -711,3 +712,57 @@ class TestFeedTimestampLocalisation:
         assert b'Thu 16 Jul' in resp.data
         assert b'23:30' not in resp.data
         assert b'Wed 15 Jul' not in resp.data
+
+
+# ---------------------------------------------------------------------------
+# AdminActionLog + DailyMessage sources (activity-feed expansion — foundation
+# PR). AdminActionLog has no call sites yet outside this test; DailyMessage is
+# wired as a free-win read of its existing created_by_id, no new call site.
+# ---------------------------------------------------------------------------
+
+class TestAdminActionLogFeed:
+
+    def test_admin_action_log_row_appears_with_prebaked_summary(self, app, client):
+        """A queued AdminActionLog row surfaces verbatim as `summary` — proves
+        the write-time-summary path renders without any live join."""
+        with app.app_context():
+            admin = _make_user('aal_admin1@test.com', role='walker', is_admin=True)
+            record_admin_action('client', 999, 'updated', actor_id=admin.id,
+                                summary='Updated contact details for Jane Smith',
+                                changes={'city': ['Leeds', 'York']})
+            db.session.commit()
+
+        _login(client, 'aal_admin1@test.com')
+        resp = _get_feed(client, _this_month())
+        assert resp.status_code == 200
+        assert b'Updated contact details for Jane Smith' in resp.data
+
+    def test_admin_action_log_survives_deleted_entity(self, app, client):
+        """entity_id pointing at a since-deleted row must not break rendering —
+        the whole point of baking `summary` at write time."""
+        with app.app_context():
+            admin = _make_user('aal_admin2@test.com', role='walker', is_admin=True)
+            record_admin_action('client', 424242, 'removed', actor_id=admin.id,
+                                summary='Removed dog access for Fido (client no longer active)')
+            db.session.commit()
+
+        _login(client, 'aal_admin2@test.com')
+        resp = _get_feed(client, _this_month())
+        assert resp.status_code == 200
+        assert b'Removed dog access for Fido' in resp.data
+
+
+class TestDailyMessageFeed:
+
+    def test_daily_message_appears_in_feed(self, app, client):
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_user('dmf_admin1@test.com', role='walker', is_admin=True)
+            db.session.add(DailyMessage(date=monday, content='Ice on the ground today',
+                                        created_by_id=admin.id))
+            db.session.commit()
+
+        _login(client, 'dmf_admin1@test.com')
+        resp = _get_feed(client, _this_month())
+        assert resp.status_code == 200
+        assert b'Posted a daily message' in resp.data
