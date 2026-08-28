@@ -92,6 +92,17 @@ class TestDiffFields:
         assert 'Old Road' not in str(changes)
         assert 'New Road' not in str(changes)
 
+    def test_decimal_equal_values_with_different_representation_are_not_a_diff(self, app):
+        """Decimal('12.0') == Decimal('12.00') is True under native comparison
+        but their str()s differ ('12.0' vs '12.00') — diff_fields compares
+        native values, not _jsonify_value-normalized ones, specifically to
+        avoid a false-positive diff here. See the docstring's contract note:
+        `before` must hold native types captured via getattr(), not a
+        serialized/string snapshot."""
+        before = {'price_per_walk': Decimal('12.00')}
+        obj = _Obj(price_per_walk=Decimal('12.0'))
+        assert diff_fields(before, obj, ['price_per_walk']) == {}
+
     def test_decimal_and_date_values_survive_a_real_commit(self, app):
         """db.JSON serializes via stdlib json.dumps, which raises TypeError on
         Decimal and date/datetime. PricingConfig's price fields are Numeric

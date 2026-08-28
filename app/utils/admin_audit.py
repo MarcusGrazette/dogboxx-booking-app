@@ -11,6 +11,15 @@ BookingStatusChange, `summary` must be a fully-rendered string built *before*
 any delete the caller is about to perform — the activity feed reads `summary`
 directly rather than reconstructing it from live joins, so the row still
 renders correctly after the underlying entity is gone.
+
+**`summary` must never contain a REDACTED_FIELDS value.** Redaction only
+covers the `changes` column — `summary` is caller-supplied free text with no
+guardrail, so `record_admin_action` cannot enforce this for you. Name the
+*entity*, never the redacted value: "Updated contact details for Jane Smith"
+is fine; "Updated address to 12 Main St" is not — it defeats the entire point
+of redacting `changes` by putting the same value in a second unredacted
+column. When in doubt, phrase the summary the same way regardless of which
+field changed.
 """
 
 from decimal import Decimal
@@ -58,6 +67,17 @@ def diff_fields(before: dict, obj, fields: list) -> dict:
     Values are passed through _jsonify_value. A field in REDACTED_FIELDS that
     changed is stored as ['(redacted)', '(redacted)'] rather than its real
     values — the key still appears so the diff isn't silently incomplete.
+
+    Contract: `before[field]` must hold the same native Python type `obj`'s
+    attribute holds (the standard call shape is
+    `before = {f: getattr(obj, f) for f in fields}` captured immediately
+    before mutating `obj`). The old/new comparison is done on native values,
+    not on the _jsonify_value-normalized form — deliberately, since
+    normalizing first would introduce its own false positive (e.g.
+    Decimal('12.0') and Decimal('12.00') are equal but stringify differently).
+    A `before` snapshot rebuilt from a serialized source (a to_dict(), a raw
+    form dict) instead of a live getattr() will silently report false-positive
+    diffs on any Decimal/date field.
     """
     changes = {}
     for field in fields:
