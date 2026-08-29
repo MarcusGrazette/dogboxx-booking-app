@@ -57,6 +57,22 @@
             </div>
           </div>
 
+          {# Hide-my-activity toggle (client-side) — on by default. The point of
+             the feed is to catch what OTHER people did; an admin already knows
+             their own actions. Filters on actor_id, not actor_type=='admin', so
+             a covering admin's changes stay visible to the primary admin and
+             vice versa (occasionally a walker is granted admin while the owner
+             is away). #}
+          <div class="col-auto">
+            <div class="form-check form-switch d-flex align-items-center gap-2 mb-0">
+              <input class="form-check-input" type="checkbox" role="switch"
+                     id="hide-mine-toggle" checked>
+              <label class="form-check-label text-muted small mb-0 text-nowrap" for="hide-mine-toggle">
+                Hide my activity
+              </label>
+            </div>
+          </div>
+
           {# Event count #}
           <div class="col-auto ms-auto">
             <span class="text-muted small">
@@ -118,6 +134,7 @@
               {# ── Cluster header (collapsible) ────────────────────────────── #}
               <tr class="activity-row cluster-header align-middle"
                   data-actor="{{ event.actor_type }}"
+                  data-actor-id="{{ event.actor_id }}"
                   data-activity="{{ event.activity_type }}"
                   data-cluster-id="{{ event.batch_id }}">
                 <td class="ps-3 align-middle">
@@ -185,6 +202,7 @@
               {# ── Plain event row ─────────────────────────────────────────── #}
               <tr class="activity-row align-middle"
                   data-actor="{{ event.actor_type }}"
+                  data-actor-id="{{ event.actor_id }}"
                   data-activity="{{ event.activity_type }}">
                 <td class="ps-3 align-middle">
                   <div class="fw-semibold small text-body">{{ (event.ts | local_time).strftime('%a %-d %b') if event.ts else '' }}</div>
@@ -267,10 +285,12 @@
 <script nonce="{{ csp_nonce }}">
 (function () {
   const PAGE_SIZE = 50;
+  const CURRENT_USER_ID = "{{ current_user.id }}";
 
-  const actorSel   = document.getElementById('actor-filter');
-  const typeSel    = document.getElementById('type-filter');
-  const rows       = Array.from(document.querySelectorAll('tr.activity-row'));
+  const actorSel      = document.getElementById('actor-filter');
+  const typeSel       = document.getElementById('type-filter');
+  const hideMineCheck = document.getElementById('hide-mine-toggle');
+  const rows          = Array.from(document.querySelectorAll('tr.activity-row'));
   const rangeEl    = document.getElementById('visible-range');
   const totalEl    = document.getElementById('visible-total');
   const noResults  = document.getElementById('no-results-row');
@@ -303,11 +323,13 @@
   });
 
   function filteredRows() {
-    const actor = actorSel ? actorSel.value : 'all';
-    const type  = typeSel  ? typeSel.value  : 'all';
+    const actor    = actorSel ? actorSel.value : 'all';
+    const type     = typeSel  ? typeSel.value  : 'all';
+    const hideMine = hideMineCheck ? hideMineCheck.checked : false;
     return rows.filter(function (r) {
       return (actor === 'all' || r.dataset.actor === actor)
-          && (type  === 'all' || r.dataset.activity === type);
+          && (type  === 'all' || r.dataset.activity === type)
+          && (!hideMine || r.dataset.actorId !== CURRENT_USER_ID);
     });
   }
 
@@ -371,8 +393,9 @@
     render();
   }
 
-  if (actorSel) actorSel.addEventListener('change', onFilterChange);
-  if (typeSel)  typeSel.addEventListener('change',  onFilterChange);
+  if (actorSel)      actorSel.addEventListener('change', onFilterChange);
+  if (typeSel)       typeSel.addEventListener('change',  onFilterChange);
+  if (hideMineCheck) hideMineCheck.addEventListener('change', onFilterChange);
 
   function go(delta) {
     currentPage += delta;
