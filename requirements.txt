@@ -40,7 +40,6 @@ psycopg2-binary==2.9.11
 redis>=3.0
 py-vapid==1.9.4
 python-dotenv==1.2.2
-pytz==2025.2
 pywebpush==2.3.0
 requests==2.33.0
 rich==13.9.4
