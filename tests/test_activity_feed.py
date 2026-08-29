@@ -553,6 +553,61 @@ class TestFeedAdminFilter:
         assert b'Client' in resp.data
 
 
+class TestHideMyActivityToggle:
+    """The client-side 'Hide my activity' toggle filters on actor_id, not
+    actor_type=='admin' — so a covering admin's rows stay visible to the
+    logged-in admin and vice versa. Server side, this only needs each row to
+    carry its actor's id; the actual hide/show logic is JS-only, so these
+    tests just assert the HTML the JS depends on is present and correct."""
+
+    def test_row_carries_actor_id_and_toggle_defaults_checked(self, app, client):
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_user('hma_admin@test.com', role='walker', is_admin=True)
+            client_u = _make_user('hma_client@test.com', role='client')
+            db.session.add(Client(user_id=client_u.id, onboarding_completed=True))
+            st = _make_service()
+            dog = _make_dog(client_u.id)
+            booking = Booking(user_id=client_u.id, dog_id=dog.id,
+                              service_type_id=st.id, date=monday,
+                              slot='Morning', status='requested')
+            db.session.add(booking)
+            db.session.flush()
+            record_booking_created(booking, actor_id=admin.id)
+            db.session.commit()
+            admin_id = admin.id
+
+        _login(client, 'hma_admin@test.com')
+        resp = _get_feed(client, _this_month())
+        assert resp.status_code == 200
+        body = resp.data.decode()
+        assert f'data-actor-id="{admin_id}"'.encode() in resp.data
+        # Checkbox exists and is checked by default (on load, before any JS runs)
+        assert 'id="hide-mine-toggle"' in body
+        toggle_tag = body[body.index('id="hide-mine-toggle"') - 100:body.index('id="hide-mine-toggle"') + 50]
+        assert 'checked' in toggle_tag
+
+    def test_two_actors_get_distinct_actor_ids(self, app, client):
+        """A row from the viewing admin and a row from another admin must
+        carry different data-actor-id values — otherwise the toggle can't
+        distinguish 'my activity' from 'a covering admin's activity'."""
+        monday = _next_weekday(0)
+        with app.app_context():
+            viewing_admin = _make_user('hma_viewer@test.com', role='walker', is_admin=True)
+            covering_admin = _make_user('hma_cover@test.com', role='walker', is_admin=True)
+            client_u = _make_user('hma_client2@test.com', role='client')
+            db.session.add(Client(user_id=client_u.id, onboarding_completed=True))
+            db.session.add(DailyMessage(date=monday, content='Covering admin note',
+                                        created_by_id=covering_admin.id))
+            db.session.commit()
+            covering_id = covering_admin.id
+
+        _login(client, 'hma_viewer@test.com')
+        resp = _get_feed(client, _this_month())
+        assert resp.status_code == 200
+        assert f'data-actor-id="{covering_id}"'.encode() in resp.data
+
+
 # ---------------------------------------------------------------------------
 # 4. Badge = to_status of the BSC row
 # ---------------------------------------------------------------------------
