@@ -3,6 +3,22 @@
 {% block page_title %}Activity Feed{% endblock %}
 {% block page_subtitle %}Bookings, availability, closures and broadcasts{% endblock %}
 
+{% block head_extra %}
+<style>
+  /* Pre-hide the current admin's own rows so the initial paint already
+     matches "Hide my activity"'s default-checked state — avoids a flash of
+     the full unfiltered table before the bottom-of-body script runs and
+     applies the same filter via JS. Placed in <head> (render-blocking)
+     rather than alongside the rest of this page's <style> block at the
+     bottom of <body>, where it would be too late to prevent the flash it's
+     meant to avoid. render()'s inline `style.display` (app/templates/
+     admin_activity.html script block) takes precedence over this
+     stylesheet rule by specificity, so unchecking the toggle still reveals
+     these rows correctly with no JS changes needed. */
+  tr.activity-row[data-actor-id="{{ current_user.id }}"] { display: none; }
+</style>
+{% endblock %}
+
 {% block main %}
 <div class="row">
   <div class="col-12">
