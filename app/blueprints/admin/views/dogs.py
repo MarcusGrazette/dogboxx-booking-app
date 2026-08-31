@@ -17,6 +17,15 @@ from app.capacity import MAX_RECURRING_SERIES
 from app.utils.invoicing import is_late_cancellation
 from app.utils.sanitize import clean_rich_text_or_none
 from app.utils.uploads import process_dog_photo
+from app.utils.admin_audit import record_admin_action, diff_fields
+
+# Mirrors clients.py's DOG_AUDIT_FIELDS — see app/utils/admin_audit.py for
+# REDACTED_FIELDS (pickup_instructions never stores real old/new values,
+# only that it changed).
+DOG_AUDIT_FIELDS = [
+    'name', 'gender', 'breed', 'allergies', 'date_of_birth',
+    'whatsapp_group_url', 'pickup_instructions', 'hold_key',
+]
 
 
 def _parse_day_filter(raw_values):
@@ -106,6 +115,8 @@ def update_dog(dog_id):
         except ValueError:
             return jsonify(success=False, message="Invalid date of birth"), 400
 
+    before = {f: getattr(dog, f) for f in DOG_AUDIT_FIELDS}
+
     dog.name = name
     dog.gender = gender or dog.gender
     dog.breed = (data.get('breed') or '').strip()
@@ -114,6 +125,13 @@ def update_dog(dog_id):
     dog.pickup_instructions = clean_rich_text_or_none(data.get('pickup_instructions'))
     dog.whatsapp_group_url = (data.get('whatsapp_group_url') or '').strip() or None
     dog.hold_key = bool(data.get('hold_key'))
+
+    changes = diff_fields(before, dog, DOG_AUDIT_FIELDS)
+    if changes:
+        record_admin_action(
+            'dog', dog.id, 'updated', actor_id=current_user.id,
+            summary=f"Updated details for {dog.name}", changes=changes,
+        )
 
     try:
         db.session.commit()
@@ -143,7 +161,13 @@ def upload_dog_pickup_photo(dog_id):
         if not filename:
             return jsonify(success=False, message="Empty file"), 400
 
+        old_filename = dog.pickup_notes_photo
         dog.pickup_notes_photo = filename
+        record_admin_action(
+            'dog', dog.id, 'updated', actor_id=current_user.id,
+            summary=f"Updated pickup photo for {dog.name}",
+            changes={'pickup_notes_photo': [old_filename, filename]},
+        )
         db.session.commit()
 
         url = url_for('static', filename=f'uploads/pickup_notes/{filename}')
