@@ -11,10 +11,11 @@
      applies the same filter via JS. Placed in <head> (render-blocking)
      rather than alongside the rest of this page's <style> block at the
      bottom of <body>, where it would be too late to prevent the flash it's
-     meant to avoid. render()'s inline `style.display` (app/templates/
-     admin_activity.html script block) takes precedence over this
-     stylesheet rule by specificity, so unchecking the toggle still reveals
-     these rows correctly with no JS changes needed. */
+     meant to avoid. render() (script block below) must set an explicit
+     inline `style.display` value (e.g. 'table-row') to reveal a row that
+     matches this selector — setting it to '' clears the inline declaration
+     rather than overriding it, which falls through to this stylesheet rule
+     and leaves the row stuck hidden regardless of the toggle's JS state. */
   tr.activity-row[data-actor-id="{{ current_user.id }}"] { display: none; }
 </style>
 {% endblock %}
@@ -367,7 +368,12 @@
 
     const start = (currentPage - 1) * PAGE_SIZE;
     const end   = start + PAGE_SIZE;
-    filtered.slice(start, end).forEach(function (r) { r.style.display = ''; });
+    // 'table-row', not '' — setting style.display to '' clears the inline
+    // declaration rather than overriding the cascade, so it falls through to
+    // the head_extra CSS rule that pre-hides the current admin's own rows
+    // (avoids the hide-mine flash on load). An explicit inline value is
+    // required to actually win over that stylesheet rule.
+    filtered.slice(start, end).forEach(function (r) { r.style.display = 'table-row'; });
 
     // Update "Showing X–Y of Z events" indicator
     if (totalEl) totalEl.textContent = filtered.length;
