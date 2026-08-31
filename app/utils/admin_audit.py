@@ -38,6 +38,22 @@ REDACTED_FIELDS = {
     'pickup_instructions',
 }
 
+# Quill-authored HTML fields — compared by stripped plain-text content, not
+# raw string equality. Every write path that round-trips one of these through
+# a Quill editor (edit_client, update_dog) resubmits it on every save even
+# when the field itself wasn't touched, and Quill's HTML re-serialization
+# isn't guaranteed byte-identical to what was stored (attribute order,
+# quoting, inter-tag whitespace) even with zero real edits — confirmed by
+# reproducing against a live dog row: sanitize_rich_text() alone is
+# idempotent, so the drift is introduced before the sanitizer ever sees it.
+# Comparing raw HTML here produces a false-positive "changed" diff on nearly
+# every save that includes this field, regardless of whether its content
+# actually changed. A pure-formatting-only edit (e.g. bolding text with no
+# character change) will no longer register as a change — acceptable since
+# every current member is also in REDACTED_FIELDS, so the only signal that
+# ever reaches the feed is "did the content change," never the markup.
+RICH_TEXT_FIELDS = {'pickup_instructions'}
+
 
 def record_admin_action(entity_type, entity_id, action, *, actor_id, summary, changes=None):
     """Queue an AdminActionLog row. Does not commit."""
@@ -58,6 +74,19 @@ def _jsonify_value(v):
     if isinstance(v, (datetime, date)):
         return v.isoformat()
     return v
+
+
+def _unchanged(field, old, new):
+    """True if `old`/`new` should be treated as the same value for `field`.
+    Rich-text fields compare by stripped plain-text content (see
+    RICH_TEXT_FIELDS) rather than raw equality; everything else compares
+    natively."""
+    if field in RICH_TEXT_FIELDS:
+        if old == new:
+            return True
+        from app.utils.sanitize import rich_text_to_plain
+        return rich_text_to_plain(old) == rich_text_to_plain(new)
+    return old == new
 
 
 def diff_fields(before: dict, obj, fields: list) -> dict:
@@ -83,7 +112,7 @@ def diff_fields(before: dict, obj, fields: list) -> dict:
     for field in fields:
         old = before.get(field)
         new = getattr(obj, field)
-        if old == new:
+        if _unchanged(field, old, new):
             continue
         if field in REDACTED_FIELDS:
             changes[field] = ['(redacted)', '(redacted)']
