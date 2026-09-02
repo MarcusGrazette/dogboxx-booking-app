@@ -3,6 +3,23 @@
 {% block page_title %}Activity Feed{% endblock %}
 {% block page_subtitle %}Bookings, availability, closures and broadcasts{% endblock %}
 
+{% block head_extra %}
+<style>
+  /* Pre-hide the current admin's own rows so the initial paint already
+     matches "Hide my activity"'s default-checked state — avoids a flash of
+     the full unfiltered table before the bottom-of-body script runs and
+     applies the same filter via JS. Placed in <head> (render-blocking)
+     rather than alongside the rest of this page's <style> block at the
+     bottom of <body>, where it would be too late to prevent the flash it's
+     meant to avoid. render() (script block below) must set an explicit
+     inline `style.display` value (e.g. 'table-row') to reveal a row that
+     matches this selector — setting it to '' clears the inline declaration
+     rather than overriding it, which falls through to this stylesheet rule
+     and leaves the row stuck hidden regardless of the toggle's JS state. */
+  tr.activity-row[data-actor-id="{{ current_user.id }}"] { display: none; }
+</style>
+{% endblock %}
+
 {% block main %}
 <div class="row">
   <div class="col-12">
@@ -351,7 +368,12 @@
 
     const start = (currentPage - 1) * PAGE_SIZE;
     const end   = start + PAGE_SIZE;
-    filtered.slice(start, end).forEach(function (r) { r.style.display = ''; });
+    // 'table-row', not '' — setting style.display to '' clears the inline
+    // declaration rather than overriding the cascade, so it falls through to
+    // the head_extra CSS rule that pre-hides the current admin's own rows
+    // (avoids the hide-mine flash on load). An explicit inline value is
+    // required to actually win over that stylesheet rule.
+    filtered.slice(start, end).forEach(function (r) { r.style.display = 'table-row'; });
 
     // Update "Showing X–Y of Z events" indicator
     if (totalEl) totalEl.textContent = filtered.length;
