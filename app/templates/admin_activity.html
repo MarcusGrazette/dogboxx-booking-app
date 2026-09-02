@@ -3,6 +3,23 @@
 {% block page_title %}Activity Feed{% endblock %}
 {% block page_subtitle %}Bookings, availability, closures and broadcasts{% endblock %}
 
+{% block head_extra %}
+<style>
+  /* Pre-hide the current admin's own rows so the initial paint already
+     matches "Hide my activity"'s default-checked state — avoids a flash of
+     the full unfiltered table before the bottom-of-body script runs and
+     applies the same filter via JS. Placed in <head> (render-blocking)
+     rather than alongside the rest of this page's <style> block at the
+     bottom of <body>, where it would be too late to prevent the flash it's
+     meant to avoid. render() (script block below) must set an explicit
+     inline `style.display` value (e.g. 'table-row') to reveal a row that
+     matches this selector — setting it to '' clears the inline declaration
+     rather than overriding it, which falls through to this stylesheet rule
+     and leaves the row stuck hidden regardless of the toggle's JS state. */
+  tr.activity-row[data-actor-id="{{ current_user.id }}"] { display: none; }
+</style>
+{% endblock %}
+
 {% block main %}
 <div class="row">
   <div class="col-12">
@@ -54,6 +71,22 @@
                 <option value="broadcast">Broadcasts</option>
                 <option value="admin">Admin changes</option>
               </select>
+            </div>
+          </div>
+
+          {# Hide-my-activity toggle (client-side) — on by default. The point of
+             the feed is to catch what OTHER people did; an admin already knows
+             their own actions. Filters on actor_id, not actor_type=='admin', so
+             a covering admin's changes stay visible to the primary admin and
+             vice versa (occasionally a walker is granted admin while the owner
+             is away). #}
+          <div class="col-auto">
+            <div class="form-check form-switch d-flex align-items-center gap-2 mb-0">
+              <input class="form-check-input" type="checkbox" role="switch"
+                     id="hide-mine-toggle" checked>
+              <label class="form-check-label text-muted small mb-0 text-nowrap" for="hide-mine-toggle">
+                Hide my activity
+              </label>
             </div>
           </div>
 
@@ -118,6 +151,7 @@
               {# ── Cluster header (collapsible) ────────────────────────────── #}
               <tr class="activity-row cluster-header align-middle"
                   data-actor="{{ event.actor_type }}"
+                  data-actor-id="{{ event.actor_id }}"
                   data-activity="{{ event.activity_type }}"
                   data-cluster-id="{{ event.batch_id }}">
                 <td class="ps-3 align-middle">
@@ -185,6 +219,7 @@
               {# ── Plain event row ─────────────────────────────────────────── #}
               <tr class="activity-row align-middle"
                   data-actor="{{ event.actor_type }}"
+                  data-actor-id="{{ event.actor_id }}"
                   data-activity="{{ event.activity_type }}">
                 <td class="ps-3 align-middle">
                   <div class="fw-semibold small text-body">{{ (event.ts | local_time).strftime('%a %-d %b') if event.ts else '' }}</div>
@@ -267,10 +302,12 @@
 <script nonce="{{ csp_nonce }}">
 (function () {
   const PAGE_SIZE = 50;
+  const CURRENT_USER_ID = "{{ current_user.id }}";
 
-  const actorSel   = document.getElementById('actor-filter');
-  const typeSel    = document.getElementById('type-filter');
-  const rows       = Array.from(document.querySelectorAll('tr.activity-row'));
+  const actorSel      = document.getElementById('actor-filter');
+  const typeSel       = document.getElementById('type-filter');
+  const hideMineCheck = document.getElementById('hide-mine-toggle');
+  const rows          = Array.from(document.querySelectorAll('tr.activity-row'));
   const rangeEl    = document.getElementById('visible-range');
   const totalEl    = document.getElementById('visible-total');
   const noResults  = document.getElementById('no-results-row');
@@ -303,11 +340,13 @@
   });
 
   function filteredRows() {
-    const actor = actorSel ? actorSel.value : 'all';
-    const type  = typeSel  ? typeSel.value  : 'all';
+    const actor    = actorSel ? actorSel.value : 'all';
+    const type     = typeSel  ? typeSel.value  : 'all';
+    const hideMine = hideMineCheck ? hideMineCheck.checked : false;
     return rows.filter(function (r) {
       return (actor === 'all' || r.dataset.actor === actor)
-          && (type  === 'all' || r.dataset.activity === type);
+          && (type  === 'all' || r.dataset.activity === type)
+          && (!hideMine || r.dataset.actorId !== CURRENT_USER_ID);
     });
   }
 
@@ -329,7 +368,12 @@
 
     const start = (currentPage - 1) * PAGE_SIZE;
     const end   = start + PAGE_SIZE;
-    filtered.slice(start, end).forEach(function (r) { r.style.display = ''; });
+    // 'table-row', not '' — setting style.display to '' clears the inline
+    // declaration rather than overriding the cascade, so it falls through to
+    // the head_extra CSS rule that pre-hides the current admin's own rows
+    // (avoids the hide-mine flash on load). An explicit inline value is
+    // required to actually win over that stylesheet rule.
+    filtered.slice(start, end).forEach(function (r) { r.style.display = 'table-row'; });
 
     // Update "Showing X–Y of Z events" indicator
     if (totalEl) totalEl.textContent = filtered.length;
@@ -371,8 +415,9 @@
     render();
   }
 
-  if (actorSel) actorSel.addEventListener('change', onFilterChange);
-  if (typeSel)  typeSel.addEventListener('change',  onFilterChange);
+  if (actorSel)      actorSel.addEventListener('change', onFilterChange);
+  if (typeSel)       typeSel.addEventListener('change',  onFilterChange);
+  if (hideMineCheck) hideMineCheck.addEventListener('change', onFilterChange);
 
   function go(delta) {
     currentPage += delta;

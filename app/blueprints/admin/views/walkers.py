@@ -15,6 +15,7 @@ from app import db
 from app.forms import WalkerCreateForm, WalkerScheduleForm
 from app.utils.notifications import NotificationBatch
 from app.utils.availability_reset import reset_bookings_for_lost_availability
+from app.utils.admin_audit import record_admin_action, diff_fields
 from werkzeug.security import generate_password_hash
 import secrets
 
@@ -52,7 +53,15 @@ def toggle_walker_admin(walker_user_id):
     if target.is_super_admin:
         return jsonify(success=False, message="Cannot change admin access for the business owner."), 400
 
+    before = {'is_admin': target.is_admin}
     target.is_admin = not target.is_admin
+    changes = diff_fields(before, target, ['is_admin'])
+    if changes:
+        verb = "Granted" if target.is_admin else "Revoked"
+        record_admin_action(
+            'walker', target.id, 'updated', actor_id=current_user.id,
+            summary=f"{verb} admin access for {target.full_name}", changes=changes,
+        )
     db.session.commit()
 
     return jsonify(success=True, is_admin=target.is_admin)
@@ -66,7 +75,15 @@ def toggle_walker_drop_ins(walker_user_id):
     target = User.query.filter_by(id=walker_user_id, role='walker').first_or_404()
     if not target.walker:
         return jsonify(success=False, message="No walker record found."), 400
+    before = {'does_drop_ins': target.walker.does_drop_ins}
     target.walker.does_drop_ins = not target.walker.does_drop_ins
+    changes = diff_fields(before, target.walker, ['does_drop_ins'])
+    if changes:
+        verb = "Enabled" if target.walker.does_drop_ins else "Disabled"
+        record_admin_action(
+            'walker', target.id, 'updated', actor_id=current_user.id,
+            summary=f"{verb} drop-in visits for {target.full_name}", changes=changes,
+        )
     db.session.commit()
     return jsonify(success=True, does_drop_ins=target.walker.does_drop_ins)
 
@@ -79,7 +96,13 @@ def toggle_walker_client(walker_user_id):
     user = User.query.filter_by(id=walker_user_id, role='walker').first_or_404()
 
     if user.client:
+        # Capture the display name before the delete — record_admin_action's
+        # summary must be fully rendered now, same as revoke_dog_access.
         db.session.delete(user.client)
+        record_admin_action(
+            'walker', user.id, 'removed', actor_id=current_user.id,
+            summary=f"Removed client booking access for {user.full_name}",
+        )
         db.session.commit()
         return jsonify(success=True, has_client=False)
 
@@ -89,6 +112,10 @@ def toggle_walker_client(walker_user_id):
         onboarding_completed_at=datetime.now(timezone.utc),
     )
     db.session.add(client)
+    record_admin_action(
+        'walker', user.id, 'created', actor_id=current_user.id,
+        summary=f"Enabled client booking access for {user.full_name}",
+    )
     db.session.commit()
     logging.info(f"Admin {current_user.id} added client record for walker {user.id}")
     return jsonify(success=True, has_client=True)
@@ -131,12 +158,29 @@ def remove_walker_role(walker_user_id):
     )
     client_batch.flush()
 
-    # Deactivate schedule so they no longer appear on future capacity
-    WalkerSchedule.query.filter_by(walker_id=user.walker.id).update(
-        {'active': False}, synchronize_session=False
-    )
+    # Loop rather than a bulk .update() — schedule rows are ≤14 per walker,
+    # and looping lets a future per-row audit hook see each one, mirroring why
+    # bulk_transition replaced raw bulk updates for bookings. One combined
+    # summary row below covers the role change + schedule count + booking
+    # resets rather than logging each row (the resets already get their own
+    # BookingStatusChange/feed rows via reset_bookings_for_lost_availability).
+    active_schedules = WalkerSchedule.query.filter_by(walker_id=user.walker.id, active=True).all()
+    sched_count = len(active_schedules)
+    for s in active_schedules:
+        s.active = False
 
+    before = {'role': user.role}
     user.role = 'client'
+    changes = diff_fields(before, user, ['role'])
+    record_admin_action(
+        'walker', user.id, 'updated', actor_id=current_user.id,
+        summary=(
+            f"Removed walker role for {user.full_name} "
+            f"({sched_count} schedule slot{'s' if sched_count != 1 else ''} cleared, "
+            f"{len(affected)} booking{'s' if len(affected) != 1 else ''} reset)"
+        ),
+        changes=changes,
+    )
     db.session.commit()
     logging.info(f"Admin {current_user.id} removed walker role for user {user.id} (kept client record)")
     return jsonify(success=True)
@@ -177,6 +221,10 @@ def new_walker():
             walker = Walker(user_id=user.id)
             db.session.add(walker)
 
+            record_admin_action(
+                'walker', user.id, 'created', actor_id=current_user.id,
+                summary=f"Added walker {user.full_name}",
+            )
             db.session.commit()
 
             logging.info(f"Admin {current_user.id} created walker account for {user.email}")
@@ -209,6 +257,7 @@ def deactivate_walker(walker_id):
         if user.id == current_user.id:
             return jsonify(success=False, message="You cannot deactivate your own account"), 400
 
+        before = {'active': user.active}
         user.active = False
 
         # Return future confirmed bookings to pending so they stay visible on
@@ -228,11 +277,24 @@ def deactivate_walker(walker_id):
         )
         client_batch.flush()
 
-        # Deactivate schedule rows so the walker no longer appears on future board dates
-        WalkerSchedule.query.filter_by(walker_id=user.walker.id).update(
-            {'active': False}, synchronize_session=False
-        )
+        # Loop rather than a bulk .update() — schedule rows are ≤14 per walker
+        # (same rationale as remove_walker_role). One combined summary row
+        # below covers the active-status change + schedule count.
+        active_schedules = WalkerSchedule.query.filter_by(walker_id=user.walker.id, active=True).all()
+        sched_count = len(active_schedules)
+        for s in active_schedules:
+            s.active = False
 
+        changes = diff_fields(before, user, ['active'])
+        if changes or sched_count:
+            record_admin_action(
+                'walker', user.id, 'updated', actor_id=current_user.id,
+                summary=(
+                    f"Deactivated walker {user.full_name} "
+                    f"({sched_count} schedule slot{'s' if sched_count != 1 else ''} cleared)"
+                ),
+                changes=changes,
+            )
         db.session.commit()
 
         logging.info(f"Admin {current_user.id} deactivated walker {user.id}")
@@ -254,10 +316,26 @@ def activate_walker(walker_id):
         if not user:
             return jsonify(success=False, message="Walker not found"), 404
 
+        before = {'active': user.active}
         user.active = True
-        WalkerSchedule.query.filter_by(walker_id=user.walker.id).update(
-            {'active': True}, synchronize_session=False
-        )
+
+        # Loop rather than a bulk .update() — see deactivate_walker for the
+        # rationale (mirrors remove_walker_role).
+        inactive_schedules = WalkerSchedule.query.filter_by(walker_id=user.walker.id, active=False).all()
+        sched_count = len(inactive_schedules)
+        for s in inactive_schedules:
+            s.active = True
+
+        changes = diff_fields(before, user, ['active'])
+        if changes or sched_count:
+            record_admin_action(
+                'walker', user.id, 'updated', actor_id=current_user.id,
+                summary=(
+                    f"Activated walker {user.full_name} "
+                    f"({sched_count} schedule slot{'s' if sched_count != 1 else ''} restored)"
+                ),
+                changes=changes,
+            )
         db.session.commit()
 
         logging.info(f"Admin {current_user.id} activated walker {user.id}")

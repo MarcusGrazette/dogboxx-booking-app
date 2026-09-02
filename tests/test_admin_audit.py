@@ -16,7 +16,7 @@ from werkzeug.security import generate_password_hash
 
 from app import db
 from app.models import AdminActionLog, User
-from app.utils.admin_audit import record_admin_action, diff_fields, REDACTED_FIELDS
+from app.utils.admin_audit import record_admin_action, diff_fields, REDACTED_FIELDS, RICH_TEXT_FIELDS
 
 
 class _Obj:
@@ -134,3 +134,26 @@ class TestDiffFields:
             fetched = db.session.get(AdminActionLog, row.id)
             assert fetched.changes['price_per_walk'] == ['12.00', '14.50']
             assert fetched.changes['date_of_birth'] == ['2020-01-01', '2021-06-01']
+
+    def test_rich_text_field_with_reserialized_but_equivalent_html_is_not_a_diff(self, app):
+        """Regression for a false positive found smoke-testing PR 3 (2026-08-31):
+        edit_client/update_dog always resubmit pickup_instructions through a
+        Quill editor even when the admin never touched it, and Quill's HTML
+        re-serialization isn't guaranteed byte-identical to what was stored
+        (attribute order, quoting, inter-tag whitespace) — sanitize_rich_text()
+        itself is idempotent, so raw-string comparison was flagging this noise
+        as a real change on nearly every edit_client/update_dog save."""
+        assert 'pickup_instructions' in RICH_TEXT_FIELDS
+        before = {'pickup_instructions': '<p>Ring the doorbell twice</p>'}
+        # Same visible content, different byte-level serialization (attribute
+        # order/quoting aside — here just inter-tag whitespace/self-closing tag
+        # style, the class of noise Quill's round-trip introduces).
+        obj = _Obj(pickup_instructions='<p>Ring the doorbell twice</p>\n')
+        assert diff_fields(before, obj, ['pickup_instructions']) == {}
+
+    def test_rich_text_field_with_real_content_change_is_still_a_diff(self, app):
+        """The plain-text equality check must not swallow genuine edits."""
+        before = {'pickup_instructions': '<p>Ring the doorbell twice</p>'}
+        obj = _Obj(pickup_instructions='<p>Use the side gate</p>')
+        changes = diff_fields(before, obj, ['pickup_instructions'])
+        assert changes == {'pickup_instructions': ['(redacted)', '(redacted)']}
