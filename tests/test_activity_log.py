@@ -1,4 +1,4 @@
-"""Foundation PR — app.utils.admin_audit chokepoint.
+"""Foundation PR — app.utils.activity_log chokepoint.
 
 Unit tests of record_admin_action / diff_fields in isolation, mirroring
 TestTransitionHelpers in test_booking_status_log.py. Route-wiring integration
@@ -15,8 +15,8 @@ import pytest
 from werkzeug.security import generate_password_hash
 
 from app import db
-from app.models import AdminActionLog, User
-from app.utils.admin_audit import record_admin_action, diff_fields, REDACTED_FIELDS, RICH_TEXT_FIELDS
+from app.models import ActivityLog, User
+from app.utils.activity_log import record_admin_action, diff_fields, REDACTED_FIELDS, RICH_TEXT_FIELDS
 
 
 class _Obj:
@@ -131,7 +131,7 @@ class TestDiffFields:
             )
             db.session.commit()  # would raise TypeError pre-fix
 
-            fetched = db.session.get(AdminActionLog, row.id)
+            fetched = db.session.get(ActivityLog, row.id)
             assert fetched.changes['price_per_walk'] == ['12.00', '14.50']
             assert fetched.changes['date_of_birth'] == ['2020-01-01', '2021-06-01']
 

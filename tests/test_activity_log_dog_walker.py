@@ -1,11 +1,11 @@
 """
 PR 3/5 of the activity-feed expansion — dog + walker (non-schedule) CRUD call
 sites in app/blueprints/admin/views/dogs.py and .../walkers.py routed through
-app/utils/admin_audit.py::record_admin_action.
+app/utils/activity_log.py::record_admin_action.
 
 Route-level integration tests: hit the real route via the `client` fixture,
-then query AdminActionLog to assert one row landed with the expected
-entity_type/action/summary substring, mirroring tests/test_admin_client_audit.py
+then query ActivityLog to assert one row landed with the expected
+entity_type/action/summary substring, mirroring tests/test_activity_log_client.py
 (PR 2/5). One feed-rendering assertion covers the 'admin' bucket for this PR's
 call sites.
 """
@@ -16,10 +16,10 @@ from werkzeug.security import generate_password_hash
 from sqlalchemy import text
 
 from app import db
-from app.models import AdminActionLog, Client, Dog, DogOwner, User, Walker, WalkerSchedule
+from app.models import ActivityLog, Client, Dog, DogOwner, User, Walker, WalkerSchedule
 
 TRUNCATE_ORDER = [
-    'admin_action_logs', 'notifications', 'bookings', 'dog_owners', 'dogs',
+    'activity_logs', 'notifications', 'bookings', 'dog_owners', 'dogs',
     'walker_schedules', 'walkers', 'clients', 'users',
 ]
 
@@ -83,7 +83,7 @@ def _login(flask_client, email):
 
 
 def _last_log():
-    return AdminActionLog.query.order_by(AdminActionLog.id.desc()).first()
+    return ActivityLog.query.order_by(ActivityLog.id.desc()).first()
 
 
 class TestUpdateDog:
@@ -102,7 +102,7 @@ class TestUpdateDog:
         })
 
         with app.app_context():
-            row = AdminActionLog.query.filter_by(entity_type='dog', entity_id=dog_id).first()
+            row = ActivityLog.query.filter_by(entity_type='dog', entity_id=dog_id).first()
             assert row is not None
             assert row.action == 'updated'
             assert 'Max' in row.summary
@@ -122,7 +122,7 @@ class TestUpdateDog:
         })
 
         with app.app_context():
-            assert AdminActionLog.query.count() == 0
+            assert ActivityLog.query.count() == 0
 
     def test_pickup_instructions_change_is_redacted(self, app, client):
         with app.app_context():
@@ -139,7 +139,7 @@ class TestUpdateDog:
         })
 
         with app.app_context():
-            row = AdminActionLog.query.filter_by(entity_type='dog', entity_id=dog_id).first()
+            row = ActivityLog.query.filter_by(entity_type='dog', entity_id=dog_id).first()
             assert row is not None
             assert row.changes.get('pickup_instructions') == ['(redacted)', '(redacted)']
             assert '4821' not in row.summary
@@ -162,7 +162,7 @@ class TestUpdateDog:
         assert resp.status_code == 200, resp.data.decode()[:300]
 
         with app.app_context():
-            row = AdminActionLog.query.filter_by(entity_type='dog', entity_id=dog_id).first()
+            row = ActivityLog.query.filter_by(entity_type='dog', entity_id=dog_id).first()
             assert row is not None
             assert row.changes['pickup_notes_photo'][0] is None
             assert row.changes['pickup_notes_photo'][1] is not None
@@ -181,7 +181,7 @@ class TestToggleWalkerAdmin:
         client.post(f'/admin/walkers/{target_id}/toggle-admin')
 
         with app.app_context():
-            row = AdminActionLog.query.filter_by(entity_type='walker', entity_id=target_id).first()
+            row = ActivityLog.query.filter_by(entity_type='walker', entity_id=target_id).first()
             assert row is not None
             assert row.action == 'updated'
             assert 'Granted' in row.summary
@@ -201,7 +201,7 @@ class TestToggleWalkerDropIns:
         client.post(f'/admin/walkers/{target_id}/toggle-drop-ins')
 
         with app.app_context():
-            row = AdminActionLog.query.filter_by(entity_type='walker', entity_id=target_id).first()
+            row = ActivityLog.query.filter_by(entity_type='walker', entity_id=target_id).first()
             assert row is not None
             assert row.changes['does_drop_ins'] == [False, True]
 
@@ -219,7 +219,7 @@ class TestToggleWalkerClient:
         client.post(f'/admin/walkers/{target_id}/toggle-client')
 
         with app.app_context():
-            row = AdminActionLog.query.filter_by(entity_type='walker', entity_id=target_id).first()
+            row = ActivityLog.query.filter_by(entity_type='walker', entity_id=target_id).first()
             assert row is not None
             assert row.action == 'created'
             assert row.changes is None
@@ -237,7 +237,7 @@ class TestToggleWalkerClient:
         client.post(f'/admin/walkers/{target_id}/toggle-client')
 
         with app.app_context():
-            row = AdminActionLog.query.filter_by(entity_type='walker', entity_id=target_id).first()
+            row = ActivityLog.query.filter_by(entity_type='walker', entity_id=target_id).first()
             assert row is not None
             assert row.action == 'removed'
             assert 'Walt Walker' in row.summary
@@ -277,7 +277,7 @@ class TestDeactivateActivateWalker:
         client.post(f'/admin/walkers/{target_id}/deactivate')
 
         with app.app_context():
-            row = AdminActionLog.query.filter_by(entity_type='walker', entity_id=target_id).first()
+            row = ActivityLog.query.filter_by(entity_type='walker', entity_id=target_id).first()
             assert row is not None
             assert row.changes['active'] == [True, False]
             assert '3 schedule slots cleared' in row.summary
@@ -295,7 +295,7 @@ class TestDeactivateActivateWalker:
         client.post(f'/admin/walkers/{target_id}/activate')
 
         with app.app_context():
-            row = AdminActionLog.query.filter_by(entity_type='walker', entity_id=target_id).first()
+            row = ActivityLog.query.filter_by(entity_type='walker', entity_id=target_id).first()
             assert row is not None
             assert row.changes['active'] == [False, True]
             assert '2 schedule slots restored' in row.summary
@@ -316,7 +316,7 @@ class TestRemoveWalkerRole:
         client.post(f'/admin/walkers/{target_id}/remove-walker-role')
 
         with app.app_context():
-            row = AdminActionLog.query.filter_by(entity_type='walker', entity_id=target_id).first()
+            row = ActivityLog.query.filter_by(entity_type='walker', entity_id=target_id).first()
             assert row is not None
             assert row.action == 'updated'
             assert row.changes['role'] == ['walker', 'client']
