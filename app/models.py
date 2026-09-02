@@ -463,13 +463,16 @@ class BookingStatusChange(db.Model):
         }
 
 
-class AdminActionLog(db.Model):
+class ActivityLog(db.Model):
     """Audit trail for admin-initiated mutations outside the booking lifecycle
     (client/dog/walker CRUD, schedule edits, pricing changes, newsletter sends).
     Append-only — mirrors BookingStatusChange's chokepoint pattern. Unlike BSC,
     `summary` is fully rendered at write time so the feed row survives the
-    underlying entity being deleted later (see app/utils/admin_audit.py)."""
-    __tablename__ = 'admin_action_logs'
+    underlying entity being deleted later (see app/utils/activity_log.py).
+    Named ActivityLog (not AdminActionLog) since a future PR adds
+    client-authored rows (FEATURES.md #47) — renamed ahead of that so it's
+    only named once."""
+    __tablename__ = 'activity_logs'
 
     id = db.Column(db.Integer, primary_key=True)
     entity_type = db.Column(db.String(30), nullable=False, index=True)

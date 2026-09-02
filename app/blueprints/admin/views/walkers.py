@@ -15,7 +15,7 @@ from app import db
 from app.forms import WalkerCreateForm, WalkerScheduleForm
 from app.utils.notifications import NotificationBatch
 from app.utils.availability_reset import reset_bookings_for_lost_availability
-from app.utils.admin_audit import record_admin_action, diff_fields
+from app.utils.activity_log import record_admin_action, diff_fields
 from werkzeug.security import generate_password_hash
 import secrets
 
