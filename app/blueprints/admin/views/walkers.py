@@ -20,6 +20,43 @@ from werkzeug.security import generate_password_hash
 import secrets
 
 
+_SCHEDULE_DOW_ABBR = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+_SCHEDULE_SLOT_ABBR = {'Morning': 'AM', 'Afternoon': 'PM'}
+
+
+def _format_schedule_entries(entries):
+    return ', '.join(
+        f"{_SCHEDULE_DOW_ABBR[day]} {_SCHEDULE_SLOT_ABBR.get(slot, slot)}"
+        for day, slot in sorted(entries)
+    )
+
+
+def _log_schedule_change(walker, before_set, after_set, *, actor_id):
+    """Diff a walker's full-week schedule replace and queue one ActivityLog
+    row (entity_type='walker_schedule', entity_id=walker.id). Does not
+    commit — caller owns the transaction, same as every other
+    activity_log.py call site. No-op (no row queued) if nothing changed.
+
+    before_set/after_set are {(day_of_week, slot)} — the same shape
+    walker_schedule_json already builds for its booking-reset logic."""
+    added = after_set - before_set
+    removed = before_set - after_set
+    if not added and not removed:
+        return
+    segments = []
+    if added:
+        segments.append(f"added {_format_schedule_entries(added)}")
+    if removed:
+        segments.append(f"removed {_format_schedule_entries(removed)}")
+    text = '; '.join(segments)
+    text = text[0].upper() + text[1:]
+    record_admin_action(
+        'walker_schedule', walker.id, 'updated', actor_id=actor_id,
+        summary=f"{text} for {walker.user.full_name}",
+        changes={'added': sorted(added), 'removed': sorted(removed)},
+    )
+
+
 @admin_bp.route("/walkers")
 @login_required
 @admin_required
@@ -364,11 +401,18 @@ def walker_schedule(walker_id):
 
     if form.validate_on_submit():
         try:
+            # Snapshot before the delete, for the ActivityLog diff below.
+            before_set = {
+                (s.day_of_week, s.slot)
+                for s in WalkerSchedule.query.filter_by(walker_id=walker_id, active=True).all()
+            }
+
             # Clear existing schedules
             WalkerSchedule.query.filter_by(walker_id=walker_id).delete()
 
             # Add new schedules based on form data
             days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+            after_set = set()
             for day_index, day_name in enumerate(days):
                 day_form = getattr(form, day_name)
 
@@ -380,6 +424,7 @@ def walker_schedule(walker_id):
                         active=True
                     )
                     db.session.add(schedule)
+                    after_set.add((day_index, 'Morning'))
 
                 if day_form.afternoon.data:
                     schedule = WalkerSchedule(
@@ -389,6 +434,9 @@ def walker_schedule(walker_id):
                         active=True
                     )
                     db.session.add(schedule)
+                    after_set.add((day_index, 'Afternoon'))
+
+            _log_schedule_change(walker, before_set, after_set, actor_id=current_user.id)
 
             db.session.commit()
 
@@ -448,6 +496,8 @@ def walker_schedule_json(walker_id):
         }
         new_set = {(e['day'], e['slot']) for e in entries}
         removed = old_set - new_set
+
+        _log_schedule_change(walker, old_set, new_set, actor_id=current_user.id)
 
         WalkerSchedule.query.filter_by(walker_id=walker_id).delete()
         for e in entries:
