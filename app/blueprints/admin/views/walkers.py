@@ -386,16 +386,14 @@ def activate_walker(walker_id):
 
 @admin_bp.route("/walkers/<int:walker_id>/schedule", methods=["GET", "POST"])
 @login_required
+@admin_required
 def walker_schedule(walker_id):
-    """View/edit walker's weekly schedule"""
+    """View/edit walker's weekly schedule (admin only — walker_profile.html
+    tells walkers to contact the admin for schedule changes, and there is no
+    in-app link to this route for a walker; self-service editing here would
+    contradict that copy)."""
 # Get walker
     walker = Walker.query.options(joinedload(Walker.user)).get_or_404(walker_id)
-
-    # Admins can edit any walker's schedule; walkers can only edit their own
-    if not current_user.is_admin:
-        own_walker = Walker.query.filter_by(user_id=current_user.id).first()
-        if not own_walker or own_walker.id != walker_id:
-            return jsonify(success=False, message="Forbidden"), 403
 
     form = WalkerScheduleForm()
 

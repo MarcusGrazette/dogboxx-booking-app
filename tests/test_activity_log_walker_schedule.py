@@ -10,10 +10,12 @@ fully delete-and-reinsert a walker's WalkerSchedule rows on every save, with
 no audit columns on the table at all, so the diff has to be computed from a
 before/after set of (day_of_week, slot) pairs rather than a simple field
 diff. Covers: added/removed diff correctness, the no-op case (resubmitting
-an unchanged schedule logs nothing), actor attribution for both an admin and
-a walker editing their own schedule (this route allows self-service, unlike
-the rest of PR 2/3's call sites), and that the existing booking-reset
-behaviour on removed combos is unaffected by this change.
+an unchanged schedule logs nothing), that a walker cannot edit any walker's
+schedule including their own (walker_schedule was tightened to admin-only
+partway through this PR — see the 403 test below; walker_profile.html
+already told walkers to contact the admin for changes, so the route's prior
+self-service branch just contradicted its own UI), and that the existing
+booking-reset behaviour on removed combos is unaffected by this change.
 """
 import datetime
 
@@ -191,8 +193,7 @@ class TestScheduleJsonModal:
 
 
 class TestScheduleFormRoute:
-    """POST /admin/walkers/<walker_id>/schedule (classic form, admin OR
-    self-service walker)."""
+    """POST /admin/walkers/<walker_id>/schedule (classic form, admin only)."""
 
     def _post_form(self, flask_client, walker_id, entries):
         """entries: iterable of (day_name, slot) e.g. ('monday', 'morning')."""
@@ -219,23 +220,23 @@ class TestScheduleFormRoute:
             assert row.changes['added'] == [[1, 'Afternoon']]
             assert row.changes['removed'] == [[0, 'Morning']]
 
-    def test_walker_self_edit_attributes_to_walker(self, app, client):
-        """A walker editing their own schedule (no admin involved) must be
-        logged with their own id as actor — this route allows self-service,
-        unlike PR 2/3's admin-only call sites."""
+    def test_walker_cannot_edit_own_schedule(self, app, client):
+        """walker_schedule is admin-only — a walker (including editing their
+        own schedule) must be forbidden, matching walker_profile.html's copy
+        ("contact the admin for changes") and walker_schedule_json's existing
+        @admin_required. No ActivityLog row should be written either."""
         with app.app_context():
             walker_user, walker = _make_walker(schedule=[])
-            walker_user_id, walker_email = walker_user.id, walker_user.email
+            walker_email = walker_user.email
             walker_id = walker.id
 
         _login(client, walker_email)
-        self._post_form(client, walker_id, [('wednesday', 'morning')])
+        resp = self._post_form(client, walker_id, [('wednesday', 'morning')])
+        assert resp.status_code == 403
 
         with app.app_context():
-            row = ActivityLog.query.filter_by(entity_type='walker_schedule', entity_id=walker_id).first()
-            assert row is not None
-            assert row.actor_id == walker_user_id
-            assert row.changes == {'added': [[2, 'Morning']], 'removed': []}
+            assert ActivityLog.query.filter_by(entity_type='walker_schedule', entity_id=walker_id).count() == 0
+            assert WalkerSchedule.query.filter_by(walker_id=walker_id, active=True).count() == 0
 
     def test_resubmitting_same_schedule_logs_nothing(self, app, client):
         with app.app_context():
