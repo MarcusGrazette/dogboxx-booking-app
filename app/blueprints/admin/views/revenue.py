@@ -1,9 +1,10 @@
 from flask import request, render_template, redirect, flash, url_for, jsonify
-from flask_login import login_required
+from flask_login import login_required, current_user
 
 from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
 from app import db
+from app.utils.activity_log import record_admin_action, diff_fields
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -255,22 +256,39 @@ def update_pricing():
         flash(f"Invalid pricing data: {e}", "error")
         return redirect(url_for('admin.revenue'))
 
+    PRICING_FIELDS = [
+        'price_per_walk', 'double_slot_discount', 'weekly_discount', 'price_per_drop_in',
+    ]
+
     # Check for duplicate effective_from
     existing = PricingConfig.query.filter_by(effective_from=eff_from).first()
     if existing:
+        before = {f: getattr(existing, f) for f in PRICING_FIELDS}
         existing.price_per_walk       = price
         existing.double_slot_discount = discount
         existing.weekly_discount      = weekly_disc
         existing.price_per_drop_in    = drop_in_price
+        changes = diff_fields(before, existing, PRICING_FIELDS)
+        if changes:
+            record_admin_action(
+                'pricing', existing.id, 'updated', actor_id=current_user.id,
+                summary=f"Updated pricing tier effective from {eff_from}", changes=changes,
+            )
         flash(f"Pricing for {eff_from} updated.", "success")
     else:
-        db.session.add(PricingConfig(
+        new_tier = PricingConfig(
             price_per_walk=price,
             double_slot_discount=discount,
             weekly_discount=weekly_disc,
             price_per_drop_in=drop_in_price,
             effective_from=eff_from,
-        ))
+        )
+        db.session.add(new_tier)
+        db.session.flush()  # populate new_tier.id before logging
+        record_admin_action(
+            'pricing', new_tier.id, 'created', actor_id=current_user.id,
+            summary=f"Added new pricing tier effective from {eff_from}",
+        )
         flash(f"New pricing tier effective from {eff_from} added.", "success")
 
     db.session.commit()
