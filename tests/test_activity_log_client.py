@@ -1,10 +1,10 @@
 """
 PR 2/5 of the activity-feed expansion — client CRUD call sites in
 app/blueprints/admin/views/clients.py routed through
-app/utils/admin_audit.py::record_admin_action.
+app/utils/activity_log.py::record_admin_action.
 
 Route-level integration tests: hit the real route via the `client` fixture,
-then query AdminActionLog to assert one row landed with the expected
+then query ActivityLog to assert one row landed with the expected
 entity_type/action/summary substring, mirroring TestRouteWiring in
 tests/test_booking_status_log.py. One feed-rendering assertion covers the
 'admin' bucket end-to-end (GET /admin/activity, `data-activity="admin"`).
@@ -18,10 +18,10 @@ from werkzeug.security import generate_password_hash
 from sqlalchemy import text
 
 from app import db
-from app.models import AdminActionLog, Client, Dog, DogOwner, User
+from app.models import ActivityLog, Client, Dog, DogOwner, User
 
 TRUNCATE_ORDER = [
-    'admin_action_logs', 'notifications', 'dog_owners', 'dogs',
+    'activity_logs', 'notifications', 'dog_owners', 'dogs',
     'clients', 'users',
 ]
 
@@ -84,7 +84,7 @@ def _base_form(**overrides):
 
 
 def _last_log():
-    return AdminActionLog.query.order_by(AdminActionLog.id.desc()).first()
+    return ActivityLog.query.order_by(ActivityLog.id.desc()).first()
 
 
 class TestNewClient:
@@ -116,7 +116,7 @@ class TestNewClient:
         ))
 
         with app.app_context():
-            rows = AdminActionLog.query.filter_by(entity_type='dog').all()
+            rows = ActivityLog.query.filter_by(entity_type='dog').all()
             assert len(rows) == 1
             assert rows[0].action == 'created'
             assert 'Buddy' in rows[0].summary
@@ -137,7 +137,7 @@ class TestEditClient:
         ))
 
         with app.app_context():
-            row = AdminActionLog.query.filter_by(entity_type='client', entity_id=target_id).first()
+            row = ActivityLog.query.filter_by(entity_type='client', entity_id=target_id).first()
             assert row is not None
             assert row.action == 'updated'
             assert 'Janet Smith' in row.summary
@@ -158,7 +158,7 @@ class TestEditClient:
         ))
 
         with app.app_context():
-            assert AdminActionLog.query.count() == 0
+            assert ActivityLog.query.count() == 0
 
     def test_redacted_field_change_omits_real_value_from_changes(self, app, client):
         with app.app_context():
@@ -174,7 +174,7 @@ class TestEditClient:
         assert resp.status_code in (301, 302), resp.data.decode()[:600]
 
         with app.app_context():
-            row = AdminActionLog.query.filter_by(entity_type='client', entity_id=target_id).first()
+            row = ActivityLog.query.filter_by(entity_type='client', entity_id=target_id).first()
             assert row is not None
             assert row.changes.get('street_address') == ['(redacted)', '(redacted)']
             assert 'Wallaby Way' not in json.dumps(row.changes)
@@ -195,7 +195,7 @@ class TestEditClient:
         ))
 
         with app.app_context():
-            dog_row = AdminActionLog.query.filter_by(entity_type='dog', entity_id=dog_id).first()
+            dog_row = ActivityLog.query.filter_by(entity_type='dog', entity_id=dog_id).first()
             assert dog_row is not None
             assert dog_row.action == 'updated'
             assert dog_row.changes['name'] == ['Rex', 'Rex II']
@@ -216,7 +216,7 @@ class TestAddDog:
         })
 
         with app.app_context():
-            row = AdminActionLog.query.filter_by(entity_type='dog').first()
+            row = ActivityLog.query.filter_by(entity_type='dog').first()
             assert row is not None
             assert row.action == 'created'
             assert 'Fido' in row.summary
@@ -270,7 +270,7 @@ class TestActivateDeactivateClient:
         client.post(f'/admin/clients/{target_id}/deactivate')
 
         with app.app_context():
-            assert AdminActionLog.query.count() == 0
+            assert ActivityLog.query.count() == 0
 
 
 class TestJoinRevokeDogAccess:
@@ -292,7 +292,7 @@ class TestJoinRevokeDogAccess:
                      content_type='application/json')
 
         with app.app_context():
-            row = AdminActionLog.query.filter_by(entity_type='dog', entity_id=dog_id).first()
+            row = ActivityLog.query.filter_by(entity_type='dog', entity_id=dog_id).first()
             assert row is not None
             assert row.action == 'created'
             assert 'Jane Smith' in row.summary  # secondary user's display name
@@ -316,7 +316,7 @@ class TestJoinRevokeDogAccess:
                      content_type='application/json')
 
         with app.app_context():
-            row = AdminActionLog.query.filter_by(entity_type='dog', entity_id=dog_id, action='removed').first()
+            row = ActivityLog.query.filter_by(entity_type='dog', entity_id=dog_id, action='removed').first()
             assert row is not None
             assert 'Rex' in row.summary
 
@@ -339,7 +339,7 @@ class TestPickupDetailsAndPhoto:
         assert resp.status_code == 200, resp.data.decode()[:300]
 
         with app.app_context():
-            row = AdminActionLog.query.filter_by(entity_type='dog', entity_id=dog_id).first()
+            row = ActivityLog.query.filter_by(entity_type='dog', entity_id=dog_id).first()
             assert row is not None
             assert row.changes.get('pickup_instructions') == ['(redacted)', '(redacted)']
             assert 'mat' not in row.summary
@@ -369,7 +369,7 @@ class TestPickupDetailsAndPhoto:
         assert resp.get_json()['success'] is True
 
         with app.app_context():
-            row = AdminActionLog.query.filter_by(entity_type='dog', entity_id=dog_id).first()
+            row = ActivityLog.query.filter_by(entity_type='dog', entity_id=dog_id).first()
             assert row is not None
             assert row.changes['pickup_notes_photo'][0] is None
             assert row.changes['pickup_notes_photo'][1] is not None

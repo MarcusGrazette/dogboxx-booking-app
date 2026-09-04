@@ -1,11 +1,13 @@
-"""Admin-action audit chokepoint.
+"""Activity log chokepoint.
 
 Every admin-initiated mutation outside the booking lifecycle (client/dog/walker
 CRUD, schedule edits, pricing changes, newsletter sends) should route through
 this module so the activity feed can't silently drift out of sync with reality
-— the same guarantee app/utils/booking_status.py gives bookings.
+— the same guarantee app/utils/booking_status.py gives bookings. (A future PR
+adds client-authored rows here too — see FEATURES.md #47 — which is why the
+table/model are named ActivityLog rather than AdminActionLog.)
 
-`record_admin_action` queues an AdminActionLog row on the session; it does
+`record_admin_action` queues an ActivityLog row on the session; it does
 **not** commit. The caller keeps ownership of the transaction. Unlike
 BookingStatusChange, `summary` must be a fully-rendered string built *before*
 any delete the caller is about to perform — the activity feed reads `summary`
@@ -25,7 +27,7 @@ field changed.
 from decimal import Decimal
 from datetime import date, datetime
 
-from app.models import db, AdminActionLog
+from app.models import db, ActivityLog
 
 # Fields whose values are never persisted in `changes`, even though we still
 # want to record *that* they changed. `changes` is a permanent store, not a
@@ -56,9 +58,9 @@ RICH_TEXT_FIELDS = {'pickup_instructions'}
 
 
 def record_admin_action(entity_type, entity_id, action, *, actor_id, summary, changes=None):
-    """Queue an AdminActionLog row. Does not commit."""
-    row = AdminActionLog(entity_type=entity_type, entity_id=entity_id, action=action,
-                          actor_id=actor_id, summary=summary, changes=changes)
+    """Queue an ActivityLog row. Does not commit."""
+    row = ActivityLog(entity_type=entity_type, entity_id=entity_id, action=action,
+                       actor_id=actor_id, summary=summary, changes=changes)
     db.session.add(row)
     return row
 

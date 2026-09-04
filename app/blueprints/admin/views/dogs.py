@@ -17,9 +17,9 @@ from app.capacity import MAX_RECURRING_SERIES
 from app.utils.invoicing import is_late_cancellation
 from app.utils.sanitize import clean_rich_text_or_none
 from app.utils.uploads import process_dog_photo
-from app.utils.admin_audit import record_admin_action, diff_fields
+from app.utils.activity_log import record_admin_action, diff_fields
 
-# Mirrors clients.py's DOG_AUDIT_FIELDS — see app/utils/admin_audit.py for
+# Mirrors clients.py's DOG_AUDIT_FIELDS — see app/utils/activity_log.py for
 # REDACTED_FIELDS (pickup_instructions never stores real old/new values,
 # only that it changed).
 DOG_AUDIT_FIELDS = [

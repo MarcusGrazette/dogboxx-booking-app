@@ -16,12 +16,12 @@ from werkzeug.security import generate_password_hash
 
 from app import db
 from app.models import (
-    AdminActionLog, Booking, BookingStatusChange, Broadcast, Client, Closure,
+    ActivityLog, Booking, BookingStatusChange, Broadcast, Client, Closure,
     DailyMessage, Dog, DogOwner, ServiceType, User, Walker,
     WalkerAdHocAvailability, WalkerSchedule, WalkerUnavailability,
 )
 from app.utils.booking_status import transition_booking, record_booking_created
-from app.utils.admin_audit import record_admin_action
+from app.utils.activity_log import record_admin_action
 
 
 def _next_weekday(target_dow):
@@ -770,15 +770,15 @@ class TestFeedTimestampLocalisation:
 
 
 # ---------------------------------------------------------------------------
-# AdminActionLog + DailyMessage sources (activity-feed expansion — foundation
-# PR). AdminActionLog has no call sites yet outside this test; DailyMessage is
+# ActivityLog + DailyMessage sources (activity-feed expansion — foundation
+# PR). ActivityLog has no call sites yet outside this test; DailyMessage is
 # wired as a free-win read of its existing created_by_id, no new call site.
 # ---------------------------------------------------------------------------
 
-class TestAdminActionLogFeed:
+class TestActivityLogFeed:
 
     def test_admin_action_log_row_appears_with_prebaked_summary(self, app, client):
-        """A queued AdminActionLog row surfaces verbatim as `summary` — proves
+        """A queued ActivityLog row surfaces verbatim as `summary` — proves
         the write-time-summary path renders without any live join."""
         with app.app_context():
             admin = _make_user('aal_admin1@test.com', role='walker', is_admin=True)

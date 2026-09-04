@@ -13,11 +13,11 @@ from app import db
 from app.forms import ClientCreateForm
 from app.utils.uploads import process_dog_photo
 from app.utils.sanitize import clean_rich_text_or_none
-from app.utils.admin_audit import record_admin_action, diff_fields
+from app.utils.activity_log import record_admin_action, diff_fields
 from werkzeug.security import generate_password_hash
 import secrets
 
-# Field sets diffed by admin_audit.diff_fields — see app/utils/admin_audit.py
+# Field sets diffed by activity_log.diff_fields — see app/utils/activity_log.py
 # for REDACTED_FIELDS (street_address/postal_code/maps_url/pickup_instructions
 # never store real old/new values, only that they changed).
 USER_AUDIT_FIELDS = ['firstname', 'lastname', 'email', 'phone', 'email_marketing']
@@ -397,7 +397,7 @@ def edit_client(client_id):
 
     if form.validate_on_submit():
         try:
-            # Snapshots for admin_audit.diff_fields — captured via getattr()
+            # Snapshots for activity_log.diff_fields — captured via getattr()
             # on the live objects before any mutation below, per the
             # chokepoint's contract (a serialized/form-dict snapshot would
             # produce false-positive Decimal/date diffs).
