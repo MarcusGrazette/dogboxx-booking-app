@@ -17,6 +17,18 @@ from decimal import Decimal
 
 from app.blueprints.client import client_bp
 from app.utils.decorators import has_client_access
+from app.utils.activity_log import record_admin_action, diff_fields
+
+# Field sets diffed by activity_log.diff_fields for client self-service edits —
+# see app/utils/activity_log.py for REDACTED_FIELDS (street_address/postal_code/
+# maps_url/pickup_instructions never store real old/new values, only that they
+# changed) and RICH_TEXT_FIELDS (pickup_instructions compared by plain-text
+# content, not raw HTML, since Quill re-serializes on every save even with zero
+# real edits). Deliberately narrower than the admin-side USER_AUDIT_FIELDS/
+# CLIENT_AUDIT_FIELDS in clients.py — this route never lets a client change
+# their own email/phone, and dog name/gender/breed stay admin-managed.
+USER_AUDIT_FIELDS = ['firstname', 'lastname', 'email_marketing']
+CLIENT_AUDIT_FIELDS = ['street_address', 'postal_code', 'maps_url']
 
 
 @client_bp.route("/profile", methods=["GET", "POST"])
@@ -97,6 +109,19 @@ def profile():
 
     if form.validate_on_submit():
         try:
+            # Snapshots for activity_log.diff_fields — captured via getattr()
+            # on the live objects before any mutation below, per the
+            # chokepoint's contract (a serialized/form-dict snapshot would
+            # produce false-positive Decimal/date diffs).
+            before_user = {f: getattr(current_user, f) for f in USER_AUDIT_FIELDS}
+            before_client = (
+                {f: getattr(client, f) for f in CLIENT_AUDIT_FIELDS} if client
+                else {f: None for f in CLIENT_AUDIT_FIELDS}
+            )
+            pickup_before = {_pd.id: _pd.pickup_instructions for _pd in primary_dogs}
+            secondary_pickup_dog = secondary_dogs[0]['dog'] if (not primary_dogs and secondary_dogs) else None
+            secondary_pickup_before = secondary_pickup_dog.pickup_instructions if secondary_pickup_dog else None
+
             # Personal info
             current_user.firstname = form.firstname.data.strip()
             current_user.lastname = form.lastname.data.strip()
@@ -139,6 +164,42 @@ def profile():
                 dog.name = form.dog_name.data.strip()
                 dog.gender = form.dog_gender.data.strip()
                 dog.breed = form.dog_breed.data.strip() if form.dog_breed.data else ""
+
+            # Activity log — one merged 'client' row for name/address/newsletter
+            # (mirrors the admin-side edit_client convention of treating User+
+            # Client as one logical entity), plus one 'dog' row per touched
+            # dog's pickup instructions. Actor == subject here, so summaries
+            # use "their own" wording to read as distinct from an admin
+            # editing someone else's profile.
+            client_changes = {}
+            client_changes.update(diff_fields(before_user, current_user, USER_AUDIT_FIELDS))
+            client_changes.update(diff_fields(before_client, client, CLIENT_AUDIT_FIELDS))
+            if client_changes:
+                record_admin_action(
+                    'client', current_user.id, 'updated', actor_id=current_user.id,
+                    summary=f"{current_user.full_name} updated their own contact details",
+                    changes=client_changes,
+                )
+            for _pd in primary_dogs:
+                pd_changes = diff_fields(
+                    {'pickup_instructions': pickup_before[_pd.id]}, _pd, ['pickup_instructions'],
+                )
+                if pd_changes:
+                    record_admin_action(
+                        'dog', _pd.id, 'updated', actor_id=current_user.id,
+                        summary=f"{current_user.full_name} updated their own pickup instructions for {_pd.name}",
+                        changes=pd_changes,
+                    )
+            if secondary_pickup_dog is not None:
+                sec_changes = diff_fields(
+                    {'pickup_instructions': secondary_pickup_before}, secondary_pickup_dog, ['pickup_instructions'],
+                )
+                if sec_changes:
+                    record_admin_action(
+                        'dog', secondary_pickup_dog.id, 'updated', actor_id=current_user.id,
+                        summary=f"{current_user.full_name} updated their own pickup instructions for {secondary_pickup_dog.name}",
+                        changes=sec_changes,
+                    )
 
             # Dog photo uploads go through the dedicated /profile/upload-dog-photo
             # AJAX endpoint (per-dog, via dog_id) — this form has no photo field.
@@ -348,7 +409,13 @@ def upload_pickup_photo(dog_id):
         if not filename:
             return jsonify(success=False, error="Empty file"), 400
 
+        old_filename = dog.pickup_notes_photo
         dog.pickup_notes_photo = filename
+        record_admin_action(
+            'dog', dog.id, 'updated', actor_id=current_user.id,
+            summary=f"{current_user.full_name} updated the pickup notes photo for {dog.name}",
+            changes={'pickup_notes_photo': [old_filename, filename]},
+        )
         db.session.commit()
 
         url = url_for('static', filename=f'uploads/pickup_notes/{filename}')
@@ -382,15 +449,31 @@ def update_pickup():
     try:
         if primary_dogs:
             for _pd in primary_dogs:
+                before = _pd.pickup_instructions
                 _pd.pickup_instructions = clean_rich_text_or_none(
                     request.form.get(f'pickup_instructions_{_pd.id}', '')
                 )
+                changes = diff_fields({'pickup_instructions': before}, _pd, ['pickup_instructions'])
+                if changes:
+                    record_admin_action(
+                        'dog', _pd.id, 'updated', actor_id=current_user.id,
+                        summary=f"{current_user.full_name} updated their own pickup instructions for {_pd.name}",
+                        changes=changes,
+                    )
         elif secondary_ownerships:
             sec_dog = db.session.get(Dog, secondary_ownerships[0].dog_id)
             if sec_dog:
+                before = sec_dog.pickup_instructions
                 sec_dog.pickup_instructions = clean_rich_text_or_none(
                     request.form.get('pickup_instructions', '')
                 )
+                changes = diff_fields({'pickup_instructions': before}, sec_dog, ['pickup_instructions'])
+                if changes:
+                    record_admin_action(
+                        'dog', sec_dog.id, 'updated', actor_id=current_user.id,
+                        summary=f"{current_user.full_name} updated their own pickup instructions for {sec_dog.name}",
+                        changes=changes,
+                    )
 
         db.session.commit()
         return jsonify(success=True)
@@ -408,7 +491,16 @@ def update_notifications():
         return jsonify(success=False, error="Forbidden"), 403
 
     try:
+        before = {'email_marketing': current_user.email_marketing}
         current_user.email_marketing = request.form.get('notify_email') == 'true'
+        changes = diff_fields(before, current_user, ['email_marketing'])
+        if changes:
+            verb = "subscribed to" if current_user.email_marketing else "unsubscribed from"
+            record_admin_action(
+                'client', current_user.id, 'updated', actor_id=current_user.id,
+                summary=f"{current_user.full_name} {verb} the newsletter",
+                changes=changes,
+            )
         db.session.commit()
         return jsonify(success=True)
     except Exception as e:
@@ -429,11 +521,20 @@ def update_dog_details(dog_id):
     if not dog:
         return jsonify(success=False, error="Dog not found"), 404
 
+    DOG_DETAIL_FIELDS = ['date_of_birth', 'allergies']
     try:
+        before = {f: getattr(dog, f) for f in DOG_DETAIL_FIELDS}
         from datetime import date as _date_type
         dob_str = request.form.get('dob', '').strip()
         dog.date_of_birth = _date_type.fromisoformat(dob_str) if dob_str else None
         dog.allergies = request.form.get('health_notes', '').strip() or None
+        changes = diff_fields(before, dog, DOG_DETAIL_FIELDS)
+        if changes:
+            record_admin_action(
+                'dog', dog.id, 'updated', actor_id=current_user.id,
+                summary=f"{current_user.full_name} updated their own details for {dog.name}",
+                changes=changes,
+            )
         db.session.commit()
         return jsonify(success=True)
     except ValueError:
