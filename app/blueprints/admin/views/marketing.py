@@ -9,6 +9,7 @@ from app.models import User, DogOwner, Broadcast
 from app import db
 from app.utils.notifications import create_notification
 from app.utils.sanitize import sanitize_rich_text, clean_rich_text_or_none, rich_text_to_plain
+from app.utils.activity_log import record_admin_action
 
 
 # ── Newsletter ────────────────────────────────────────────────────────────────
@@ -69,6 +70,15 @@ def newsletter():
                 flash(f"Newsletter sent to {result['sent']} client(s).", "success")
             else:
                 flash(f"Sent {result['sent']}, failed {result['failed']}. Check logs.", "warning")
+
+            record_admin_action(
+                'newsletter', None, 'sent', actor_id=current_user.id,
+                summary=(
+                    f"Sent newsletter \"{subject}\" — {result['sent']} sent, "
+                    f"{result['failed']} failed"
+                ),
+            )
+            db.session.commit()
 
     return render_template(
         "admin_newsletter.html",
