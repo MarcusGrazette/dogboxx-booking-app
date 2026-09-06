@@ -148,6 +148,33 @@ class TestUpdatePricingUpdate:
         with app.app_context():
             assert ActivityLog.query.count() == 0
 
+    def test_no_op_edit_with_non_dyadic_decimal_logs_nothing(self, app, client):
+        """Regression: Decimal('12.10') != 12.10 (float) — re-saving an
+        unchanged non-whole-number tier must not produce a false-positive
+        diff. The whole-number tests above don't catch this because
+        Decimal('10.00') == 10.0 is True (10 is exactly representable)."""
+        with app.app_context():
+            admin = _make_admin()
+            admin_email = admin.email
+            tier = PricingConfig(
+                price_per_walk=12.10, double_slot_discount=1, weekly_discount=2,
+                price_per_drop_in=5, effective_from=datetime.date(2026, 10, 1),
+            )
+            db.session.add(tier)
+            db.session.commit()
+
+        _login(client, admin_email)
+        client.post('/admin/revenue/pricing', data={
+            'price_per_walk': '12.10',
+            'double_slot_discount': '1.00',
+            'weekly_discount': '2.00',
+            'price_per_drop_in': '5.00',
+            'effective_from': '2026-10-01',
+        })
+
+        with app.app_context():
+            assert ActivityLog.query.count() == 0
+
 
 class TestNewsletterSendLogsRow:
 

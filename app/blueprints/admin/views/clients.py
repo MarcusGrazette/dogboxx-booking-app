@@ -304,7 +304,6 @@ def new_client():
                 hashed_password=generate_password_hash(temp_password),
                 must_change_password=True,
             )
-            user.notification_preference = 'email'
             user.email_marketing = bool(form.notify_email.data)
             user.phone = form.phone.data.strip() if form.phone.data else None
 
@@ -420,7 +419,6 @@ def edit_client(client_id):
             user.firstname = form.firstname.data.strip().title()
             user.lastname = form.lastname.data.strip().title()
 
-            user.notification_preference = 'email'
             user.email_marketing = bool(form.notify_email.data)
             user.phone = form.phone.data.strip() if form.phone.data else None
 

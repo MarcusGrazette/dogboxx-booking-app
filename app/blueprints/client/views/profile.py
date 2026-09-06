@@ -114,6 +114,7 @@ def profile():
             # chokepoint's contract (a serialized/form-dict snapshot would
             # produce false-positive Decimal/date diffs).
             before_user = {f: getattr(current_user, f) for f in USER_AUDIT_FIELDS}
+            client_is_new = client is None
             before_client = (
                 {f: getattr(client, f) for f in CLIENT_AUDIT_FIELDS} if client
                 else {f: None for f in CLIENT_AUDIT_FIELDS}
@@ -156,14 +157,14 @@ def profile():
 
             # Notifications — email toggle controls newsletter subscription
             current_user.email_marketing = bool(form.notify_email.data)
-            current_user.notification_preference = 'email'
 
-            # Dog info — name/gender/breed are admin-managed (round-trip via hidden fields)
-            # dob and allergies are client-editable via per-dog raw fields
-            if dog:
-                dog.name = form.dog_name.data.strip()
-                dog.gender = form.dog_gender.data.strip()
-                dog.breed = form.dog_breed.data.strip() if form.dog_breed.data else ""
+            # Dog info — name/gender/breed are admin-managed. The hidden
+            # dog_name/dog_gender/dog_breed form fields exist only so WTForms
+            # can redisplay the form on a validation error; they must never
+            # be written back to `dog` — doing so let a tampered hidden field
+            # silently rename/re-gender a dog with no audit trail (found in
+            # activity-feed review, 2026-09-06). dob and allergies are the
+            # actual client-editable dog fields, via per-dog raw fields below.
 
             # Activity log — one merged 'client' row for name/address/newsletter
             # (mirrors the admin-side edit_client convention of treating User+
@@ -171,15 +172,38 @@ def profile():
             # dog's pickup instructions. Actor == subject here, so summaries
             # lead with the client's own name ("Jane Smith updated...") rather
             # than the admin-side "Updated ... for Jane Smith" phrasing.
-            client_changes = {}
-            client_changes.update(diff_fields(before_user, current_user, USER_AUDIT_FIELDS))
-            client_changes.update(diff_fields(before_client, client, CLIENT_AUDIT_FIELDS))
-            if client_changes:
+            if client_is_new:
+                # First save for a secondary-only owner creates the Client
+                # row — diff_fields would report every CLIENT_AUDIT_FIELDS
+                # entry as changed against the None-filled snapshot above,
+                # which is real (a row now exists) but not a diff to show;
+                # mirrors clients.py's plain 'created' summary, no changes.
+                user_changes = diff_fields(before_user, current_user, USER_AUDIT_FIELDS)
                 record_admin_action(
-                    'client', current_user.id, 'updated', actor_id=current_user.id,
-                    summary=f"{current_user.full_name} updated contact details",
-                    changes=client_changes,
+                    'client', current_user.id, 'created', actor_id=current_user.id,
+                    summary=f"{current_user.full_name} added contact details",
+                    changes=user_changes or None,
                 )
+            else:
+                client_changes = {}
+                client_changes.update(diff_fields(before_user, current_user, USER_AUDIT_FIELDS))
+                client_changes.update(diff_fields(before_client, client, CLIENT_AUDIT_FIELDS))
+                if client_changes:
+                    # Same wording as the AJAX update_notifications route below
+                    # when the newsletter toggle is the only thing that changed
+                    # — one logical action ("subscribed"/"unsubscribed"), not
+                    # generic "updated contact details", regardless of which
+                    # form the client used to change it.
+                    if set(client_changes) == {'email_marketing'}:
+                        verb = "subscribed to" if current_user.email_marketing else "unsubscribed from"
+                        summary = f"{current_user.full_name} {verb} the newsletter"
+                    else:
+                        summary = f"{current_user.full_name} updated contact details"
+                    record_admin_action(
+                        'client', current_user.id, 'updated', actor_id=current_user.id,
+                        summary=summary,
+                        changes=client_changes,
+                    )
             for _pd in primary_dogs:
                 pd_changes = diff_fields(
                     {'pickup_instructions': pickup_before[_pd.id]}, _pd, ['pickup_instructions'],

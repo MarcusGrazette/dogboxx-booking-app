@@ -1,4 +1,5 @@
 import os
+import tempfile
 from datetime import timedelta
 
 class Config:
@@ -159,6 +160,18 @@ class TestingConfig(Config):
     SSE_REDIS_URL = None  # tests always use the in-memory SSE fan-out
     SENTRY_DSN = None  # never send test-environment noise to Sentry, even if
                        # SENTRY_DSN is set in local .env for manual verification
+
+    # Route photo uploads into a fresh temp directory instead of the real
+    # app/static/uploads/ tree — otherwise every test that saves a dog/profile/
+    # pickup-notes photo (test_pickup_notes.py, test_activity_log_*.py, etc.)
+    # leaves a throwaway UUID-named image behind permanently, since nothing
+    # ever deletes them. Mirrors the real <UPLOAD_FOLDER>/../<subfolder>
+    # layout (uploads/dogs, uploads/profiles, uploads/pickup_notes) so
+    # process_dog_photo()/process_cropped_photo()'s subfolder resolution
+    # (app/utils/uploads.py) works unchanged. Created once at import time
+    # (session-scoped, matching production's one shared UPLOAD_FOLDER per app
+    # process) — cleaned up by conftest.py's session-scoped fixture.
+    UPLOAD_FOLDER = os.path.join(tempfile.mkdtemp(prefix='dogboxx_test_uploads_'), 'uploads', 'dogs')
 
     # No HTTPS enforcement in testing
     SESSION_COOKIE_SECURE = False

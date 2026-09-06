@@ -83,8 +83,6 @@ def onboard():
             client.onboarding_completed = True
             client.onboarding_completed_at = datetime.now(timezone.utc)
 
-            current_user.notification_preference = 'email'
-
             # Handle file upload
             pic_filename = None
             if 'file' in request.files:

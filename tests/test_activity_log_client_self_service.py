@@ -110,6 +110,29 @@ class TestProfilePostContactAndDogEdits:
             assert row.changes['street_address'] == ['(redacted)', '(redacted)']
             assert 'New Road' not in row.summary
 
+    def test_newsletter_only_change_via_main_form_uses_newsletter_wording(self, app, client):
+        """Regression: the main /profile form and the AJAX
+        /profile/update-notifications route must use the same summary
+        wording for the same logical action (email_marketing toggle)."""
+        with app.app_context():
+            user, dog = _make_client_with_dog()
+            email = user.email
+            user_id = user.id
+            dog_name, dog_gender, dog_breed = dog.name, dog.gender, dog.breed
+            db.session.get(User, user_id).email_marketing = True
+            db.session.commit()
+
+        _login(client, email)
+        form = self._base_form(dog_name, dog_gender, dog_breed)
+        del form['notify_email']  # unchecked checkbox is simply absent from form data
+        client.post('/profile', data=form)
+
+        with app.app_context():
+            row = ActivityLog.query.filter_by(entity_type='client', entity_id=user_id).first()
+            assert row is not None
+            assert row.summary == 'Jane Smith unsubscribed from the newsletter'
+            assert list(row.changes.keys()) == ['email_marketing']
+
     def test_no_op_submit_logs_nothing(self, app, client):
         with app.app_context():
             user, dog = _make_client_with_dog()
@@ -121,6 +144,27 @@ class TestProfilePostContactAndDogEdits:
 
         with app.app_context():
             assert ActivityLog.query.count() == 0
+
+    def test_tampered_dog_hidden_fields_do_not_mutate_dog(self, app, client):
+        """Regression: dog_name/dog_gender/dog_breed are round-trip-only
+        hidden fields (admin-managed) — a client submitting different values
+        (devtools tampering, or a stale form) must not rename/re-gender the
+        dog, and no unaudited mutation should occur."""
+        with app.app_context():
+            user, dog = _make_client_with_dog()
+            email = user.email
+            dog_id = dog.id
+
+        _login(client, email)
+        form = self._base_form('Not Rex', 'female', 'Poodle')
+        client.post('/profile', data=form)
+
+        with app.app_context():
+            fresh = db.session.get(Dog, dog_id)
+            assert fresh.name == 'Rex'
+            assert fresh.gender == 'male'
+            assert fresh.breed == 'Lab'
+            assert ActivityLog.query.filter_by(entity_type='dog', entity_id=dog_id).count() == 0
 
     def test_pickup_instructions_edit_logs_dog_row(self, app, client):
         with app.app_context():
@@ -141,6 +185,60 @@ class TestProfilePostContactAndDogEdits:
             assert row.summary == 'Jane Smith updated pickup instructions for Rex'
             assert row.changes['pickup_instructions'] == ['(redacted)', '(redacted)']
             assert '4821' not in row.summary
+
+
+class TestSecondaryOnlyOwnerFirstSave:
+
+    def _make_secondary_only_owner(self):
+        primary = User(firstname='Prime', lastname='Owner', email='prime@test.com',
+                       role='client', active=True,
+                       hashed_password=generate_password_hash('Testpass1!'))
+        db.session.add(primary)
+        db.session.flush()
+        db.session.add(Client(user_id=primary.id, onboarding_completed=True,
+                               street_address='1 Rd', postal_code='AB1'))
+        dog = Dog(name='Fido', gender='male', breed='Lab', allergies='')
+        db.session.add(dog)
+        db.session.flush()
+        db.session.add(DogOwner(dog_id=dog.id, user_id=primary.id, role='primary'))
+
+        sec = User(firstname='Sec', lastname='Owner', email='sec@test.com',
+                   role='client', active=True,
+                   hashed_password=generate_password_hash('Testpass1!'))
+        db.session.add(sec)
+        db.session.flush()
+        db.session.add(DogOwner(dog_id=dog.id, user_id=sec.id, role='secondary'))
+        db.session.commit()
+        return sec, dog
+
+    def test_first_save_logs_created_not_updated(self, app, client):
+        """Regression: a secondary-only owner has no Client row yet on their
+        first /profile save. diff_fields' before-snapshot is seeded all-None
+        for this case, which correctly flags every field as 'changed' but
+        should be logged as a creation, not a false 'updated' diff row."""
+        with app.app_context():
+            sec, dog = self._make_secondary_only_owner()
+            email = sec.email
+            sec_id = sec.id
+            dog_name, dog_gender, dog_breed = dog.name, dog.gender, dog.breed
+
+        _login(client, email)
+        client.post('/profile', data={
+            'firstname': 'Sec', 'lastname': 'Owner',
+            'address_line_1': '5 New Rd', 'postcode': 'CD2',
+            'dog_name': dog_name, 'dog_gender': dog_gender, 'dog_breed': dog_breed or '',
+            'notify_email': 'y',
+        })
+
+        with app.app_context():
+            new_client = Client.query.filter_by(user_id=sec_id).first()
+            assert new_client is not None
+            assert new_client.street_address == '5 New Rd'
+
+            row = ActivityLog.query.filter_by(entity_type='client', entity_id=sec_id).first()
+            assert row is not None
+            assert row.action == 'created'
+            assert row.changes is None or 'street_address' not in row.changes
 
 
 class TestUpdatePickupAjax:

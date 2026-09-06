@@ -103,8 +103,14 @@ def create_app(config_name=None):
     if os.environ.get('FLASK_ENV') == 'production' and app.config.get('DEBUG'):
         raise RuntimeError("DEBUG must be False when FLASK_ENV=production.")
 
-    # Configure upload folder
-    upload_folder = os.path.join(app.static_folder, 'uploads', 'dogs')
+    # Configure upload folder. Testing respects the temp directory
+    # TestingConfig.UPLOAD_FOLDER already points at (see config.py) so
+    # test-generated images don't pollute the real static assets dir — dev/prod
+    # always use the real static/uploads/dogs path, unchanged.
+    if app.config.get('TESTING'):
+        upload_folder = app.config['UPLOAD_FOLDER']
+    else:
+        upload_folder = os.path.join(app.static_folder, 'uploads', 'dogs')
     app.config['UPLOAD_FOLDER'] = upload_folder
     os.makedirs(upload_folder, exist_ok=True)
 
