@@ -169,15 +169,15 @@ def profile():
             # (mirrors the admin-side edit_client convention of treating User+
             # Client as one logical entity), plus one 'dog' row per touched
             # dog's pickup instructions. Actor == subject here, so summaries
-            # use "their own" wording to read as distinct from an admin
-            # editing someone else's profile.
+            # lead with the client's own name ("Jane Smith updated...") rather
+            # than the admin-side "Updated ... for Jane Smith" phrasing.
             client_changes = {}
             client_changes.update(diff_fields(before_user, current_user, USER_AUDIT_FIELDS))
             client_changes.update(diff_fields(before_client, client, CLIENT_AUDIT_FIELDS))
             if client_changes:
                 record_admin_action(
                     'client', current_user.id, 'updated', actor_id=current_user.id,
-                    summary=f"{current_user.full_name} updated their own contact details",
+                    summary=f"{current_user.full_name} updated contact details",
                     changes=client_changes,
                 )
             for _pd in primary_dogs:
@@ -187,7 +187,7 @@ def profile():
                 if pd_changes:
                     record_admin_action(
                         'dog', _pd.id, 'updated', actor_id=current_user.id,
-                        summary=f"{current_user.full_name} updated their own pickup instructions for {_pd.name}",
+                        summary=f"{current_user.full_name} updated pickup instructions for {_pd.name}",
                         changes=pd_changes,
                     )
             if secondary_pickup_dog is not None:
@@ -197,7 +197,7 @@ def profile():
                 if sec_changes:
                     record_admin_action(
                         'dog', secondary_pickup_dog.id, 'updated', actor_id=current_user.id,
-                        summary=f"{current_user.full_name} updated their own pickup instructions for {secondary_pickup_dog.name}",
+                        summary=f"{current_user.full_name} updated pickup instructions for {secondary_pickup_dog.name}",
                         changes=sec_changes,
                     )
 
@@ -457,7 +457,7 @@ def update_pickup():
                 if changes:
                     record_admin_action(
                         'dog', _pd.id, 'updated', actor_id=current_user.id,
-                        summary=f"{current_user.full_name} updated their own pickup instructions for {_pd.name}",
+                        summary=f"{current_user.full_name} updated pickup instructions for {_pd.name}",
                         changes=changes,
                     )
         elif secondary_ownerships:
@@ -471,7 +471,7 @@ def update_pickup():
                 if changes:
                     record_admin_action(
                         'dog', sec_dog.id, 'updated', actor_id=current_user.id,
-                        summary=f"{current_user.full_name} updated their own pickup instructions for {sec_dog.name}",
+                        summary=f"{current_user.full_name} updated pickup instructions for {sec_dog.name}",
                         changes=changes,
                     )
 
@@ -532,7 +532,7 @@ def update_dog_details(dog_id):
         if changes:
             record_admin_action(
                 'dog', dog.id, 'updated', actor_id=current_user.id,
-                summary=f"{current_user.full_name} updated their own details for {dog.name}",
+                summary=f"{current_user.full_name} updated details for {dog.name}",
                 changes=changes,
             )
         db.session.commit()

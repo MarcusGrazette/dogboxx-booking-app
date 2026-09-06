@@ -7,9 +7,12 @@ Route-level integration tests: hit the real route via the `client` fixture,
 then query ActivityLog to assert one row landed with the expected
 entity_type/action/summary substring, mirroring
 tests/test_activity_log_client.py (PR 2/5). Actor == subject here, so
-summaries use "their own" wording rather than the admin-side "for <name>"
-phrasing — asserted explicitly below. One feed-rendering assertion covers
-the 'admin' bucket + 'client' actor_type combination end-to-end.
+summaries lead with the client's own name ("Jane Smith updated...") rather
+than the admin-side "Updated ... for Jane Smith" phrasing — asserted
+explicitly below (an earlier revision used "their own" wording; dropped
+after user feedback during browser testing of PR #206). One feed-rendering
+assertion covers the 'admin' bucket + 'client' actor_type combination
+end-to-end.
 """
 import datetime
 
@@ -101,7 +104,7 @@ class TestProfilePostContactAndDogEdits:
             assert row is not None
             assert row.action == 'updated'
             assert row.actor_id == user_id
-            assert 'their own' in row.summary
+            assert row.summary.startswith('Janet Smith')
             assert row.changes['firstname'] == ['Jane', 'Janet']
             # street_address is a REDACTED_FIELDS member — key present, value not.
             assert row.changes['street_address'] == ['(redacted)', '(redacted)']
@@ -135,8 +138,7 @@ class TestProfilePostContactAndDogEdits:
             row = ActivityLog.query.filter_by(entity_type='dog', entity_id=dog_id).first()
             assert row is not None
             assert row.action == 'updated'
-            assert 'Rex' in row.summary
-            assert 'their own' in row.summary
+            assert row.summary == 'Jane Smith updated pickup instructions for Rex'
             assert row.changes['pickup_instructions'] == ['(redacted)', '(redacted)']
             assert '4821' not in row.summary
 
