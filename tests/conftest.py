@@ -5,11 +5,27 @@ Tests run against PostgreSQL by default (matching CI), or in-memory SQLite
 when USE_SQLITE=1 is set — see TestingConfig in config.py. A fresh schema is
 created per test. CSRF is disabled in test config. Flask-Limiter is disabled.
 """
+import os
+import shutil
+
 import pytest
 from werkzeug.security import generate_password_hash
 
 from app import create_app, db as _db
 from app.models import User, Client, Dog, DogOwner, Walker, ServiceType, Booking
+
+
+@pytest.fixture(scope='session', autouse=True)
+def _cleanup_test_uploads(app):
+    """Remove TestingConfig's temp upload directory after the whole suite
+    finishes. UPLOAD_FOLDER is <tempdir>/uploads/dogs (see config.py) —
+    tempdir is the mkdtemp() root, two levels up, and is what needs removing."""
+    yield
+    with app.app_context():
+        upload_folder = app.config.get('UPLOAD_FOLDER')
+    if upload_folder:
+        tmp_root = os.path.dirname(os.path.dirname(upload_folder))
+        shutil.rmtree(tmp_root, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------
