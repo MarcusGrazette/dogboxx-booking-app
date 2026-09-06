@@ -157,7 +157,6 @@ def profile():
 
             # Notifications — email toggle controls newsletter subscription
             current_user.email_marketing = bool(form.notify_email.data)
-            current_user.notification_preference = 'email'
 
             # Dog info — name/gender/breed are admin-managed. The hidden
             # dog_name/dog_gender/dog_breed form fields exist only so WTForms
