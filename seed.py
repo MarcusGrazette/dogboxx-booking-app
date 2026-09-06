@@ -69,15 +69,6 @@ def seed():
             db.session.add(drop_in)
             print("✓ Created service type: Drop In")
 
-        # Ensure Lydia's walker record has does_drop_ins=True (idempotent)
-        lydia_user = User.query.filter_by(email='lydia@dogboxx.org').first()
-        if lydia_user:
-            lydia_walker = Walker.query.filter_by(user_id=lydia_user.id).first()
-            if lydia_walker and not lydia_walker.does_drop_ins:
-                lydia_walker.does_drop_ins = True
-                db.session.commit()
-                print("✓ Enabled does_drop_ins for Lydia's walker record")
-
         # Owner / admin account
         if not User.query.filter_by(email='lydia@dogboxx.org').first():
             admin = User(
@@ -92,7 +83,21 @@ def seed():
                 active=True,
             )
             db.session.add(admin)
+            db.session.flush()  # get admin.id for the Walker row below
             print("✓ Created owner account: lydia@dogboxx.org (password: changeme123!)")
+
+        # Ensure Lydia's walker record exists with does_drop_ins=True (idempotent) —
+        # the owner is walker + super-admin, so this must exist whether her User
+        # row was just created above or already existed from a prior seed.
+        lydia_user = User.query.filter_by(email='lydia@dogboxx.org').first()
+        lydia_walker = Walker.query.filter_by(user_id=lydia_user.id).first()
+        if not lydia_walker:
+            lydia_walker = Walker(user_id=lydia_user.id, does_drop_ins=True)
+            db.session.add(lydia_walker)
+            print("✓ Created walker record for lydia@dogboxx.org")
+        elif not lydia_walker.does_drop_ins:
+            lydia_walker.does_drop_ins = True
+            print("✓ Enabled does_drop_ins for Lydia's walker record")
 
         db.session.commit()
         print("\n✓ Base seed complete — loading test data from seed_data/...")
