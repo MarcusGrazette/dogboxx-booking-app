@@ -244,15 +244,16 @@ def revenue_data():
 def update_pricing():
     """Add a new pricing tier."""
     from datetime import date
+    from decimal import Decimal, InvalidOperation
     from app.models import PricingConfig
 
     try:
-        price            = float(request.form['price_per_walk'])
-        discount         = float(request.form['double_slot_discount'])
-        weekly_disc      = float(request.form.get('weekly_discount', 0))
-        drop_in_price    = float(request.form.get('price_per_drop_in', 5))
+        price            = Decimal(request.form['price_per_walk'])
+        discount         = Decimal(request.form['double_slot_discount'])
+        weekly_disc      = Decimal(request.form.get('weekly_discount', 0))
+        drop_in_price    = Decimal(request.form.get('price_per_drop_in', 5))
         eff_from         = date.fromisoformat(request.form['effective_from'])
-    except (KeyError, ValueError) as e:
+    except (KeyError, ValueError, InvalidOperation) as e:
         flash(f"Invalid pricing data: {e}", "error")
         return redirect(url_for('admin.revenue'))
 
