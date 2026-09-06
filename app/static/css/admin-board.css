@@ -42,6 +42,13 @@
     background: #fffdf0;
 }
 
+/* Pending-column lane for a frozen (date, slot) — auto-confirm paused, so
+   requests are expected to pile up here for manual review. */
+.board-lane.lane-frozen {
+    border-color: #9ec5fe;
+    background: #eef5ff;
+}
+
 .lane-header.lane-header-unavailable .lane-title {
     color: #856404;
 }

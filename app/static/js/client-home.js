@@ -284,6 +284,47 @@
             });
         }
 
+        // ─── Frozen slot confirmation ─────────────────────────────
+        // slotData is populated by fetchAvailability() and carries a `frozen`
+        // flag per slot (GET /api/slot_availability) — admin-set DB state the
+        // client can't compute locally, unlike isSameDay() above.
+        function isFrozen(slotValue) {
+            if (!slotData) return false;
+            if (slotValue === 'Both') {
+                return !!(slotData.Morning?.frozen || slotData.Afternoon?.frozen);
+            }
+            return !!slotData[slotValue]?.frozen;
+        }
+        // Returns a promise resolving to true if the client confirms,
+        // false if they cancel/dismiss the modal. Clone of confirmSameDay().
+        function confirmFrozen() {
+            return new Promise((resolve) => {
+                const el = document.getElementById('frozenModal');
+                const modal = bootstrap.Modal.getOrCreateInstance(el);
+                const confirmBtn = document.getElementById('frozen-confirm-btn');
+                let settled = false;
+                function cleanup() {
+                    confirmBtn.removeEventListener('click', onConfirm);
+                    el.removeEventListener('hidden.bs.modal', onHidden);
+                }
+                function onConfirm() {
+                    settled = true;
+                    cleanup();
+                    modal.hide();
+                    resolve(true);
+                }
+                function onHidden() {
+                    if (!settled) {
+                        cleanup();
+                        resolve(false);
+                    }
+                }
+                confirmBtn.addEventListener('click', onConfirm);
+                el.addEventListener('hidden.bs.modal', onHidden);
+                modal.show();
+            });
+        }
+
         // ─── Form submit — all booking types ─────────────────────
         const bookingForm = document.getElementById('BookingForm');
         bookingForm.addEventListener('submit', async function (e) {
@@ -345,6 +386,7 @@
                 if (!slotSelect.value) { showToast('Please choose a time slot.', 'warning'); return; }
 
                 if (isSameDay(selectedDate) && !(await confirmSameDay())) return;
+                if (isFrozen(slotSelect.value) && !(await confirmFrozen())) return;
 
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Requesting…';
@@ -385,6 +427,7 @@
                 if (!selectedDate) { showToast('Please select a date.', 'warning'); return; }
 
                 if (isSameDay(selectedDate) && !(await confirmSameDay())) return;
+                if (isFrozen('Both') && !(await confirmFrozen())) return;
 
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Requesting…';
@@ -425,6 +468,7 @@
                 if (!slotSelect.value) { showToast('Please choose a slot.', 'warning'); return; }
 
                 if (isSameDay(selectedDate) && !(await confirmSameDay())) return;
+                if (isFrozen(slotSelect.value) && !(await confirmFrozen())) return;
 
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Requesting…';

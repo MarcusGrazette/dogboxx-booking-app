@@ -223,6 +223,13 @@
                             <span>Closures</span>
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('admin.freezes') }}"
+                           class="nav-link {% if request.endpoint in ['admin.freezes', 'admin.add_freeze', 'admin.delete_freeze_range'] %}active{% endif %}">
+                            <i class="bi bi-snow me-2"></i>
+                            <span>Freeze</span>
+                        </a>
+                    </li>
 
                     {# ── Rosters ───────────────────────────────────────── #}
                     <li class="nav-header">Rosters</li>

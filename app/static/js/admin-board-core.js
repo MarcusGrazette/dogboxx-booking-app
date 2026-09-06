@@ -182,8 +182,11 @@
 
             ['Morning', 'Afternoon'].forEach(slot => {
                 const slotPending = state.pending.filter(b => b.slot === slot);
-                if (!state.pending.length || !slotPending.length) return;
-                const lane = makeLane(null, slot, false);
+                const isFrozen = (state.frozenSlots || []).includes(slot);
+                // A frozen slot gets its lane even with nothing pending yet — the
+                // point is to flag "expect requests here" before they arrive.
+                if (!slotPending.length && !isFrozen) return;
+                const lane = makeLane(null, slot, false, false, isFrozen);
                 slotPending.forEach(b =>
                     lane.querySelector('.lane-cards').appendChild(makePendingCard(b)));
                 col.appendChild(lane);
@@ -270,7 +273,7 @@
             return wrap;
         }
 
-        function makeLane(walkerId, slot, isWalkerLane, isUnavail = false) {
+        function makeLane(walkerId, slot, isWalkerLane, isUnavail = false, isFrozen = false) {
             const cap      = walkerId ? getLaneCapacity(walkerId, slot) : null;
             const isFull   = cap !== null && cap >= state.maxCap;
             const isTarget = state.selectedId !== null && isWalkerLane && !isFull;
@@ -279,13 +282,16 @@
             wrap.className = 'board-lane'
                 + (isFull    ? ' lane-full'        : '')
                 + (isTarget  ? ' lane-target'      : '')
-                + (isUnavail ? ' lane-unavailable' : '');
+                + (isUnavail ? ' lane-unavailable' : '')
+                + (isFrozen  ? ' lane-frozen'      : '');
 
             const hdr = document.createElement('div');
             hdr.className = 'lane-header' + (isUnavail ? ' lane-header-unavailable' : '');
             hdr.innerHTML = `
                 <span class="lane-title">${slot}${isUnavail
                     ? ' <i class="bi bi-exclamation-triangle-fill text-warning ms-1" title="Walker unavailable — override active"></i>'
+                    : ''}${isFrozen
+                    ? ' <i class="bi bi-snow text-primary ms-1" title="Frozen — new requests need manual review"></i>'
                     : ''}</span>
                 ${cap !== null
                     ? `<span class="capacity-badge${isFull ? ' cap-full' : ''}">${cap}/${state.maxCap}</span>`
@@ -478,10 +484,11 @@
                 const res  = await fetch(cfg.boardDataUrl.replace('DATE', dateStr));
                 const data = await res.json();
                 if (!data.success) throw new Error('Failed to load board');
-                state.pending  = data.pending;
-                state.assigned = data.assigned;
-                state.walkers  = data.walkers;
-                state.maxCap   = data.max_capacity;
+                state.pending     = data.pending;
+                state.assigned    = data.assigned;
+                state.walkers     = data.walkers;
+                state.maxCap      = data.max_capacity;
+                state.frozenSlots = data.frozen_slots || [];
                 render();
             } catch (err) {
                 console.error(err);
