@@ -64,6 +64,7 @@ def activity_feed():
         'admin_schedule':   ('Schedule',    'bi-calendar-week-fill', '#495057', 'rgba(73,80,87,0.11)'),
         'admin_pricing':    ('Pricing',     'bi-tag-fill',           '#495057', 'rgba(73,80,87,0.11)'),
         'admin_newsletter': ('Newsletter',  'bi-envelope-fill',      '#495057', 'rgba(73,80,87,0.11)'),
+        'admin_freeze':     ('Freeze',      'bi-snow',               '#495057', 'rgba(73,80,87,0.11)'),
         'daily_message':    ('Message',     'bi-chat-square-text-fill', '#495057', 'rgba(73,80,87,0.11)'),
     }
 
@@ -442,6 +443,7 @@ def activity_feed():
         'walker_schedule': 'admin_schedule',
         'pricing': 'admin_pricing',
         'newsletter': 'admin_newsletter',
+        'slot_freeze': 'admin_freeze',
     }
     ACTIVITY_LINK_BY_ENTITY = {
         'client': url_for('admin.clients'),
@@ -450,6 +452,7 @@ def activity_feed():
         'walker_schedule': url_for('admin.walkers'),
         'pricing': url_for('admin.revenue'),
         'newsletter': url_for('admin.newsletter'),
+        'slot_freeze': url_for('admin.freezes'),
     }
     for log in (ActivityLog.query
                 .options(joinedload(ActivityLog.actor))

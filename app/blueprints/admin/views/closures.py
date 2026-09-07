@@ -1,6 +1,6 @@
 import uuid
 from collections import OrderedDict
-from datetime import date as date_type, datetime, timedelta
+from datetime import date as date_type
 
 from flask import request, render_template, jsonify
 from flask_login import login_required, current_user
@@ -13,42 +13,11 @@ from app.models import User, Booking, DogOwner, ServiceType, Closure
 from app import db
 from app.utils.notifications import NotificationBatch
 from app.utils.booking_status import transition_booking
+from app.utils.date_ranges import parse_range, dates_in_range, range_label
 
 ACTIVE_STATUSES = ('requested', 'confirmed', 'waitlisted')
 # Sanity guard against a fat-fingered multi-year range wiping out the calendar.
 MAX_CLOSURE_RANGE_DAYS = 60
-
-
-def _parse_range(source):
-    """Resolve a (start, end) date pair from either explicit start_date/end_date
-    keys or a legacy single `date` key (start == end). Raises ValueError with a
-    user-facing message on any invalid input."""
-    single = source.get('date', '')
-    start_str = source.get('start_date') or single
-    end_str = source.get('end_date') or single
-
-    try:
-        start = datetime.strptime(start_str, '%Y-%m-%d').date()
-        end = datetime.strptime(end_str, '%Y-%m-%d').date()
-    except ValueError:
-        raise ValueError("Invalid date")
-
-    if end < start:
-        raise ValueError("End date is before start date")
-    if (end - start).days + 1 > MAX_CLOSURE_RANGE_DAYS:
-        raise ValueError(f"Range too long — max {MAX_CLOSURE_RANGE_DAYS} days")
-
-    return start, end
-
-
-def _dates_in_range(start, end):
-    return [start + timedelta(days=i) for i in range((end - start).days + 1)]
-
-
-def _range_label(dates):
-    if len(dates) == 1:
-        return dates[0].strftime('%-d %b %Y')
-    return f"{dates[0].strftime('%-d %b')} – {dates[-1].strftime('%-d %b %Y')}"
 
 
 @admin_bp.route("/closures")
@@ -68,11 +37,11 @@ def closures():
 @admin_required
 def closures_preview():
     try:
-        start, end = _parse_range(request.args)
+        start, end = parse_range(request.args, max_days=MAX_CLOSURE_RANGE_DAYS)
     except ValueError as e:
         return jsonify(success=False, message=str(e)), 400
 
-    dates = _dates_in_range(start, end)
+    dates = dates_in_range(start, end)
     existing_dates = {c.date for c in Closure.query.filter(Closure.date.in_(dates)).all()}
     new_dates = [d for d in dates if d not in existing_dates]
     conflict_dates = [d for d in dates if d in existing_dates]
@@ -111,13 +80,13 @@ def add_closure():
             return jsonify(success=False, message="No data received"), 400
 
         try:
-            start, end = _parse_range(data)
+            start, end = parse_range(data, max_days=MAX_CLOSURE_RANGE_DAYS)
         except ValueError as e:
             return jsonify(success=False, message=str(e)), 400
 
         reason = (data.get('reason') or '').strip() or None
 
-        dates = _dates_in_range(start, end)
+        dates = dates_in_range(start, end)
         existing_dates = {c.date for c in Closure.query.filter(Closure.date.in_(dates)).all()}
         new_dates = [d for d in dates if d not in existing_dates]
         skipped_dates = [d for d in dates if d in existing_dates]
@@ -143,7 +112,7 @@ def add_closure():
         # One batch_id ties together every cancellation caused by this closure
         # (single date or range) so the activity feed can cluster them.
         batch_id = uuid.uuid4().hex
-        body_text = f"DogBoxx is closed {_range_label(new_dates)}" + (f" — {reason}." if reason else ".")
+        body_text = f"DogBoxx is closed {range_label(new_dates)}" + (f" — {reason}." if reason else ".")
 
         # Batch-fetch co-owners to avoid N+1 (one DogOwner query per booking).
         dog_ids = [b.dog_id for b in bookings if b.dog_id]

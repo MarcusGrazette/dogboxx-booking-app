@@ -10,7 +10,7 @@ import traceback
 from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
 from app.utils.db_error_handler import handle_db_errors
-from app.models import User, Booking, Walker, WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, ServiceType, DogOwner
+from app.models import User, Booking, Walker, WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, ServiceType, DogOwner, SlotFreeze
 from app import db
 from app.capacity import get_max_per_walker, get_walker_slot_count, get_drop_in_capacity, auto_assign_walker, get_available_walkers, check_availability, acquire_booking_lock
 from app.utils.notifications import create_notification
@@ -299,6 +299,8 @@ def board_data(date_str):
 
         max_capacity = get_max_per_walker(ServiceType.WALK)
 
+        frozen_slots = [f.slot for f in SlotFreeze.query.filter_by(date=selected_date).all()]
+
         return jsonify(
             success=True,
             date=date_str,
@@ -306,6 +308,7 @@ def board_data(date_str):
             assigned=assigned,
             walkers=walkers_data,
             max_capacity=max_capacity,
+            frozen_slots=frozen_slots,
         )
     except Exception as e:
         logging.exception('Error loading board data for %s: %s', date_str, e)
