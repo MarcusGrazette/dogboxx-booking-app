@@ -1,0 +1,242 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}Admin — Freeze{% endblock %}
+{% block page_title %}Freeze{% endblock %}
+{% block page_subtitle %}Pause auto-confirm for a date + slot — new requests land as requested for manual review{% endblock %}
+
+{% block page_actions %}
+    <a href="{{ url_for('admin.index') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Admin
+    </a>
+{% endblock %}
+
+{% block main %}
+
+<div class="row g-4">
+
+    {# ── Add a freeze ── #}
+    <div class="col-12 col-lg-5">
+        <div class="card">
+            <div class="card-header fw-semibold">
+                <i class="bi bi-snow me-2 text-primary"></i>Add a freeze
+            </div>
+            <div class="card-body">
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label fw-semibold small">Start date <span class="text-danger">*</span></label>
+                        <input type="date" class="form-control" id="freeze-start-date">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-semibold small">End date <span class="text-muted fw-normal">(optional)</span></label>
+                        <input type="date" class="form-control" id="freeze-end-date">
+                    </div>
+                </div>
+                <div class="form-text mb-3">Leave end date blank for a single-day freeze.</div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small">Slot <span class="text-danger">*</span></label>
+                    <select class="form-select" id="freeze-slot">
+                        <option value="Morning">Morning</option>
+                        <option value="Afternoon">Afternoon</option>
+                        <option value="Both">Both</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small">Reason <span class="text-muted fw-normal">(optional, internal)</span></label>
+                    <input type="text" class="form-control" id="freeze-reason"
+                           placeholder="e.g. Short-staffed, trialling a new walker…">
+                </div>
+                <button class="btn btn-primary" id="add-freeze-btn">
+                    <i class="bi bi-snow me-1"></i>Add freeze
+                </button>
+                <div id="freeze-result" class="mt-3" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+
+    {# ── Freezes list ── #}
+    <div class="col-12 col-lg-7">
+        <div class="card">
+            <div class="card-header fw-semibold">
+                <i class="bi bi-list-ul me-2"></i>All freezes
+            </div>
+            {% if freeze_groups %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="freezes-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Dates</th>
+                            <th>Slot</th>
+                            <th>Reason</th>
+                            <th>Added by</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for members in freeze_groups %}
+                        {% set first = members[0] %}
+                        {% set dates = members|map(attribute='date')|unique|sort|list %}
+                        {% set last_date = dates[-1] %}
+                        {% set slots = members|map(attribute='slot')|unique|sort|list %}
+                        <tr id="freeze-row-{{ first.range_id }}" class="{% if last_date < today %}text-muted{% endif %}">
+                            <td class="fw-semibold">
+                                {% if dates|length == 1 %}
+                                    {{ dates[0].strftime('%-d %b %Y') }}
+                                {% else %}
+                                    {{ dates[0].strftime('%-d %b') }} – {{ last_date.strftime('%-d %b %Y') }}
+                                    <span class="badge bg-light text-dark border ms-1" style="font-size:0.65rem;">{{ dates|length }} days</span>
+                                {% endif %}
+                                {% if last_date < today %}<span class="badge bg-secondary ms-1" style="font-size:0.65rem;">Past</span>{% endif %}
+                            </td>
+                            <td class="small">{{ slots|join(' & ') }}</td>
+                            <td>{{ first.reason or '—' }}</td>
+                            <td class="small">{{ first.created_by.firstname if first.created_by else '—' }}</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-danger delete-freeze-btn"
+                                        data-range-id="{{ first.range_id }}"
+                                        data-freeze-label="{% if dates|length == 1 %}{{ dates[0].strftime('%-d %b %Y') }}{% else %}{{ dates[0].strftime('%-d %b') }} – {{ last_date.strftime('%-d %b %Y') }} ({{ dates|length }} days){% endif %} ({{ slots|join(' & ') }})">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer text-muted small">
+                Bookings already <code>requested</code> during a frozen window aren't retroactively confirmed when the freeze is removed.
+            </div>
+            {% else %}
+            <div class="card-body text-muted">No freezes added yet.</div>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+
+{# ── Confirm delete modal ── #}
+<div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Remove freeze</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Remove the freeze for <strong id="delete-modal-date"></strong>?</p>
+                <p class="text-muted small mb-0">New bookings for this date/slot will resume auto-confirming. This does not retroactively confirm bookings that landed as requested while frozen.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirm-delete-btn">Remove</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+(function () {
+    const addBtn      = document.getElementById('add-freeze-btn');
+    const startInput  = document.getElementById('freeze-start-date');
+    const endInput    = document.getElementById('freeze-end-date');
+    const slotSelect  = document.getElementById('freeze-slot');
+    const reasonInput = document.getElementById('freeze-reason');
+    const resultDiv   = document.getElementById('freeze-result');
+    const confirmDeleteModal = new bootstrap.Modal(document.getElementById('confirmDeleteModal'));
+    const confirmDelBtn = document.getElementById('confirm-delete-btn');
+
+    function csrf() {
+        return document.querySelector('meta[name=csrf-token]')?.content ||
+               document.querySelector('input[name=csrf_token]')?.value || '';
+    }
+
+    function showResult(type, msg) {
+        resultDiv.className = `alert alert-${type} py-2 mb-0`;
+        resultDiv.textContent = msg;
+        resultDiv.style.display = 'block';
+    }
+
+    // Keep end date in step with start date until the admin deliberately picks
+    // their own end date (so a single-day freeze needs only one click).
+    let endTouched = false;
+    endInput.addEventListener('input', function () { endTouched = true; });
+    startInput.addEventListener('input', function () {
+        endInput.min = startInput.value;
+        if (!endTouched) endInput.value = startInput.value;
+    });
+
+    // ── Add freeze flow ───────────────────────────────────────────────────────
+    addBtn.addEventListener('click', function () {
+        resultDiv.style.display = 'none';
+        const start = startInput.value;
+        const end = endInput.value || start;
+        if (!start) { showResult('danger', 'Please select a start date.'); return; }
+
+        addBtn.disabled = true;
+        addBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Adding…';
+
+        fetch('{{ url_for("admin.add_freeze") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+            body: JSON.stringify({ start_date: start, end_date: end, slot: slotSelect.value, reason: reasonInput.value }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            addBtn.disabled = false;
+            addBtn.innerHTML = '<i class="bi bi-snow me-1"></i>Add freeze';
+            if (data.success) {
+                window.location.reload();
+            } else {
+                showResult('danger', data.message || 'Something went wrong.');
+            }
+        })
+        .catch(() => {
+            addBtn.disabled = false;
+            addBtn.innerHTML = '<i class="bi bi-snow me-1"></i>Add freeze';
+            showResult('danger', 'Network error — please try again.');
+        });
+    });
+
+    // ── Delete freeze flow ────────────────────────────────────────────────────
+    let pendingDeleteRangeId = null;
+
+    document.querySelectorAll('.delete-freeze-btn').forEach(btn => {
+        btn.addEventListener('click', function () {
+            pendingDeleteRangeId = this.dataset.rangeId;
+            document.getElementById('delete-modal-date').textContent = this.dataset.freezeLabel;
+            confirmDeleteModal.show();
+        });
+    });
+
+    confirmDelBtn.addEventListener('click', function () {
+        if (!pendingDeleteRangeId) return;
+        confirmDelBtn.disabled = true;
+        confirmDelBtn.textContent = 'Removing…';
+
+        fetch(`{{ url_for('admin.freezes') }}/range/${pendingDeleteRangeId}`, {
+            method: 'DELETE',
+            headers: { 'X-CSRFToken': csrf() },
+        })
+        .then(r => r.json())
+        .then(data => {
+            confirmDeleteModal.hide();
+            confirmDelBtn.disabled = false;
+            confirmDelBtn.textContent = 'Remove';
+            if (data.success) {
+                const row = document.getElementById(`freeze-row-${pendingDeleteRangeId}`);
+                if (row) row.remove();
+            }
+            pendingDeleteRangeId = null;
+        })
+        .catch(() => {
+            confirmDeleteModal.hide();
+            confirmDelBtn.disabled = false;
+            confirmDelBtn.textContent = 'Remove';
+            pendingDeleteRangeId = null;
+        });
+    });
+}());
+</script>
+{% endblock %}

@@ -579,6 +579,31 @@
     </div>
 </div>
 
+<!-- Frozen slot warning modal -->
+<div class="modal fade" id="frozenModal" tabindex="-1" aria-labelledby="frozenModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content" style="border-radius: 1rem;">
+            <div class="modal-header border-0 pb-0">
+                <h6 class="modal-title fw-bold" id="frozenModalLabel">
+                    <i class="bi bi-snow me-2 text-primary"></i>Slot on hold
+                </h6>
+            </div>
+            <div class="modal-body pt-1">
+                <p class="mb-0" style="font-size: 0.92rem;">
+                    DogBoxx can't auto confirm this slot, {{ owner_firstname }} will review, you'll get a
+                    notification if your booking request is confirmed.
+                </p>
+            </div>
+            <div class="modal-footer border-0 pt-1 gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm flex-fill"
+                        id="frozen-cancel-btn" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm flex-fill fw-semibold"
+                        id="frozen-confirm-btn">Request anyway</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="{{ url_for('static', filename='js/reusable-calendar.js') }}"></script>
 <script type="application/json" id="page-config">
 {

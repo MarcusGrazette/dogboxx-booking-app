@@ -19,7 +19,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from app import create_app, db
-from app.models import User, Client, Dog, Walker, Booking, ServiceType, DogOwner
+from app.models import User, Client, Dog, Walker, Booking, ServiceType, DogOwner, WalkerSchedule
 
 
 def load_json_data(filename):
@@ -76,7 +76,7 @@ def seed_clients(clients_data, users):
         if not user:
             print(f"  Warning: User with email {user_email} not found, skipping client")
             continue
-            
+
         client = Client(
             user_id=user.id,
             street_address=client_data.get('street_address'),
@@ -191,6 +191,15 @@ def seed_walkers(walkers_data, users):
         )
 
         db.session.add(walker)
+        db.session.flush()  # get walker.id for the schedule rows below
+
+        for slot_data in walker_data.get('schedule', []):
+            db.session.add(WalkerSchedule(
+                walker_id=walker.id,
+                day_of_week=slot_data['day_of_week'],
+                slot=slot_data['slot'],
+            ))
+
         created_walkers.append(walker)
         print(f"  Created walker: {walker.firstname} {walker.lastname} (user: {user.email})")
 

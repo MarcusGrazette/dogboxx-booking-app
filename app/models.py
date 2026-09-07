@@ -686,6 +686,31 @@ class Closure(db.Model):
     created_by = db.relationship('User', foreign_keys=[created_by_id])
 
 
+class SlotFreeze(db.Model):
+    """A (date, slot) on which new bookings land as 'requested' instead of
+    auto-confirming, even when walker capacity is available. Unlike Closure,
+    a freeze doesn't reject bookings and doesn't touch bookings already
+    confirmed before it was set — see capacity.py::is_slot_frozen()."""
+    __tablename__ = 'slot_freezes'
+    __table_args__ = (
+        db.UniqueConstraint('date', 'slot', name='uq_slot_freeze_date_slot'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, nullable=False, index=True)
+    slot = db.Column(db.Enum('Morning', 'Afternoon', name='schedule_slot', create_type=False), nullable=False)
+    reason = db.Column(db.String(200), nullable=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    # Indexed: the activity feed filters this source by created_at month range (F4).
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    # Groups the N per-date rows created by one date-range freeze action (a
+    # "Both" slot selection creates two rows per date), so the admin list and
+    # activity feed can collapse them into a single entry — mirrors Closure.
+    range_id = db.Column(db.String(32), nullable=False, index=True)
+
+    created_by = db.relationship('User', foreign_keys=[created_by_id])
+
+
 class Broadcast(db.Model):
     """Admin-authored one-shot message to all clients booked on a given date/slot.
 

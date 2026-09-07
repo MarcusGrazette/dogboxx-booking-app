@@ -1,7 +1,24 @@
 [
-  {"firstname": "Admin", "lastname": "User", "user_email": "admin@dogboxx.org"},
-  {"firstname": "Alice", "lastname": "Walker", "user_email": "alice@dogboxx.org"},
-  {"firstname": "Bob", "lastname": "Walker", "user_email": "bob@dogboxx.org"},
-  {"firstname": "Carol", "lastname": "Walker", "user_email": "carol@dogboxx.org"},
-  {"firstname": "Test", "lastname": "Walker", "user_email": "testwalker@dogboxx.org"}
+  {"firstname": "Alice", "lastname": "Walker", "user_email": "alice@dogboxx.org", "schedule": [
+    {"day_of_week": 0, "slot": "Morning"},
+    {"day_of_week": 0, "slot": "Afternoon"},
+    {"day_of_week": 2, "slot": "Morning"},
+    {"day_of_week": 2, "slot": "Afternoon"},
+    {"day_of_week": 4, "slot": "Morning"}
+  ]},
+  {"firstname": "Bob", "lastname": "Walker", "user_email": "bob@dogboxx.org", "schedule": [
+    {"day_of_week": 1, "slot": "Morning"},
+    {"day_of_week": 3, "slot": "Morning"},
+    {"day_of_week": 3, "slot": "Afternoon"}
+  ]},
+  {"firstname": "Carol", "lastname": "Walker", "user_email": "carol@dogboxx.org", "schedule": [
+    {"day_of_week": 0, "slot": "Afternoon"},
+    {"day_of_week": 1, "slot": "Morning"},
+    {"day_of_week": 3, "slot": "Afternoon"}
+  ]},
+  {"firstname": "Test", "lastname": "Walker", "user_email": "testwalker@dogboxx.org", "schedule": [
+    {"day_of_week": 2, "slot": "Morning"},
+    {"day_of_week": 4, "slot": "Morning"},
+    {"day_of_week": 4, "slot": "Afternoon"}
+  ]}
 ]

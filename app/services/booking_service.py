@@ -19,6 +19,7 @@ from app.capacity import (
     check_availability,
     auto_assign_walker,
     get_walker_slot_count,
+    is_slot_frozen,
 )
 from app.utils.booking_status import record_booking_created, transition_booking
 
@@ -57,8 +58,9 @@ def create_booking(
     actor_id        User.id of the person performing the action (audit / BSC row).
     batch_id        Shared hex string for this request; ties the creation BSC row to
                     any immediate auto-confirm BSC row so the activity feed can group.
-    auto_confirm    If True and capacity is available and not same_day and not drop-in,
-                    attempt auto-assign and transition to 'confirmed'.
+    auto_confirm    If True and capacity is available and not same_day and not drop-in
+                    and the slot isn't frozen (SlotFreeze), attempt auto-assign and
+                    transition to 'confirmed'.
     admin_override  Passed through to check_availability; lets admins book past/closed dates.
     same_day        Forces initial status to 'requested' (no waitlist, no auto-assign).
     created_by_id   Set to the admin's user_id when booking on behalf of a client.
@@ -90,7 +92,7 @@ def create_booking(
 
     auto_confirmed = False
     is_drop_in = (service.slug == ServiceType.DROP_IN)
-    if auto_confirm and available and not same_day and not is_drop_in:
+    if auto_confirm and available and not same_day and not is_drop_in and not is_slot_frozen(date, slot):
         walker = auto_assign_walker(date, slot, service_slug=service.slug)
         if walker:
             transition_booking(

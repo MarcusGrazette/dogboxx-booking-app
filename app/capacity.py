@@ -6,7 +6,7 @@ import struct
 from sqlalchemy import func, text
 from sqlalchemy.orm import joinedload
 
-from app.models import WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, Booking, ServiceType, Walker, Closure
+from app.models import WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, Booking, ServiceType, Walker, Closure, SlotFreeze
 from app import db
 
 # Shared between /recurring_booking (client) and /admin/recurring_for_dog —
@@ -245,6 +245,15 @@ def is_date_closed(date):
     return False, ''
 
 
+def is_slot_frozen(date, slot):
+    """Return True if (date, slot) has a SlotFreeze record — auto-confirm
+    should be skipped so the booking lands as 'requested' for manual review.
+    Plain equality lookup: every create_booking() caller only ever passes
+    slot='Morning'|'Afternoon' (see create_booking's docstring), so there's
+    no 'Full Day'/'Half Day AM'/'Half Day PM' mapping to resolve here."""
+    return SlotFreeze.query.filter_by(date=date, slot=slot).first() is not None
+
+
 def check_availability(service_type, date, slot=None, admin_override=False):
     """Check if a booking can be made for the given service, date, and slot.
     Returns (available: bool, can_waitlist: bool, message: str).
@@ -300,8 +309,8 @@ def get_slot_availability_summary(date):
     """Return availability info for both slots on a given date for group walks.
 
     Returns: {
-        'Morning': {'total': 12, 'booked': 8, 'available': 4},
-        'Afternoon': {'total': 6, 'booked': 2, 'available': 4},
+        'Morning': {'total': 12, 'booked': 8, 'available': 4, 'frozen': False},
+        'Afternoon': {'total': 6, 'booked': 2, 'available': 4, 'frozen': False},
     }
     """
     result = {}
@@ -311,6 +320,7 @@ def get_slot_availability_summary(date):
             'total': total,
             'booked': booked,
             'available': available,
+            'frozen': is_slot_frozen(date, slot),
         }
     return result
 
@@ -319,8 +329,8 @@ def get_drop_in_availability_summary(date):
     """Return drop-in availability info for both slots on a given date.
 
     Returns: {
-        'Morning': {'total': 6, 'booked': 2, 'available': 4},
-        'Afternoon': {'total': 6, 'booked': 1, 'available': 5},
+        'Morning': {'total': 6, 'booked': 2, 'available': 4, 'frozen': False},
+        'Afternoon': {'total': 6, 'booked': 1, 'available': 5, 'frozen': False},
     }
     """
     result = {}
@@ -330,5 +340,6 @@ def get_drop_in_availability_summary(date):
             'total': total,
             'booked': booked,
             'available': available,
+            'frozen': is_slot_frozen(date, slot),
         }
     return result
