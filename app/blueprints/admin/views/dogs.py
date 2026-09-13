@@ -13,7 +13,7 @@ from app import db
 from app.utils.notifications import NotificationBatch
 from app.utils.booking_status import bulk_transition
 from app.services.booking_service import create_booking, CapacityError
-from app.capacity import MAX_RECURRING_SERIES
+from app.capacity import MAX_RECURRING_SERIES, check_availability
 from app.utils.invoicing import is_late_cancellation
 from app.utils.sanitize import clean_rich_text_or_none
 from app.utils.uploads import process_dog_photo
@@ -249,6 +249,27 @@ def book_for_dog():
                 label = f"the {s.lower()} slot" if slot == 'Both' else "that slot"
                 return jsonify(success=False, message=f"This dog already has a booking for {label} on that date"), 400
 
+        # Capacity pre-flight for EVERY slot before creating ANY of them — same
+        # all-or-nothing shape as the duplicate check above, and for the same
+        # reason. Without it, a 'Both' booking whose Afternoon has no walkers
+        # created the Morning row, then returned 400; the Morning booking
+        # persisted anyway (Flask-Session commits db.session at response time)
+        # while the notification batch below — built after this loop — never ran.
+        # The admin saw "nothing happened", the client was never told, and the
+        # walker's pickup list silently gained a dog.
+        #
+        # Slots don't share capacity, so checking Afternoon before creating
+        # Morning gives the same answer as checking it afterwards. This is only
+        # the fast path, though: create_booking() re-checks under its advisory
+        # lock, so a concurrent booking can still raise CapacityError below —
+        # hence the rollback there.
+        for s in slots_to_book:
+            available, can_waitlist, capacity_msg = check_availability(
+                service, booking_date, s, admin_override=True
+            )
+            if not available and not can_waitlist:
+                return jsonify(success=False, message=capacity_msg), 400
+
         service_label = service.name.lower()
 
         bookings_created = []
@@ -266,6 +287,10 @@ def book_for_dog():
                     auto_confirm=not is_drop_in,
                 )
             except CapacityError as e:
+                # Lost the race against a concurrent booking between the
+                # pre-flight above and create_booking()'s own locked re-check.
+                # Roll back so an earlier slot in this loop doesn't persist.
+                db.session.rollback()
                 return jsonify(success=False, message=str(e)), 400
 
             bookings_created.append(booking)
