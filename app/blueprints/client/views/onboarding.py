@@ -68,6 +68,29 @@ def onboard():
 
     if form.validate_on_submit():
         try:
+            # Handle file upload FIRST, before touching the Client record.
+            # Both error branches below return a rendered template without
+            # rolling back, and Flask-Session commits db.session at response
+            # time — so when this ran after the mutations below, a rejected
+            # photo still persisted onboarding_completed=True, leaving the
+            # client marked onboarded with no dog and landing on a dashboard
+            # that assumes one. Note these returns are HTTP 200, so nothing
+            # keyed on an error status would have caught it either.
+            # process_dog_photo() only writes a file and returns a name; it
+            # touches no DB state, so hoisting it is behaviour-preserving.
+            pic_filename = None
+            if 'file' in request.files:
+                try:
+                    pic_filename = process_dog_photo(request.files['file'])
+                except ValueError as e:
+                    logging.error(f"Invalid file upload: {e}")
+                    flash(f"Upload error: {str(e)}. Please try a different file.", "error")
+                    return render_template("onboarding.html", form=form, existing_dog=existing_dog, has_address=has_address, has_dog_info=has_dog_info, today=datetime.now().strftime('%Y-%m-%d'))
+                except Exception as e:
+                    logging.exception(f"Error processing uploaded file: {e}")
+                    flash("There was an error processing your image. Please try a different file.", "error")
+                    return render_template("onboarding.html", form=form, existing_dog=existing_dog, has_address=has_address, has_dog_info=has_dog_info, today=datetime.now().strftime('%Y-%m-%d'))
+
             if not client:
                 client = Client(user_id=current_user.id)
                 db.session.add(client)
@@ -82,20 +105,6 @@ def onboard():
             client.maps_url = form.maps_url.data.strip() if form.maps_url.data else None
             client.onboarding_completed = True
             client.onboarding_completed_at = datetime.now(timezone.utc)
-
-            # Handle file upload
-            pic_filename = None
-            if 'file' in request.files:
-                try:
-                    pic_filename = process_dog_photo(request.files['file'])
-                except ValueError as e:
-                    logging.error(f"Invalid file upload: {e}")
-                    flash(f"Upload error: {str(e)}. Please try a different file.", "error")
-                    return render_template("onboarding.html", form=form, existing_dog=existing_dog, has_address=has_address, has_dog_info=has_dog_info, today=datetime.now().strftime('%Y-%m-%d'))
-                except Exception as e:
-                    logging.exception(f"Error processing uploaded file: {e}")
-                    flash("There was an error processing your image. Please try a different file.", "error")
-                    return render_template("onboarding.html", form=form, existing_dog=existing_dog, has_address=has_address, has_dog_info=has_dog_info, today=datetime.now().strftime('%Y-%m-%d'))
 
             # Dog: update existing record if admin already created one, else create fresh
             dog_name = form.dog_name.data.strip()
