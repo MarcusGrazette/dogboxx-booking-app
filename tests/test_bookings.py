@@ -1220,8 +1220,15 @@ class TestConcurrentDuplicateGraceful409:
     def _setup(self, app):
         tom = tomorrow()
         with app.app_context():
-            make_walker_with_schedule(f'w_am_{id(self)}@t.com', tom.weekday(), 'Morning')
+            w_am = make_walker_with_schedule(f'w_am_{id(self)}@t.com', tom.weekday(), 'Morning')
             make_walker_with_schedule(f'w_pm_{id(self)}@t.com', tom.weekday(), 'Afternoon')
+            # The morning walker must do drop-ins, or /book_drop_in 409s on
+            # capacity before it ever reaches create_booking(). The previous
+            # version of this test had no such walker and still "passed" for
+            # /book_drop_in — it asserted 409 and got one, but for a capacity
+            # reason, never exercising the duplicate path at all. The
+            # `assert state['fired']` below is what stops that recurring.
+            w_am.does_drop_ins = True
             make_service(capacity=6)
             make_drop_in_service(capacity=6)
             user = make_user(f'cl_race_{id(self)}@t.com')
@@ -1236,19 +1243,34 @@ class TestConcurrentDuplicateGraceful409:
         ('/book_drop_in', {'slot': 'Morning'}),
         ('/book_both',    {}),
     ])
-    def test_integrityerror_at_commit_returns_409(self, app, client, endpoint, extra):
+    def test_integrityerror_at_flush_returns_409(self, app, client, endpoint, extra):
+        """The violation must be handled where it actually happens: the FLUSH.
+
+        This test previously injected at `before_commit`, which is the one point
+        the failure *cannot* occur — create_booking() calls db.session.flush() to
+        populate booking.id before writing the audit row, so Postgres rejects the
+        duplicate there, hundreds of lines before the commit the handlers used to
+        wrap. The old test therefore passed against code that 500'd in production.
+
+        Injecting at `after_flush` reproduces the real timing: it fires inside
+        db.session.flush(), so the exception propagates out of create_booking()
+        exactly as a live unique-index violation does.
+        """
         from sqlalchemy import event
         from sqlalchemy.exc import IntegrityError
 
         email, dog_id = self._setup(app)
         login(client, email)
 
-        # Raise on the FIRST commit (the booking commit) only, so any later
-        # session-store commit during teardown still succeeds.
+        # Fire once, and only on the flush that is inserting a Booking — later
+        # flushes (notifications, and the session-store write at teardown) must
+        # still succeed.
         state = {'fired': False}
 
-        def _raise_dupe(session):
+        def _raise_dupe(session, flush_context):
             if state['fired']:
+                return
+            if not any(isinstance(obj, Booking) for obj in session.new):
                 return
             state['fired'] = True
             raise IntegrityError(
@@ -1256,15 +1278,17 @@ class TestConcurrentDuplicateGraceful409:
                 Exception('duplicate key value violates unique constraint '
                           '"ix_booking_dog_date_slot_active"'))
 
-        event.listen(db.session, 'before_commit', _raise_dupe)
+        event.listen(db.session, 'after_flush', _raise_dupe)
         try:
             payload = {'dog_id': dog_id, 'date': tomorrow().isoformat(), **extra}
             resp = client.post(endpoint, data=json.dumps(payload),
                                content_type='application/json')
         finally:
-            event.remove(db.session, 'before_commit', _raise_dupe)
+            event.remove(db.session, 'after_flush', _raise_dupe)
             db.session.remove()
 
+        assert state['fired'], \
+            f'{endpoint}: the injection never fired — test proves nothing'
         assert resp.status_code == 409, \
             f'{endpoint}: expected graceful 409, got {resp.status_code}'
         data = resp.get_json()

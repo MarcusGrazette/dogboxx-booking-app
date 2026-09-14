@@ -174,6 +174,95 @@ def create_app(config_name=None):
 
             gevent.spawn(_send_pending_pushes, wp_pending)
 
+    @sa_event.listens_for(db.session, 'after_rollback')
+    def _discard_pending_on_rollback(session):
+        # session.info is scoped to the Session OBJECT, not the transaction, so a
+        # rollback leaves the queues above fully intact. Without this, a route that
+        # queued a notification and then rolled back still delivers it: the next
+        # commit on the same session drains the queue, and Flask-Session commits
+        # db.session at response time on essentially every request (see
+        # _guard_uncommitted_session below). The delivered SSE payload embeds the
+        # notif.id from the rolled-back flush, so the bell links to a row that
+        # doesn't exist.
+        #
+        # Plain 'after_rollback' is sufficient *because the app uses no savepoints*.
+        # If begin_nested() is ever introduced, this becomes wrong — a nested
+        # rollback would discard payloads queued outside the savepoint — and the
+        # listener must then split into after_rollback / after_soft_rollback.
+        session.info.pop('sse_pending', None)
+        session.info.pop('webpush_pending', None)
+        session.info.pop('_flushed_uncommitted', None)
+
+    @sa_event.listens_for(db.session, 'after_flush')
+    def _mark_flushed_uncommitted(session, flush_context):
+        # Tracks "this transaction has written something that isn't committed".
+        #
+        # session.new / .dirty / .deleted only hold *unflushed* changes — once a
+        # flush sends the INSERT/UPDATE they empty out, even though the
+        # transaction is still open and uncommitted. That makes them useless as a
+        # leak detector here, because the leaks we care about are all
+        # post-flush: create_booking() flushes to populate booking.id before
+        # writing its audit row, so by the time the route returns an error the
+        # session looks perfectly clean while a full INSERT sits pending.
+        session.info['_flushed_uncommitted'] = True
+
+    @sa_event.listens_for(db.session, 'after_commit')
+    def _clear_flushed_marker(session):
+        session.info.pop('_flushed_uncommitted', None)
+
+    @app.after_request
+    def _guard_uncommitted_session(response):
+        """Detect (currently: only report) work left uncommitted at response time.
+
+        Flask-Session stores sessions in the app's own db.session
+        (SESSION_SQLALCHEMY = db above), and its _upsert_session() ends with
+        db.session.commit(). Flask's SESSION_REFRESH_EACH_REQUEST defaults to True,
+        so that runs on essentially every request from a logged-in user — which
+        means `return jsonify(...), 400` without a rollback is not an escape hatch,
+        it's a deferred commit of whatever the route already mutated.
+
+        Ordering is load-bearing: Flask.process_response runs after_request funcs
+        and *then* save_session, so this sees the session before that commit.
+
+        Triggering on pending writes rather than status code is also deliberate —
+        the onboarding photo-error path returns HTTP 200 while leaving
+        onboarding_completed=True pending, so a 4xx/5xx check would miss it.
+
+        "Pending" means either unflushed ORM changes (new/dirty/deleted) or a
+        flush that no commit or rollback has followed — see
+        _mark_flushed_uncommitted above for why the second half is the important
+        one.
+
+        LOG-ONLY for now: this reports, it does not roll back, so it protects
+        nothing on its own. Its job is to prove the accompanying route fixes found
+        every site — it should be silent from day one, and any hit is a site we
+        missed. Flip to enforcing (add session.rollback()) after a clean week in
+        prod; tracked in FEATURES.md. Same staging pattern as the Web Push SSRF
+        allowlist (FEATURES #51).
+
+        ERROR level is intentional: Sentry's LoggingIntegration turns this into an
+        event, and a hit here is a real bug that should surface rather than sit in
+        a log file.
+        """
+        try:
+            sess = db.session
+            flushed = sess.info.get('_flushed_uncommitted', False)
+            if flushed or sess.new or sess.dirty or sess.deleted:
+                app.logger.error(
+                    'Uncommitted session state at response time: %s %s -> %s '
+                    '(flushed=%s new=%d dirty=%d deleted=%d). A route mutated and '
+                    'returned without committing or rolling back; Flask-Session is '
+                    'about to commit it. See CLAUDE.md "Transactions & session state".',
+                    request.method, request.path, response.status_code,
+                    flushed, len(sess.new), len(sess.dirty), len(sess.deleted),
+                )
+        except Exception:
+            # Never let the guard break a response — it is a diagnostic, not a
+            # dependency. A detached/failed session is exactly when a request is
+            # already going wrong; masking the real error would be worse.
+            logging.getLogger(__name__).exception('Uncommitted-session guard failed')
+        return response
+
     # Initialize Flask-Migrate for database migrations
     migrate.init_app(app, db)
 

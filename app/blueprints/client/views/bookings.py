@@ -598,6 +598,24 @@ def book_both():
         except CapacityError:
             skipped.append(slot)
             continue
+        except IntegrityError:
+            # Concurrent-duplicate race. create_booking() flushes the INSERT to
+            # populate booking.id for the audit row, so the (dog_id, date, slot)
+            # partial unique index rejects it HERE — not at the commit far below,
+            # which is the only place this used to be caught. The advisory lock
+            # is per-service while the index is cross-service (dog, date, slot),
+            # so a walk racing a drop-in still collides.
+            #
+            # Unlike CapacityError we can't skip this slot and carry on: the
+            # rollback also discards the other slot's booking, so continuing
+            # would build notifications for a row that no longer exists. Abort
+            # the whole request with one 409 and let the client reload. (The
+            # per-slot alternative is a savepoint per slot; deliberately not
+            # done — see the PR 1 notes on keeping savepoints out of this
+            # codebase.)
+            db.session.rollback()
+            return jsonify({'success': False,
+                            'message': f'{dog.name} already has a booking for one of those slots.'}), 409
 
         final_created.append((slot, b.status, b))
         if b.status == 'waitlisted' or not auto_confirmed:
@@ -781,13 +799,22 @@ def book_drop_in():
         )
     except CapacityError as e:
         return jsonify({'success': False, 'message': str(e)}), 409
+    except IntegrityError:
+        # Concurrent-duplicate race. create_booking() flushes the INSERT to
+        # populate booking.id for the audit row, so the unique index rejects it
+        # here rather than at the commit below — the commit-only handler that
+        # used to be the sole guard never saw it, and this 500'd. A drop-in
+        # racing a walk is the realistic case: the advisory lock is per-service,
+        # the index is cross-service (dog, date, slot).
+        db.session.rollback()
+        return jsonify({'success': False,
+                        'message': f'{dog.name} already has a booking for that slot.'}), 409
 
     booking_status = new_booking.status
     try:
         db.session.commit()
     except IntegrityError:
-        # Concurrent-duplicate race — unique index rejected it. Graceful 409
-        # instead of a 500 (SECURITY_REVIEW.md #2).
+        # Backstop for a collision that somehow survives to commit time.
         db.session.rollback()
         return jsonify({'success': False,
                         'message': f'{dog.name} already has a booking for that slot.'}), 409

@@ -48,6 +48,25 @@ def _error_test_crash_view():
     return 'ok'
 
 
+# Same trick for the uncommitted-session guard (tests/test_transaction_integrity.py):
+# a route that deliberately mutates and returns an error WITHOUT committing or
+# rolling back — the shape every finding-#1 site had. It has to be registered at
+# app-creation time for the same reason as the crash route above.
+_DIRTY_TEST_PATH = '/__test_leaves_session_dirty__'
+_dirty_test_user_id = None
+
+
+def _dirty_session_view():
+    """Mutate a user and return 400 without committing or rolling back."""
+    from app.models import User as _User
+    if _dirty_test_user_id is not None:
+        user = _db.session.get(_User, _dirty_test_user_id)
+        if user is not None:
+            user.lastname = 'LeakedByTest'
+            _db.session.flush()
+    return {'ok': False}, 400
+
+
 @pytest.fixture(scope='session')
 def app():
     """Create application with testing config (in-memory SQLite)."""
@@ -59,6 +78,12 @@ def app():
         endpoint='_test_error_handler_crash',
         view_func=_error_test_crash_view,
     )
+    application.add_url_rule(
+        _DIRTY_TEST_PATH,
+        endpoint='_test_leaves_session_dirty',
+        view_func=_dirty_session_view,
+        methods=['GET'],
+    )
     return application
 
 
@@ -69,6 +94,20 @@ def crash_next_request():
     _raise_on_next_error_test_request = True
     yield
     _raise_on_next_error_test_request = False
+
+
+@pytest.fixture
+def dirty_session_route():
+    """Point the uncommitted-session test route at a user, and yield its path.
+
+    Usage: `path = dirty_session_route(user_id)` then GET that path.
+    """
+    def _configure(user_id):
+        global _dirty_test_user_id
+        _dirty_test_user_id = user_id
+        return _DIRTY_TEST_PATH
+    yield _configure
+    _dirty_test_user_id = None
 
 
 @pytest.fixture(autouse=True)

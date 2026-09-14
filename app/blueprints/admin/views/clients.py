@@ -792,6 +792,19 @@ def update_client_pickup_details(client_id):
     if pickup_instructions and len(pickup_instructions) > 20000:
         return jsonify(success=False, message="Instructions too long"), 400
 
+    # Resolve the dog BEFORE mutating the client. Pickup notes live on the dog,
+    # not the client, and a client with no dog is a normal state —
+    # /admin/clients/new only requires name + email. When this 404 came after
+    # `client.maps_url = maps_url`, the admin was told the save failed while the
+    # URL change persisted anyway (Flask-Session commits db.session at response
+    # time), and record_admin_action further down never ran — so the change also
+    # bypassed the ActivityLog chokepoint and left no audit row.
+    from app.models import DogOwner
+    dog_owner = DogOwner.query.filter_by(user_id=user.id, role='primary').first()
+    dog = db.session.get(Dog, dog_owner.dog_id) if dog_owner else None
+    if not dog:
+        return jsonify(success=False, message="No dog record found — add a dog first before saving pickup notes"), 404
+
     before_client_maps_url = client.maps_url
     if 'maps_url' in data:
         maps_url = (data.get('maps_url') or '').strip() or None
@@ -799,12 +812,6 @@ def update_client_pickup_details(client_id):
             return jsonify(success=False, message="Maps URL too long"), 400
         client.maps_url = maps_url
 
-    # Pickup notes now live on the dog, not the client
-    from app.models import DogOwner
-    dog_owner = DogOwner.query.filter_by(user_id=user.id, role='primary').first()
-    dog = db.session.get(Dog, dog_owner.dog_id) if dog_owner else None
-    if not dog:
-        return jsonify(success=False, message="No dog record found — add a dog first before saving pickup notes"), 404
     before_dog_pickup = dog.pickup_instructions
     dog.pickup_instructions = pickup_instructions
 
