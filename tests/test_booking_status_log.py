@@ -515,6 +515,131 @@ class TestCancel:
         assert resp.status_code == 400
 
 
+class TestCancelSourceStateGuards:
+    """develop review 2026-09-09, finding #2: cancellation lacked source-state
+    validation — repeat cancellation overwrote billing attribution, and
+    clients could cancel bookings in the past."""
+
+    def test_repeat_cancellation_is_idempotent_noop(self, app, client):
+        """Re-cancelling an already-cancelled booking returns success without
+        touching cancelled_at/cancelled_by/bill_cancellation again, and writes
+        no second BSC row."""
+        with app.app_context():
+            b, user = seed_booking(status='confirmed')
+            db.session.commit()
+            email, bid = user.email, b.id
+
+        login(client, email)
+        first = client.post('/cancel_booking', data=json.dumps({'booking_id': bid}),
+                            content_type='application/json')
+        assert first.status_code == 200
+
+        with app.app_context():
+            first_cancelled_at = db.session.get(Booking, bid).cancelled_at
+
+        second = client.post('/cancel_booking', data=json.dumps({'booking_id': bid}),
+                             content_type='application/json')
+        assert second.status_code == 200
+        assert second.get_json()['success'] is True
+
+        with app.app_context():
+            rows = bsc_rows(bid)
+            assert len(rows) == 1
+            booking = db.session.get(Booking, bid)
+            assert booking.cancelled_at == first_cancelled_at
+
+    def test_client_cannot_cancel_past_booking(self, app, client):
+        with app.app_context():
+            yesterday = datetime.date.today() - datetime.timedelta(days=1)
+            b, user = seed_booking(status='confirmed', date=yesterday)
+            db.session.commit()
+            email, bid = user.email, b.id
+
+        login(client, email)
+        resp = client.post('/cancel_booking', data=json.dumps({'booking_id': bid}),
+                           content_type='application/json')
+        assert resp.status_code == 400
+
+        with app.app_context():
+            assert db.session.get(Booking, bid).status == 'confirmed'
+
+    def test_admin_can_still_cancel_past_booking(self, app, client):
+        """Admin back-fill onto past dates is deliberate (mirrors book_for_dog);
+        only the client-initiated branch is date-restricted."""
+        with app.app_context():
+            admin = make_user('admin_past_cancel@test.com', role='walker', is_admin=True)
+            yesterday = datetime.date.today() - datetime.timedelta(days=1)
+            b, _ = seed_booking(status='confirmed', date=yesterday)
+            db.session.commit()
+            admin_email, bid = admin.email, b.id
+
+        login(client, admin_email)
+        resp = client.post('/cancel_booking', data=json.dumps({'booking_id': bid}),
+                           content_type='application/json')
+        assert resp.status_code == 200
+
+        with app.app_context():
+            assert db.session.get(Booking, bid).status == 'cancelled'
+
+
+class TestCancelNeverConfirmedNotBillable:
+    """develop review 2026-09-09, finding #3: cancelling a waitlisted or
+    requested (never-confirmed) booking must never be billable, regardless of
+    the notice window — no walker time was ever committed. See
+    bill_cancellation_for() in app/utils/invoicing.py."""
+
+    def test_waitlisted_cancel_inside_window_not_billed(self, app, client):
+        with app.app_context():
+            near = datetime.date.today() + datetime.timedelta(days=1)
+            b, user = seed_booking(status='waitlisted', date=near)
+            db.session.commit()
+            email, bid = user.email, b.id
+
+        login(client, email)
+        resp = client.post('/cancel_booking', data=json.dumps({'booking_id': bid}),
+                           content_type='application/json')
+        assert resp.status_code == 200
+
+        with app.app_context():
+            booking = db.session.get(Booking, bid)
+            assert booking.bill_cancellation is False
+
+    def test_same_day_requested_cancel_not_billed(self, app, client):
+        with app.app_context():
+            today = datetime.date.today()
+            b, user = seed_booking(status='requested', date=today)
+            db.session.commit()
+            email, bid = user.email, b.id
+
+        login(client, email)
+        resp = client.post('/cancel_booking', data=json.dumps({'booking_id': bid}),
+                           content_type='application/json')
+        assert resp.status_code == 200
+
+        with app.app_context():
+            booking = db.session.get(Booking, bid)
+            assert booking.bill_cancellation is False
+
+    def test_confirmed_cancel_still_uses_legacy_window_policy(self, app, client):
+        """Sanity check: a genuinely-confirmed booking cancelled by the client
+        inside the notice window still leaves bill_cancellation=None, deferring
+        to is_billable_cancellation()'s legacy policy (unchanged)."""
+        with app.app_context():
+            near = datetime.date.today() + datetime.timedelta(days=1)
+            b, user = seed_booking(status='confirmed', date=near)
+            db.session.commit()
+            email, bid = user.email, b.id
+
+        login(client, email)
+        resp = client.post('/cancel_booking', data=json.dumps({'booking_id': bid}),
+                           content_type='application/json')
+        assert resp.status_code == 200
+
+        with app.app_context():
+            booking = db.session.get(Booking, bid)
+            assert booking.bill_cancellation is None
+
+
 class TestReset:
 
     def test_admin_unavailability_resets_and_logs(self, app, client):

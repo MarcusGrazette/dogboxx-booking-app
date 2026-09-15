@@ -14,7 +14,7 @@ from app.models import User, Booking, Walker, WalkerSchedule, WalkerUnavailabili
 from app import db
 from app.capacity import get_max_per_walker, get_walker_slot_count, get_drop_in_capacity, auto_assign_walker, get_available_walkers, check_availability, acquire_booking_lock
 from app.utils.notifications import create_notification
-from app.utils.booking_status import transition_booking
+from app.utils.booking_status import transition_booking, InvalidTransitionError
 
 
 def _batch_owners_display(dog_ids):
@@ -355,10 +355,13 @@ def assign_walker():
         if not booking:
             return jsonify(success=False, message="Booking not found"), 404
 
-        # If walker_id is None, this is an unassignment operation
+        # If walker_id is None, this is an unassignment operation. allowed_from
+        # rejects a booking a client already cancelled since the board loaded
+        # (or the admin already unassigned it in another tab) rather than
+        # silently reopening it as 'requested'.
         if walker_id is None:
             transition_booking(booking, 'requested', actor_id=current_user.id,
-                               walker_id=None)
+                               walker_id=None, allowed_from={'confirmed'})
             booking.pickup_order = None
             db.session.commit()
 
@@ -460,10 +463,15 @@ def assign_walker():
         # (otherwise both look like a confirmed→confirmed row with no detail).
         slot_was_changed = bool(slot_override and slot and old_slot and old_slot != slot)
         bsc_notes = f"slot {old_slot} → {slot}" if slot_was_changed else None
+        # allowed_from covers both a fresh assign (requested/waitlisted) and a
+        # reassign between walkers (confirmed) — but rejects a booking the
+        # client cancelled, or the admin declined, after this board loaded, so
+        # a stale drag-and-drop can't resurrect it as confirmed.
         transition_booking(booking, 'confirmed', actor_id=current_user.id,
                            walker_id=walker.id, notes=bsc_notes,
                            old_slot=old_slot if slot_was_changed else None,
-                           new_slot=slot if slot_was_changed else None)
+                           new_slot=slot if slot_was_changed else None,
+                           allowed_from={'requested', 'waitlisted', 'confirmed'})
         if slot:
             booking.slot = slot
 
@@ -526,6 +534,9 @@ def assign_walker():
             }
         ), 200
 
+    except InvalidTransitionError:
+        db.session.rollback()
+        return jsonify(success=False, message="This booking's status just changed — please reload the board"), 409
     except Exception as e:
         # This will be handled by the @handle_db_errors decorator
         # This code won't be reached for database errors, only for other types of exceptions

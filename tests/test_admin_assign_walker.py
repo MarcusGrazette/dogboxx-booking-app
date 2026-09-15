@@ -605,3 +605,51 @@ class TestAssignWalkerConcurrencyRace:
             ).count()
             assert confirmed == 1, \
                 f'walker over capacity: expected 1 confirmed booking, found {confirmed}'
+
+
+class TestSourceStateGuard:
+    """develop review 2026-09-09, finding #2: assign_walker never checked the
+    refreshed booking's status before unconditionally confirming/unassigning
+    it — a stale admin board could resurrect a booking a client had since
+    cancelled, or reopen one that was never actually assigned."""
+
+    def test_assigning_a_cancelled_booking_is_rejected(self, app, client):
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_admin()
+            _, walker = _make_walker()
+            booking = _make_booking(monday, slot='Morning')
+            booking.status = 'cancelled'
+            db.session.add(WalkerSchedule(
+                walker_id=walker.id, day_of_week=0, slot='Morning', active=True,
+            ))
+            db.session.commit()
+            admin_email, booking_id, walker_id = admin.email, booking.id, walker.id
+
+        _login(client, admin_email)
+        resp = _post_assign(client, booking_id, walker_id, slot='Morning')
+        assert resp.status_code == 409, resp.get_json()
+
+        with app.app_context():
+            booking = db.session.get(Booking, booking_id)
+            assert booking.status == 'cancelled'
+            assert booking.walker_id is None
+
+    def test_unassigning_a_never_confirmed_booking_is_rejected(self, app, client):
+        """Unassign is only meaningful on a confirmed (has-a-walker) booking —
+        rejecting anything else stops a stale board reopening e.g. a rejected
+        booking as 'requested'."""
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_admin()
+            booking = _make_booking(monday, slot='Morning')
+            booking.status = 'rejected'
+            db.session.commit()
+            admin_email, booking_id = admin.email, booking.id
+
+        _login(client, admin_email)
+        resp = _post_assign(client, booking_id, None)
+        assert resp.status_code == 409, resp.get_json()
+
+        with app.app_context():
+            assert db.session.get(Booking, booking_id).status == 'rejected'

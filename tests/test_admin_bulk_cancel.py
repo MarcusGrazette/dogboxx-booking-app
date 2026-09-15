@@ -280,15 +280,37 @@ class TestBulkCancelWalkerNotification:
 
 
 class TestBulkCancelLateFeeBilling:
-    """Admin bulk-cancel: bookings inside the notice window bill by default
-    (bill_cancellation=True) unless waived; bookings outside it stay None."""
+    """Admin bulk-cancel: a *confirmed* booking inside the notice window bills
+    by default (bill_cancellation=True) unless waived; outside the window it
+    stays None. A booking that was never confirmed is never billed, regardless
+    of the notice window — see bill_cancellation_for() in app/utils/invoicing.py
+    (develop review 2026-09-09, finding #3)."""
+
+    def _seed_confirmed_bookings(self, user, dog, service_type, dates, slot='Morning'):
+        """Like _seed_bookings but status='confirmed' with a walker assigned —
+        the only pre-cancel status a late cancellation can actually bill."""
+        from app.models import User as _User
+        u = _User(firstname='Walker', lastname='LF', email=f'walker_lf_{dates[0]}@test.com',
+                  role='walker', hashed_password=generate_password_hash('Testpass1!'))
+        db.session.add(u); db.session.flush()
+        walker = Walker(user_id=u.id)
+        db.session.add(walker); db.session.flush()
+        ids = []
+        for d in dates:
+            b = Booking(user_id=user.id, dog_id=dog.id, service_type_id=service_type.id,
+                       date=d, slot=slot, status='confirmed', walker_id=walker.id)
+            db.session.add(b)
+            db.session.flush()
+            ids.append(b.id)
+        db.session.commit()
+        return ids
 
     def test_late_bookings_bill_by_default(self, client_user, dog, service_type,
                                            admin_user, logged_in_admin):
-        # Both dates within the 5-day notice window → late.
+        # Both dates within the 5-day notice window → late. Confirmed, so billable.
         d1 = datetime.date.today() + datetime.timedelta(days=1)
         d2 = datetime.date.today() + datetime.timedelta(days=2)
-        ids = _seed_bookings(client_user, dog, service_type, [d1, d2])
+        ids = self._seed_confirmed_bookings(client_user, dog, service_type, [d1, d2])
         resp = logged_in_admin.post(
             f'/admin/dogs/{dog.id}/bulk-cancel',
             data=json.dumps({'start': d1.isoformat(), 'end': d2.isoformat()}),
@@ -301,7 +323,7 @@ class TestBulkCancelLateFeeBilling:
     def test_waive_late_fee_sets_false(self, client_user, dog, service_type,
                                        admin_user, logged_in_admin):
         d1 = datetime.date.today() + datetime.timedelta(days=1)
-        ids = _seed_bookings(client_user, dog, service_type, [d1])
+        ids = self._seed_confirmed_bookings(client_user, dog, service_type, [d1])
         resp = logged_in_admin.post(
             f'/admin/dogs/{dog.id}/bulk-cancel',
             data=json.dumps({'start': d1.isoformat(), 'end': d1.isoformat(),
@@ -323,6 +345,21 @@ class TestBulkCancelLateFeeBilling:
         )
         assert resp.status_code == 200
         assert db.session.get(Booking, ids[0]).bill_cancellation is None
+
+    def test_late_but_never_confirmed_not_billed(self, client_user, dog, service_type,
+                                                 admin_user, logged_in_admin):
+        # Inside the notice window, but still 'requested' — no walker time was
+        # ever committed, so it must not bill even though it's "late" and the
+        # admin didn't waive.
+        d1 = datetime.date.today() + datetime.timedelta(days=1)
+        ids = _seed_bookings(client_user, dog, service_type, [d1])
+        resp = logged_in_admin.post(
+            f'/admin/dogs/{dog.id}/bulk-cancel',
+            data=json.dumps({'start': d1.isoformat(), 'end': d1.isoformat()}),
+            content_type='application/json',
+        )
+        assert resp.status_code == 200
+        assert db.session.get(Booking, ids[0]).bill_cancellation is False
 
 
 class TestCancelServiceFilter:

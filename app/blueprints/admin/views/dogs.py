@@ -650,8 +650,16 @@ def dog_cancel_preview(dog_id):
 
     # How many fall inside the notice window — these bill by default unless the
     # admin waives. The UI uses late_count to show/hide the late-fee checkbox.
+    # Confirmed-only: a never-confirmed booking (requested/waitlisted) is
+    # never billable regardless of the notice window (see
+    # bill_cancellation_for in app/utils/invoicing.py) — counting it here
+    # would show the late-fee checkbox for a range that won't actually bill
+    # anything.
     today = datetime.now(timezone.utc).date()
-    late_count = sum(1 for b in bookings if is_late_cancellation(b, today))
+    late_count = sum(
+        1 for b in bookings
+        if b.status == 'confirmed' and is_late_cancellation(b, today)
+    )
 
     # The preview only needs to confirm the admin picked the right dates/days —
     # the range can span hundreds of walks, so cap the serialised list at 10.
@@ -745,15 +753,25 @@ def dog_bulk_cancel(dog_id):
     # default unless `waive_late_fee` is set; bookings outside the window are
     # never late so leave bill_cancellation=None. Set the flag only on the late
     # subset — an explicit True on a non-late row would wrongly bill it.
+    # Within the late subset, only a booking that was actually confirmed (a
+    # walker's time was committed) can be billed — see bill_cancellation_for().
+    # A late-but-never-confirmed booking (requested/waitlisted) still cancels,
+    # just never billed, regardless of the waive checkbox.
     today = datetime.now(timezone.utc).date()
     waive = bool(data.get('waive_late_fee'))
     late, not_late = [], []
     for b in bookings:
         (late if is_late_cancellation(b, today) else not_late).append(b)
-    if late:
-        bulk_transition(late, 'cancelled', actor_id=current_user.id,
+    late_confirmed = [b for b in late if b.status == 'confirmed']
+    late_other = [b for b in late if b.status != 'confirmed']
+    if late_confirmed:
+        bulk_transition(late_confirmed, 'cancelled', actor_id=current_user.id,
                         walker_id=None, cancelled_by='admin', batch_id=batch_id,
                         bill_cancellation=(not waive))
+    if late_other:
+        bulk_transition(late_other, 'cancelled', actor_id=current_user.id,
+                        walker_id=None, cancelled_by='admin', batch_id=batch_id,
+                        bill_cancellation=False)
     if not_late:
         bulk_transition(not_late, 'cancelled', actor_id=current_user.id,
                         walker_id=None, cancelled_by='admin', batch_id=batch_id)
