@@ -29,6 +29,30 @@ def is_late_cancellation(booking, ref_date):
     return (booking.date - ref_date).days < _cancellation_notice_days(booking)
 
 
+def bill_cancellation_for(pre_cancel_status, admin_override=None):
+    """Decide the bill_cancellation value to persist at the moment of
+    cancellation, given the booking's status *before* the transition mutates
+    it (read this before calling transition_booking/bulk_transition — the
+    whole point is that this can't be re-derived correctly afterwards).
+
+    A booking that was never confirmed (still `requested` or `waitlisted` —
+    including one reset there by `availability_reset.py` because DogBoxx lost
+    the walker) never carries a billable cancellation: no walker time was
+    ever committed, so there is nothing a late cancellation could disrupt.
+    Returns False unconditionally for those, regardless of `admin_override`
+    or the notice window — an admin's late-fee checkbox only makes sense for
+    a booking that was actually on the schedule.
+
+    For a `confirmed` pre-cancel booking, passes `admin_override` straight
+    through: True=bill / False=waive from an admin's explicit late-cancel
+    choice, or None to defer to is_billable_cancellation()'s legacy
+    notice-window policy (the branch that must stay frozen for old rows).
+    """
+    if pre_cancel_status != 'confirmed':
+        return False
+    return admin_override
+
+
 def is_billable_cancellation(booking):
     """Whether a cancelled booking should appear on the invoice.
 
