@@ -139,7 +139,7 @@ def invoicing_detail(client_id):
     year, month = month_start.year, month_start.month
 
     from app.models import PricingConfig
-    from app.utils.pricing import config_for_date, build_line_items, build_double_slot_discounts
+    from app.utils.pricing import config_for_date, build_line_items, build_double_slot_discounts, is_drop_in
     all_configs = (
         PricingConfig.query
         .filter(PricingConfig.effective_from <= month_end)
@@ -165,6 +165,21 @@ def invoicing_detail(client_id):
     from datetime import timedelta
     # First Monday on or before month_start
     first_monday = month_start - timedelta(days=month_start.weekday())
+
+    # (dog_id, date) pairs where that dog has both Morning + Afternoon confirmed —
+    # computed independently of build_double_slot_discounts()/`discounts` above, which
+    # skips a pair when that period's PricingConfig.double_slot_discount is zero/blank.
+    # The weekly "double walks" count must reflect the dog actually walking twice that
+    # day even when no discount happens to be priced in for the period.
+    dog_date_slots = defaultdict(set)
+    for b in inv['confirmed']:
+        if not is_drop_in(b):
+            dog_date_slots[(b.dog_id, b.date)].add(b.slot)
+    double_walk_dates = [
+        d for (_dog_id, d), slots in dog_date_slots.items()
+        if 'Morning' in slots and 'Afternoon' in slots
+    ]
+
     weeks = []
     weekly_discounts = []  # per-qualifying-week discount line items for the line-items section
     wk_start = first_monday
@@ -179,6 +194,10 @@ def invoicing_detail(client_id):
         wk_drop_ins   = sum(1 for li in wk_items if not li['is_cancel'] and li['is_drop_in'])
         wk_cancels    = sum(1 for li in wk_items if li['is_cancel'])
         wk_double_discount = sum(d['amount'] for d in wk_discounts)
+
+        # Split the confirmed-legs count into single walks vs double-walk pairs.
+        wk_doubles = sum(1 for d in double_walk_dates if wk_start <= d < wk_end)
+        wk_singles = wk_confirmed - (2 * wk_doubles)
 
         # Weekly discount: ≥5 confirmed group walks in the week
         wk_weekly_discount = Decimal('0.00')
@@ -198,7 +217,8 @@ def invoicing_detail(client_id):
 
         weeks.append({
             'commencing':          wk_start,
-            'confirmed':           wk_confirmed,
+            'single_walks':        wk_singles,
+            'double_walks':        wk_doubles,
             'drop_ins':            wk_drop_ins,
             'cancels':             wk_cancels,
             'double_discount':     wk_double_discount,
