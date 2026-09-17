@@ -112,7 +112,7 @@ def weekly_discount_for_walks(walk_dates, configs):
     return round(total, 2), weeks
 
 
-def build_double_slot_discounts(all_billable, configs):
+def build_double_slot_discounts(confirmed_bookings, configs):
     """Double-slot discount rows — one per ``(dog, day)`` where that dog has
     both Morning + Afternoon.
 
@@ -125,9 +125,16 @@ def build_double_slot_discounts(all_billable, configs):
     discount. Conversely a household where two dogs each do AM+PM gets two rows,
     matching ``inv['doubles'] == 2``. The rows carry only the date (the invoice
     templates render per-day lines), but multiple rows can share one date.
+
+    ``confirmed_bookings`` must be *confirmed-only* (pass ``inv['confirmed']``,
+    never ``inv['all_billable']``) — a late-cancelled-but-billed leg is a fee,
+    not a walk, and counting it toward eligibility here previously let a dog
+    with one real walk plus one billed cancellation look like a genuine double
+    slot and undercharge by the discount amount (found 2026-09-17, FEATURES.md
+    #79).
     """
     dog_date_slots = defaultdict(set)
-    for b in all_billable:
+    for b in confirmed_bookings:
         if not is_drop_in(b):
             dog_date_slots[(b.dog_id, b.date)].add(b.slot)
 
