@@ -23,9 +23,24 @@ from app.models import db, BookingStatusChange
 _UNSET = object()
 
 
+class InvalidTransitionError(Exception):
+    """Raised by transition_booking when the caller passed allowed_from and
+    the booking's current status isn't in it — e.g. a stale admin board
+    trying to confirm a booking a client cancelled after the board loaded.
+    Callers decide the response; typically a 409 telling the actor to reload.
+    """
+    def __init__(self, from_status, allowed_from):
+        self.from_status = from_status
+        self.allowed_from = allowed_from
+        super().__init__(
+            f"Cannot transition from {from_status!r}; allowed: {sorted(allowed_from)}"
+        )
+
+
 def transition_booking(booking, to_status, *, actor_id, notes=None,
                        walker_id=_UNSET, cancelled_by=_UNSET, batch_id=None,
-                       old_slot=None, new_slot=None, bill_cancellation=_UNSET):
+                       old_slot=None, new_slot=None, bill_cancellation=_UNSET,
+                       allowed_from=None):
     """Mutate a booking's status and append a BookingStatusChange row.
 
     Sets confirmed_at / cancelled_at as implied by to_status. cancelled_by is
@@ -38,9 +53,20 @@ def transition_booking(booking, to_status, *, actor_id, notes=None,
     structurally. The BSC row always snapshots booking.walker_id *after* any
     mutation above, so historical reads (e.g. the activity feed) see who was
     assigned as of this exact transition, not whoever holds the booking now.
+
+    allowed_from (optional set of statuses): when given, raises
+    InvalidTransitionError if booking.status isn't in it, instead of mutating.
+    Opt-in — omitted by the bulk paths (closures, bulk-cancel, availability
+    reset) whose callers already pre-filter by status, so a resubmitted row
+    already in the target state doesn't start erroring. Pass it from routes
+    that accept an arbitrary booking_id from a client or a possibly-stale
+    admin board, where a from-state check closes a real race/replay gap.
+
     Returns the BSC row. Caller still commits.
     """
     from_status = booking.status
+    if allowed_from is not None and from_status not in allowed_from:
+        raise InvalidTransitionError(from_status, allowed_from)
     now = datetime.now(timezone.utc)
 
     booking.status = to_status

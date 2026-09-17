@@ -21,9 +21,10 @@ from app.blueprints.client import client_bp
 from app.utils.notifications import create_notification, NotificationBatch
 from app.utils.booking_status import (
     transition_booking, bulk_transition,
+    InvalidTransitionError,
     _UNSET as _UNSET_BILL,
 )
-from app.utils.invoicing import is_late_cancellation
+from app.utils.invoicing import is_late_cancellation, bill_cancellation_for
 from app.utils.decorators import has_client_access
 from app.services.booking_service import create_booking, CapacityError
 
@@ -1003,8 +1004,19 @@ def pause_walks():
     # One batch_id ties together every cancellation in this pause action so the
     # activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
     batch_id = uuid.uuid4().hex
-    bulk_transition(bookings, 'cancelled', actor_id=current_user.id,
-                    walker_id=None, cancelled_by='client', batch_id=batch_id)
+    # Split by pre-cancel status — a never-confirmed booking (requested/
+    # waitlisted) is never billable regardless of the notice window, so it
+    # can't share bill_cancellation=None (the legacy policy) with confirmed
+    # rows. See bill_cancellation_for().
+    confirmed_bookings = [b for b in bookings if b.status == 'confirmed']
+    other_bookings = [b for b in bookings if b.status != 'confirmed']
+    if confirmed_bookings:
+        bulk_transition(confirmed_bookings, 'cancelled', actor_id=current_user.id,
+                        walker_id=None, cancelled_by='client', batch_id=batch_id)
+    if other_bookings:
+        bulk_transition(other_bookings, 'cancelled', actor_id=current_user.id,
+                        walker_id=None, cancelled_by='client', batch_id=batch_id,
+                        bill_cancellation=False)
 
     notif_batch.flush()
     db.session.commit()
@@ -1035,10 +1047,29 @@ def cancel_booking():
         if not user_can_access_booking(current_user, booking):
             return jsonify(success=False, message="You are not authorized to cancel this booking"), 403
 
+        # Idempotent no-op: the client's intent (no walk) is already satisfied.
+        # Re-running the cancel below would overwrite cancelled_at/cancelled_by/
+        # bill_cancellation with the *replay's* values — for the legacy
+        # bill_cancellation=None branch that shifts the notice-window arithmetic
+        # away from the original cancellation, silently changing what's billed.
+        if booking.status == 'cancelled':
+            return jsonify(success=True, message="Booking already cancelled")
+
         is_admin_cancel = current_user.is_admin and booking.user_id != current_user.id
+
+        # Reject client-initiated cancellation of a past booking — the UI only
+        # hides the button, it doesn't block the request. Admin back-fill onto
+        # past dates is deliberate elsewhere (book_for_dog), so only the
+        # client-initiated branch is restricted here.
+        if not is_admin_cancel:
+            today = datetime.now(timezone.utc).date()
+            if booking.date < today:
+                return jsonify(success=False, message="This booking is in the past and can't be cancelled"), 400
+
         # Capture the assigned walker's user_id before clearing the FK below —
         # we notify them at the end so they know the walk is off their schedule.
         prior_walker_user_id = booking.walker.user_id if booking.walker else None
+        pre_cancel_status = booking.status
 
         # Late-cancel billing override (admin cancels only). When an admin cancels
         # a booking inside the notice window, bill by default and let them waive
@@ -1052,12 +1083,26 @@ def cancel_booking():
                 waive = str(form.get('waive_late_fee', '')).lower() in ('1', 'true', 'on', 'yes')
                 bill_cancellation = not waive
 
+        # A booking that was never confirmed (requested/waitlisted, including
+        # one reset there by a lost walker) is never billable regardless of
+        # the notice window or an admin's late-fee choice above — see
+        # bill_cancellation_for(). No-op for a confirmed pre-cancel booking:
+        # passes the admin override (or None, deferring to the legacy
+        # notice-window policy) straight through.
+        bill_cancellation = bill_cancellation_for(
+            pre_cancel_status,
+            admin_override=None if bill_cancellation is _UNSET_BILL else bill_cancellation,
+        )
+
         # transition_booking sets status, cancelled_at and logs the BSC row.
         # cancelled_by records who cancelled (admin acting on a client's booking
         # vs the client/owner themselves); walker_id=None unassigns.
+        # allowed_from rejects a booking that isn't actually active any more
+        # (e.g. two tabs racing to cancel/reject the same booking).
         transition_booking(booking, 'cancelled', actor_id=current_user.id,
                             cancelled_by='admin' if is_admin_cancel else 'client',
-                            walker_id=None, bill_cancellation=bill_cancellation)
+                            walker_id=None, bill_cancellation=bill_cancellation,
+                            allowed_from={'requested', 'waitlisted', 'confirmed'})
         # Do NOT commit here — notifications are added below and everything
         # commits atomically at the end. An early commit would make the
         # cancellation irreversible if the notification step later raises.
@@ -1130,6 +1175,9 @@ def cancel_booking():
         db.session.commit()
         return jsonify(success=True, message="Booking successfully cancelled")
 
+    except InvalidTransitionError:
+        db.session.rollback()
+        return jsonify(success=False, message="This booking's status just changed — please refresh and try again"), 409
     except Exception as e:
         db.session.rollback()
         logging.exception(f"Error cancelling booking: {e}")
