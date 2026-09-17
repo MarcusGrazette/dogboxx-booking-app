@@ -245,8 +245,49 @@ class TestInvoiceForClient:
             expected = round(WALK_PRICE * 2 - DOUBLE_DISCOUNT, 2)
             assert inv['doubles'] == 1
             assert inv['subtotal'] == expected
-            rows = build_double_slot_discounts(inv['all_billable'], all_configs())
+            rows = build_double_slot_discounts(inv['confirmed'], all_configs())
             assert rows == [{'date': MON_1, 'amount': float(DOUBLE_DISCOUNT)}]
+
+    def test_double_slot_discount_not_applied_when_one_leg_late_cancelled(self, app):
+        """FEATURES.md #79: AM confirmed + PM cancelled inside the notice window
+        (billed as a late cancellation) — only one walk actually happened, so
+        no double-slot discount. The PM leg is still billed at full price."""
+        with app.app_context():
+            u, dog = make_client_with_dog('inv_dbl_latecancel@test.com')
+            st = make_walk_service()
+            make_pricing_config()
+            add_booking(u, dog, st, MON_1, 'Morning', status='confirmed')
+            cancelled_at = datetime.datetime.combine(
+                MON_1 - datetime.timedelta(days=2), datetime.time.min
+            )
+            add_booking(u, dog, st, MON_1, 'Afternoon',
+                        status='cancelled', cancelled_at=cancelled_at)
+            db.session.commit()
+            inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
+            assert inv['total_cancels'] == 1
+            assert inv['doubles'] == 0
+            assert inv['subtotal'] == round(WALK_PRICE * 2, 2)
+            assert build_double_slot_discounts(inv['confirmed'], all_configs()) == []
+
+    def test_double_slot_discount_not_applied_when_both_legs_late_cancelled(self, app):
+        """Neither walk happened — no discount, and neither leg's billing is
+        affected by the other."""
+        with app.app_context():
+            u, dog = make_client_with_dog('inv_dbl_bothcancel@test.com')
+            st = make_walk_service()
+            make_pricing_config()
+            cancelled_at = datetime.datetime.combine(
+                MON_1 - datetime.timedelta(days=2), datetime.time.min
+            )
+            add_booking(u, dog, st, MON_1, 'Morning',
+                        status='cancelled', cancelled_at=cancelled_at)
+            add_booking(u, dog, st, MON_1, 'Afternoon',
+                        status='cancelled', cancelled_at=cancelled_at)
+            db.session.commit()
+            inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
+            assert inv['total_cancels'] == 2
+            assert inv['doubles'] == 0
+            assert inv['subtotal'] == round(WALK_PRICE * 2, 2)
 
     def test_double_slot_discount_not_applied_to_drop_ins(self, app):
         """AM + PM drop-ins on the same day → no double-slot discount."""
@@ -299,7 +340,7 @@ class TestInvoiceForClient:
             # The rendered discount lines must agree with the billed subtotal —
             # two implementations of one rule, and they drifted once before
             # (a phantom -GBP5 line on the detail page of exactly this household).
-            assert build_double_slot_discounts(inv['all_billable'], all_configs()) == []
+            assert build_double_slot_discounts(inv['confirmed'], all_configs()) == []
 
     def test_double_slot_discount_per_dog_when_one_dog_has_both_slots(self, app):
         """Multi-dog household: dog A has AM+PM, dog B has only AM.
@@ -320,7 +361,7 @@ class TestInvoiceForClient:
             assert inv['total_walks'] == 3
             assert inv['doubles'] == 1
             assert inv['subtotal'] == round(WALK_PRICE * 3 - DOUBLE_DISCOUNT, 2)
-            rows = build_double_slot_discounts(inv['all_billable'], all_configs())
+            rows = build_double_slot_discounts(inv['confirmed'], all_configs())
             assert rows == [{'date': MON_1, 'amount': float(DOUBLE_DISCOUNT)}]
 
     def test_double_slot_discount_per_dog_when_both_dogs_have_both_slots(self, app):
@@ -344,7 +385,7 @@ class TestInvoiceForClient:
             assert inv['doubles'] == 2
             assert inv['subtotal'] == round(WALK_PRICE * 4 - DOUBLE_DISCOUNT * 2, 2)
             # One discount line per dog, both on the same date.
-            rows = build_double_slot_discounts(inv['all_billable'], all_configs())
+            rows = build_double_slot_discounts(inv['confirmed'], all_configs())
             assert rows == [{'date': MON_1, 'amount': float(DOUBLE_DISCOUNT)}] * 2
 
     def test_late_cancel_is_billable(self, app):

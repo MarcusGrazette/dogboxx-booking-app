@@ -119,8 +119,14 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
     # morning and dog B took the afternoon. pricing.build_double_slot_discounts
     # — which renders the discount LINES for this same invoice — must use the
     # identical key, or the lines and this subtotal disagree on the same page.
+    #
+    # Built from `confirmed` only, not `all_billable`: the discount rewards a
+    # dog actually getting both walks. A late-cancelled-but-billed leg is a
+    # fee, not a walk — counting it here let a dog with one real walk plus one
+    # billed cancellation look like a genuine double slot and undercharge by
+    # the discount amount (found 2026-09-17, FEATURES.md #79).
     dog_date_slots = defaultdict(set)
-    for b in all_billable:
+    for b in confirmed:
         if not is_drop_in(b):
             dog_date_slots[(b.dog_id, b.date)].add(b.slot)
 

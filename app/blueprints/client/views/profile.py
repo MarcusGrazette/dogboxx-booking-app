@@ -305,7 +305,7 @@ def monthly_summary():
 
     late_cancel_ids = {b.id for b in inv['late_cancels']}
     line_items = build_line_items(inv['all_billable'], late_cancel_ids, all_configs)
-    discounts = build_double_slot_discounts(inv['all_billable'], all_configs)
+    discounts = build_double_slot_discounts(inv['confirmed'], all_configs)
 
     # Month nav
     if month == 1:

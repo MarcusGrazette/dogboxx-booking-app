@@ -155,7 +155,7 @@ def invoicing_detail(client_id):
 
     late_cancel_ids = {b.id for b in inv['late_cancels']}
     line_items = build_line_items(inv['all_billable'], late_cancel_ids, all_configs)
-    discounts = build_double_slot_discounts(inv['all_billable'], all_configs)
+    discounts = build_double_slot_discounts(inv['confirmed'], all_configs)
 
     do = DogOwner.query.filter_by(user_id=client_user.id, role='primary').first()
     dog = db.session.get(Dog, do.dog_id) if do else None
