@@ -33,7 +33,7 @@ def make_walker(email, is_admin=False, is_super_admin=False):
     db.session.flush()
     walker = Walker(user_id=user.id)
     db.session.add(walker)
-    db.session.flush()
+    db.session.commit()
     return user
 
 

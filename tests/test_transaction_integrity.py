@@ -335,13 +335,14 @@ class TestRolledBackNotificationsAreDiscarded:
 
 
 # ---------------------------------------------------------------------------
-# The response-time guard (LOG-ONLY in this PR)
+# The response-time guard (enforcing since 2026-09-21, FEATURES.md #77)
 # ---------------------------------------------------------------------------
 
 class TestUncommittedSessionGuard:
-    """The guard reports; it does not roll back — that flip comes after a clean
-    week in prod (FEATURES.md). These tests pin both halves of that: it must fire
-    when work is left pending, and must stay silent on ordinary requests.
+    """ENFORCING as of 2026-09-21 (FEATURES.md #77) — a clean week in prod with
+    zero hits proved the accompanying route fixes found every leak site at the
+    time. These tests pin: it must fire *and roll back* when work is left
+    pending, and must stay silent on ordinary requests.
 
     A noisy guard would be worse than none: Sentry's LoggingIntegration turns
     each hit into an event, so a false positive pages the owner.
@@ -368,13 +369,13 @@ class TestUncommittedSessionGuard:
         assert hits, f'guard did not fire; app.logger saw: {records}'
         assert path in hits[0], 'guard message should name the offending path'
 
-    def test_guard_does_not_roll_back_yet(self, app, client, dirty_session_route):
-        """LOG-ONLY, deliberately. Pinning this stops the flip happening by
-        accident before the prod log review that's meant to justify it — and
-        makes the future enforcing change a one-line, one-test edit.
+    def test_guard_rolls_back_pending_writes(self, app, client, dirty_session_route):
+        """ENFORCING since 2026-09-21 (FEATURES.md #77). Named so a future
+        revert back to log-only can't happen by accident — update this test and
+        the FEATURES.md entry together if that's ever deliberately reversed.
         """
         with app.app_context():
-            u = _make_user(f'guard_noroll_{id(self)}@t.com')
+            u = _make_user(f'guard_rollback_{id(self)}@t.com')
             # Without a Client record a before_request gate redirects to
             # /account-pending and the route under test never runs.
             db.session.add(Client(user_id=u.id, onboarding_completed=True))
@@ -385,10 +386,8 @@ class TestUncommittedSessionGuard:
         client.get(dirty_session_route(user_id))
 
         with app.app_context():
-            assert db.session.get(User, user_id).lastname == 'LeakedByTest', (
-                'the guard rolled back — it is meant to be log-only in this PR. '
-                'If this was an intentional flip to enforcing, update this test '
-                'and the FEATURES.md entry together.'
+            assert db.session.get(User, user_id).lastname != 'LeakedByTest', (
+                'the guard did not roll back a pending write at response time'
             )
 
     def test_guard_is_silent_on_a_normal_request(self, app, client):
