@@ -15,7 +15,6 @@
     /* Pickup notes rich text editor */
     .pickup-quill {
         min-height: 120px;
-        font-size: 0.95rem;
         background: #fff;
         border-radius: 0 0 0.375rem 0.375rem;
         text-align: left;
@@ -24,9 +23,23 @@
         border-radius: 0.375rem 0.375rem 0 0;
         border-color: #dee2e6 !important;
     }
+    /* Quill's snow theme sets its own Helvetica 13px on .ql-container — match
+       the Bootstrap form controls instead. 1rem (16px) also stops iOS Safari
+       zooming the page when a field is focused. */
+    .pickup-quill-wrap .ql-container,
+    .dog-health-notes {
+        font-family: inherit;
+        font-size: 1rem;
+    }
+    .pickup-quill-wrap .ql-editor {
+        line-height: 1.5;
+    }
     .pickup-quill-wrap .ql-container {
         border-color: #dee2e6 !important;
         border-radius: 0 0 0.375rem 0.375rem;
+    }
+    .profile-hint {
+        font-size: 0.8rem;
     }
     .pickup-photo-thumb {
         width: 40px;
@@ -220,7 +233,7 @@
                     {# DOB — editable #}
                     <div class="d-flex align-items-center gap-2 mb-2 mt-3">
                         <label class="form-label fw-semibold small mb-0 text-nowrap">DoB</label>
-                        <div class="input-group input-group-sm" style="max-width:180px;">
+                        <div class="input-group" style="max-width:200px;">
                             <span class="input-group-text"><i class="bi bi-calendar-heart text-secondary"></i></span>
                             <input type="date" class="form-control"
                                    name="dog_dob_{{ dog.id }}"
@@ -230,30 +243,30 @@
                     </div>
 
                     {# Allergies / health notes — editable #}
-                    <div class="mb-3">
+                    <div class="mb-3 dog-health-field">
                         <label class="form-label fw-semibold small mb-1">Health notes</label>
-                        <div class="input-group input-group-sm">
+                        <div class="input-group">
                             <span class="input-group-text"><i class="bi bi-bandaid text-secondary"></i></span>
                             <textarea class="form-control dog-health-notes"
                                       name="dog_allergies_{{ dog.id }}"
-                                      rows="2"
+                                      rows="4"
                                       maxlength="200"
                                       placeholder="Allergies, medical conditions, special needs…">{{ dog.allergies or '' }}</textarea>
                         </div>
+                        {# Shown by JS once the notes near the 200-char limit #}
+                        <div class="profile-hint text-muted text-end mt-1 dog-health-count d-none" aria-live="polite"></div>
                     </div>
 
                     {# Per-dog save ─ AJAX, does not submit the main form #}
-                    <div class="d-flex align-items-center gap-2">
+                    <div class="d-flex justify-content-end">
                         <button type="button"
-                                class="btn btn-sm btn-outline-secondary fw-semibold save-dog-btn"
+                                class="btn btn-sm btn-primary fw-semibold save-dog-btn"
                                 data-dog-id="{{ dog.id }}"
-                                data-url="{{ url_for('client.update_dog_details', dog_id=dog.id) }}">
-                            <i class="bi bi-check2 me-1"></i>Save dog details
+                                data-dog-name="{{ dog.name }}"
+                                data-url="{{ url_for('client.update_dog_details', dog_id=dog.id) }}"
+                                aria-label="Save {{ dog.name }}'s details">
+                            <i class="bi bi-floppy me-1"></i>Save
                         </button>
-                        <span class="save-dog-feedback text-success small" style="display:none; font-size:0.8rem;">
-                            <i class="bi bi-check-circle-fill me-1"></i>Saved
-                        </span>
-                        <span class="save-dog-error text-danger small" style="display:none; font-size:0.8rem;"></span>
                     </div>
 
                 </div>
@@ -288,7 +301,7 @@
                                 {{ sdog.gender | capitalize if sdog.gender }}{% if sdog.breed %} · {{ sdog.breed }}{% endif %}<span class="dog-age-static" data-dob="{{ sdog.date_of_birth.strftime('%Y-%m-%d') if sdog.date_of_birth else '' }}"></span>
                             </div>
                             {% if primary_owner %}
-                            <div class="text-muted" style="font-size:0.72rem; margin-top:2px;">
+                            <div class="profile-hint text-muted" style="margin-top:2px;">
                                 <i class="bi bi-person me-1"></i>Co-owner: {{ primary_owner.full_name }}
                             </div>
                             {% endif %}
@@ -358,6 +371,34 @@
                         {% endif %}
                     {% endif %}
 
+                    {# Photo controls, shared by both layouts below. One dog → the
+                       photo button sits beside Save in the footer row; several
+                       dogs → each dog gets its own right-aligned photo row. #}
+                    {% macro pickup_photo_thumb(d) %}
+                        {% if d.pickup_notes_photo %}
+                        <img src="{{ url_for('static', filename='uploads/pickup_notes/' + d.pickup_notes_photo) }}"
+                             class="pickup-photo-thumb" id="pickup-photo-thumb-{{ d.id }}" alt="Pickup reference photo">
+                        {% else %}
+                        <img src="" class="pickup-photo-thumb d-none" id="pickup-photo-thumb-{{ d.id }}" alt="Pickup reference photo">
+                        {% endif %}
+                    {% endmacro %}
+                    {% macro pickup_photo_button(d) %}
+                        <button type="button" class="btn btn-sm btn-outline-secondary pickup-photo-btn"
+                                data-dog-id="{{ d.id }}"
+                                data-url="{{ url_for('client.upload_pickup_photo', dog_id=d.id) }}">
+                            <i class="bi bi-camera me-1"></i>{{ 'Change photo' if d.pickup_notes_photo else 'Add photo' }}
+                        </button>
+                        <input type="file" class="d-none pickup-photo-input" id="pickup-photo-input-{{ d.id }}" accept="image/*">
+                    {% endmacro %}
+
+                    {% if primary_dogs|length == 1 %}
+                        {% set footer_photo_dog = primary_dogs[0] %}
+                    {% elif not primary_dogs and secondary_dogs %}
+                        {% set footer_photo_dog = secondary_dogs[0].dog %}
+                    {% else %}
+                        {% set footer_photo_dog = None %}
+                    {% endif %}
+
                     {% if primary_dogs %}
                         {% for dog in primary_dogs %}
                         {% if primary_dogs|length > 1 %}
@@ -369,7 +410,7 @@
                             <span>DogBoxx holds a key for {{ dog.name }}</span>
                         </div>
                         {% endif %}
-                        <p class="text-muted mb-2" style="font-size:0.8rem;">
+                        <p class="profile-hint text-muted mb-2">
                             Anything we need to know when collecting {{ dog.name }}?
                         </p>
                         <div class="pickup-quill-wrap">
@@ -379,25 +420,16 @@
                         <textarea name="pickup_instructions_{{ dog.id }}" class="d-none" aria-hidden="true"
                                   data-pickup-hidden="{{ dog.id }}">{{ dog.pickup_instructions or '' }}</textarea>
 
+                        {% if not footer_photo_dog %}
                         <div class="d-flex align-items-center gap-2 mt-2">
-                            {% if dog.pickup_notes_photo %}
-                            <img src="{{ url_for('static', filename='uploads/pickup_notes/' + dog.pickup_notes_photo) }}"
-                                 class="pickup-photo-thumb" id="pickup-photo-thumb-{{ dog.id }}" alt="Pickup reference photo">
-                            {% else %}
-                            <img src="" class="pickup-photo-thumb d-none" id="pickup-photo-thumb-{{ dog.id }}" alt="Pickup reference photo">
-                            {% endif %}
-                            <button type="button" class="btn btn-sm btn-outline-secondary pickup-photo-btn"
-                                    data-dog-id="{{ dog.id }}"
-                                    data-url="{{ url_for('client.upload_pickup_photo', dog_id=dog.id) }}">
-                                <i class="bi bi-camera me-1"></i>{{ 'Change photo' if dog.pickup_notes_photo else 'Add a reference photo' }}
-                            </button>
-                            <input type="file" class="d-none pickup-photo-input" id="pickup-photo-input-{{ dog.id }}" accept="image/*">
-                            <span class="pickup-photo-error text-danger small" id="pickup-photo-error-{{ dog.id }}"></span>
+                            {{ pickup_photo_thumb(dog) }}
+                            <div class="ms-auto">{{ pickup_photo_button(dog) }}</div>
                         </div>
+                        {% endif %}
                         {% if not loop.last %}<hr class="my-3">{% endif %}
                         {% endfor %}
                     {% else %}
-                        <p class="text-muted mb-3" style="font-size:0.8rem;">
+                        <p class="profile-hint text-muted mb-3">
                             Anything we need to know when collecting {{ secondary_dogs[0].dog.name if secondary_dogs else 'your dog' }}?
                         </p>
                         <div class="pickup-quill-wrap">
@@ -405,35 +437,18 @@
                                data-placeholder="e.g. Our buzzer is labelled A, you can park the bike in our courtyard."></div>
                         </div>
                         {{ form.pickup_instructions(class="d-none", **{"aria-hidden": "true", "data-pickup-hidden": "secondary"}) }}
-                        {% set sdog = secondary_dogs[0].dog if secondary_dogs else None %}
-                        {% if sdog %}
-                        <div class="d-flex align-items-center gap-2 mt-2">
-                            {% if sdog.pickup_notes_photo %}
-                            <img src="{{ url_for('static', filename='uploads/pickup_notes/' + sdog.pickup_notes_photo) }}"
-                                 class="pickup-photo-thumb" id="pickup-photo-thumb-{{ sdog.id }}" alt="Pickup reference photo">
-                            {% else %}
-                            <img src="" class="pickup-photo-thumb d-none" id="pickup-photo-thumb-{{ sdog.id }}" alt="Pickup reference photo">
-                            {% endif %}
-                            <button type="button" class="btn btn-sm btn-outline-secondary pickup-photo-btn"
-                                    data-dog-id="{{ sdog.id }}"
-                                    data-url="{{ url_for('client.upload_pickup_photo', dog_id=sdog.id) }}">
-                                <i class="bi bi-camera me-1"></i>{{ 'Change photo' if sdog.pickup_notes_photo else 'Add a reference photo' }}
-                            </button>
-                            <input type="file" class="d-none pickup-photo-input" id="pickup-photo-input-{{ sdog.id }}" accept="image/*">
-                            <span class="pickup-photo-error text-danger small" id="pickup-photo-error-{{ sdog.id }}"></span>
-                        </div>
-                        {% endif %}
                     {% endif %}
                     <div class="d-flex align-items-center gap-2 mt-3">
-                        <button type="button" id="save-pickup-btn"
-                                class="btn btn-primary fw-semibold"
-                                data-url="{{ url_for('client.update_pickup') }}">
-                            <i class="bi bi-check2 me-1"></i>Save pickup notes
-                        </button>
-                        <span id="save-pickup-feedback" class="text-success small" style="display:none; font-size:0.8rem;">
-                            <i class="bi bi-check-circle-fill me-1"></i>Saved
-                        </span>
-                        <span id="save-pickup-error" class="text-danger small" style="display:none; font-size:0.8rem;"></span>
+                        {% if footer_photo_dog %}{{ pickup_photo_thumb(footer_photo_dog) }}{% endif %}
+                        <div class="ms-auto d-flex align-items-center gap-2">
+                            {% if footer_photo_dog %}{{ pickup_photo_button(footer_photo_dog) }}{% endif %}
+                            <button type="button" id="save-pickup-btn"
+                                    class="btn btn-sm btn-primary fw-semibold"
+                                    data-url="{{ url_for('client.update_pickup') }}"
+                                    aria-label="Save pickup notes">
+                                <i class="bi bi-floppy me-1"></i>Save
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -448,11 +463,7 @@
                     <div class="d-flex align-items-center justify-content-between py-2">
                         <div>
                             <div class="fw-semibold small"><i class="bi bi-envelope me-1 text-muted"></i> Email newsletter &amp; updates</div>
-                            <div class="text-muted" style="font-size:0.75rem;">Toggle on to get the monthly DogBoxx newsletter to {{ current_user.email }}</div>
-                            <span id="notify-email-feedback" class="text-success small" style="display:none; font-size:0.75rem;">
-                                <i class="bi bi-check-circle-fill me-1"></i>Saved
-                            </span>
-                            <span id="notify-email-error" class="text-danger small" style="display:none; font-size:0.75rem;"></span>
+                            <div class="profile-hint text-muted">Toggle on to get the monthly DogBoxx newsletter to {{ current_user.email }}</div>
                         </div>
                         <div class="form-check form-switch mb-0">
                             {{ form.notify_email(class="form-check-input", role="switch", **{"data-url": url_for('client.update_notifications')}) }}
@@ -511,6 +522,7 @@
 {{ super() }}
 <script src="https://unpkg.com/quill@1.3.7/dist/quill.min.js"
         integrity="sha384-QUJ+ckWz1M+a7w0UfG1sEn4pPrbQwSxGm/1TIPyioqXBrwuT9l4f9gdHWLDLbVWI" crossorigin="anonymous"></script>
+<script src="{{ url_for('static', filename='js/quill-toolbars.js') }}" nonce="{{ csp_nonce }}"></script>
 <script nonce="{{ csp_nonce }}">
 (function () {
     'use strict';
@@ -535,12 +547,8 @@
             const card    = btn.closest('.card-body');
             const dobInput    = card.querySelector('input[name="dog_dob_' + dogId + '"]');
             const notesInput  = card.querySelector('textarea[name="dog_allergies_' + dogId + '"]');
-            const feedback    = btn.nextElementSibling;
-            const errEl       = feedback.nextElementSibling;
 
             btn.disabled = true;
-            feedback.style.display = 'none';
-            errEl.style.display = 'none';
 
             const body = new FormData();
             body.append('dob',          dobInput  ? dobInput.value  : '');
@@ -554,19 +562,29 @@
             .then(function (res) { return res.json(); })
             .then(function (data) {
                 if (data.success) {
-                    feedback.style.display = 'inline';
-                    setTimeout(function () { feedback.style.display = 'none'; }, 3000);
+                    showToast(btn.dataset.dogName + '’s details saved.', 'success');
                 } else {
-                    errEl.textContent = data.error || 'Could not save';
-                    errEl.style.display = 'inline';
+                    showToast(data.error || 'Could not save.', 'danger');
                 }
             })
             .catch(function () {
-                errEl.textContent = 'Network error — please try again';
-                errEl.style.display = 'inline';
+                showToast('Network error — please try again.', 'danger');
             })
             .finally(function () { btn.disabled = false; });
         });
+    });
+
+    // ── Health-notes character counter (only near the limit) ────────────────
+    document.querySelectorAll('.dog-health-notes').forEach(function (ta) {
+        var counter = ta.closest('.dog-health-field').querySelector('.dog-health-count');
+        var max = parseInt(ta.getAttribute('maxlength'), 10);
+        function update() {
+            var len = ta.value.length;
+            counter.textContent = len + ' / ' + max;
+            counter.classList.toggle('d-none', len < max * 0.75);
+        }
+        ta.addEventListener('input', update);
+        update();
     });
 
     // ── Pickup notes rich text editors ──────────────────────────────────────
@@ -583,13 +601,7 @@
             theme: 'snow',
             placeholder: el.dataset.placeholder || '',
             modules: {
-                toolbar: [
-                    [{ header: [1, 2, 3, false] }],
-                    ['bold', 'italic', 'underline'],
-                    [{ list: 'ordered' }, { list: 'bullet' }],
-                    ['blockquote', 'link'],
-                    ['clean'],
-                ],
+                toolbar: pickupQuillToolbar(el),
             },
         });
         quill.root.innerHTML = hidden.value;
@@ -603,13 +615,11 @@
         var dogId  = btn.dataset.dogId;
         var input  = document.getElementById('pickup-photo-input-' + dogId);
         var thumb  = document.getElementById('pickup-photo-thumb-' + dogId);
-        var errEl  = document.getElementById('pickup-photo-error-' + dogId);
 
         btn.addEventListener('click', function () { input.click(); });
 
         input.addEventListener('change', function () {
             if (!input.files || !input.files[0]) return;
-            errEl.textContent = '';
             btn.disabled = true;
 
             var body = new FormData();
@@ -626,25 +636,22 @@
                     thumb.src = data.url;
                     thumb.classList.remove('d-none');
                     btn.innerHTML = '<i class="bi bi-camera me-1"></i>Change photo';
+                    showToast('Photo uploaded.', 'success');
                 } else {
-                    errEl.textContent = data.error || 'Could not upload photo';
+                    showToast(data.error || 'Could not upload photo.', 'danger');
                 }
             })
-            .catch(function () { errEl.textContent = 'Network error — please try again'; })
+            .catch(function () { showToast('Network error — please try again.', 'danger'); })
             .finally(function () { btn.disabled = false; input.value = ''; });
         });
     });
 
     // ── Pickup notes AJAX save ───────────────────────────────────────────────
-    var pickupBtn      = document.getElementById('save-pickup-btn');
-    var pickupFeedback = document.getElementById('save-pickup-feedback');
-    var pickupError    = document.getElementById('save-pickup-error');
+    var pickupBtn = document.getElementById('save-pickup-btn');
 
     if (pickupBtn) {
         pickupBtn.addEventListener('click', function () {
             pickupBtn.disabled = true;
-            pickupFeedback.style.display = 'none';
-            pickupError.style.display    = 'none';
 
             var body = new FormData();
 
@@ -664,31 +671,24 @@
             .then(function (res) { return res.json(); })
             .then(function (data) {
                 if (data.success) {
-                    pickupFeedback.style.display = 'inline';
-                    setTimeout(function () { pickupFeedback.style.display = 'none'; }, 3000);
+                    showToast('Pickup notes saved.', 'success');
                 } else {
-                    pickupError.textContent = data.error || 'Could not save';
-                    pickupError.style.display = 'inline';
+                    showToast(data.error || 'Could not save.', 'danger');
                 }
             })
             .catch(function () {
-                pickupError.textContent = 'Network error — please try again';
-                pickupError.style.display = 'inline';
+                showToast('Network error — please try again.', 'danger');
             })
             .finally(function () { pickupBtn.disabled = false; });
         });
     }
 
     // ── Newsletter toggle auto-save ─────────────────────────────────────────────
-    var notifyToggle   = document.querySelector('input[name="notify_email"]');
-    var notifyFeedback = document.getElementById('notify-email-feedback');
-    var notifyError    = document.getElementById('notify-email-error');
+    var notifyToggle = document.querySelector('input[name="notify_email"]');
 
     if (notifyToggle) {
         notifyToggle.addEventListener('change', function () {
             notifyToggle.disabled = true;
-            notifyFeedback.style.display = 'none';
-            notifyError.style.display    = 'none';
 
             var body = new FormData();
             body.append('notify_email', notifyToggle.checked ? 'true' : 'false');
@@ -701,18 +701,17 @@
             .then(function (res) { return res.json(); })
             .then(function (data) {
                 if (data.success) {
-                    notifyFeedback.style.display = 'inline';
-                    setTimeout(function () { notifyFeedback.style.display = 'none'; }, 3000);
+                    showToast(notifyToggle.checked
+                        ? 'Subscribed to the newsletter.'
+                        : 'Unsubscribed from the newsletter.', 'success');
                 } else {
                     notifyToggle.checked = !notifyToggle.checked;
-                    notifyError.textContent = data.error || 'Could not save';
-                    notifyError.style.display = 'inline';
+                    showToast(data.error || 'Could not save.', 'danger');
                 }
             })
             .catch(function () {
                 notifyToggle.checked = !notifyToggle.checked;
-                notifyError.textContent = 'Network error — please try again';
-                notifyError.style.display = 'inline';
+                showToast('Network error — please try again.', 'danger');
             })
             .finally(function () { notifyToggle.disabled = false; });
         });
