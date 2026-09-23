@@ -804,6 +804,8 @@
             document.getElementById('noteModal').addEventListener('shown.bs.modal', () => textarea.focus(), { once: true });
         });
 
+        const saveBtnHtml = saveBtn.innerHTML;
+
         saveBtn.addEventListener('click', function () {
             const note = textarea.value.trim();
             errorEl.textContent = '';
@@ -820,7 +822,7 @@
                 .then(r => r.json())
                 .then(data => {
                     saveBtn.disabled = false;
-                    saveBtn.textContent = 'Save note';
+                    saveBtn.innerHTML = saveBtnHtml;
                     if (data.success) {
                         // Update the button icon + data attr to reflect saved state
                         activeNoteBtn.setAttribute('data-current-note', note);
@@ -839,7 +841,7 @@
                 })
                 .catch(() => {
                     saveBtn.disabled = false;
-                    saveBtn.textContent = 'Save note';
+                    saveBtn.innerHTML = saveBtnHtml;
                     errorEl.textContent = 'Network error — please try again.';
                 });
         });
