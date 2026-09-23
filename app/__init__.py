@@ -212,7 +212,7 @@ def create_app(config_name=None):
 
     @app.after_request
     def _guard_uncommitted_session(response):
-        """Detect (currently: only report) work left uncommitted at response time.
+        """Detect and roll back work left uncommitted at response time.
 
         Flask-Session stores sessions in the app's own db.session
         (SESSION_SQLALCHEMY = db above), and its _upsert_session() ends with
@@ -222,7 +222,7 @@ def create_app(config_name=None):
         it's a deferred commit of whatever the route already mutated.
 
         Ordering is load-bearing: Flask.process_response runs after_request funcs
-        and *then* save_session, so this sees the session before that commit.
+        and *then* save_session, so this rolls back before that commit ever fires.
 
         Triggering on pending writes rather than status code is also deliberate —
         the onboarding photo-error path returns HTTP 200 while leaving
@@ -233,12 +233,14 @@ def create_app(config_name=None):
         _mark_flushed_uncommitted above for why the second half is the important
         one.
 
-        LOG-ONLY for now: this reports, it does not roll back, so it protects
-        nothing on its own. Its job is to prove the accompanying route fixes found
-        every site — it should be silent from day one, and any hit is a site we
-        missed. Flip to enforcing (add session.rollback()) after a clean week in
-        prod; tracked in FEATURES.md. Same staging pattern as the Web Push SSRF
-        allowlist (FEATURES #51).
+        ENFORCING as of 2026-09-21, after a clean week in prod (zero hits across
+        every deploy since PR #212/#213) proved the accompanying route fixes found
+        every leak site at the time. Was log-only through that week; see
+        FEATURES.md #77 and CLAUDE.md "Transactions & session state". Same
+        staging pattern as the Web Push SSRF allowlist (FEATURES #51). A hit now
+        is a genuine bug in some other route we haven't found yet — the rollback
+        keeps its failure response honest (nothing partially saved) so a client
+        retry is a clean retry, not a collision with a half-written prior attempt.
 
         ERROR level is intentional: Sentry's LoggingIntegration turns this into an
         event, and a hit here is a real bug that should surface rather than sit in
@@ -251,13 +253,15 @@ def create_app(config_name=None):
                 app.logger.error(
                     'Uncommitted session state at response time: %s %s -> %s '
                     '(flushed=%s new=%d dirty=%d deleted=%d). A route mutated and '
-                    'returned without committing or rolling back; Flask-Session is '
-                    'about to commit it. See CLAUDE.md "Transactions & session state".',
+                    'returned without committing or rolling back; rolling back '
+                    'before Flask-Session commits it. See CLAUDE.md "Transactions '
+                    '& session state".',
                     request.method, request.path, response.status_code,
                     flushed, len(sess.new), len(sess.dirty), len(sess.deleted),
                 )
+                sess.rollback()
         except Exception:
-            # Never let the guard break a response — it is a diagnostic, not a
+            # Never let the guard break a response — it is a safety net, not a
             # dependency. A detached/failed session is exactly when a request is
             # already going wrong; masking the real error would be worse.
             logging.getLogger(__name__).exception('Uncommitted-session guard failed')
