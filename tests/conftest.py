@@ -78,6 +78,18 @@ def app():
         endpoint='_test_error_handler_crash',
         view_func=_error_test_crash_view,
     )
+    @application.teardown_request
+    def _expire_shared_session(exc):
+        # The autouse `db` fixture holds one app context open for the whole
+        # test, and Flask reuses an already-active app context for each
+        # test-client request — so every request shares the fixture's
+        # db.session (Flask-SQLAlchemy scopes it by app context). In
+        # production each request gets its own context and a fresh session.
+        # Expiring cached objects here makes the next request re-read the
+        # database, the way a fresh session would. (Until 2026-09 Flask-Session
+        # committed on every request, which expired them as a side effect.)
+        _db.session.expire_all()
+
     application.add_url_rule(
         _DIRTY_TEST_PATH,
         endpoint='_test_leaves_session_dirty',

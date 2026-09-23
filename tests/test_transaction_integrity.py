@@ -2,10 +2,10 @@
 
 The bug these guard against is not in any one route. Flask-Session stores sessions
 in the app's own db.session (`SESSION_SQLALCHEMY = db` in app/__init__.py), and its
-`_upsert_session()` ends with `db.session.commit()`. Flask's
-`SESSION_REFRESH_EACH_REQUEST` defaults to True, so that commit runs on essentially
-every request from a logged-in user — *after* the view returned, *before* the
-scoped session is removed.
+`_upsert_session()` ends with `db.session.commit()`. That commit runs whenever the
+session was modified (a flash(), a login, the daily expiry touch) — and ran on every
+logged-in request while `SESSION_REFRESH_EACH_REQUEST` was True — *after* the view
+returned, *before* the scoped session is removed.
 
 Consequences, each covered below:
   #1  `return jsonify(...), 400` without a rollback is a deferred COMMIT, not an

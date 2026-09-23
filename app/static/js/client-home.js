@@ -635,12 +635,18 @@
             const serviceLabel = isDropIn ? 'drop-in' : 'walk';
             cancelModalBody.textContent = `Are you sure you want to cancel the ${slot} ${serviceLabel} on ${date}?`;
 
-            // Show late-cancel warning if within 5 days
+            // Show the late-cancel charge warning only for a CONFIRMED booking
+            // inside the 5-day window. A requested/waitlisted booking was never
+            // confirmed, so cancelling it is never billed (server rule:
+            // bill_cancellation_for() in app/utils/invoicing.py) — warning
+            // about a charge there was wrong.
+            const status = btn.getAttribute('data-booking-status');
             const walkDate = new Date(dateIso);
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const noticeDays = Math.round((walkDate - today) / 86400000);
-            cancelLateWarn.classList.toggle('d-none', noticeDays >= 5);
+            const willBeCharged = status === 'confirmed' && noticeDays < 5;
+            cancelLateWarn.classList.toggle('d-none', !willBeCharged);
 
             cancelModal.show();
         });
@@ -739,6 +745,7 @@
                     data-booking-slot="${booking.slot}"
                     data-booking-date="${booking.date_display}"
                     data-booking-date-iso="${booking.date_iso}"
+                    data-booking-status="${booking.status}"
                     data-is-drop-in="${booking.is_drop_in ? 'true' : 'false'}"
                     title="Cancel booking"
                     style="line-height:1;font-size:1.1rem;">

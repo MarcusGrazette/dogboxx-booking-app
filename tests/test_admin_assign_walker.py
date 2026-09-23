@@ -653,3 +653,90 @@ class TestSourceStateGuard:
 
         with app.app_context():
             assert db.session.get(Booking, booking_id).status == 'rejected'
+
+
+class TestAssignVersusCancelRowLock:
+    """Review follow-up (2026-09-23) to finding #2. allowed_from compares the
+    booking's *in-memory* status, so on its own it only stops replays — a
+    client cancel that commits between assign_walker's refresh and its write
+    was still overwritten with 'confirmed' (lost update). assign_walker now
+    refreshes FOR UPDATE and cancel_booking loads FOR UPDATE, so the two
+    serialize on the row and the cancel sees the assign's committed state.
+
+    Drives both requests through the real views on separate connections, the
+    same way TestAssignWalkerConcurrencyRace does.
+    """
+
+    def test_cancel_racing_an_assign_is_not_overwritten(self, app):
+        if db.engine.dialect.name != 'postgresql':
+            pytest.skip('FOR UPDATE is a no-op on SQLite — race cannot be exercised')
+
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_admin()
+            _, walker = _make_walker()
+            db.session.add(WalkerSchedule(
+                walker_id=walker.id, day_of_week=0, slot='Morning', active=True,
+            ))
+            booking = _make_booking(monday, slot='Morning', email='race_cancel@test.com')
+            db.session.commit()
+            admin_email, walker_id, booking_id = admin.email, walker.id, booking.id
+
+        # Pause the assign right after its refresh (get_available_walkers is
+        # the first call after it) — i.e. after it has read the booking's
+        # status but before it writes 'confirmed'.
+        paused = threading.Event()
+        release = threading.Event()
+        orig = board_module.get_available_walkers
+
+        def _paused_get_available_walkers(*a, **kw):
+            paused.set()
+            release.wait(timeout=5)
+            return orig(*a, **kw)
+
+        board_module.get_available_walkers = _paused_get_available_walkers
+        results = {}
+
+        def _assign():
+            c = app.test_client()
+            _login(c, admin_email)
+            resp = _post_assign(c, booking_id, walker_id, slot='Morning')
+            results['assign'] = (resp.status_code, resp.get_json())
+
+        def _cancel():
+            c = app.test_client()
+            _login(c, 'race_cancel@test.com')
+            resp = c.post('/cancel_booking', data={'booking_id': booking_id})
+            results['cancel'] = (resp.status_code, resp.get_json())
+
+        try:
+            t_assign = threading.Thread(target=_assign)
+            t_assign.start()
+            assert paused.wait(timeout=5), 'assign never reached the paused section'
+
+            t_cancel = threading.Thread(target=_cancel)
+            t_cancel.start()
+            # Let the cancel reach Postgres and block on the row lock (with the
+            # fix) or run to completion (without it).
+            time.sleep(0.5)
+
+            release.set()
+            t_assign.join(timeout=10)
+            t_cancel.join(timeout=10)
+        finally:
+            board_module.get_available_walkers = orig
+
+        assert not t_assign.is_alive() and not t_cancel.is_alive(), 'a thread never finished — deadlock?'
+        assert results['assign'][0] == 200, results['assign']
+        assert results['cancel'][0] == 200, results['cancel']
+
+        with app.app_context():
+            booking = db.session.get(Booking, booking_id)
+            # The cancel was the last request to commit, so it must win.
+            assert booking.status == 'cancelled'
+            # And it cancelled the booking as it really was — confirmed, with
+            # the assign's walker — not the stale 'requested' snapshot.
+            last = (BookingStatusChange.query
+                    .filter_by(booking_id=booking_id, to_status='cancelled')
+                    .one())
+            assert last.from_status == 'confirmed'

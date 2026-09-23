@@ -620,10 +620,11 @@ class TestCancelNeverConfirmedNotBillable:
             booking = db.session.get(Booking, bid)
             assert booking.bill_cancellation is False
 
-    def test_confirmed_cancel_still_uses_legacy_window_policy(self, app, client):
-        """Sanity check: a genuinely-confirmed booking cancelled by the client
-        inside the notice window still leaves bill_cancellation=None, deferring
-        to is_billable_cancellation()'s legacy policy (unchanged)."""
+    def test_confirmed_late_client_cancel_persists_explicit_true(self, app, client):
+        """A confirmed booking cancelled by the client inside the notice window
+        is billed — and the decision is persisted as True, not left as None
+        for is_billable_cancellation() to re-derive later (review follow-up,
+        2026-09-23)."""
         with app.app_context():
             near = datetime.date.today() + datetime.timedelta(days=1)
             b, user = seed_booking(status='confirmed', date=near)
@@ -637,7 +638,73 @@ class TestCancelNeverConfirmedNotBillable:
 
         with app.app_context():
             booking = db.session.get(Booking, bid)
-            assert booking.bill_cancellation is None
+            assert booking.bill_cancellation is True
+
+    def test_confirmed_early_client_cancel_persists_explicit_false(self, app, client):
+        with app.app_context():
+            far = datetime.date.today() + datetime.timedelta(days=30)
+            b, user = seed_booking(status='confirmed', date=far)
+            db.session.commit()
+            email, bid = user.email, b.id
+
+        login(client, email)
+        resp = client.post('/cancel_booking', data=json.dumps({'booking_id': bid}),
+                           content_type='application/json')
+        assert resp.status_code == 200
+
+        with app.app_context():
+            booking = db.session.get(Booking, bid)
+            assert booking.bill_cancellation is False
+
+    def test_changing_notice_setting_later_does_not_rebill(self, app, client):
+        """The point of persisting the decision: editing the service type's
+        cancellation_notice_days afterwards must not change whether an
+        already-cancelled booking is billed."""
+        from app.utils.invoicing import is_billable_cancellation
+        with app.app_context():
+            near = datetime.date.today() + datetime.timedelta(days=1)
+            b, user = seed_booking(status='confirmed', date=near)
+            db.session.commit()
+            email, bid = user.email, b.id
+
+        login(client, email)
+        resp = client.post('/cancel_booking', data=json.dumps({'booking_id': bid}),
+                           content_type='application/json')
+        assert resp.status_code == 200
+
+        with app.app_context():
+            booking = db.session.get(Booking, bid)
+            assert is_billable_cancellation(booking) is True
+            # Shrink the notice window to zero days: under the legacy None
+            # branch this would flip the booking to not-billable.
+            st = booking.service_type
+            st.settings = {**(st.settings or {}), 'cancellation_notice_days': 0}
+            db.session.commit()
+            booking = db.session.get(Booking, bid)
+            assert is_billable_cancellation(booking) is True
+
+
+class TestCancelButtonCarriesStatus:
+    """The client home's late-cancel charge warning is shown only for a
+    confirmed booking inside the notice window (client-home.js). It reads the
+    booking's status from the cancel button, so the button must carry it —
+    without it, a requested booking inside the window showed "you will still
+    be charged", though bill_cancellation_for() never bills it."""
+
+    @pytest.mark.parametrize('status', ['requested', 'confirmed', 'waitlisted'])
+    def test_cancel_button_renders_booking_status(self, app, client, status):
+        with app.app_context():
+            b, user = seed_booking(status=status)
+            db.session.commit()
+            email, bid = user.email, b.id
+
+        login(client, email)
+        html = client.get('/').get_data(as_text=True)
+        # One cancel button for this booking, carrying its status.
+        start = html.index(f'cancel-booking-btn text-danger"\n')
+        button = html[start:html.index('</button>', start)]
+        assert f'data-booking-id="{bid}"' in button
+        assert f'data-booking-status="{status}"' in button
 
 
 class TestReset:

@@ -11,6 +11,7 @@ branching model. For a quick SQLite-only start, see the [README](../README.md#lo
 - **`main`** — production. Railway auto-deploys on merge to `main`.
 - Create a `feature/<short-name>` branch off `develop` and open a PR back to `develop`.
 - Deploy by merging `develop` → `main` via PR.
+- If you stack a PR on another branch, merge the lower one first (merge commit, not squash) and delete its branch, so GitHub retargets the upper PR to `develop`.
 
 After any schema change, generate and commit a migration (`flask db migrate -m "…"`) —
 never add columns via standalone scripts, so CI's `flask db check` catches drift.
@@ -87,7 +88,7 @@ TEST_DATABASE_URL=postgresql://dogboxx:choose-a-dev-password@localhost:5432/dogb
 
 ```bash
 flask db upgrade        # runs all migrations against DATABASE_URL
-python seed.py          # seeds test data
+python seed.py          # seeds test data — run once, on an empty database
 flask run --host=0.0.0.0 --port=5000
 ```
 
@@ -101,11 +102,14 @@ After seeding, these accounts are available:
 
 | Role | Email | Password |
 |---|---|---|
-| Admin + Walker (Owner) | lydia@dogboxx.org | changeme123! |
+| Admin + Walker (Owner, super-admin) | lydia@dogboxx.org | changeme123! — you'll be asked to set a new password on first login |
+| Admin + Walker | admin@dogboxx.org | adminpass |
 | Walker | testwalker@dogboxx.org | walkies123 |
 | Client | john.doe@example.com | clientpass |
 
-The seed also creates ~13 client accounts with dogs — see `seed.py` for the full list.
+The seed also creates 10 client accounts with dogs — see `seed_data/` for the full list.
+
+`seed.py`'s test-data step isn't idempotent: running it a second time on a seeded database fails on duplicate emails. To re-seed, drop and recreate the database (or delete the test data) first.
 
 ### Demo data
 
@@ -115,6 +119,8 @@ Two demo seed scripts add realistic booking data:
 python seed_may_demo.py   # ~10 walks/slot/weekday across two weeks, ±2 randomised, 3–5 drop-ins/day
 python seed_june_demo.py  # mix of normal and at-capacity days to demonstrate the waitlist
 ```
+
+Both use fixed May/June 2026 dates, so their bookings now appear in the past. Navigate the calendar back to those months to see them.
 
 ---
 
@@ -146,6 +152,18 @@ USE_SQLITE=1 pytest
 Use this for rapid iteration, but **re-run against Postgres before pushing** — CI always
 runs on Postgres regardless.
 
+Don't run two `pytest` processes against the test database at once — each run creates and
+drops the tables, so concurrent runs deadlock or fail spuriously.
+
+### What CI runs
+
+On every push and pull request to `main`/`develop`, GitHub Actions runs:
+
+1. `flask db upgrade` — the full migration chain from an empty Postgres database.
+2. `flask db check` — fails if a model change has no matching migration.
+3. `pytest` — the suite, on Postgres.
+4. `pip-audit` — a separate job that installs `requirements.txt` into a clean environment and fails on any known CVE in it.
+
 ---
 
 ## Configuration
@@ -154,6 +172,6 @@ The app uses three config classes in `config.py`:
 
 | Config | Used when | Notes |
 |---|---|---|
-| `DevelopmentConfig` | `FLASK_ENV=development` | Debug on, SQLAlchemy echo, CSP report-only |
+| `DevelopmentConfig` | `FLASK_ENV=development` | Debug on, CSP report-only; SQL logging opt-in via `SQL_ECHO=1` |
 | `TestingConfig` | Tests | PostgreSQL by default (`USE_SQLITE=1` for SQLite), CSRF disabled |
-| `ProductionConfig` | `FLASK_ENV=production` | Secure cookies, strict CSP, Redis rate limiting |
+| `ProductionConfig` | `FLASK_ENV=production` | Secure cookies, enforced CSP, DB statement timeouts; rate limits in Redis when `REDIS_URL` is set |

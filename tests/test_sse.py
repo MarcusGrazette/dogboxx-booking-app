@@ -200,3 +200,51 @@ class TestPubsubMessageHandling:
         })
         assert q.empty()
         sse.unsubscribe(11, q)
+
+
+class TestStreamReleasesDbConnection:
+    """Review follow-up (2026-09-23): /notifications/stream runs under
+    stream_with_context, which keeps the request context — and the scoped
+    db.session that load_user() opened a transaction on — alive for the whole
+    stream. The route must close the session before streaming, or each open
+    tab pins a pooled Postgres connection "idle in transaction".
+
+    With SESSION_REFRESH_EACH_REQUEST off (config.py), no Flask-Session commit
+    ends that transaction for us — the login in the fixture already stamped
+    today's session touch, so the stream request leaves the session unmodified.
+    """
+
+    def test_open_stream_holds_no_idle_transaction(self, app, logged_in_admin):
+        from sqlalchemy import create_engine, text
+        from app import db
+
+        if db.engine.dialect.name != 'postgresql':
+            pytest.skip('pg_stat_activity is Postgres-only')
+
+        probe = create_engine(app.config['SQLALCHEMY_DATABASE_URI'])
+        count_sql = text(
+            "SELECT count(*) FROM pg_stat_activity "
+            "WHERE datname = current_database() "
+            "AND state = 'idle in transaction' AND pid <> pg_backend_pid()"
+        )
+
+        # The test's own session may legitimately hold a transaction open;
+        # end it so the baseline is just "everything else".
+        db.session.commit()
+        with probe.connect() as conn:
+            baseline = conn.execute(count_sql).scalar()
+
+        assert app.config['SESSION_REFRESH_EACH_REQUEST'] is False
+        resp = None
+        try:
+            resp = logged_in_admin.get('/notifications/stream', buffered=False)
+            assert resp.status_code == 200
+            with probe.connect() as conn:
+                during = conn.execute(count_sql).scalar()
+            assert during == baseline, (
+                f'open SSE stream left {during - baseline} connection(s) idle in transaction'
+            )
+        finally:
+            if resp is not None:
+                resp.close()
+            probe.dispose()
