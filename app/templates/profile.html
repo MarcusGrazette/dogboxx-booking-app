@@ -522,6 +522,7 @@
 {{ super() }}
 <script src="https://unpkg.com/quill@1.3.7/dist/quill.min.js"
         integrity="sha384-QUJ+ckWz1M+a7w0UfG1sEn4pPrbQwSxGm/1TIPyioqXBrwuT9l4f9gdHWLDLbVWI" crossorigin="anonymous"></script>
+<script src="{{ url_for('static', filename='js/quill-toolbars.js') }}" nonce="{{ csp_nonce }}"></script>
 <script nonce="{{ csp_nonce }}">
 (function () {
     'use strict';
@@ -600,13 +601,7 @@
             theme: 'snow',
             placeholder: el.dataset.placeholder || '',
             modules: {
-                toolbar: [
-                    [{ header: [1, 2, 3, false] }],
-                    ['bold', 'italic', 'underline'],
-                    [{ list: 'ordered' }, { list: 'bullet' }],
-                    ['blockquote', 'link'],
-                    ['clean'],
-                ],
+                toolbar: pickupQuillToolbar(el),
             },
         });
         quill.root.innerHTML = hidden.value;
