@@ -333,9 +333,11 @@ class TestBulkCancelLateFeeBilling:
         assert resp.status_code == 200
         assert db.session.get(Booking, ids[0]).bill_cancellation is False
 
-    def test_non_late_bookings_left_none(self, client_user, dog, service_type,
-                                         admin_user, logged_in_admin):
-        # Outside the 5-day window → not late → no explicit billing flag.
+    def test_non_late_bookings_persist_explicit_false(self, client_user, dog, service_type,
+                                                      admin_user, logged_in_admin):
+        # Outside the 5-day window → not late → explicitly not billed. Stored
+        # as False rather than None so a later change to the notice-days
+        # setting can't re-bill it (see bill_cancellation_for).
         far = datetime.date.today() + datetime.timedelta(days=20)
         ids = _seed_bookings(client_user, dog, service_type, [far])
         resp = logged_in_admin.post(
@@ -344,7 +346,7 @@ class TestBulkCancelLateFeeBilling:
             content_type='application/json',
         )
         assert resp.status_code == 200
-        assert db.session.get(Booking, ids[0]).bill_cancellation is None
+        assert db.session.get(Booking, ids[0]).bill_cancellation is False
 
     def test_late_but_never_confirmed_not_billed(self, client_user, dog, service_type,
                                                  admin_user, logged_in_admin):

@@ -133,8 +133,12 @@ def add_closure():
         for booking in bookings:
             # Closure cancel intentionally leaves walker_id set (unlike client
             # cancellations) — preserve that by not passing walker_id.
+            # A closure is DogBoxx's decision, never the client's, so it is
+            # never billed — persisted explicitly rather than left to the
+            # legacy None branch (see bill_cancellation_for in invoicing.py).
             transition_booking(booking, 'cancelled', actor_id=current_user.id,
-                               cancelled_by='admin', batch_id=batch_id)
+                               cancelled_by='admin', batch_id=batch_id,
+                               bill_cancellation=False)
             svc_label = (
                 'drop-in'
                 if booking.service_type and booking.service_type.slug == ServiceType.DROP_IN

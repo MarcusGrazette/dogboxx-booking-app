@@ -2,7 +2,7 @@ from flask import request, render_template, jsonify, url_for
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError
-from datetime import datetime, timezone
+from datetime import datetime
 import logging
 import uuid
 
@@ -14,7 +14,8 @@ from app.utils.notifications import NotificationBatch
 from app.utils.booking_status import bulk_transition
 from app.services.booking_service import create_booking, CapacityError
 from app.capacity import MAX_RECURRING_SERIES, check_availability
-from app.utils.invoicing import is_late_cancellation
+from app.utils.invoicing import is_late_cancellation, group_by_bill_cancellation
+from app.utils.dates import local_today
 from app.utils.sanitize import clean_rich_text_or_none
 from app.utils.uploads import process_dog_photo
 from app.utils.activity_log import record_admin_action, diff_fields
@@ -661,7 +662,7 @@ def dog_cancel_preview(dog_id):
     # bill_cancellation_for in app/utils/invoicing.py) — counting it here
     # would show the late-fee checkbox for a range that won't actually bill
     # anything.
-    today = datetime.now(timezone.utc).date()
+    today = local_today()
     late_count = sum(
         1 for b in bookings
         if b.status == 'confirmed' and is_late_cancellation(b, today)
@@ -755,32 +756,23 @@ def dog_bulk_cancel(dog_id):
     # One batch_id ties together every cancellation in this bulk-cancel action
     # so the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
     batch_id = uuid.uuid4().hex
-    # Late-cancel billing (admin): bookings inside the notice window bill by
-    # default unless `waive_late_fee` is set; bookings outside the window are
-    # never late so leave bill_cancellation=None. Set the flag only on the late
-    # subset — an explicit True on a non-late row would wrongly bill it.
-    # Within the late subset, only a booking that was actually confirmed (a
-    # walker's time was committed) can be billed — see bill_cancellation_for().
-    # A late-but-never-confirmed booking (requested/waitlisted) still cancels,
-    # just never billed, regardless of the waive checkbox.
-    today = datetime.now(timezone.utc).date()
+    # Late-cancel billing (admin): a confirmed booking inside the notice window
+    # bills by default unless `waive_late_fee` is set. Everything else — not
+    # late, or late but never confirmed (requested/waitlisted: no walker time
+    # was committed) — is persisted as an explicit False. The override is only
+    # offered for late rows: an explicit True on a non-late row would wrongly
+    # bill it. See bill_cancellation_for() for why every new row gets an
+    # explicit value rather than None.
+    today = local_today()
     waive = bool(data.get('waive_late_fee'))
-    late, not_late = [], []
-    for b in bookings:
-        (late if is_late_cancellation(b, today) else not_late).append(b)
-    late_confirmed = [b for b in late if b.status == 'confirmed']
-    late_other = [b for b in late if b.status != 'confirmed']
-    if late_confirmed:
-        bulk_transition(late_confirmed, 'cancelled', actor_id=current_user.id,
+    buckets = group_by_bill_cancellation(
+        bookings, cancelled_by='admin', today=today,
+        admin_override_for=lambda b: (not waive) if is_late_cancellation(b, today) else None,
+    )
+    for bill, group in buckets.items():
+        bulk_transition(group, 'cancelled', actor_id=current_user.id,
                         walker_id=None, cancelled_by='admin', batch_id=batch_id,
-                        bill_cancellation=(not waive))
-    if late_other:
-        bulk_transition(late_other, 'cancelled', actor_id=current_user.id,
-                        walker_id=None, cancelled_by='admin', batch_id=batch_id,
-                        bill_cancellation=False)
-    if not_late:
-        bulk_transition(not_late, 'cancelled', actor_id=current_user.id,
-                        walker_id=None, cancelled_by='admin', batch_id=batch_id)
+                        bill_cancellation=bill)
 
     # Notify dog owners (excluding admins) and assigned walkers (§7.4) —
     # one grouped notice each.

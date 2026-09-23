@@ -92,6 +92,23 @@ class Config:
     # in migrations/env.py (see run_migrations_online).
     STATEMENT_TIMEOUT_MS = int(os.environ.get('PG_STATEMENT_TIMEOUT_MS', '15000'))
 
+    # Postgres idle-in-transaction timeout for app connections (ms). The
+    # statement_timeout above only bounds a *running* statement; a connection
+    # that opened a transaction and then went quiet (e.g. a request context
+    # kept alive by a long-lived SSE stream) holds its pooled connection and
+    # any row locks indefinitely. This makes Postgres end such a session
+    # instead; pool_pre_ping then discards the dead connection on next
+    # checkout. Measured per idle gap, not per transaction, so a request
+    # making several slow outbound calls between statements is unaffected
+    # unless one gap alone exceeds it. Migrations bypass it (migrations/env.py).
+    IDLE_IN_TX_TIMEOUT_MS = int(os.environ.get('PG_IDLE_IN_TX_TIMEOUT_MS', '60000'))
+
+    # libpq `options` string carrying both timeouts, for connect_args.
+    PG_CONNECT_OPTIONS = (
+        f"-c statement_timeout={STATEMENT_TIMEOUT_MS} "
+        f"-c idle_in_transaction_session_timeout={IDLE_IN_TX_TIMEOUT_MS}"
+    )
+
 
 class DevelopmentConfig(Config):
     """Development configuration."""
@@ -153,7 +170,7 @@ class TestingConfig(Config):
         # ProductionConfig for the full rationale.
         SQLALCHEMY_ENGINE_OPTIONS = {
             "pool_pre_ping": True,
-            "connect_args": {"options": f"-c statement_timeout={Config.STATEMENT_TIMEOUT_MS}"},
+            "connect_args": {"options": Config.PG_CONNECT_OPTIONS},
         }
     WTF_CSRF_ENABLED = False
     RATELIMIT_ENABLED = False
@@ -194,7 +211,7 @@ class ProductionConfig(Config):
     # the connection is released, and the worker keeps serving everyone else.
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,
-        "connect_args": {"options": f"-c statement_timeout={Config.STATEMENT_TIMEOUT_MS}"},
+        "connect_args": {"options": Config.PG_CONNECT_OPTIONS},
     }
 
     # HTTPS enforcement in production

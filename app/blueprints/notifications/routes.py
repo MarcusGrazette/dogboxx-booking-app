@@ -30,6 +30,16 @@ def stream():
         # needed. A capped-out surface just falls back to the bell's existing
         # foreground reconciliation instead of live push.
         return Response('', status=429, mimetype='text/event-stream')
+    # stream_with_context keeps this request's context — and with it the
+    # scoped db.session — alive for as long as the stream is open (hours, for
+    # an idle PWA tab). load_user() already opened a transaction on it, so
+    # without this close the stream would pin a pooled connection "idle in
+    # transaction" until the client disconnects. It is currently released
+    # only as a side effect of Flask-Session's per-request commit; closing
+    # here makes that explicit. The generator never touches the DB, and
+    # anything after this (Flask-Session's save) simply opens a fresh,
+    # short transaction on the same scoped session.
+    db.session.close()
     return Response(
         stream_with_context(stream_generator(user_id, q)),
         mimetype='text/event-stream',
