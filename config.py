@@ -22,6 +22,12 @@ class Config:
     SESSION_TYPE = "sqlalchemy"          # store sessions in the app DB (works on Railway)
     SESSION_SQLALCHEMY_TABLE = "sessions" # table name in Postgres/SQLite
     SESSION_PERMANENT = True
+    # Don't rewrite the session row on every request. With the SQL backend,
+    # True meant an UPSERT + db.session.commit() on every request from a
+    # logged-in user — static assets and unread-count polls included. The
+    # sliding 14-day expiry is kept by app/__init__.py::_touch_session_daily,
+    # which marks the session modified at most once per (London) day.
+    SESSION_REFRESH_EACH_REQUEST = False
     
     # Logging configuration
     LOG_LEVEL = "INFO"

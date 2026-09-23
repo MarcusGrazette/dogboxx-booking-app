@@ -180,7 +180,8 @@ def create_app(config_name=None):
         # rollback leaves the queues above fully intact. Without this, a route that
         # queued a notification and then rolled back still delivers it: the next
         # commit on the same session drains the queue, and Flask-Session commits
-        # db.session at response time on essentially every request (see
+        # db.session at response time whenever the session was modified — a
+        # flash(), login, or the daily expiry touch (see
         # _guard_uncommitted_session below). The delivered SSE payload embeds the
         # notif.id from the rolled-back flush, so the bell links to a row that
         # doesn't exist.
@@ -216,10 +217,12 @@ def create_app(config_name=None):
 
         Flask-Session stores sessions in the app's own db.session
         (SESSION_SQLALCHEMY = db above), and its _upsert_session() ends with
-        db.session.commit(). Flask's SESSION_REFRESH_EACH_REQUEST defaults to True,
-        so that runs on essentially every request from a logged-in user — which
-        means `return jsonify(...), 400` without a rollback is not an escape hatch,
-        it's a deferred commit of whatever the route already mutated.
+        db.session.commit(). That runs whenever the session was modified — any
+        flash(), a login, the first request of each day (_touch_session_daily)
+        — and until 2026-09 ran on every logged-in request, because
+        SESSION_REFRESH_EACH_REQUEST was left at its True default. So
+        `return jsonify(...), 400` without a rollback is not an escape hatch,
+        it can be a deferred commit of whatever the route already mutated.
 
         Ordering is load-bearing: Flask.process_response runs after_request funcs
         and *then* save_session, so this rolls back before that commit ever fires.
@@ -309,6 +312,28 @@ def create_app(config_name=None):
         if user.session_token and user.session_token != token:
             return None
         return user
+
+    @app.before_request
+    def _touch_session_daily():
+        """Keep the 14-day session expiry sliding without a DB write per request.
+
+        SESSION_REFRESH_EACH_REQUEST is False (config.py), so Flask-Session only
+        writes the session row — and re-sends the cookie with a fresh expiry —
+        when the session is modified. Stamping today's date here modifies it on
+        the first request of each day and not again until tomorrow, so an active
+        user's session is extended daily, and expiry lands at most a day earlier
+        than with a per-request refresh.
+
+        Authenticated users only: an anonymous visitor's session must not be
+        made non-empty here, or every bot hitting /login would get a stored row.
+        """
+        from flask_login import current_user
+        if request.endpoint == 'static' or not current_user.is_authenticated:
+            return
+        from app.utils.dates import local_today
+        today = local_today().isoformat()
+        if session.get('_touched') != today:
+            session['_touched'] = today
 
     @app.before_request
     def set_csp_nonce():

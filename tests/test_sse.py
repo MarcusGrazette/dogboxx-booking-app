@@ -209,10 +209,9 @@ class TestStreamReleasesDbConnection:
     stream. The route must close the session before streaming, or each open
     tab pins a pooled Postgres connection "idle in transaction".
 
-    Today Flask-Session's per-request commit happens to end that transaction
-    anyway, so the test switches SESSION_REFRESH_EACH_REQUEST off to take that
-    accidental release out of the picture — which is also the configuration
-    the connection must survive if that setting is ever turned off.
+    With SESSION_REFRESH_EACH_REQUEST off (config.py), no Flask-Session commit
+    ends that transaction for us — the login in the fixture already stamped
+    today's session touch, so the stream request leaves the session unmodified.
     """
 
     def test_open_stream_holds_no_idle_transaction(self, app, logged_in_admin):
@@ -235,8 +234,7 @@ class TestStreamReleasesDbConnection:
         with probe.connect() as conn:
             baseline = conn.execute(count_sql).scalar()
 
-        original = app.config.get('SESSION_REFRESH_EACH_REQUEST', True)
-        app.config['SESSION_REFRESH_EACH_REQUEST'] = False
+        assert app.config['SESSION_REFRESH_EACH_REQUEST'] is False
         resp = None
         try:
             resp = logged_in_admin.get('/notifications/stream', buffered=False)
@@ -249,5 +247,4 @@ class TestStreamReleasesDbConnection:
         finally:
             if resp is not None:
                 resp.close()
-            app.config['SESSION_REFRESH_EACH_REQUEST'] = original
             probe.dispose()
