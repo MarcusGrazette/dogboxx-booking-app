@@ -34,9 +34,10 @@ def stream():
     # scoped db.session — alive for as long as the stream is open (hours, for
     # an idle PWA tab). load_user() already opened a transaction on it, so
     # without this close the stream would pin a pooled connection "idle in
-    # transaction" until the client disconnects. It is currently released
-    # only as a side effect of Flask-Session's per-request commit; closing
-    # here makes that explicit. The generator never touches the DB, and
+    # transaction" until the client disconnects. (It used to be released as a
+    # side effect of Flask-Session committing on every request; with
+    # SESSION_REFRESH_EACH_REQUEST off, nothing else ends it.) The generator
+    # never touches the DB, and
     # anything after this (Flask-Session's save) simply opens a fresh,
     # short transaction on the same scoped session.
     db.session.close()
