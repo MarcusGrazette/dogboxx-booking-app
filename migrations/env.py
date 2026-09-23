@@ -107,6 +107,10 @@ def run_migrations_online():
         if connection.dialect.name == 'postgresql':
             from sqlalchemy import text as _text
             connection.execute(_text("SET statement_timeout = 0"))
+            # Same for idle_in_transaction_session_timeout (config.py) — a data
+            # migration doing slow Python work between statements mustn't be
+            # killed by the app-level cap.
+            connection.execute(_text("SET idle_in_transaction_session_timeout = 0"))
             # SQLAlchemy 2.x autobegins a transaction on that execute(). If left
             # open, MigrationContext sees the connection as already "in a
             # transaction" (_get_connection_in_transaction) and sets

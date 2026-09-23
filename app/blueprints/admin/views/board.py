@@ -358,8 +358,11 @@ def assign_walker():
         # If walker_id is None, this is an unassignment operation. allowed_from
         # rejects a booking a client already cancelled since the board loaded
         # (or the admin already unassigned it in another tab) rather than
-        # silently reopening it as 'requested'.
+        # silently reopening it as 'requested'. The FOR UPDATE refresh makes
+        # that check see the latest committed status and holds the row until
+        # commit, so a concurrent cancel can't land between check and write.
         if walker_id is None:
+            db.session.refresh(booking, with_for_update=True)
             transition_booking(booking, 'requested', actor_id=current_user.id,
                                walker_id=None, allowed_from={'confirmed'})
             booking.pickup_order = None
@@ -401,8 +404,14 @@ def assign_walker():
         # Refresh the in-memory booking afterwards so booking.status/walker_id — read below
         # by the capacity check and by transition_booking()'s from_status snapshot — reflect
         # any commit that landed while we were waiting on the lock, not a stale pre-lock read.
+        # The refresh is FOR UPDATE: the advisory lock only serialises against other
+        # booking writers for this (service, date, slot), not against cancel_booking /
+        # decline_booking, which don't take it. Without the row lock a client cancel could
+        # commit after this refresh and be overwritten by our 'confirmed' write below.
+        # Order is always advisory lock → row lock here; the cancel/decline paths take only
+        # the row lock, so there's no cycle to deadlock on.
         acquire_booking_lock(service_slug, booking.date, assign_slot)
-        db.session.refresh(booking)
+        db.session.refresh(booking, with_for_update=True)
 
         if not slot_override:
             is_drop_in = (service_slug == ServiceType.DROP_IN)
@@ -552,7 +561,10 @@ def assign_walker():
 def decline_booking(booking_id):
     """Decline a pending or waitlisted booking. Sets status to 'rejected' and notifies the client."""
     try:
-        booking = db.session.get(Booking, booking_id)
+        # FOR UPDATE so the PENDING_STATUSES check below can't be invalidated by
+        # a concurrent cancel/assign between the check and our write.
+        booking = db.session.get(Booking, booking_id, with_for_update=True,
+                                 populate_existing=True)
         if not booking:
             return jsonify(success=False, message="Booking not found"), 404
         if booking.status not in Booking.PENDING_STATUSES:

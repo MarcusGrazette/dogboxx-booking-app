@@ -29,28 +29,52 @@ def is_late_cancellation(booking, ref_date):
     return (booking.date - ref_date).days < _cancellation_notice_days(booking)
 
 
-def bill_cancellation_for(pre_cancel_status, admin_override=None):
+def bill_cancellation_for(booking, *, cancelled_by, today, admin_override=None):
     """Decide the bill_cancellation value to persist at the moment of
-    cancellation, given the booking's status *before* the transition mutates
-    it (read this before calling transition_booking/bulk_transition — the
-    whole point is that this can't be re-derived correctly afterwards).
+    cancellation. Call it BEFORE transition_booking/bulk_transition: it reads
+    booking.status as the pre-cancel status, which the transition destroys.
 
-    A booking that was never confirmed (still `requested` or `waitlisted` —
-    including one reset there by `availability_reset.py` because DogBoxx lost
-    the walker) never carries a billable cancellation: no walker time was
-    ever committed, so there is nothing a late cancellation could disrupt.
-    Returns False unconditionally for those, regardless of `admin_override`
-    or the notice window — an admin's late-fee checkbox only makes sense for
-    a booking that was actually on the schedule.
+    Always returns an explicit True/False, never None. The None ("legacy")
+    branch of is_billable_cancellation() re-derives the decision at invoice
+    time from the service type's *live* cancellation_notice_days setting, so
+    changing that setting would silently re-bill every past cancellation that
+    relied on it. Deciding once, here, and persisting it keeps issued months
+    fixed. Existing None rows are left alone — that branch stays frozen.
 
-    For a `confirmed` pre-cancel booking, passes `admin_override` straight
-    through: True=bill / False=waive from an admin's explicit late-cancel
-    choice, or None to defer to is_billable_cancellation()'s legacy
-    notice-window policy (the branch that must stay frozen for old rows).
+    Rules, in order:
+      - Never confirmed (`requested`/`waitlisted`, including a booking reset
+        there by availability_reset.py because DogBoxx lost the walker):
+        False, whatever the notice window or admin_override says. No walker
+        time was committed, so a late cancellation disrupts nothing.
+      - admin_override (True=bill / False=waive, from an admin's late-fee
+        choice): returned as-is. Callers only pass it for a genuinely late
+        cancellation — True on a non-late booking would wrongly bill it.
+      - Otherwise the same policy the legacy branch applies: bill iff the
+        client (not an admin) cancelled inside the notice window, judged
+        against `today` (use app.utils.dates.local_today()).
     """
-    if pre_cancel_status != 'confirmed':
+    if booking.status != 'confirmed':
         return False
-    return admin_override
+    if admin_override is not None:
+        return admin_override
+    return cancelled_by != 'admin' and is_late_cancellation(booking, today)
+
+
+def group_by_bill_cancellation(bookings, *, cancelled_by, today, admin_override_for=None):
+    """Bucket bookings by their bill_cancellation_for() decision, for bulk
+    paths — bulk_transition takes one bill_cancellation value per call.
+
+    admin_override_for: optional callable(booking) -> True/False/None, for
+    routes whose admin override applies to only some rows (late ones).
+    Returns {True: [...], False: [...]} with empty buckets omitted.
+    """
+    buckets = {}
+    for b in bookings:
+        override = admin_override_for(b) if admin_override_for else None
+        decision = bill_cancellation_for(b, cancelled_by=cancelled_by, today=today,
+                                         admin_override=override)
+        buckets.setdefault(decision, []).append(b)
+    return buckets
 
 
 def is_billable_cancellation(booking):

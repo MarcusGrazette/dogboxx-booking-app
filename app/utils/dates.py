@@ -1,4 +1,4 @@
-from datetime import date, timezone
+from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 LOCAL_TZ = ZoneInfo('Europe/London')
@@ -15,6 +15,17 @@ def to_local_time(dt):
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(LOCAL_TZ)
+
+
+def local_today():
+    """Today's date in Europe/London — the business's calendar day.
+
+    `datetime.now(timezone.utc).date()` is a day behind between 00:00 and
+    01:00 London time during BST, so a rule keyed on "today" (past-booking
+    checks, the late-cancellation notice window) is off by one for that
+    hour. Use this for any rule where the answer should follow the date a
+    client or walker sees on their own clock."""
+    return datetime.now(LOCAL_TZ).date()
 
 
 def _month_bounds(year, month):
