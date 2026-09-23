@@ -684,6 +684,29 @@ class TestCancelNeverConfirmedNotBillable:
             assert is_billable_cancellation(booking) is True
 
 
+class TestCancelButtonCarriesStatus:
+    """The client home's late-cancel charge warning is shown only for a
+    confirmed booking inside the notice window (client-home.js). It reads the
+    booking's status from the cancel button, so the button must carry it —
+    without it, a requested booking inside the window showed "you will still
+    be charged", though bill_cancellation_for() never bills it."""
+
+    @pytest.mark.parametrize('status', ['requested', 'confirmed', 'waitlisted'])
+    def test_cancel_button_renders_booking_status(self, app, client, status):
+        with app.app_context():
+            b, user = seed_booking(status=status)
+            db.session.commit()
+            email, bid = user.email, b.id
+
+        login(client, email)
+        html = client.get('/').get_data(as_text=True)
+        # One cancel button for this booking, carrying its status.
+        start = html.index(f'cancel-booking-btn text-danger"\n')
+        button = html[start:html.index('</button>', start)]
+        assert f'data-booking-id="{bid}"' in button
+        assert f'data-booking-status="{status}"' in button
+
+
 class TestReset:
 
     def test_admin_unavailability_resets_and_logs(self, app, client):
