@@ -546,12 +546,18 @@ def update_dog_details(dog_id):
         return jsonify(success=False, error="Dog not found"), 404
 
     DOG_DETAIL_FIELDS = ['date_of_birth', 'allergies']
+    health_notes = request.form.get('health_notes', '').strip() or None
+    # Dog.allergies is db.String(200) — check before mutating, or a too-long
+    # value flushes fine and only fails at commit with an opaque DataError.
+    if health_notes and len(health_notes) > 200:
+        return jsonify(success=False, error="Health notes must be 200 characters or fewer"), 400
+
     try:
         before = {f: getattr(dog, f) for f in DOG_DETAIL_FIELDS}
         from datetime import date as _date_type
         dob_str = request.form.get('dob', '').strip()
         dog.date_of_birth = _date_type.fromisoformat(dob_str) if dob_str else None
-        dog.allergies = request.form.get('health_notes', '').strip() or None
+        dog.allergies = health_notes
         changes = diff_fields(before, dog, DOG_DETAIL_FIELDS)
         if changes:
             record_admin_action(
