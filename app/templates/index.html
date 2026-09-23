@@ -377,6 +377,7 @@
                                     data-booking-id="{{ booking.id }}" data-booking-slot="{{ booking.slot }}"
                                     data-booking-date="{{ booking.date_display }}"
                                     data-booking-date-iso="{{ booking.date.isoformat() }}"
+                                    data-booking-status="{{ booking.status }}"
                                     data-is-drop-in="{{ 'true' if booking.is_drop_in else 'false' }}"
                                     title="Cancel booking" style="line-height: 1; font-size: 1.1rem;">
                                     <i class="bi bi-x-circle"></i>
