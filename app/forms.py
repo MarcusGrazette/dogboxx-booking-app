@@ -77,14 +77,15 @@ class OnboardingForm(FlaskForm):
 
     dog_allergies = StringField(
         'Allergies',
-        validators=[Optional()]
+        validators=[Optional(), Length(max=200)],
+        render_kw={"maxlength": 200}
     )
 
     dog_dob = DateField(
         'Date of Birth',
         validators=[Optional()]
     )
-    
+
     submit = SubmitField("Next")
 
 class BookingForm(FlaskForm):
@@ -169,7 +170,7 @@ class ProfileForm(FlaskForm):
         'Date of Birth',
         validators=[Optional()]
     )
-    dog_allergies = StringField('Allergies', validators=[Optional()])
+    dog_allergies = StringField('Allergies', validators=[Optional(), Length(max=200)])
 
     submit = SubmitField("Save Changes")
 
@@ -264,8 +265,8 @@ class ClientCreateForm(FlaskForm):
     )
     dog_allergies = TextAreaField(
         'Allergies / health notes',
-        validators=[Optional()],
-        render_kw={"rows": 2, "placeholder": "Allergies, medical notes, special needs…"}
+        validators=[Optional(), Length(max=200)],
+        render_kw={"rows": 2, "placeholder": "Allergies, medical notes, special needs…", "maxlength": 200}
     )
     dog_whatsapp_group_url = StringField(
         'WhatsApp Group URL',
@@ -311,8 +312,8 @@ class AddDogForm(FlaskForm):
     dog_breed = StringField('Breed', validators=[Optional()])
     dog_allergies = TextAreaField(
         'Allergies / health notes',
-        validators=[Optional()],
-        render_kw={"rows": 2, "placeholder": "Allergies, medical notes, special needs…"}
+        validators=[Optional(), Length(max=200)],
+        render_kw={"rows": 2, "placeholder": "Allergies, medical notes, special needs…", "maxlength": 200}
     )
     pickup_instructions = TextAreaField(
         'Pickup instructions',

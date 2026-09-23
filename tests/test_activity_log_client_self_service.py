@@ -318,6 +318,23 @@ class TestUpdateDogDetailsAjax:
             # allergies is NOT a REDACTED_FIELDS member — value stored plainly.
             assert 'Peanut allergy' not in row.summary  # summary stays entity-framed regardless
 
+    def test_health_notes_over_200_chars_rejected_with_clear_message(self, app, client):
+        with app.app_context():
+            user, dog = _make_client_with_dog()
+            email = user.email
+            dog_id = dog.id
+
+        _login(client, email)
+        resp = client.post(f'/profile/dog/{dog_id}/update-details', data={
+            'dob': '', 'health_notes': 'x' * 201,
+        })
+
+        assert resp.status_code == 400
+        assert '200 characters' in resp.get_json()['error']
+        with app.app_context():
+            assert ActivityLog.query.filter_by(entity_type='dog', entity_id=dog_id).count() == 0
+            assert db.session.get(Dog, dog_id).allergies != 'x' * 201
+
 
 class TestUploadPickupPhotoAjax:
 

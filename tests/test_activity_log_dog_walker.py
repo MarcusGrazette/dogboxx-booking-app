@@ -124,6 +124,25 @@ class TestUpdateDog:
         with app.app_context():
             assert ActivityLog.query.count() == 0
 
+    def test_allergies_over_200_chars_rejected_with_clear_message(self, app, client):
+        with app.app_context():
+            admin = _make_admin()
+            admin_email = admin.email
+            dog = _make_dog_with_owner()
+            dog_id = dog.id
+
+        _login(client, admin_email)
+        resp = client.post(f'/admin/dogs/{dog_id}/update', json={
+            'name': 'Rex', 'gender': 'male', 'breed': 'Lab',
+            'allergies': 'x' * 201, 'date_of_birth': '', 'whatsapp_group_url': '', 'hold_key': False,
+        })
+
+        assert resp.status_code == 400
+        assert '200 characters' in resp.get_json()['message']
+        with app.app_context():
+            assert ActivityLog.query.count() == 0
+            assert db.session.get(Dog, dog_id).allergies != 'x' * 201
+
     def test_pickup_instructions_change_is_redacted(self, app, client):
         with app.app_context():
             admin = _make_admin()
