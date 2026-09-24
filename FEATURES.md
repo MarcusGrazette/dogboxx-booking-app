@@ -30,7 +30,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 5 | Duplicate-booking prevention | One booking per dog per slot per day, enforced by a database index. |
 | 8 | "Book both walks" | Book morning and afternoon in one action. |
 | 29 | Drop-in service | Morning/afternoon drop-in visits with their own board, walker flag and pricing. |
-| 78 | Booking lifecycle guards | Stale or repeated actions can't reopen or re-cancel a booking; never-confirmed cancellations aren't billed. |
+| 78 | Booking lifecycle guards | Stale, repeated or simultaneous actions can't reopen or re-cancel a booking; never-confirmed cancellations aren't billed or warned about. |
 | 77 | Transaction integrity | A failed request can't leave partial changes behind. |
 
 ### Admin
@@ -108,6 +108,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 68 | Strict script policy | No inline event handlers; CSP blocks them. |
 | 70 | Login lockout | Temporary per-account lockout after repeated wrong passwords. |
 | 80 | Code tidy-up | Unused variables removed during the client routes split. |
+| 81 | Lighter session storage | Login sessions are saved once a day instead of on every request. |
 
 ## Dropped
 
