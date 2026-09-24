@@ -94,12 +94,40 @@ def is_billable_cancellation(booking):
                 < _cancellation_notice_days(booking))
 
 
+def drop_rebooked_cancellations(billable_cancels, confirmed):
+    """Charge a late-cancelled slot at most once.
+
+    A billable cancellation is dropped when the same dog has a *confirmed*
+    booking of the *same service* for the same date + slot — the client
+    rebooked, so they pay for the walk, not the fee as well. A different
+    service still leaves the fee standing (owner decision: a drop-in is
+    priced well below the walk it replaced). A requested/waitlisted rebook
+    doesn't count until it's confirmed. Of several billable cancellations
+    for one (dog, date, slot, service) — cancel, rebook, cancel late again —
+    only the first is kept.
+
+    Applied at invoice time, so it covers legacy NULL rows and past months
+    alike; bill_cancellation itself is never rewritten.
+    """
+    def key(b):
+        return (b.dog_id, b.date, b.slot, b.service_type_id)
+
+    taken = {key(b) for b in confirmed}
+    kept = []
+    for b in sorted(billable_cancels, key=lambda b: (b.date, b.slot, b.id)):
+        if key(b) not in taken:
+            taken.add(key(b))
+            kept.append(b)
+    return kept
+
+
 def invoice_for_client(user_id, month_start, month_end, all_configs):
     """Return invoice data dict for a single client in the given month.
 
     Billable items:
       - confirmed bookings (walks + drop-ins)
-      - cancelled bookings where notice < cancellation_notice_days (from ServiceType.settings)
+      - cancelled bookings where notice < cancellation_notice_days (from ServiceType.settings),
+        minus any rebooked for the same slot (see drop_rebooked_cancellations)
 
     Pricing:
       - Group walks: price_per_walk; double_slot_discount for same-day AM+PM;
@@ -134,7 +162,8 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
     # an explicit admin bill/waive choice wins, otherwise the legacy default
     # (client-initiated late cancels only — closures and admin cancels stay free
     # unless the admin opted to bill at cancel time).
-    late_cancels = [b for b in bookings if is_billable_cancellation(b)]
+    late_cancels = drop_rebooked_cancellations(
+        [b for b in bookings if is_billable_cancellation(b)], confirmed)
     all_billable = confirmed + late_cancels
 
     # Group walk items keyed by (dog_id, date) so the double-slot discount only

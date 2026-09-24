@@ -14,6 +14,8 @@ Covers:
 - Late cancel (< 5 days notice) → billable
 - Early cancel (>= 5 days notice) → not billable
 - Cancel with no cancelled_at → not billable
+- Late cancel then confirmed rebook of the same dog/date/slot/service → billed once
+  (different service, unconfirmed rebook, other slot or other dog → fee stands)
 - total_walks / total_drop_ins / total_cancels counts
 - Weekly discount: ≥5 confirmed group walks in ISO week → per-walk discount
 - Weekly discount: <5 walks → no discount
@@ -920,3 +922,145 @@ class TestDecimalMoneyMath:
                     follow_redirects=True)
         resp = client.get('/monthly-summary?month=2026-02')
         assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Late cancel then rebook the same slot — charged once, not twice
+# ---------------------------------------------------------------------------
+
+def _late(date):
+    """A cancelled_at two days before `date` — inside the 5-day window."""
+    return datetime.datetime.combine(date - datetime.timedelta(days=2), datetime.time.min)
+
+
+class TestRebookedLateCancel:
+    """A billable late cancel is dropped when the same dog has a confirmed
+    booking of the same service in the same date + slot (drop_rebooked_cancellations)."""
+
+    def test_legacy_null_cancel_then_confirmed_rebook_billed_once(self, app):
+        # Mirrors the prod case: bill_cancellation NULL, legacy rule says bill.
+        with app.app_context():
+            u, dog = make_client_with_dog('rb_legacy@test.com')
+            st = make_walk_service()
+            make_pricing_config()
+            add_booking(u, dog, st, MON_1, 'Morning', status='cancelled',
+                        cancelled_at=_late(MON_1), cancelled_by='client')
+            add_booking(u, dog, st, MON_1, 'Morning', status='confirmed')
+            db.session.commit()
+            inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
+            assert inv['total_cancels'] == 0
+            assert inv['total_billable'] == 1
+            assert inv['subtotal'] == WALK_PRICE
+
+    def test_explicit_bill_flag_cancel_then_rebook_billed_once(self, app):
+        with app.app_context():
+            u, dog = make_client_with_dog('rb_flag@test.com')
+            st = make_walk_service()
+            make_pricing_config()
+            add_booking(u, dog, st, MON_1, 'Morning', status='cancelled',
+                        cancelled_at=_late(MON_1), cancelled_by='client',
+                        bill_cancellation=True)
+            add_booking(u, dog, st, MON_1, 'Morning', status='confirmed')
+            db.session.commit()
+            inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
+            assert inv['total_cancels'] == 0
+            assert inv['subtotal'] == WALK_PRICE
+
+    def test_rebook_as_different_service_keeps_fee(self, app):
+        # Owner decision: a walk swapped for a (much cheaper) drop-in keeps the fee.
+        with app.app_context():
+            u, dog = make_client_with_dog('rb_service@test.com')
+            walk, drop_in = make_walk_service(), make_drop_in_service()
+            make_pricing_config()
+            add_booking(u, dog, walk, MON_1, 'Morning', status='cancelled',
+                        cancelled_at=_late(MON_1), cancelled_by='client',
+                        bill_cancellation=True)
+            add_booking(u, dog, drop_in, MON_1, 'Morning', status='confirmed')
+            db.session.commit()
+            inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
+            assert inv['total_cancels'] == 1
+            assert inv['subtotal'] == WALK_PRICE + DROP_IN_PRICE
+
+    def test_unconfirmed_rebook_keeps_fee(self, app):
+        # A requested rebook isn't billed and isn't a walk yet — the fee stands.
+        with app.app_context():
+            u, dog = make_client_with_dog('rb_requested@test.com')
+            st = make_walk_service()
+            make_pricing_config()
+            add_booking(u, dog, st, MON_1, 'Morning', status='cancelled',
+                        cancelled_at=_late(MON_1), cancelled_by='client',
+                        bill_cancellation=True)
+            add_booking(u, dog, st, MON_1, 'Morning', status='requested')
+            db.session.commit()
+            inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
+            assert inv['total_cancels'] == 1
+            assert inv['subtotal'] == WALK_PRICE
+
+    def test_repeated_late_cancels_of_one_slot_billed_once(self, app):
+        # Cancel late, rebook, cancel late again → one fee, not two.
+        with app.app_context():
+            u, dog = make_client_with_dog('rb_twice@test.com')
+            st = make_walk_service()
+            make_pricing_config()
+            for _ in range(2):
+                add_booking(u, dog, st, MON_1, 'Morning', status='cancelled',
+                            cancelled_at=_late(MON_1), cancelled_by='client',
+                            bill_cancellation=True)
+            db.session.commit()
+            inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
+            assert inv['total_cancels'] == 1
+            assert inv['subtotal'] == WALK_PRICE
+
+    def test_other_slot_same_day_keeps_fee(self, app):
+        # AM cancelled late, PM confirmed: different slots, both charged, and
+        # no AM+PM discount (the cancelled leg is a fee, not a walk).
+        with app.app_context():
+            u, dog = make_client_with_dog('rb_slot@test.com')
+            st = make_walk_service()
+            make_pricing_config()
+            add_booking(u, dog, st, MON_1, 'Morning', status='cancelled',
+                        cancelled_at=_late(MON_1), cancelled_by='client',
+                        bill_cancellation=True)
+            add_booking(u, dog, st, MON_1, 'Afternoon', status='confirmed')
+            db.session.commit()
+            inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
+            assert inv['total_cancels'] == 1
+            assert inv['subtotal'] == WALK_PRICE * 2
+
+    def test_other_dog_same_slot_keeps_fee(self, app):
+        # Dog A cancelled late, dog B walked in that slot: A's fee stands.
+        with app.app_context():
+            u, dog_a = make_client_with_dog('rb_dogs@test.com')
+            dog_b = Dog(name='OtherDog', breed='Mutt')
+            db.session.add(dog_b)
+            db.session.flush()
+            db.session.add(DogOwner(dog_id=dog_b.id, user_id=u.id, role='primary'))
+            st = make_walk_service()
+            make_pricing_config()
+            add_booking(u, dog_a, st, MON_1, 'Morning', status='cancelled',
+                        cancelled_at=_late(MON_1), cancelled_by='client',
+                        bill_cancellation=True)
+            add_booking(u, dog_b, st, MON_1, 'Morning', status='confirmed')
+            db.session.commit()
+            inv = _invoice_for_client(u.id, MONTH_START, MONTH_END, all_configs())
+            assert inv['total_cancels'] == 1
+            assert inv['subtotal'] == WALK_PRICE * 2
+
+    def test_client_monthly_summary_shows_rebooked_slot_once(self, app, client):
+        with app.app_context():
+            u, dog = make_client_with_dog('rb_summary@test.com')
+            st = make_walk_service()
+            make_pricing_config()
+            add_booking(u, dog, st, MON_1, 'Morning', status='cancelled',
+                        cancelled_at=_late(MON_1), cancelled_by='client')
+            add_booking(u, dog, st, MON_1, 'Morning', status='confirmed')
+            db.session.commit()
+
+        client.post('/auth/login',
+                    data={'email': 'rb_summary@test.com', 'password': 'Testpass1!'},
+                    follow_redirects=True)
+        resp = client.get('/monthly-summary?month=2026-02')
+        assert resp.status_code == 200
+        body = resp.get_data(as_text=True)
+        assert 'late cancellation</span>' not in body
+        assert body.count('Mon 02 Feb') == 1
