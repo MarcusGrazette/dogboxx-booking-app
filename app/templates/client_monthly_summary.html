@@ -62,8 +62,11 @@
             <div class="col-6 col-sm-3">
                 <div class="card profile-card text-center h-100">
                     <div class="card-body py-3">
-                        <div class="stat-num">{{ inv.total_cancels }}</div>
-                        <div class="stat-label"><i class="bi bi-alarm me-1" aria-hidden="true"></i>Late cancels</div>
+                        {# AM + PM rows plus the weekly discount (which has no row of its own) —
+                           the same two deductions invoice_for_client takes off the subtotal. #}
+                        {% set discount_total = (discounts | sum(attribute='amount')) + (inv.weekly_discount_total or 0) %}
+                        <div class="stat-num text-success">£{{ '%.2f'|format(discount_total) }}</div>
+                        <div class="stat-label">Discounts</div>
                     </div>
                 </div>
             </div>
@@ -122,17 +125,20 @@
                             </td>
                             <td class="text-end text-nowrap{{ muted }}">£{{ '%.2f'|format(item.unit_price) }}</td>
                         </tr>
-                        {% endfor %}
 
-                        {# Discount rows #}
-                        {% for d in discounts %}
-                        <tr class="text-success">
-                            <td class="text-nowrap">{{ d.date.strftime('%a %d %b') }}</td>
-                            <td colspan="2">
+                        {# Discounts sit directly under the last row of the day they apply
+                           to (line_items is date-sorted). Green goes on each cell, as above. #}
+                        {% if not loop.nextitem or loop.nextitem.booking.date != item.booking.date %}
+                        {% for d in discounts if d.date == item.booking.date %}
+                        <tr>
+                            <td class="text-nowrap text-success">{{ d.date.strftime('%a %d %b') }}</td>
+                            <td colspan="2" class="text-success">
                                 <i class="bi bi-tag me-1"></i>AM + PM discount
                             </td>
-                            <td class="text-end text-nowrap">−£{{ '%.2f'|format(d.amount) }}</td>
+                            <td class="text-end text-nowrap text-success">−£{{ '%.2f'|format(d.amount) }}</td>
                         </tr>
+                        {% endfor %}
+                        {% endif %}
                         {% endfor %}
                     </tbody>
                     <tfoot>
@@ -148,11 +154,16 @@
         </div>
 
         {# ── Disclaimer ── #}
-        <p class="text-muted small">
-            <i class="bi bi-info-circle me-1"></i>
-            This is an estimate based on your confirmed bookings and current pricing.
-            DogBoxx will issue your invoice separately. Late cancellations (<i class="bi bi-alarm" aria-hidden="true"></i> less than 5 days' notice) are charged at the full rate.
-        </p>
+        <div class="text-muted small">
+            <p class="d-flex gap-2 mb-2">
+                <i class="bi bi-info-circle" aria-hidden="true"></i>
+                <span>This is an estimate based on your confirmed bookings and current pricing.
+                DogBoxx will issue your invoice separately. Late cancellations (less than 5 days' notice) are charged at the full rate.</span>
+            </p>
+            <p class="d-flex gap-2 mb-1"><i class="bi bi-alarm" aria-hidden="true"></i><span>Late cancellation</span></p>
+            <p class="d-flex gap-2 mb-1"><i class="bi bi-person-walking" aria-hidden="true"></i><span>Walk</span></p>
+            <p class="d-flex gap-2 mb-0"><i class="bi bi-house-door" aria-hidden="true"></i><span>Drop-in</span></p>
+        </div>
         {% endif %}
 
     </div>
