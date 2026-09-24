@@ -60,14 +60,21 @@ def unit_price(booking, config):
     return config.price_per_drop_in if is_drop_in(booking) else config.price_per_walk
 
 
+# Day order for line items. Sorting the slot strings put Afternoon before
+# Morning. Other booking_slot values (Full Day / Half Day AM|PM) belong to the
+# unoffered day-care service — no order is defined for them, so they sort last.
+SLOT_ORDER = {'Morning': 0, 'Afternoon': 1}
+
+
 def build_line_items(all_billable, late_cancel_ids, configs):
     """Per-booking line items for an invoice / monthly-summary view.
 
-    Returns a list of dicts (sorted by date then slot), each:
+    Returns a list of dicts (sorted by date then slot, Morning first), each:
     ``{booking, unit_price, is_cancel, is_drop_in}``.
     """
     line_items = []
-    for b in sorted(all_billable, key=lambda x: (x.date, x.slot)):
+    for b in sorted(all_billable,
+                    key=lambda x: (x.date, SLOT_ORDER.get(x.slot, len(SLOT_ORDER)))):
         cfg = config_for_date(configs, b.date)
         line_items.append({
             'booking':    b,
