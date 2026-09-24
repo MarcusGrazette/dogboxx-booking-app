@@ -62,8 +62,8 @@
             <div class="col-6 col-sm-3">
                 <div class="card profile-card text-center h-100">
                     <div class="card-body py-3">
-                        <div class="stat-num text-warning">{{ inv.total_cancels }}</div>
-                        <div class="stat-label">Late cancels</div>
+                        <div class="stat-num">{{ inv.total_cancels }}</div>
+                        <div class="stat-label"><i class="bi bi-alarm me-1" aria-hidden="true"></i>Late cancels</div>
                     </div>
                 </div>
             </div>
@@ -104,20 +104,23 @@
                     </thead>
                     <tbody>
                         {% for item in line_items %}
-                        <tr {% if item.is_cancel %}class="table-warning"{% endif %}>
-                            <td class="text-nowrap">{{ item.booking.date.strftime('%a %d %b') }}</td>
-                            <td>{{ item.booking.slot }}</td>
-                            <td>
+                        {# Late cancels are de-emphasised, not highlighted: grey text on
+                           each cell (the .table cell colour ignores a class on the <tr>). #}
+                        {% set muted = ' text-body-secondary' if item.is_cancel else '' %}
+                        <tr>
+                            <td class="text-nowrap{{ muted }}">{{ item.booking.date.strftime('%a %d %b') }}</td>
+                            <td class="{{ muted }}">{{ item.booking.slot }}</td>
+                            <td class="text-nowrap{{ muted }}">
                                 {% if item.is_drop_in %}
-                                <span class="badge" style="background:#7c3aed;color:#fff;">Drop-in</span>
+                                <i class="bi bi-house-door" title="Drop-in" aria-hidden="true"></i><span class="visually-hidden">Drop-in</span>
                                 {% else %}
-                                <span class="badge bg-dark">Walk</span>
+                                <i class="bi bi-person-walking" title="Walk" aria-hidden="true"></i><span class="visually-hidden">Walk</span>
                                 {% endif %}
                                 {% if item.is_cancel %}
-                                <span class="badge bg-warning text-dark ms-1">Late cancel</span>
+                                <i class="bi bi-alarm ms-2" title="Late cancellation" aria-hidden="true"></i><span class="visually-hidden">, late cancellation</span>
                                 {% endif %}
                             </td>
-                            <td class="text-end text-nowrap">£{{ '%.2f'|format(item.unit_price) }}</td>
+                            <td class="text-end text-nowrap{{ muted }}">£{{ '%.2f'|format(item.unit_price) }}</td>
                         </tr>
                         {% endfor %}
 
@@ -148,7 +151,7 @@
         <p class="text-muted small">
             <i class="bi bi-info-circle me-1"></i>
             This is an estimate based on your confirmed bookings and current pricing.
-            DogBoxx will issue your invoice separately. Late cancellations (less than 5 days notice) are charged at the full rate.
+            DogBoxx will issue your invoice separately. Late cancellations (<i class="bi bi-alarm" aria-hidden="true"></i> less than 5 days' notice) are charged at the full rate.
         </p>
         {% endif %}
 
