@@ -1064,3 +1064,74 @@ class TestRebookedLateCancel:
         body = resp.get_data(as_text=True)
         assert 'late cancellation</span>' not in body
         assert body.count('Mon 02 Feb') == 1
+
+
+# ---------------------------------------------------------------------------
+# Weekly discount rows — admin detail and client summary list what was subtracted
+# ---------------------------------------------------------------------------
+
+APR_START, APR_END = datetime.date(2026, 4, 1), datetime.date(2026, 5, 1)
+
+
+class TestWeeklyDiscountRows:
+    """invoice_for_client returns the per-week rows (pricing.build_weekly_discounts)
+    that it subtracts; both invoice views render those rows, never re-derive them."""
+
+    def _april_client(self, email):
+        # Wed 1 – Fri 3 Apr AM+PM = 6 walks in the week of Mon 30 Mar (starts in
+        # March), then Mon 6 – Fri 10 Apr mornings = 5 walks. Both weeks qualify.
+        st = make_walk_service()
+        make_pricing_config(weekly_discount=WEEKLY_DISCOUNT)
+        u, dog = make_client_with_dog(email)
+        for day in (1, 2, 3):
+            for slot in ('Morning', 'Afternoon'):
+                add_booking(u, dog, st, datetime.date(2026, 4, day), slot)
+        for day in range(6, 11):
+            add_booking(u, dog, st, datetime.date(2026, 4, day), 'Morning')
+        db.session.commit()
+        return u
+
+    def test_rows_match_the_subtracted_total(self, app):
+        with app.app_context():
+            u = self._april_client('wkrows_inv@test.com')
+            inv = _invoice_for_client(u.id, APR_START, APR_END, all_configs())
+            rows = inv['weekly_discounts']
+            assert [(r['week_start'], r['walk_count']) for r in rows] == [
+                (datetime.date(2026, 3, 30), 6), (datetime.date(2026, 4, 6), 5)]
+            assert sum(r['amount'] for r in rows) == inv['weekly_discount_total']
+            assert inv['weekly_discount_weeks'] == 2
+            gross = WALK_PRICE * 11
+            doubles = DOUBLE_DISCOUNT * 3
+            assert inv['subtotal'] == round(gross - doubles - WEEKLY_DISCOUNT * 11, 2)
+
+    def test_client_summary_row_follows_last_row_of_its_week(self, app, client):
+        with app.app_context():
+            self._april_client('wkrows_client@test.com')
+
+        client.post('/auth/login',
+                    data={'email': 'wkrows_client@test.com', 'password': 'Testpass1!'},
+                    follow_redirects=True)
+        body = client.get('/monthly-summary?month=2026-04').get_data(as_text=True)
+        first = body.index('Weekly discount, w/c 30 Mar')
+        second = body.index('Weekly discount, w/c 6 Apr')
+        # After Friday 3 Apr (and its AM + PM discount), before Monday 6 Apr.
+        assert body.rindex('Fri 03 Apr') < first < body.index('Mon 06 Apr')
+        assert body.rindex('Fri 10 Apr') < second < body.index('Estimated total')
+        assert '(6 walks)' in body and '(5 walks)' in body
+
+    def test_admin_detail_still_lists_weekly_rows(self, app, client):
+        with app.app_context():
+            admin = User(firstname='Admin', lastname='User', email='wkrows_admin@test.com',
+                         role='walker', is_admin=True, active=True,
+                         hashed_password=generate_password_hash('Testpass1!'))
+            db.session.add(admin)
+            u = self._april_client('wkrows_detail@test.com')
+            client_id = u.id
+
+        client.post('/auth/login',
+                    data={'email': 'wkrows_admin@test.com', 'password': 'Testpass1!'},
+                    follow_redirects=True)
+        body = client.get(f'/admin/invoicing/{client_id}?month=2026-04').get_data(as_text=True)
+        assert 'Wk 30 Mar' in body and 'Wk 6 Apr' in body
+        assert body.count('>Weekly discount</span>') == 2
+        assert '−£6.00' in body and '−£5.00' in body

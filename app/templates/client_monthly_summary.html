@@ -62,9 +62,9 @@
             <div class="col-6 col-sm-3">
                 <div class="card profile-card text-center h-100">
                     <div class="card-body py-3">
-                        {# AM + PM rows plus the weekly discount (which has no row of its own) —
-                           the same two deductions invoice_for_client takes off the subtotal. #}
-                        {% set discount_total = (discounts | sum(attribute='amount')) + (inv.weekly_discount_total or 0) %}
+                        {# AM + PM rows plus weekly rows — the same two deductions
+                           invoice_for_client takes off the subtotal. #}
+                        {% set discount_total = (discounts | sum(attribute='amount')) + (weekly_discounts | sum(attribute='amount')) %}
                         <div class="stat-num text-success">£{{ '%.2f'|format(discount_total) }}</div>
                         <div class="stat-label">Discounts</div>
                     </div>
@@ -107,6 +107,7 @@
                     </thead>
                     <tbody>
                         {% for item in line_items %}
+                        {% set next_item = loop.nextitem %}
                         {# Late cancels are de-emphasised, not highlighted: grey text on
                            each cell (the .table cell colour ignores a class on the <tr>). #}
                         {% set muted = ' text-body-secondary' if item.is_cancel else '' %}
@@ -128,7 +129,7 @@
 
                         {# Discounts sit directly under the last row of the day they apply
                            to (line_items is date-sorted). Green goes on each cell, as above. #}
-                        {% if not loop.nextitem or loop.nextitem.booking.date != item.booking.date %}
+                        {% if not next_item or next_item.booking.date != item.booking.date %}
                         {% for d in discounts if d.date == item.booking.date %}
                         <tr>
                             <td class="text-nowrap text-success">{{ d.date.strftime('%a %d %b') }}</td>
@@ -139,6 +140,19 @@
                         </tr>
                         {% endfor %}
                         {% endif %}
+
+                        {# The weekly discount follows the last row of its week. #}
+                        {% for w in weekly_discounts
+                               if w.week_start <= item.booking.date and item.booking.date <= w.week_end
+                                  and (not next_item or next_item.booking.date > w.week_end) %}
+                        <tr>
+                            <td class="text-success" colspan="3">
+                                <i class="bi bi-tag me-1"></i>Weekly discount, w/c {{ w.week_start.strftime('%-d %b') }}
+                                <span class="text-nowrap">({{ w.walk_count }} walk{{ 's' if w.walk_count != 1 }})</span>
+                            </td>
+                            <td class="text-end text-nowrap text-success">−£{{ '%.2f'|format(w.amount) }}</td>
+                        </tr>
+                        {% endfor %}
                         {% endfor %}
                     </tbody>
                     <tfoot>
@@ -158,9 +172,9 @@
             <p class="d-flex gap-2 mb-2">
                 <i class="bi bi-info-circle" aria-hidden="true"></i>
                 <span>This is an estimate based on your confirmed bookings and current pricing.
-                DogBoxx will issue your invoice separately. Late cancellations (less than 5 days' notice) are charged at the full rate.</span>
+                DogBoxx will issue your invoice separately.</span>
             </p>
-            <p class="d-flex gap-2 mb-1"><i class="bi bi-alarm" aria-hidden="true"></i><span>Late cancellation</span></p>
+            <p class="d-flex gap-2 mb-1"><i class="bi bi-alarm" aria-hidden="true"></i><span>Late cancellations (less than 5 days' notice) are charged at the full rate.</span></p>
             <p class="d-flex gap-2 mb-1"><i class="bi bi-person-walking" aria-hidden="true"></i><span>Walk</span></p>
             <p class="d-flex gap-2 mb-0"><i class="bi bi-house-door" aria-hidden="true"></i><span>Drop-in</span></p>
         </div>

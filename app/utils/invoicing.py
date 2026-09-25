@@ -8,7 +8,7 @@ from decimal import Decimal
 from sqlalchemy.orm import joinedload
 from app.models import DogOwner, Booking
 from app.utils.pricing import (
-    config_for_date, is_drop_in, unit_price, weekly_discount_for_walks,
+    build_weekly_discounts, config_for_date, is_drop_in, unit_price,
 )
 
 
@@ -199,10 +199,12 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
             if cfg:
                 subtotal -= cfg.double_slot_discount
 
-    # Weekly discount — confirmed group walks only, ≥5 per ISO week
-    weekly_discount_total, weekly_discount_weeks = weekly_discount_for_walks(
+    # Weekly discount — confirmed group walks only, ≥5 per ISO week. The rows go
+    # back to the caller too, so the views list exactly what was subtracted here.
+    weekly_discounts = build_weekly_discounts(
         [b.date for b in walk_confirmed], all_configs
     )
+    weekly_discount_total = sum((w['amount'] for w in weekly_discounts), Decimal('0.00'))
     subtotal -= weekly_discount_total
 
     return {
@@ -216,6 +218,7 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
         'doubles':                sum(1 for s in dog_date_slots.values()
                                       if 'Morning' in s and 'Afternoon' in s),
         'weekly_discount_total':  round(weekly_discount_total, 2),
-        'weekly_discount_weeks':  weekly_discount_weeks,
+        'weekly_discount_weeks':  len(weekly_discounts),
+        'weekly_discounts':       weekly_discounts,
         'subtotal':               round(subtotal, 2),
     }
