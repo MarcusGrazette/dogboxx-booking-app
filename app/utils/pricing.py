@@ -85,38 +85,48 @@ def build_line_items(all_billable, late_cancel_ids, configs):
     return line_items
 
 
-def weekly_discount_for_walks(walk_dates, configs):
-    """Weekly ≥5-walk discount for ONE billing group's confirmed group-walk dates.
+def build_weekly_discounts(walk_dates, configs):
+    """Weekly ≥5-walk discount rows for ONE billing group's confirmed group walks.
 
     A "billing group" is whatever the caller bills as a unit: a single client's
     household for invoices, or one primary owner's dogs for the revenue rollup.
     For each ISO week in which the group has ≥5 confirmed group walks, applies
     ``weekly_discount`` per walk, priced from the config effective on that week's
-    Monday.
+    Monday. A week with no configured discount gets no row.
 
     ``walk_dates`` is an iterable of ``date`` (one per confirmed group walk;
-    drop-ins excluded by the caller). Returns ``(total_discount, week_count)``
-    where ``week_count`` is the number of qualifying weeks.
+    drop-ins excluded by the caller). Returns a date-sorted list of
+    ``{week_start, week_end, walk_count, amount}`` (Mon, Sun inclusive).
 
-    This is the single source for the weekly rule — both ``invoice_for_client``
-    and the admin revenue dashboard call it, so the two can never disagree on
-    whether a week qualifies or how much it discounts.
+    This is the single source for the weekly rule: ``weekly_discount_for_walks``
+    sums these rows, ``invoice_for_client`` returns them for the admin invoice
+    detail and the client monthly summary to render.
     """
     week_counts = defaultdict(int)
     for d in walk_dates:
         iso_year, iso_week, _ = d.isocalendar()
         week_counts[(iso_year, iso_week)] += 1
 
-    total = Decimal('0.00')
-    weeks = 0
-    for (iso_year, iso_week), count in week_counts.items():
+    rows = []
+    for (iso_year, iso_week), count in sorted(week_counts.items()):
         if count >= 5:
             monday = _date.fromisocalendar(iso_year, iso_week, 1)
             cfg = config_for_date(configs, monday)
             if cfg and cfg.weekly_discount:
-                total += cfg.weekly_discount * count
-                weeks += 1
-    return round(total, 2), weeks
+                rows.append({
+                    'week_start': monday,
+                    'week_end':   _date.fromisocalendar(iso_year, iso_week, 7),
+                    'walk_count': count,
+                    'amount':     round(cfg.weekly_discount * count, 2),
+                })
+    return rows
+
+
+def weekly_discount_for_walks(walk_dates, configs):
+    """``(total_discount, week_count)`` for ``build_weekly_discounts``' rows —
+    the totals-only form the revenue dashboard uses."""
+    rows = build_weekly_discounts(walk_dates, configs)
+    return round(sum((r['amount'] for r in rows), Decimal('0.00')), 2), len(rows)
 
 
 def build_double_slot_discounts(confirmed_bookings, configs):

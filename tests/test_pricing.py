@@ -17,6 +17,7 @@ from app.utils.pricing import (
     unit_price,
     build_line_items,
     build_double_slot_discounts,
+    build_weekly_discounts,
     weekly_discount_for_walks,
 )
 
@@ -236,3 +237,31 @@ class TestWeeklyDiscount:
     def test_empty_dates(self):
         configs = [_cfg_weekly(date(2026, 1, 1), weekly=1.5)]
         assert weekly_discount_for_walks([], configs) == (0.0, 0)
+
+
+class TestBuildWeeklyDiscounts:
+    WEEK = TestWeeklyDiscount.WEEK
+
+    def test_one_row_per_qualifying_week(self):
+        configs = [_cfg_weekly(date(2026, 1, 1), weekly=1.5)]
+        next_week = [d.replace(day=d.day + 7) for d in self.WEEK]
+        rows = build_weekly_discounts(next_week + self.WEEK + self.WEEK[:1], configs)
+        assert rows == [
+            {'week_start': date(2026, 6, 1), 'week_end': date(2026, 6, 7),
+             'walk_count': 6, 'amount': Decimal('9.00')},
+            {'week_start': date(2026, 6, 8), 'week_end': date(2026, 6, 14),
+             'walk_count': 5, 'amount': Decimal('7.50')},
+        ]
+
+    def test_non_qualifying_week_has_no_row(self):
+        configs = [_cfg_weekly(date(2026, 1, 1), weekly=1.5)]
+        assert build_weekly_discounts(self.WEEK[:4], configs) == []
+
+    def test_totals_are_the_sum_of_the_rows(self):
+        # weekly_discount_for_walks must stay a pure sum of these rows — the
+        # rows are what the invoice views render, the total what they subtract.
+        configs = [_cfg_weekly(date(2026, 1, 1), weekly=1.25)]
+        dates = self.WEEK * 2 + [d.replace(day=d.day + 7) for d in self.WEEK]
+        rows = build_weekly_discounts(dates, configs)
+        assert weekly_discount_for_walks(dates, configs) == (
+            sum(r['amount'] for r in rows), len(rows))
