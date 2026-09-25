@@ -105,6 +105,25 @@ class TestBuildLineItems:
     def test_empty(self):
         assert build_line_items([], set(), []) == []
 
+    def test_same_day_morning_before_afternoon(self):
+        # Regression: sorting the slot strings put Afternoon before Morning.
+        configs = [_cfg(date(2026, 1, 1))]
+        d = date(2026, 6, 1)
+        items = build_line_items(
+            [_booking(1, d, 'Afternoon'), _booking(2, d, 'Morning')],
+            late_cancel_ids=set(), configs=configs)
+        assert [li['booking'].slot for li in items] == ['Morning', 'Afternoon']
+
+    def test_unranked_slot_sorts_last_in_its_day(self):
+        # Day-care slots have no defined order — last within the day, never an error.
+        configs = [_cfg(date(2026, 1, 1))]
+        d = date(2026, 6, 1)
+        items = build_line_items(
+            [_booking(1, d, 'Full Day'), _booking(2, d, 'Afternoon'),
+             _booking(3, d, 'Morning'), _booking(4, date(2026, 6, 2), 'Morning')],
+            late_cancel_ids=set(), configs=configs)
+        assert [li['booking'].id for li in items] == [3, 2, 1, 4]
+
 
 # ── build_double_slot_discounts ────────────────────────────────────────────
 
