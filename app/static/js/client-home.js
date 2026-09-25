@@ -804,11 +804,12 @@
             document.getElementById('noteModal').addEventListener('shown.bs.modal', () => textarea.focus(), { once: true });
         });
 
+        // Quick save: just disable while in flight, toast on success (same as
+        // /profile). Spinner + "…ing" labels are for the slow actions.
         saveBtn.addEventListener('click', function () {
             const note = textarea.value.trim();
             errorEl.textContent = '';
             saveBtn.disabled = true;
-            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
 
             const csrfToken = document.querySelector('input[name=csrf_token]')?.value;
 
@@ -819,8 +820,6 @@
             })
                 .then(r => r.json())
                 .then(data => {
-                    saveBtn.disabled = false;
-                    saveBtn.textContent = 'Save note';
                     if (data.success) {
                         // Update the button icon + data attr to reflect saved state
                         activeNoteBtn.setAttribute('data-current-note', note);
@@ -833,15 +832,15 @@
                             activeNoteBtn.title = 'Add note';
                         }
                         modal.hide();
+                        showToast(note ? 'Note saved.' : 'Note removed.', 'success');
                     } else {
                         errorEl.textContent = data.message || 'Could not save note.';
                     }
                 })
                 .catch(() => {
-                    saveBtn.disabled = false;
-                    saveBtn.textContent = 'Save note';
                     errorEl.textContent = 'Network error — please try again.';
-                });
+                })
+                .finally(() => { saveBtn.disabled = false; });
         });
     })();
 

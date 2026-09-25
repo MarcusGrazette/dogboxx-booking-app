@@ -139,7 +139,7 @@ def invoicing_detail(client_id):
     year, month = month_start.year, month_start.month
 
     from app.models import PricingConfig
-    from app.utils.pricing import config_for_date, build_line_items, build_double_slot_discounts, is_drop_in
+    from app.utils.pricing import build_line_items, build_double_slot_discounts, is_drop_in
     all_configs = (
         PricingConfig.query
         .filter(PricingConfig.effective_from <= month_end)
@@ -151,7 +151,8 @@ def invoicing_detail(client_id):
     if inv is None:
         inv = {'confirmed': [], 'late_cancels': [], 'all_billable': [],
                'total_walks': 0, 'total_drop_ins': 0, 'total_cancels': 0,
-               'total_billable': 0, 'doubles': 0, 'subtotal': Decimal('0.00')}
+               'total_billable': 0, 'doubles': 0, 'subtotal': Decimal('0.00'),
+               'weekly_discounts': []}
 
     late_cancel_ids = {b.id for b in inv['late_cancels']}
     line_items = build_line_items(inv['all_billable'], late_cancel_ids, all_configs)
@@ -180,8 +181,12 @@ def invoicing_detail(client_id):
         if 'Morning' in slots and 'Afternoon' in slots
     ]
 
+    # Per-week discount rows come from invoice_for_client (pricing.build_weekly_discounts)
+    # — the same rows it subtracted from the subtotal, never re-derived here.
+    weekly_discounts = inv['weekly_discounts']
+    weekly_by_start = {wd['week_start']: wd for wd in weekly_discounts}
+
     weeks = []
-    weekly_discounts = []  # per-qualifying-week discount line items for the line-items section
     wk_start = first_monday
     while wk_start < month_end:
         wk_end = wk_start + timedelta(days=7)  # exclusive
@@ -199,17 +204,8 @@ def invoicing_detail(client_id):
         wk_doubles = sum(1 for d in double_walk_dates if wk_start <= d < wk_end)
         wk_singles = wk_confirmed - (2 * wk_doubles)
 
-        # Weekly discount: ≥5 confirmed group walks in the week
-        wk_weekly_discount = Decimal('0.00')
-        if wk_confirmed >= 5:
-            cfg = config_for_date(all_configs, wk_start)
-            if cfg and cfg.weekly_discount:
-                wk_weekly_discount = round(cfg.weekly_discount * wk_confirmed, 2)
-                weekly_discounts.append({
-                    'week_start':  wk_start,
-                    'walk_count':  wk_confirmed,
-                    'amount':      wk_weekly_discount,
-                })
+        wk_weekly = weekly_by_start.get(wk_start)
+        wk_weekly_discount = wk_weekly['amount'] if wk_weekly else Decimal('0.00')
 
         wk_discount_total = round(wk_double_discount + wk_weekly_discount, 2)
         wk_gross      = sum(li['unit_price'] for li in wk_items)

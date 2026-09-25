@@ -17,6 +17,7 @@ from app.utils.pricing import (
     unit_price,
     build_line_items,
     build_double_slot_discounts,
+    build_weekly_discounts,
     weekly_discount_for_walks,
 )
 
@@ -104,6 +105,25 @@ class TestBuildLineItems:
 
     def test_empty(self):
         assert build_line_items([], set(), []) == []
+
+    def test_same_day_morning_before_afternoon(self):
+        # Regression: sorting the slot strings put Afternoon before Morning.
+        configs = [_cfg(date(2026, 1, 1))]
+        d = date(2026, 6, 1)
+        items = build_line_items(
+            [_booking(1, d, 'Afternoon'), _booking(2, d, 'Morning')],
+            late_cancel_ids=set(), configs=configs)
+        assert [li['booking'].slot for li in items] == ['Morning', 'Afternoon']
+
+    def test_unranked_slot_sorts_last_in_its_day(self):
+        # Day-care slots have no defined order — last within the day, never an error.
+        configs = [_cfg(date(2026, 1, 1))]
+        d = date(2026, 6, 1)
+        items = build_line_items(
+            [_booking(1, d, 'Full Day'), _booking(2, d, 'Afternoon'),
+             _booking(3, d, 'Morning'), _booking(4, date(2026, 6, 2), 'Morning')],
+            late_cancel_ids=set(), configs=configs)
+        assert [li['booking'].id for li in items] == [3, 2, 1, 4]
 
 
 # ── build_double_slot_discounts ────────────────────────────────────────────
@@ -217,3 +237,31 @@ class TestWeeklyDiscount:
     def test_empty_dates(self):
         configs = [_cfg_weekly(date(2026, 1, 1), weekly=1.5)]
         assert weekly_discount_for_walks([], configs) == (0.0, 0)
+
+
+class TestBuildWeeklyDiscounts:
+    WEEK = TestWeeklyDiscount.WEEK
+
+    def test_one_row_per_qualifying_week(self):
+        configs = [_cfg_weekly(date(2026, 1, 1), weekly=1.5)]
+        next_week = [d.replace(day=d.day + 7) for d in self.WEEK]
+        rows = build_weekly_discounts(next_week + self.WEEK + self.WEEK[:1], configs)
+        assert rows == [
+            {'week_start': date(2026, 6, 1), 'week_end': date(2026, 6, 7),
+             'walk_count': 6, 'amount': Decimal('9.00')},
+            {'week_start': date(2026, 6, 8), 'week_end': date(2026, 6, 14),
+             'walk_count': 5, 'amount': Decimal('7.50')},
+        ]
+
+    def test_non_qualifying_week_has_no_row(self):
+        configs = [_cfg_weekly(date(2026, 1, 1), weekly=1.5)]
+        assert build_weekly_discounts(self.WEEK[:4], configs) == []
+
+    def test_totals_are_the_sum_of_the_rows(self):
+        # weekly_discount_for_walks must stay a pure sum of these rows — the
+        # rows are what the invoice views render, the total what they subtract.
+        configs = [_cfg_weekly(date(2026, 1, 1), weekly=1.25)]
+        dates = self.WEEK * 2 + [d.replace(day=d.day + 7) for d in self.WEEK]
+        rows = build_weekly_discounts(dates, configs)
+        assert weekly_discount_for_walks(dates, configs) == (
+            sum(r['amount'] for r in rows), len(rows))

@@ -301,6 +301,7 @@ def monthly_summary():
             'confirmed': [], 'late_cancels': [], 'all_billable': [],
             'total_walks': 0, 'total_drop_ins': 0, 'total_cancels': 0,
             'total_billable': 0, 'doubles': 0, 'subtotal': Decimal('0.00'),
+            'weekly_discounts': [],
         }
 
     late_cancel_ids = {b.id for b in inv['late_cancels']}
@@ -323,6 +324,7 @@ def monthly_summary():
         inv=inv,
         line_items=line_items,
         discounts=discounts,
+        weekly_discounts=inv['weekly_discounts'],
         month_start=month_start,
         prev_month=prev_month,
         next_month=next_month,
