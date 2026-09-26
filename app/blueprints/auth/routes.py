@@ -169,13 +169,20 @@ def logout():
     # user is, so a shared device stops receiving their pushes. The endpoint
     # comes from the logout form (filled by notification_bell.html); scoping
     # by user_id means a forged value can only ever delete your own row.
+    # Best-effort: a DB error here must never block the logout itself — a
+    # leftover row is harmless (reassigned on the next login from this
+    # device, or pruned on its next failed send).
     push_endpoint = (request.form.get('push_endpoint') or '').strip()
     if push_endpoint:
-        from app.models import PushSubscription
-        PushSubscription.query.filter_by(
-            user_id=current_user.id, endpoint=push_endpoint,
-        ).delete(synchronize_session=False)
-        db.session.commit()
+        try:
+            from app.models import PushSubscription
+            PushSubscription.query.filter_by(
+                user_id=current_user.id, endpoint=push_endpoint,
+            ).delete(synchronize_session=False)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            logging.exception("Logout: failed to delete push subscription for user %s", current_user.id)
     logout_user()
     # Clear any stale flash messages left in the session before adding ours.
     # With SESSION_PERMANENT=True sessions persist for 14 days, so unconsumed

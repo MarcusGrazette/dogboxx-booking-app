@@ -75,9 +75,17 @@ class User(UserMixin, db.Model):
         """Invalidate every session for this user. Called on password reset
         and password change — the account-recovery revocation chokepoint.
         The caller is responsible for re-syncing its own session identity
-        afterward if it wants to stay logged in (see auth/routes.py)."""
+        afterward if it wants to stay logged in (see auth/routes.py).
+
+        Also drops every Web Push subscription: push never goes through
+        user_loader, so a device an attacker registered would otherwise keep
+        receiving this user's notifications after the reset. Legitimate
+        devices re-register on their next page load (notification_bell.html
+        re-POSTs the existing subscription). Queued, not committed — the
+        caller's commit covers it."""
         import secrets
         self.session_token = secrets.token_urlsafe(32)
+        PushSubscription.query.filter_by(user_id=self.id).delete(synchronize_session=False)
 
     def __repr__(self):
         return f'<User {self.email}>'

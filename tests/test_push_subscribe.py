@@ -327,3 +327,69 @@ class TestLogoutDropsThisDeviceSubscription:
         from pathlib import Path
         src = Path(app.root_path, 'templates/partials/notification_bell.html').read_text()
         assert "(_isStandalone && Notification.permission === 'granted')" in src
+
+    def test_logout_succeeds_even_if_push_cleanup_fails(self, app, logged_in_admin, monkeypatch):
+        """The cleanup is best-effort: a DB error must not 500 the logout and
+        leave the user logged in (worst case on exactly the shared device this
+        cleanup exists for)."""
+        from sqlalchemy.exc import OperationalError
+
+        class _BrokenQuery:
+            def filter_by(self, **kw):
+                raise OperationalError('DELETE', {}, Exception('db down'))
+
+        monkeypatch.setattr(PushSubscription, 'query', _BrokenQuery())
+        resp = logged_in_admin.post('/auth/logout', data={'push_endpoint': self.EP})
+        monkeypatch.undo()
+        assert resp.status_code in (301, 302)
+        assert '/auth/login' in resp.headers['Location']
+        # Actually logged out: an admin page now bounces to login.
+        after = logged_in_admin.get('/admin/', follow_redirects=False)
+        assert after.status_code in (301, 302)
+        assert '/auth/login' in after.headers['Location']
+
+
+class TestCredentialChangeDropsSubscriptions:
+    """Review follow-up on #26: password reset/change (User.rotate_session_token,
+    the account-recovery chokepoint) ends every session — and now every push
+    subscription too, or a device an attacker registered keeps receiving the
+    user's notifications. Legitimate devices re-register on their next page load."""
+
+    def _subs(self, user_id, tag):
+        for n in (1, 2):
+            db.session.add(PushSubscription(
+                user_id=user_id, endpoint=f'https://fcm.googleapis.com/fcm/send/{tag}-{user_id}-{n}',
+                p256dh='k', auth='a',
+            ))
+
+    def test_change_password_drops_all_subscriptions(self, app, logged_in_client, client_user, admin_user):
+        self._subs(client_user.id, 'chg')
+        self._subs(admin_user.id, 'chg')
+        db.session.commit()
+        uid, aid = client_user.id, admin_user.id
+
+        resp = logged_in_client.post('/auth/change-password', data={
+            'current_password': 'Testpass1!',
+            'new_password': 'NewPass456!',
+            'confirm_password': 'NewPass456!',
+        })
+        assert resp.status_code in (301, 302)
+        assert PushSubscription.query.filter_by(user_id=uid).count() == 0
+        assert PushSubscription.query.filter_by(user_id=aid).count() == 2
+
+    def test_reset_password_drops_all_subscriptions(self, app, client, client_user, admin_user):
+        from app.blueprints.auth.routes import _make_reset_token
+
+        self._subs(client_user.id, 'rst')
+        self._subs(admin_user.id, 'rst')
+        db.session.commit()
+        uid, aid = client_user.id, admin_user.id
+        token = _make_reset_token(client_user)
+
+        resp = client.post(f'/auth/reset-password/{token}', data={
+            'password': 'BrandNew789!',
+            'confirm_password': 'BrandNew789!',
+        })
+        assert resp.status_code in (301, 302)
+        assert PushSubscription.query.filter_by(user_id=uid).count() == 0
+        assert PushSubscription.query.filter_by(user_id=aid).count() == 2
