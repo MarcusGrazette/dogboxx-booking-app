@@ -15,27 +15,34 @@ def _revenue_for_range(start, end):
     """Return ``(daily, weekly_discount_total)`` for start..end (inclusive).
 
     ``daily`` is a list of per-day dicts:
-        {date, revenue, walks, drop_ins, doubles, price_per_walk,
-         price_per_drop_in, discount}
-    where each day's ``revenue`` is gross of the weekly discount (the daily chart
-    bars). ``weekly_discount_total`` is the ≥5-walks-per-week discount summed
-    across households for the whole range — it is a *weekly* concept and so can't
-    be attributed to a single day, hence returned separately. Callers subtract it
-    from the headline total so the dashboard reflects what is actually invoiced.
+        {date, revenue, walks, drop_ins, doubles, cancel_fees}
+    where each day's ``revenue`` is what that day bills, gross of the weekly
+    discount (the daily chart bars): confirmed walks and drop-ins, plus billed
+    late-cancellation fees (``cancel_fees``), minus double-slot discounts.
+    ``weekly_discount_total`` is the ≥5-walks-per-week discount summed across
+    households for the whole range — it is a *weekly* concept and so can't be
+    attributed to a single day, hence returned separately. Callers subtract it
+    from the headline total so the dashboard equals the sum of the per-client
+    invoices.
 
-    Logic per day:
-      - Group walks: count confirmed bookings by (dog_id, slot); double-slot
-        discount for dogs with BOTH Morning + Afternoon on the same day
-      - Drop-ins: counted separately, priced at price_per_drop_in (no discount)
-    Weekly discount is computed per billing household (a dog's primary owner) so
-    it matches the sum of per-client invoices. Uses the PricingConfig with the
-    highest effective_from <= the relevant day. Note: like the invoice path's
-    double-slot keying, weekly grouping is by primary owner — see the internal
-    handbook's pricing-invoicing page for the two-dog-household caveat (out of scope).
+    Billed items come from ``invoicing.billable_bookings`` — the same selection
+    ``invoice_for_client`` uses — so a billed late cancel counts here too.
+    ``walks`` / ``drop_ins`` / ``doubles`` count delivered (confirmed) services
+    only; a cancellation fee is money, not a walk. The double-slot discount is
+    per dog with BOTH Morning + Afternoon confirmed on the day. Weekly discount
+    is computed per billing household (a dog's primary owner), qualifying on the
+    whole ISO week so a week straddling the range edge splits like the invoices.
     """
+    from collections import defaultdict
     from datetime import timedelta
-    from app.models import PricingConfig, Booking, ServiceType, DogOwner
-    from app.utils.pricing import config_for_date, weekly_discount_for_walks
+    from decimal import Decimal
+    from sqlalchemy.orm import joinedload
+    from app.models import PricingConfig, Booking, DogOwner
+    from app.utils.invoicing import billable_bookings
+    from app.utils.pricing import (
+        config_for_date, is_drop_in, iso_weeks_window, unit_price,
+        weekly_discount_for_walks,
+    )
 
     all_configs = (
         PricingConfig.query
@@ -44,96 +51,80 @@ def _revenue_for_range(start, end):
         .all()
     )
 
-    # Group walk bookings: (date, dog_id, slot)
-    walk_rows = (
+    # Whole ISO weeks overlapping the range, for the weekly discount; the
+    # daily figures use the in-range subset.
+    range_end = end + timedelta(days=1)
+    weeks_from, weeks_to = iso_weeks_window(start, range_end)
+    week_bookings = (
         Booking.query
-        .join(ServiceType)
+        .options(joinedload(Booking.service_type))
         .filter(
-            Booking.date >= start,
-            Booking.date <= end,
-            Booking.status == 'confirmed',
-            Booking.slot.in_(['Morning', 'Afternoon']),
-            ServiceType.slug == ServiceType.WALK,
+            Booking.date >= weeks_from,
+            Booking.date < weeks_to,
+            Booking.status.in_(Booking.INVOICE_STATUSES),
         )
-        .with_entities(Booking.date, Booking.dog_id, Booking.slot)
         .all()
     )
+    confirmed, late_cancels = billable_bookings(
+        [b for b in week_bookings if start <= b.date <= end])
 
-    # Drop-in bookings: (date,)
-    drop_in_rows = (
-        Booking.query
-        .join(ServiceType)
-        .filter(
-            Booking.date >= start,
-            Booking.date <= end,
-            Booking.status == 'confirmed',
-            ServiceType.slug == ServiceType.DROP_IN,
-        )
-        .with_entities(Booking.date)
-        .all()
-    )
+    day_dog_slots = defaultdict(lambda: defaultdict(set))
+    day_walks = defaultdict(int)
+    day_drop_ins = defaultdict(int)
+    for b in confirmed:
+        if is_drop_in(b):
+            day_drop_ins[b.date] += 1
+        else:
+            day_walks[b.date] += 1
+            day_dog_slots[b.date][b.dog_id].add(b.slot)
 
-    # Build lookups
-    day_dog_slots = {}
-    for r in walk_rows:
-        day_dog_slots.setdefault(r.date, {}).setdefault(r.dog_id, set()).add(r.slot)
+    day_gross = defaultdict(Decimal)
+    day_fees = defaultdict(Decimal)
+    for b in confirmed + late_cancels:
+        price = unit_price(b, config_for_date(all_configs, b.date))
+        day_gross[b.date] += price
+        if b.status == 'cancelled':
+            day_fees[b.date] += price
 
-    day_drop_ins = {}
-    for r in drop_in_rows:
-        day_drop_ins[r.date] = day_drop_ins.get(r.date, 0) + 1
-
+    # Money stays Decimal until each figure leaves this function: the per-day
+    # figures are float throughout (JSON API + chart data).
     results = []
     d = start
     while d <= end:
-        dog_slots  = day_dog_slots.get(d, {})
-        walks      = sum(len(slots) for slots in dog_slots.values())
-        doubles    = sum(1 for slots in dog_slots.values()
-                         if 'Morning' in slots and 'Afternoon' in slots)
-        drop_ins   = day_drop_ins.get(d, 0)
+        doubles = sum(1 for slots in day_dog_slots[d].values()
+                      if 'Morning' in slots and 'Afternoon' in slots)
         cfg = config_for_date(all_configs, d)
-        if cfg:
-            price          = float(cfg.price_per_walk)
-            drop_in_price  = float(cfg.price_per_drop_in)
-            discount       = float(cfg.double_slot_discount)
-            revenue        = round(
-                walks * price - doubles * discount + drop_ins * drop_in_price, 2
-            )
-        else:
-            price = drop_in_price = discount = revenue = 0.0
+        discount = cfg.double_slot_discount if cfg else Decimal('0.00')
         results.append({
-            'date':              d,
-            'revenue':           revenue,
-            'walks':             walks,
-            'drop_ins':          drop_ins,
-            'doubles':           doubles,
-            'price_per_walk':    price,
-            'price_per_drop_in': drop_in_price,
-            'discount':          discount,
+            'date':        d,
+            'revenue':     float(round(day_gross[d] - doubles * discount, 2)),
+            'walks':       day_walks[d],
+            'drop_ins':    day_drop_ins[d],
+            'doubles':     doubles,
+            'cancel_fees': float(day_fees[d]),
         })
         d += timedelta(days=1)
 
     # Weekly ≥5-walk discount — grouped by billing household (a dog's primary
     # owner) so the rollup equals the sum of per-client invoices. Walks whose dog
     # has no primary owner are skipped (defensive; shouldn't occur for billable).
-    dog_ids = {r.dog_id for r in walk_rows}
+    week_walks = [b for b in week_bookings
+                  if b.status == 'confirmed' and not is_drop_in(b)]
+    dog_ids = {b.dog_id for b in week_walks}
     primary_owner = dict(
         db.session.query(DogOwner.dog_id, DogOwner.user_id)
         .filter(DogOwner.dog_id.in_(dog_ids), DogOwner.role == 'primary')
         .all()
     ) if dog_ids else {}
-    walks_by_household = {}
-    for r in walk_rows:
-        uid = primary_owner.get(r.dog_id)
-        if uid is None:
-            continue
-        walks_by_household.setdefault(uid, []).append(r.date)
+    walks_by_household = defaultdict(list)
+    for b in week_walks:
+        uid = primary_owner.get(b.dog_id)
+        if uid is not None:
+            walks_by_household[uid].append(b.date)
 
-    # weekly_discount_for_walks returns Decimal (pricing.py is Decimal
-    # end-to-end); this module's per-day figures are float throughout
-    # (JSON API + chart data), so convert back to float right at this one
-    # call site rather than propagating Decimal into an unrelated contract.
     weekly_discount_total = round(sum(
-        float(weekly_discount_for_walks(dates, all_configs)[0])
+        float(weekly_discount_for_walks(dates, all_configs,
+                                        bill_from=start, bill_to=range_end)[0])
         for dates in walks_by_household.values()
     ), 2)
 
@@ -187,6 +178,7 @@ def revenue():
         total_walks=sum(r['walks'] for r in daily),
         total_doubles=sum(r['doubles'] for r in daily),
         weekly_discount=weekly_discount,
+        cancel_fees=round(sum(r['cancel_fees'] for r in daily), 2),
         current_pricing=current_pricing,
         all_pricing=all_pricing,
     )
@@ -234,6 +226,7 @@ def revenue_data():
         total_walks=sum(r['walks'] for r in daily),
         total_doubles=sum(r['doubles'] for r in daily),
         weekly_discount=round(weekly_discount, 2),
+        cancel_fees=round(sum(r['cancel_fees'] for r in daily), 2),
         current_pricing=current_pricing.to_dict() if current_pricing else None,
     )
 

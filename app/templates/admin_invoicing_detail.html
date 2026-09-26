@@ -255,7 +255,7 @@
               <tr class="table-light">
                 <td class="text-muted small">Wk {{ wd.week_start.strftime('%-d %b') }}</td>
                 <td class="text-muted small"></td>
-                <td class="text-muted small">{{ wd.walk_count }} walk{{ 's' if wd.walk_count != 1 }}</td>
+                <td class="text-muted small">{{ wd.walk_count }} walk{{ 's' if wd.walk_count != 1 }}{% if wd.week_walk_count != wd.walk_count %} of {{ wd.week_walk_count }} that week{% endif %}</td>
                 <td><span class="badge bg-info-subtle text-info">Weekly discount</span></td>
                 <td></td>
                 <td class="text-end text-info fw-semibold">−£{{ '%.2f' | format(wd.amount) }}</td>

@@ -1135,3 +1135,174 @@ class TestWeeklyDiscountRows:
         assert 'Wk 30 Mar' in body and 'Wk 6 Apr' in body
         assert body.count('>Weekly discount</span>') == 2
         assert '−£6.00' in body and '−£5.00' in body
+
+
+# ---------------------------------------------------------------------------
+# Weekly discount across a month end (develop review #14) and revenue ↔
+# invoice reconciliation including billed cancellations (#15)
+# ---------------------------------------------------------------------------
+
+AUG_START = datetime.date(2026, 8, 1)
+SEP_START = datetime.date(2026, 9, 1)
+OCT_START = datetime.date(2026, 10, 1)
+# Mon 31 Aug – Fri 4 Sep 2026 is one ISO week: 1 walk in August, 4 in September.
+BOUNDARY_WEEK = [datetime.date(2026, 8, 31)] + [datetime.date(2026, 9, d) for d in range(1, 5)]
+
+
+def _cancelled_before(date, days):
+    return datetime.datetime.combine(date - datetime.timedelta(days=days), datetime.time.min)
+
+
+class TestBoundaryWeekInvoice:
+    def test_discount_split_per_walk_across_the_two_invoices(self, app):
+        with app.app_context():
+            st = make_walk_service()
+            make_pricing_config(weekly_discount=WEEKLY_DISCOUNT)
+            u, dog = make_client_with_dog('bw_split@test.com')
+            for d in BOUNDARY_WEEK:
+                add_booking(u, dog, st, d, 'Morning')
+            db.session.commit()
+
+            aug = _invoice_for_client(u.id, AUG_START, SEP_START, all_configs())
+            sep = _invoice_for_client(u.id, SEP_START, OCT_START, all_configs())
+            assert aug['weekly_discount_total'] == Decimal('1.00')
+            assert sep['weekly_discount_total'] == Decimal('4.00')
+            assert [(r['walk_count'], r['week_walk_count']) for r in aug['weekly_discounts']] == [(1, 5)]
+            assert [(r['walk_count'], r['week_walk_count']) for r in sep['weekly_discounts']] == [(4, 5)]
+            # Only each month's own walks are billed.
+            assert aug['total_walks'] == 1 and sep['total_walks'] == 4
+            assert aug['subtotal'] == Decimal('11.00')
+            assert sep['subtotal'] == Decimal('44.00')
+
+    def test_other_months_drop_in_or_cancel_does_not_qualify_the_week(self, app):
+        with app.app_context():
+            walk, drop_in = make_walk_service(), make_drop_in_service()
+            make_pricing_config(weekly_discount=WEEKLY_DISCOUNT)
+            u, dog = make_client_with_dog('bw_noqual@test.com')
+            for d in BOUNDARY_WEEK[1:]:
+                add_booking(u, dog, walk, d, 'Morning')
+            add_booking(u, dog, drop_in, BOUNDARY_WEEK[0], 'Morning')
+            add_booking(u, dog, walk, BOUNDARY_WEEK[0], 'Afternoon', status='cancelled',
+                        cancelled_at=_cancelled_before(BOUNDARY_WEEK[0], 1),
+                        cancelled_by='client', bill_cancellation=True)
+            db.session.commit()
+
+            sep = _invoice_for_client(u.id, SEP_START, OCT_START, all_configs())
+            assert sep['weekly_discounts'] == []
+            assert sep['subtotal'] == Decimal('48.00')
+
+    def test_client_summary_labels_the_split_week(self, app, client):
+        with app.app_context():
+            st = make_walk_service()
+            make_pricing_config(weekly_discount=WEEKLY_DISCOUNT)
+            u, dog = make_client_with_dog('bw_label@test.com')
+            for d in BOUNDARY_WEEK:
+                add_booking(u, dog, st, d, 'Morning')
+            db.session.commit()
+
+        client.post('/auth/login',
+                    data={'email': 'bw_label@test.com', 'password': 'Testpass1!'},
+                    follow_redirects=True)
+        body = client.get('/monthly-summary?month=2026-08').get_data(as_text=True)
+        assert 'Weekly discount, w/c 31 Aug' in body
+        assert '(1 walk of 5 that week)' in body
+
+
+class TestRevenueMatchesInvoices:
+    """/admin/revenue's net total equals the sum of every client's invoice —
+    billed late cancels included, waived/early ones and rebooked fees not."""
+
+    def _admin(self):
+        admin = User(firstname='Admin', lastname='User', email='recon_admin@test.com',
+                     role='walker', is_admin=True, active=True,
+                     hashed_password=generate_password_hash('Testpass1!'))
+        db.session.add(admin)
+
+    def _september(self):
+        walk, drop_in = make_walk_service(), make_drop_in_service()
+        make_pricing_config(weekly_discount=WEEKLY_DISCOUNT)
+        a, dog_a = make_client_with_dog('recon_a@test.com')
+        b, dog_b = make_client_with_dog('recon_b@test.com')
+
+        # Client A — boundary week (1 Aug walk + 4 Sep walks) ...
+        for d in BOUNDARY_WEEK:
+            add_booking(a, dog_a, walk, d, 'Morning')
+        # ... a genuine double on Mon 7 Sep ...
+        sep = lambda day: datetime.date(2026, 9, day)
+        add_booking(a, dog_a, walk, sep(7), 'Morning')
+        add_booking(a, dog_a, walk, sep(7), 'Afternoon')
+        # ... a legacy (NULL) client late cancel → billed ...
+        add_booking(a, dog_a, walk, sep(8), 'Morning', status='cancelled',
+                    cancelled_at=_cancelled_before(sep(8), 2), cancelled_by='client')
+        # ... an admin-waived late cancel, an early cancel → free ...
+        add_booking(a, dog_a, walk, sep(9), 'Morning', status='cancelled',
+                    cancelled_at=_cancelled_before(sep(9), 1), cancelled_by='admin',
+                    bill_cancellation=False)
+        add_booking(a, dog_a, walk, sep(10), 'Morning', status='cancelled',
+                    cancelled_at=_cancelled_before(sep(10), 10), cancelled_by='client')
+        # ... and a late cancel rebooked into the same slot → walk billed, fee dropped.
+        add_booking(a, dog_a, walk, sep(11), 'Morning', status='cancelled',
+                    cancelled_at=_cancelled_before(sep(11), 2), cancelled_by='client',
+                    bill_cancellation=True)
+        add_booking(a, dog_a, walk, sep(11), 'Morning')
+
+        # Client B — a drop-in, a walk, an admin-billed late cancel, and a day of
+        # one confirmed walk + one billed cancel (a fee, not a double).
+        add_booking(b, dog_b, drop_in, sep(14), 'Afternoon')
+        add_booking(b, dog_b, walk, sep(14), 'Morning')
+        add_booking(b, dog_b, walk, sep(15), 'Afternoon', status='cancelled',
+                    cancelled_at=_cancelled_before(sep(15), 1), cancelled_by='admin',
+                    bill_cancellation=True)
+        add_booking(b, dog_b, walk, sep(16), 'Morning')
+        add_booking(b, dog_b, walk, sep(16), 'Afternoon', status='cancelled',
+                    cancelled_at=_cancelled_before(sep(16), 1), cancelled_by='client',
+                    bill_cancellation=True)
+        db.session.commit()
+        return a, b
+
+    def _invoiced(self, users, start, end):
+        return sum(_invoice_for_client(u.id, start, end, all_configs())['subtotal']
+                   for u in users)
+
+    def test_revenue_equals_sum_of_invoices(self, app):
+        with app.app_context():
+            a, b = self._september()
+            daily, weekly = _revenue_for_range(SEP_START, datetime.date(2026, 9, 30))
+            net = round(sum(r['revenue'] for r in daily) - weekly, 2)
+
+            # A: 7 walks × 12 + 1 fee − 1 double − 4 weekly = 90
+            # B: drop-in 5 + 2 walks × 12 + 2 fees × 12 = 53
+            assert net == 143.00
+            assert net == float(self._invoiced([a, b], SEP_START, OCT_START))
+            assert weekly == 4.00
+            assert sum(r['cancel_fees'] for r in daily) == 36.00
+
+    def test_counts_are_delivered_services_not_fees(self, app):
+        with app.app_context():
+            self._september()
+            daily, _ = _revenue_for_range(SEP_START, datetime.date(2026, 9, 30))
+            assert sum(r['walks'] for r in daily) == 9
+            assert sum(r['drop_ins'] for r in daily) == 1
+            # 7 Sep is the only double; 16 Sep's billed PM cancel isn't a walk.
+            assert sum(r['doubles'] for r in daily) == 1
+
+    def test_boundary_week_splits_the_same_way_in_revenue(self, app):
+        with app.app_context():
+            a, b = self._september()
+            daily, weekly = _revenue_for_range(AUG_START, datetime.date(2026, 8, 31))
+            assert weekly == 1.00
+            assert round(sum(r['revenue'] for r in daily) - weekly, 2) == float(
+                self._invoiced([a, b], AUG_START, SEP_START)) == 11.00
+
+    def test_revenue_page_and_api_report_the_fees(self, app, client):
+        with app.app_context():
+            self._admin()
+            self._september()
+
+        client.post('/auth/login',
+                    data={'email': 'recon_admin@test.com', 'password': 'Testpass1!'},
+                    follow_redirects=True)
+        data = client.get('/admin/api/revenue-data?start=2026-09-01').get_json()
+        assert data['total_revenue'] == 143.00
+        assert data['cancel_fees'] == 36.00
+        assert data['total_walks'] == 9
