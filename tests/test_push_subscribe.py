@@ -277,3 +277,53 @@ class TestDeactivationDropsSubscriptions:
         assert resp.status_code == 200, resp.get_data(as_text=True)
         assert PushSubscription.query.filter_by(user_id=target_id).count() == 0
         assert PushSubscription.query.filter_by(user_id=admin_id).count() == 1
+
+
+class TestLogoutDropsThisDeviceSubscription:
+    """Review finding #26 (shared device): logout deletes the PushSubscription
+    for the endpoint the logout form carries (filled by notification_bell.html),
+    server-side while the session is still valid. The browser subscription is
+    kept — on an iOS PWA re-creating one may need a gesture, and the bell only
+    re-POSTs an existing subscription on page load."""
+
+    EP = 'https://web.push.apple.com/logout-device'
+
+    def _sub(self, user_id, endpoint):
+        db.session.add(PushSubscription(user_id=user_id, endpoint=endpoint, p256dh='k', auth='a'))
+
+    def test_logout_deletes_only_this_devices_row(self, app, logged_in_admin, admin_user):
+        self._sub(admin_user.id, self.EP)
+        self._sub(admin_user.id, 'https://fcm.googleapis.com/fcm/send/other-device')
+        db.session.commit()
+        uid = admin_user.id
+
+        resp = logged_in_admin.post('/auth/logout', data={'push_endpoint': self.EP})
+        assert resp.status_code in (301, 302)
+        assert PushSubscription.query.filter_by(endpoint=self.EP).count() == 0
+        assert PushSubscription.query.filter_by(user_id=uid).count() == 1
+
+    def test_logout_without_endpoint_deletes_nothing(self, app, logged_in_admin, admin_user):
+        self._sub(admin_user.id, self.EP)
+        db.session.commit()
+        logged_in_admin.post('/auth/logout')
+        assert PushSubscription.query.filter_by(endpoint=self.EP).count() == 1
+
+    def test_logout_cannot_delete_another_users_row(self, app, logged_in_admin, client_user):
+        self._sub(client_user.id, self.EP)
+        db.session.commit()
+        logged_in_admin.post('/auth/logout', data={'push_endpoint': self.EP})
+        assert PushSubscription.query.filter_by(endpoint=self.EP).count() == 1
+
+    def test_logout_forms_carry_push_endpoint_field(self, app, logged_in_admin):
+        """Both layouts' logout forms must expose the field the bell fills."""
+        for path in ('/admin/', '/profile'):
+            html = logged_in_admin.get(path, follow_redirects=True).get_data(as_text=True)
+            assert 'name="push_endpoint"' in html, path
+
+    def test_bell_auto_registers_granted_ios_pwa(self, app):
+        """Regression: the bell used to call registerWebPush() only for
+        non-iOS, so an installed iOS PWA never re-POSTed its subscription —
+        the 90-day sweep then deleted a live row with no UI to recover."""
+        from pathlib import Path
+        src = Path(app.root_path, 'templates/partials/notification_bell.html').read_text()
+        assert "(_isStandalone && Notification.permission === 'granted')" in src

@@ -288,3 +288,16 @@ class TestOwnerAccountGuards:
         assert resp.status_code in (301, 302)
         with app.app_context():
             assert db.session.get(User, dual_role_owner.id).email == 'new-owner@dogboxx.org'
+
+    def test_unchanged_mixed_case_owner_email_is_not_blocked(
+            self, app, logged_in_promoted_admin, dual_role_owner):
+        """The form lowercases the submission; a legacy stored email with
+        capitals must still count as unchanged, not as an owner email change."""
+        dual_role_owner.email = 'Owner@DogBoxx.org'
+        db.session.commit()
+        resp = logged_in_promoted_admin.post(
+            f'/admin/clients/{dual_role_owner.id}/edit',
+            data={'firstname': 'Lydia', 'lastname': 'Test', 'email': 'Owner@DogBoxx.org'},
+        )
+        assert resp.status_code in (301, 302)
+        assert db.session.get(User, dual_role_owner.id).firstname == 'Lydia'

@@ -165,6 +165,17 @@ def login():
 def logout():
     """Log user out. POST-only so a GET <img>/link from another origin can't
     force-logout a logged-in user (CSRF). Flask-WTF protects the POST."""
+    # Delete this device's push subscription while we still know who the
+    # user is, so a shared device stops receiving their pushes. The endpoint
+    # comes from the logout form (filled by notification_bell.html); scoping
+    # by user_id means a forged value can only ever delete your own row.
+    push_endpoint = (request.form.get('push_endpoint') or '').strip()
+    if push_endpoint:
+        from app.models import PushSubscription
+        PushSubscription.query.filter_by(
+            user_id=current_user.id, endpoint=push_endpoint,
+        ).delete(synchronize_session=False)
+        db.session.commit()
     logout_user()
     # Clear any stale flash messages left in the session before adding ours.
     # With SESSION_PERMANENT=True sessions persist for 14 days, so unconsumed

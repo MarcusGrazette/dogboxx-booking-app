@@ -431,6 +431,18 @@
         return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
     }
 
+    // Hand this device's endpoint to the logout form(s) so logout() can delete
+    // exactly this device's PushSubscription row while the session is still
+    // valid — otherwise a shared device keeps receiving the previous user's
+    // pushes. Filled at registration time, not in a submit handler, so there's
+    // nothing async racing the logout navigation. The browser subscription
+    // itself is deliberately kept: on iOS re-creating it may need a gesture.
+    function rememberEndpointForLogout(sub) {
+        document.querySelectorAll('input[name="push_endpoint"]').forEach(function (inp) {
+            inp.value = sub.endpoint;
+        });
+    }
+
     async function registerWebPush() {
         if (!VAPID_PUBLIC_KEY)               return;  // not configured server-side
         if (!('serviceWorker' in navigator)) return;  // browser too old
@@ -474,6 +486,7 @@
                 },
                 body: JSON.stringify(sub.toJSON()),
             });
+            rememberEndpointForLogout(sub);
 
         } catch (err) {
             console.debug('[push] registration skipped:', err.message);
@@ -549,6 +562,7 @@
                         },
                         body: JSON.stringify(sub.toJSON()),
                     });
+                    rememberEndpointForLogout(sub);
 
                     enableDiv.classList.add('d-none');
 
@@ -563,8 +577,14 @@
 
     setupIOSHints();
 
-    // Non-iOS: auto-register on page load as normal
-    if (!_isIOS) {
+    // Auto-register on page load: everything non-iOS, plus an installed iOS PWA
+    // that has already granted permission. For the latter registerWebPush()
+    // never calls requestPermission() (the gesture-only step) — it just
+    // re-POSTs the existing subscription, which refreshes last_seen_at (else
+    // the 90-day sweep-push-subscriptions cron deletes a live iOS row and
+    // nothing recreates it), re-claims the endpoint for whoever is now logged
+    // in on a shared device, and fills the logout form's push_endpoint.
+    if (!_isIOS || (_isStandalone && Notification.permission === 'granted')) {
         registerWebPush();
     }
 

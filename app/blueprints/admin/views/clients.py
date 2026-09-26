@@ -387,7 +387,7 @@ def _blocks_owner_email_change(form, user):
     """
     submitted = form.email.data.strip().lower() if form.email.data else ''
     if (user.is_super_admin and not current_user.is_super_admin
-            and submitted and submitted != user.email):
+            and submitted and submitted != (user.email or '').lower()):
         form.email.errors.append("Only the business owner can change this email address.")
         return True
     return False

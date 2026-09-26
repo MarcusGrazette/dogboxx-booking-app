@@ -138,22 +138,5 @@
         if (reg.active) reg.active.postMessage({ type: 'CLEAR_PAGE_CACHE' });
     }).catch(function () {});
 }());
-
-// Drop this device's Web Push subscription whenever the login page is reached
-// — same trigger as the two blocks above. Otherwise the previous user's
-// PushSubscription row keeps delivering to a shared device after logout.
-// Done browser-side because only the browser knows which of the user's
-// endpoints is this device: once unsubscribed, the push service answers the
-// next send with 404/410 and send_web_push() prunes the server row. The next
-// login re-subscribes automatically (notification_bell.html registerWebPush,
-// permission is already granted).
-(function () {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-    navigator.serviceWorker.ready.then(function (reg) {
-        return reg.pushManager.getSubscription();
-    }).then(function (sub) {
-        if (sub) return sub.unsubscribe();
-    }).catch(function () {});
-}());
 </script>
 {% endblock %}
