@@ -185,14 +185,28 @@ def _deliver_local(user_id: int, msg: str) -> int:
     return sent
 
 
-def stream_generator(user_id: int, q: queue.Queue):
+# Maximum lifetime of one SSE connection. The generator never re-checks the
+# user (and deliberately never touches the DB — see notifications/routes.py
+# stream()), so deactivation, a password reset or logout on another tab would
+# otherwise leave an open stream delivering indefinitely. Ending it forces the
+# browser to reconnect through @login_required, where user_loader refuses an
+# inactive user or stale session_token. Chosen over an instant Redis "revoke"
+# message: fewer moving parts, and ≤10 min of residual delivery is acceptable.
+# The bell's onerror handler reconnects after ~2 s.
+STREAM_MAX_LIFETIME_S = 600
+KEEPALIVE_S = 15
+
+
+def stream_generator(user_id: int, q: queue.Queue, max_lifetime: float = STREAM_MAX_LIFETIME_S):
     """Generator yielding SSE-formatted strings from a user's queue.
 
     Sends an immediate flush comment on connect so that reverse proxies
     (e.g. Tailscale Serve) don't close the connection before the first
     real ping arrives.  Keepalive pings fire every 15 s thereafter.
+    Ends after `max_lifetime` seconds (see STREAM_MAX_LIFETIME_S).
     Cleans up the queue registration when the client disconnects.
     """
+    deadline = time.monotonic() + max_lifetime
     try:
         # Flush the HTTP headers immediately — this is critical for proxies
         # that buffer responses until they see data.  Without this, Tailscale
@@ -200,8 +214,11 @@ def stream_generator(user_id: int, q: queue.Queue):
         yield ": connected\n\n"
 
         while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return
             try:
-                msg = q.get(timeout=15)
+                msg = q.get(timeout=min(KEEPALIVE_S, remaining))
                 yield msg
             except queue.Empty:
                 # SSE comment line — keeps the connection alive, ignored by clients

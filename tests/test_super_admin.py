@@ -8,12 +8,15 @@ Covers:
 - Walker (non-admin) is forbidden from toggling
 - Super-admin cannot toggle their own access
 - Super-admin target cannot be demoted via the toggle
+- Owner account guards (review finding #10): an ordinary admin can't
+  deactivate the owner via either the walker or client route, or change her
+  email via the client edit form
 """
 import pytest
 from werkzeug.security import generate_password_hash
 
 from app import db
-from app.models import User, Walker
+from app.models import User, Walker, Client
 
 
 # ---------------------------------------------------------------------------
@@ -210,3 +213,78 @@ class TestAdminWalkersListRendering:
         assert 'detail-walker-gear' in html
         assert 'data-walker-name' in html  # the replacement mechanism is present
         assert 'onclick="' not in html  # no admin.html script builds an onclick attribute string at all
+
+
+# ---------------------------------------------------------------------------
+# Owner account guards — review finding #10
+#
+# The owner is dual-role (walker + client), so deactivate_walker,
+# deactivate_client and edit_client all reach her account. Walkers are
+# temporarily granted is_admin to cover, so a non-super admin on these routes
+# is routine. Deactivation would lock out the only account that can grant
+# is_admin; an email change would allow takeover via "forgot password".
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def dual_role_owner(super_admin):
+    db.session.add(Client(user_id=super_admin.id, onboarding_completed=True))
+    db.session.commit()
+    return super_admin
+
+
+class TestOwnerAccountGuards:
+
+    def test_admin_cannot_deactivate_owner_via_walker_route(
+            self, app, logged_in_promoted_admin, dual_role_owner):
+        resp = logged_in_promoted_admin.post(f'/admin/walkers/{dual_role_owner.id}/deactivate')
+        assert resp.status_code == 400
+        assert resp.get_json()['success'] is False
+        with app.app_context():
+            assert db.session.get(User, dual_role_owner.id).active is True
+
+    def test_admin_cannot_deactivate_owner_via_client_route(
+            self, app, logged_in_promoted_admin, dual_role_owner):
+        resp = logged_in_promoted_admin.post(f'/admin/clients/{dual_role_owner.id}/deactivate')
+        assert resp.status_code == 400
+        assert resp.get_json()['success'] is False
+        with app.app_context():
+            assert db.session.get(User, dual_role_owner.id).active is True
+
+    def test_admin_can_still_deactivate_plain_walker(
+            self, app, logged_in_promoted_admin, plain_walker):
+        resp = logged_in_promoted_admin.post(f'/admin/walkers/{plain_walker.id}/deactivate')
+        assert resp.status_code == 200
+        with app.app_context():
+            assert db.session.get(User, plain_walker.id).active is False
+
+    def test_admin_cannot_change_owner_email(
+            self, app, logged_in_promoted_admin, dual_role_owner):
+        resp = logged_in_promoted_admin.post(
+            f'/admin/clients/{dual_role_owner.id}/edit',
+            data={'firstname': 'Walker', 'lastname': 'Test', 'email': 'attacker@example.com'},
+        )
+        # Form re-renders with a field error, nothing saved.
+        assert resp.status_code == 200
+        assert b'Only the business owner can change this email address' in resp.data
+        with app.app_context():
+            assert db.session.get(User, dual_role_owner.id).email == 'owner@dogboxx.org'
+
+    def test_admin_can_edit_owner_other_fields(
+            self, app, logged_in_promoted_admin, dual_role_owner):
+        """Only the email is locked — unchanged email passes through."""
+        resp = logged_in_promoted_admin.post(
+            f'/admin/clients/{dual_role_owner.id}/edit',
+            data={'firstname': 'Lydia', 'lastname': 'Test', 'email': 'owner@dogboxx.org'},
+        )
+        assert resp.status_code in (301, 302)
+        with app.app_context():
+            assert db.session.get(User, dual_role_owner.id).firstname == 'Lydia'
+
+    def test_owner_can_change_own_email(self, app, logged_in_super_admin, dual_role_owner):
+        resp = logged_in_super_admin.post(
+            f'/admin/clients/{dual_role_owner.id}/edit',
+            data={'firstname': 'Walker', 'lastname': 'Test', 'email': 'new-owner@dogboxx.org'},
+        )
+        assert resp.status_code in (301, 302)
+        with app.app_context():
+            assert db.session.get(User, dual_role_owner.id).email == 'new-owner@dogboxx.org'

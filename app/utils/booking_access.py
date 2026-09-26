@@ -35,12 +35,15 @@ def user_can_access_booking(user, booking: Booking) -> bool:
     """Return True if the user is allowed to view or act on a booking.
 
     A user can access a booking if:
-    - They created the booking (booking.user_id == user.id), OR
-    - They are an owner (primary or secondary) of the booked dog, OR
+    - They are a current owner (primary or secondary) of the booked dog, OR
     - They are an admin.
+
+    Deliberately NOT "they created the booking": booking.user_id is
+    attribution only. Revoking a co-owner deletes just their DogOwner row, so
+    a creator short-circuit would let a former co-owner keep cancelling and
+    editing bookings they made — bookings their own calendar (filtered by
+    get_accessible_dog_ids) no longer even shows them.
     """
     if user.is_admin:
-        return True
-    if booking.user_id == user.id:
         return True
     return DogOwner.query.filter_by(dog_id=booking.dog_id, user_id=user.id).first() is not None

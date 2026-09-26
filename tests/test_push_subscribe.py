@@ -245,3 +245,35 @@ class TestSweepPushSubscriptions:
                 endpoint='https://fcm.googleapis.com/fcm/send/stale').first() is None
             assert PushSubscription.query.filter_by(
                 endpoint='https://fcm.googleapis.com/fcm/send/fresh').first() is not None
+
+
+class TestDeactivationDropsSubscriptions:
+    """Review finding #26: user_loader refuses a deactivated user's next
+    request, but Web Push never goes through a request — so deactivation must
+    delete the user's PushSubscription rows or their devices keep receiving."""
+
+    def _sub(self, user_id, n):
+        db.session.add(PushSubscription(
+            user_id=user_id, endpoint=f'https://fcm.googleapis.com/fcm/send/deact{user_id}-{n}',
+            p256dh='k', auth='a',
+        ))
+
+    @pytest.mark.parametrize('route', ['walkers', 'clients'])
+    def test_deactivate_deletes_only_that_users_subscriptions(
+            self, app, logged_in_admin, admin_user, route):
+        from app.models import Client, Walker
+        from tests.conftest import make_user
+
+        target = make_user(email=f'deact-{route}@test.org', role='walker')
+        db.session.add(Walker(user_id=target.id))
+        db.session.add(Client(user_id=target.id, onboarding_completed=True))
+        self._sub(target.id, 1)
+        self._sub(target.id, 2)
+        self._sub(admin_user.id, 1)
+        db.session.commit()
+        target_id, admin_id = target.id, admin_user.id
+
+        resp = logged_in_admin.post(f'/admin/{route}/{target_id}/deactivate')
+        assert resp.status_code == 200, resp.get_data(as_text=True)
+        assert PushSubscription.query.filter_by(user_id=target_id).count() == 0
+        assert PushSubscription.query.filter_by(user_id=admin_id).count() == 1
