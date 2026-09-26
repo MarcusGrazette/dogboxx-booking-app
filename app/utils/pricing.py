@@ -25,7 +25,7 @@ much as the arithmetic — that is where the two implementations drifted.
 """
 
 from collections import defaultdict
-from datetime import date as _date
+from datetime import date as _date, timedelta
 from decimal import Decimal
 
 from app.models import ServiceType
@@ -85,7 +85,17 @@ def build_line_items(all_billable, late_cancel_ids, configs):
     return line_items
 
 
-def build_weekly_discounts(walk_dates, configs):
+def iso_weeks_window(start, end):
+    """``(first_monday, next_monday)`` — the whole ISO weeks overlapping the
+    half-open date range ``[start, end)``. Callers widen their walk query to
+    this range so ``build_weekly_discounts`` sees every walk of a boundary week.
+    """
+    first_monday = start - timedelta(days=start.weekday())
+    last_day = end - timedelta(days=1)
+    return first_monday, last_day + timedelta(days=7 - last_day.weekday())
+
+
+def build_weekly_discounts(walk_dates, configs, *, bill_from=None, bill_to=None):
     """Weekly ≥5-walk discount rows for ONE billing group's confirmed group walks.
 
     A "billing group" is whatever the caller bills as a unit: a single client's
@@ -96,36 +106,51 @@ def build_weekly_discounts(walk_dates, configs):
 
     ``walk_dates`` is an iterable of ``date`` (one per confirmed group walk;
     drop-ins excluded by the caller). Returns a date-sorted list of
-    ``{week_start, week_end, walk_count, amount}`` (Mon, Sun inclusive).
+    ``{week_start, week_end, walk_count, week_walk_count, amount}`` (Mon, Sun
+    inclusive).
+
+    Boundary weeks: a week qualifies on ALL its walks, but only the walks inside
+    ``[bill_from, bill_to)`` are discounted — ``walk_count`` counts those,
+    ``week_walk_count`` the whole week. So a 5-walk week split 1/4 across a month
+    end discounts 1 walk on the first month's invoice and 4 on the next (the
+    business's own split). Before this, callers passed one month's walks only
+    and a boundary week could never reach 5 in either month. Pass ``walk_dates``
+    covering the whole overlapping weeks (``iso_weeks_window``); with no window,
+    every walk is billed.
 
     This is the single source for the weekly rule: ``weekly_discount_for_walks``
     sums these rows, ``invoice_for_client`` returns them for the admin invoice
     detail and the client monthly summary to render.
     """
     week_counts = defaultdict(int)
+    billed_counts = defaultdict(int)
     for d in walk_dates:
         iso_year, iso_week, _ = d.isocalendar()
         week_counts[(iso_year, iso_week)] += 1
+        if (bill_from is None or d >= bill_from) and (bill_to is None or d < bill_to):
+            billed_counts[(iso_year, iso_week)] += 1
 
     rows = []
     for (iso_year, iso_week), count in sorted(week_counts.items()):
-        if count >= 5:
+        billed = billed_counts[(iso_year, iso_week)]
+        if count >= 5 and billed:
             monday = _date.fromisocalendar(iso_year, iso_week, 1)
             cfg = config_for_date(configs, monday)
             if cfg and cfg.weekly_discount:
                 rows.append({
-                    'week_start': monday,
-                    'week_end':   _date.fromisocalendar(iso_year, iso_week, 7),
-                    'walk_count': count,
-                    'amount':     round(cfg.weekly_discount * count, 2),
+                    'week_start':      monday,
+                    'week_end':        _date.fromisocalendar(iso_year, iso_week, 7),
+                    'walk_count':      billed,
+                    'week_walk_count': count,
+                    'amount':          round(cfg.weekly_discount * billed, 2),
                 })
     return rows
 
 
-def weekly_discount_for_walks(walk_dates, configs):
+def weekly_discount_for_walks(walk_dates, configs, *, bill_from=None, bill_to=None):
     """``(total_discount, week_count)`` for ``build_weekly_discounts``' rows —
     the totals-only form the revenue dashboard uses."""
-    rows = build_weekly_discounts(walk_dates, configs)
+    rows = build_weekly_discounts(walk_dates, configs, bill_from=bill_from, bill_to=bill_to)
     return round(sum((r['amount'] for r in rows), Decimal('0.00')), 2), len(rows)
 
 
