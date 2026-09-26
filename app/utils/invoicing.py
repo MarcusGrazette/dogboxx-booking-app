@@ -8,7 +8,7 @@ from decimal import Decimal
 from sqlalchemy.orm import joinedload
 from app.models import DogOwner, Booking
 from app.utils.pricing import (
-    build_weekly_discounts, config_for_date, is_drop_in, unit_price,
+    build_weekly_discounts, config_for_date, is_drop_in, iso_weeks_window, unit_price,
 )
 
 
@@ -121,17 +121,37 @@ def drop_rebooked_cancellations(billable_cancels, confirmed):
     return kept
 
 
+def billable_bookings(bookings):
+    """``(confirmed, late_cancels)`` — what gets billed from ``bookings``.
+
+    ``bookings`` are already-queried rows in ``Booking.INVOICE_STATUSES`` (load
+    ``service_type`` with them: the legacy cancellation branch reads its notice
+    days). ``late_cancels`` are the billable cancellations — an explicit admin
+    bill/waive choice wins, otherwise the legacy default (client-initiated late
+    cancels only; closures and admin cancels stay free unless the admin opted to
+    bill) — minus any rebooked for the same slot (``drop_rebooked_cancellations``).
+
+    The one selection for every billing surface: ``invoice_for_client`` for a
+    household, ``/admin/revenue`` for everyone. Revenue used to count confirmed
+    bookings only, so a billed late cancel was on the invoice but missing from
+    reported revenue.
+    """
+    confirmed = [b for b in bookings if b.status == 'confirmed']
+    late_cancels = drop_rebooked_cancellations(
+        [b for b in bookings if is_billable_cancellation(b)], confirmed)
+    return confirmed, late_cancels
+
+
 def invoice_for_client(user_id, month_start, month_end, all_configs):
     """Return invoice data dict for a single client in the given month.
 
-    Billable items:
-      - confirmed bookings (walks + drop-ins)
-      - cancelled bookings where notice < cancellation_notice_days (from ServiceType.settings),
-        minus any rebooked for the same slot (see drop_rebooked_cancellations)
+    Billable items: see billable_bookings (confirmed + billable late cancels,
+    minus any rebooked for the same slot).
 
     Pricing:
       - Group walks: price_per_walk; double_slot_discount for same-day AM+PM;
         weekly_discount per walk for weeks with ≥5 confirmed group walks
+        (a boundary week counts its walks in both months, discounts this month's)
       - Drop-ins: price_per_drop_in; no double discount; no weekly discount
 
     Returns None if the user has no primary dog (and therefore no bookings).
@@ -144,26 +164,25 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
     if not dog_owner_ids:
         return None
 
-    bookings = (
+    # Queried over the whole ISO weeks overlapping the month: a boundary week
+    # qualifies for the weekly discount on all its walks (see
+    # build_weekly_discounts). Everything else uses the in-month subset.
+    weeks_from, weeks_to = iso_weeks_window(month_start, month_end)
+    week_bookings = (
         Booking.query
         .options(joinedload(Booking.dog), joinedload(Booking.service_type))
         .filter(
             Booking.dog_id.in_(dog_owner_ids),
-            Booking.date >= month_start,
-            Booking.date < month_end,
+            Booking.date >= weeks_from,
+            Booking.date < weeks_to,
             Booking.status.in_(Booking.INVOICE_STATUSES),
         )
         .order_by(Booking.date, Booking.slot)
         .all()
     )
+    bookings = [b for b in week_bookings if month_start <= b.date < month_end]
 
-    confirmed = [b for b in bookings if b.status == 'confirmed']
-    # A cancelled booking is billed when is_billable_cancellation() says so:
-    # an explicit admin bill/waive choice wins, otherwise the legacy default
-    # (client-initiated late cancels only — closures and admin cancels stay free
-    # unless the admin opted to bill at cancel time).
-    late_cancels = drop_rebooked_cancellations(
-        [b for b in bookings if is_billable_cancellation(b)], confirmed)
+    confirmed, late_cancels = billable_bookings(bookings)
     all_billable = confirmed + late_cancels
 
     # Group walk items keyed by (dog_id, date) so the double-slot discount only
@@ -199,10 +218,13 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
             if cfg:
                 subtotal -= cfg.double_slot_discount
 
-    # Weekly discount — confirmed group walks only, ≥5 per ISO week. The rows go
-    # back to the caller too, so the views list exactly what was subtracted here.
+    # Weekly discount — confirmed group walks only, ≥5 per ISO week, counted
+    # across the whole week but discounted on this month's walks only. The rows
+    # go back to the caller too, so the views list exactly what was subtracted.
     weekly_discounts = build_weekly_discounts(
-        [b.date for b in walk_confirmed], all_configs
+        [b.date for b in week_bookings
+         if b.status == 'confirmed' and not is_drop_in(b)],
+        all_configs, bill_from=month_start, bill_to=month_end,
     )
     weekly_discount_total = sum((w['amount'] for w in weekly_discounts), Decimal('0.00'))
     subtotal -= weekly_discount_total

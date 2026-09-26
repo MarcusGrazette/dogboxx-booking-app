@@ -23,6 +23,9 @@
               £{{ "%.2f"|format(total_revenue) }}
             </div>
             <div class="text-muted small">Total revenue</div>
+            <div class="text-muted small" id="statFeesNote" {% if not cancel_fees %}hidden{% endif %}>
+              incl. £<span id="statFees">{{ "%.2f"|format(cancel_fees) }}</span> late-cancellation fees
+            </div>
             <div class="text-muted small" id="statWeeklyNote" {% if not weekly_discount %}hidden{% endif %}>
               after &minus;£<span id="statWeekly">{{ "%.2f"|format(weekly_discount) }}</span> weekly discount
             </div>
@@ -85,7 +88,7 @@
           </div>
         </div>
         <div class="card-body" style="position:relative; height:280px;">
-          <canvas id="revenueChart"></canvas>
+          <canvas id="revenueChart" data-today="{{ today_iso }}" data-start="{{ start_iso }}"></canvas>
         </div>
       </div>
     </div>
@@ -194,29 +197,32 @@
 <script nonce="{{ csp_nonce }}">
 (function () {
   const PINK = '#E02FAC';
-  const TODAY_ISO  = '{{ today_iso }}';
-  const MONTH_DAYS = {{ chart_labels | tojson }};   // day numbers as strings
+
+  const ctx = document.getElementById('revenueChart');
+  if (!ctx) return;
+  const TODAY_ISO = ctx.dataset.today;
 
   // First-of-month helper
   function firstOfMonth(iso) {
     return iso.slice(0, 7) + '-01';
   }
 
-  // Shift a YYYY-MM-01 string by N months
+  // Shift a YYYY-MM-01 string by N months. String arithmetic on purpose: a
+  // local-time Date round-trip through toISOString() shifts the month under
+  // BST (local midnight on the 1st is 23:00 UTC on the last day of the month
+  // before), so "Next" stood still and "Previous" skipped a month.
   function shiftMonth(ymd, delta) {
-    const d = new Date(ymd + 'T00:00:00');
-    d.setMonth(d.getMonth() + delta);
-    return d.toISOString().slice(0, 7) + '-01';
+    const [y, m] = ymd.split('-').map(Number);
+    const idx = y * 12 + (m - 1) + delta;
+    const month = String(idx % 12 + 1).padStart(2, '0');
+    return `${Math.floor(idx / 12)}-${month}-01`;
   }
 
   function todayFirstOfMonth() {
-    return TODAY_ISO.slice(0, 7) + '-01';
+    return firstOfMonth(TODAY_ISO);
   }
 
-  let currentStart = firstOfMonth('{{ start_iso }}');
-
-  const ctx = document.getElementById('revenueChart');
-  if (!ctx) return;
+  let currentStart = firstOfMonth(ctx.dataset.start);
 
   const chart = new Chart(ctx, {
     type: 'bar',
@@ -278,6 +284,9 @@
     const weekly = d.weekly_discount || 0;
     document.getElementById('statWeekly').textContent   = weekly.toFixed(2);
     document.getElementById('statWeeklyNote').hidden    = (weekly <= 0);
+    const fees = d.cancel_fees || 0;
+    document.getElementById('statFees').textContent     = fees.toFixed(2);
+    document.getElementById('statFeesNote').hidden      = (fees <= 0);
   }
 
   // ── Navigation ───────────────────────────────────────────────────────────
@@ -290,7 +299,10 @@
     titleEl.textContent = 'Revenue — ' + d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
   }
 
+  // Sets both buttons from currentStart — also the recovery path after a
+  // failed load, which leaves currentStart on the month still displayed.
   function updateButtons() {
+    prevBtn.disabled = false;
     nextBtn.disabled = currentStart >= todayFirstOfMonth();
   }
 
@@ -299,6 +311,7 @@
     nextBtn.disabled = true;
     try {
       const resp = await fetch(`/admin/api/revenue-data?start=${startIso}`);
+      if (!resp.ok) throw new Error(`revenue-data ${resp.status}`);
       const d    = await resp.json();
       currentStart = d.start;
       walkData     = d.walks;
@@ -309,16 +322,17 @@
 
       updateTitle(currentStart);
       updateStats(d);
+    } catch (err) {
+      console.error('Revenue month load failed', err);
     } finally {
       updateButtons();
-      nextBtn.disabled = false;
     }
   }
 
   prevBtn.addEventListener('click', () => loadMonth(shiftMonth(currentStart, -1)));
   nextBtn.addEventListener('click', () => loadMonth(shiftMonth(currentStart,  1)));
 
-  // Disable prev if we're already at the earliest useful month
+  // Disable Next if we're already on the current month
   updateButtons();
   updateTitle(currentStart);
 })();

@@ -15,6 +15,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 69 | P3 | M | 🔲 | **Build pipeline hardening** | Tighten how the production image is built. |
 | 75 | P3 | L | 🔲 | **Locking consistency for closure and availability changes** | Make closures and availability changes coordinate with in-flight bookings. |
 | 72 | P3 | S | 🔲 | **Handle rate-limited push re-registration** | Back off quietly when push re-subscription is throttled. |
+| 82 | P3 | L | 📋 | **One typed invoice calculator** | Every billing page reads its numbers from one calculation instead of re-deriving them. |
 | 24 | P3 | L | 🔲 | **Dental cleans service type** | Admin-managed time slots that clients book into. |
 | 74 | P4 | S | 🔲 | **Drop `User.notification_preference`** | Remove a column that only ever holds `'email'`. |
 | 76 | P4 | L | 🔲 | **Keyboard operability** | Make the calendar and assignment board fully keyboard-usable. |

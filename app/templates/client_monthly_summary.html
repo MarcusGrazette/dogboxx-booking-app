@@ -148,7 +148,7 @@
                         <tr>
                             <td class="text-success" colspan="3">
                                 <i class="bi bi-tag me-1"></i>Weekly discount, w/c {{ w.week_start.strftime('%-d %b') }}
-                                <span class="text-nowrap">({{ w.walk_count }} walk{{ 's' if w.walk_count != 1 }})</span>
+                                <span class="text-nowrap">({{ w.walk_count }} walk{{ 's' if w.walk_count != 1 }}{% if w.week_walk_count != w.walk_count %} of {{ w.week_walk_count }} that week{% endif %})</span>
                             </td>
                             <td class="text-end text-nowrap text-success">−£{{ '%.2f'|format(w.amount) }}</td>
                         </tr>

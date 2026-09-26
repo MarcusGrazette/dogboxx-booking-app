@@ -18,6 +18,7 @@ from app.utils.pricing import (
     build_line_items,
     build_double_slot_discounts,
     build_weekly_discounts,
+    iso_weeks_window,
     weekly_discount_for_walks,
 )
 
@@ -248,9 +249,9 @@ class TestBuildWeeklyDiscounts:
         rows = build_weekly_discounts(next_week + self.WEEK + self.WEEK[:1], configs)
         assert rows == [
             {'week_start': date(2026, 6, 1), 'week_end': date(2026, 6, 7),
-             'walk_count': 6, 'amount': Decimal('9.00')},
+             'walk_count': 6, 'week_walk_count': 6, 'amount': Decimal('9.00')},
             {'week_start': date(2026, 6, 8), 'week_end': date(2026, 6, 14),
-             'walk_count': 5, 'amount': Decimal('7.50')},
+             'walk_count': 5, 'week_walk_count': 5, 'amount': Decimal('7.50')},
         ]
 
     def test_non_qualifying_week_has_no_row(self):
@@ -265,3 +266,60 @@ class TestBuildWeeklyDiscounts:
         rows = build_weekly_discounts(dates, configs)
         assert weekly_discount_for_walks(dates, configs) == (
             sum(r['amount'] for r in rows), len(rows))
+
+
+class TestWeeklyDiscountBoundaryWeeks:
+    """A week straddling a month end qualifies on all its walks; each month's
+    window discounts only its own walks (develop review #14)."""
+    # Mon 31 Aug – Fri 4 Sep 2026: one ISO week, 1 walk in Aug + 4 in Sep.
+    WEEK = [date(2026, 8, 31), date(2026, 9, 1), date(2026, 9, 2),
+            date(2026, 9, 3), date(2026, 9, 4)]
+    AUG = dict(bill_from=date(2026, 8, 1), bill_to=date(2026, 9, 1))
+    SEP = dict(bill_from=date(2026, 9, 1), bill_to=date(2026, 10, 1))
+
+    def test_split_allocates_per_walk_to_each_month(self):
+        configs = [_cfg_weekly(date(2026, 1, 1), weekly=1.0)]
+        aug = build_weekly_discounts(self.WEEK, configs, **self.AUG)
+        sep = build_weekly_discounts(self.WEEK, configs, **self.SEP)
+        assert [(r['walk_count'], r['week_walk_count'], r['amount']) for r in aug] == [
+            (1, 5, Decimal('1.00'))]
+        assert [(r['walk_count'], r['week_walk_count'], r['amount']) for r in sep] == [
+            (4, 5, Decimal('4.00'))]
+        assert aug[0]['week_start'] == sep[0]['week_start'] == date(2026, 8, 31)
+
+    def test_split_sums_to_the_whole_week(self):
+        configs = [_cfg_weekly(date(2026, 1, 1), weekly=1.5)]
+        whole, _ = weekly_discount_for_walks(self.WEEK, configs)
+        aug, _ = weekly_discount_for_walks(self.WEEK, configs, **self.AUG)
+        sep, _ = weekly_discount_for_walks(self.WEEK, configs, **self.SEP)
+        assert aug + sep == whole == Decimal('7.50')
+
+    def test_under_threshold_week_gets_nothing_either_side(self):
+        configs = [_cfg_weekly(date(2026, 1, 1), weekly=1.0)]
+        assert build_weekly_discounts(self.WEEK[:4], configs, **self.AUG) == []
+        assert build_weekly_discounts(self.WEEK[:4], configs, **self.SEP) == []
+
+    def test_no_row_when_no_walks_fall_in_the_window(self):
+        # The whole week is inside September — August's window bills none of it.
+        configs = [_cfg_weekly(date(2026, 1, 1), weekly=1.0)]
+        sep_week = [date(2026, 9, d) for d in range(7, 12)]
+        assert build_weekly_discounts(sep_week, configs, **self.AUG) == []
+
+    def test_priced_on_the_mondays_config_even_in_the_later_month(self):
+        # A new rate from 1 Sep doesn't reprice the week that began 31 Aug.
+        configs = [_cfg_weekly(date(2026, 9, 1), weekly=3.0),
+                   _cfg_weekly(date(2026, 1, 1), weekly=1.0)]
+        rows = build_weekly_discounts(self.WEEK, configs, **self.SEP)
+        assert rows[0]['amount'] == Decimal('4.00')
+
+
+class TestIsoWeeksWindow:
+    def test_widens_to_whole_weeks(self):
+        # Sep 2026: Tue 1st .. Wed 30th → Mon 31 Aug .. Mon 5 Oct (exclusive).
+        assert iso_weeks_window(date(2026, 9, 1), date(2026, 10, 1)) == (
+            date(2026, 8, 31), date(2026, 10, 5))
+
+    def test_month_already_on_week_boundaries(self):
+        # Feb 2021 starts on a Monday and ends on a Sunday.
+        assert iso_weeks_window(date(2021, 2, 1), date(2021, 3, 1)) == (
+            date(2021, 2, 1), date(2021, 3, 1))
