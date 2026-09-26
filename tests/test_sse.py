@@ -248,3 +248,35 @@ class TestStreamReleasesDbConnection:
             if resp is not None:
                 resp.close()
             probe.dispose()
+
+
+class TestStreamLifetimeCap:
+    """Review finding #26: the stream generator never re-validates the user,
+    so an open stream outlived deactivation / password reset / logout. It now
+    ends after STREAM_MAX_LIFETIME_S; the browser's reconnect then goes through
+    @login_required, which refuses a revoked session."""
+
+    def test_default_cap_is_ten_minutes(self):
+        assert sse.STREAM_MAX_LIFETIME_S == 600
+
+    def test_stream_ends_at_deadline_and_unsubscribes(self, app):
+        q = sse.subscribe(21)
+        chunks = list(sse.stream_generator(21, q, max_lifetime=0.2))
+        # Connected flush, then at most keepalive pings — and it terminated.
+        assert chunks[0] == ": connected\n\n"
+        assert all(c == ": ping\n\n" for c in chunks[1:])
+        assert q not in sse._connections.get(21, [])
+
+    def test_queued_events_are_delivered_before_the_deadline(self, app):
+        q = sse.subscribe(22)
+        sse.broadcast(22, 'notification', {'id': 1})
+        chunks = list(sse.stream_generator(22, q, max_lifetime=0.2))
+        assert any('event: notification' in c for c in chunks)
+
+    def test_reconnect_after_deactivation_is_refused(self, app, logged_in_admin, admin_user):
+        from app import db
+        from app.models import User
+        db.session.get(User, admin_user.id).active = False
+        db.session.commit()
+        resp = logged_in_admin.get('/notifications/stream')
+        assert resp.status_code != 200

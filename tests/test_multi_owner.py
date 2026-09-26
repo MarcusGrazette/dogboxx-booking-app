@@ -381,6 +381,68 @@ class TestSecondaryOwnerCancelBooking:
 
 
 # ---------------------------------------------------------------------------
+# Revoked co-owner — review finding #4
+#
+# user_can_access_booking() used to short-circuit on booking.user_id ==
+# user.id, so a secondary owner kept cancel/note rights over bookings they
+# created after revoke_dog_access deleted their DogOwner row. Revocation is
+# simulated by deleting that row directly — exactly what the route does
+# (covered by TestAdminJoinRevoke.test_revoke_removes_secondary_record).
+# ---------------------------------------------------------------------------
+
+class TestRevokedCoOwnerLosesBookingRights:
+
+    def _setup(self):
+        primary = make_client_user(email='revprim@test.org')
+        secondary = make_client_user(email='revsec@test.org')
+        dog = make_dog('Nutmeg')
+        make_primary_ownership(dog, primary)
+        record = make_secondary_ownership(dog, secondary)
+        st = make_service_type()
+        # Created BY the secondary owner — the case the old shortcut let through.
+        booking = make_booking(secondary, dog, st)
+        db.session.delete(record)
+        db.session.commit()
+        return primary, secondary, booking
+
+    def test_helper_denies_former_co_owner_who_created_booking(self, app, db):
+        with app.app_context():
+            primary, secondary, booking = self._setup()
+            assert user_can_access_booking(secondary, booking) is False
+            assert user_can_access_booking(primary, booking) is True
+
+    def test_former_co_owner_cannot_cancel(self, app, db, client):
+        with app.app_context():
+            _, secondary, booking = self._setup()
+            booking_id = booking.id
+
+            login(client, secondary.email)
+            resp = client.post('/cancel_booking', data={'booking_id': booking_id})
+            assert resp.status_code == 403
+            assert db.session.get(Booking, booking_id).status == 'confirmed'
+
+    def test_former_co_owner_cannot_edit_note(self, app, db, client):
+        with app.app_context():
+            _, secondary, booking = self._setup()
+            booking_id = booking.id
+
+            login(client, secondary.email)
+            resp = client.post(f'/booking/{booking_id}/note', json={'note': 'still here'})
+            assert resp.status_code == 403
+            assert db.session.get(Booking, booking_id).client_notes is None
+
+    def test_primary_owner_can_still_cancel(self, app, db, client):
+        with app.app_context():
+            primary, _, booking = self._setup()
+            booking_id = booking.id
+
+            login(client, primary.email)
+            resp = client.post('/cancel_booking', data={'booking_id': booking_id})
+            assert resp.status_code == 200
+            assert db.session.get(Booking, booking_id).status == 'cancelled'
+
+
+# ---------------------------------------------------------------------------
 # Dual-role users (role='walker' with a Client record) — regression
 #
 # Three routes used to hard-string current_user.role == 'client', which
