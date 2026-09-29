@@ -9,7 +9,7 @@ from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
 from app.models import (
     User, Booking, Walker, Client, WalkerSchedule, WalkerUnavailability,
-    WalkerAdHocAvailability,
+    WalkerAdHocAvailability, PushSubscription,
 )
 from app import db
 from app.forms import WalkerCreateForm, WalkerScheduleForm
@@ -294,8 +294,14 @@ def deactivate_walker(walker_id):
         if user.id == current_user.id:
             return jsonify(success=False, message="You cannot deactivate your own account"), 400
 
+        # See deactivate_client — the owner's account is reachable from both.
+        if user.is_super_admin:
+            return jsonify(success=False, message="The business owner's account cannot be deactivated."), 400
+
         before = {'active': user.active}
         user.active = False
+        # See deactivate_client — push bypasses user_loader's inactive check.
+        PushSubscription.query.filter_by(user_id=user.id).delete(synchronize_session=False)
 
         # Return future confirmed bookings to pending so they stay visible on
         # the board, and notify each affected client (§7.2): one grouped

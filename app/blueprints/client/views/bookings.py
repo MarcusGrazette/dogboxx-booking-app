@@ -1027,7 +1027,7 @@ def cancel_booking():
     """Cancel a booking.
 
     Authorization is handled below by user_can_access_booking() — which
-    correctly allows the booking creator, any dog co-owner, or admins.
+    allows any current dog co-owner or admins (not the creator as such).
     No early role gate (used to reject dual-role walkers incorrectly).
     """
     try:
@@ -1049,7 +1049,7 @@ def cancel_booking():
         if not booking:
             return jsonify(success=False, message="Booking not found"), 404
 
-        # Check authorization — allow booking creator, any dog owner, or admins
+        # Check authorization — any current dog owner, or admins
         if not user_can_access_booking(current_user, booking):
             return jsonify(success=False, message="You are not authorized to cancel this booking"), 403
 
@@ -1473,8 +1473,8 @@ def recurring_booking():
 def update_booking_note(booking_id):
     """Save or clear the client note on a booking.
 
-    Authorization is enforced via user_can_access_booking() below — admin,
-    booking creator, or any dog co-owner. No early role gate (used to
+    Authorization is enforced via user_can_access_booking() below — admin
+    or any current dog co-owner. No early role gate (used to
     reject dual-role walkers incorrectly).
     """
     booking = db.session.get(Booking, booking_id)

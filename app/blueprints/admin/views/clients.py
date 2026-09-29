@@ -8,7 +8,7 @@ import logging
 
 from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
-from app.models import User, Dog, Client, DogOwner, Notification
+from app.models import User, Dog, Client, DogOwner, Notification, PushSubscription
 from app import db
 from app.forms import ClientCreateForm
 from app.utils.uploads import process_dog_photo
@@ -376,6 +376,23 @@ def new_client():
     return render_template("admin_client_form.html", form=form, title="Add New Client", is_edit=False)
 
 
+def _blocks_owner_email_change(form, user):
+    """True (with a field error on the form) if a non-super-admin is trying to
+    change a super-admin's email.
+
+    The owner is dual-role, so her account is editable here. An ordinary admin
+    (walkers are temporarily granted is_admin to cover) could otherwise point
+    her email at an address they control and take the account over via
+    "forgot password". Runs after validation, before any mutation.
+    """
+    submitted = form.email.data.strip().lower() if form.email.data else ''
+    if (user.is_super_admin and not current_user.is_super_admin
+            and submitted and submitted != (user.email or '').lower()):
+        form.email.errors.append("Only the business owner can change this email address.")
+        return True
+    return False
+
+
 @admin_bp.route("/clients/<int:client_id>/edit", methods=["GET", "POST"])
 @login_required
 @admin_required
@@ -394,7 +411,7 @@ def edit_client(client_id):
 
     form = ClientCreateForm()
 
-    if form.validate_on_submit():
+    if form.validate_on_submit() and not _blocks_owner_email_change(form, user):
         try:
             # Snapshots for activity_log.diff_fields — captured via getattr()
             # on the live objects before any mutation below, per the
@@ -701,8 +718,18 @@ def deactivate_client(client_id):
         if user.id == current_user.id:
             return jsonify(success=False, message="You cannot deactivate your own account"), 400
 
+        # The owner is dual-role, so this route and deactivate_walker both
+        # reach her account. Deactivating her would lock out the only account
+        # that can grant is_admin — no in-app recovery. Same guard as
+        # toggle_walker_admin.
+        if user.is_super_admin:
+            return jsonify(success=False, message="The business owner's account cannot be deactivated."), 400
+
         before = {'active': user.active}
         user.active = False
+        # user_loader already refuses the next request; push bypasses requests
+        # entirely, so drop every device subscription too (review #26).
+        PushSubscription.query.filter_by(user_id=user.id).delete(synchronize_session=False)
         changes = diff_fields(before, user, ['active'])
         if changes:
             record_admin_action(
