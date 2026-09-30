@@ -5,7 +5,7 @@ from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
 from app.models import User, Booking, Walker, WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, ServiceType, Closure
 from app import db
-from app.capacity import get_max_per_walker
+from app.capacity import eligible_walker_clause, get_max_per_walker
 from app.utils.walker_visuals import walker_color as _walker_color, walker_initials as _walker_initials
 from sqlalchemy.orm import joinedload
 from datetime import timedelta
@@ -48,7 +48,7 @@ def _compute_month_data(year, month, today):
 
     # ── Batch-load ───────────────────────────────────────────────────────────
     all_walkers = (
-        Walker.query.join(User).filter(User.active == True)
+        Walker.query.join(User).filter(eligible_walker_clause())
         .options(joinedload(Walker.user)).all()
     )
     active_walker_ids = {w.id for w in all_walkers}
@@ -256,7 +256,7 @@ def _compute_day_detail(selected_date, today):
     from sqlalchemy import func
 
     all_walkers = (
-        Walker.query.join(User).filter(User.active == True)
+        Walker.query.join(User).filter(eligible_walker_clause())
         .options(joinedload(Walker.user)).all()
     )
 

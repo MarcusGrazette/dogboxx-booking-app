@@ -11,7 +11,7 @@ from app.models import User, Dog, Booking, DogOwner, ServiceType, Walker, Closur
 from app import db, limiter
 from app.utils.db_error_handler import DBErrorHandler
 from app.utils.booking_access import get_accessible_dog_ids, user_can_access_booking
-from app.capacity import is_date_closed, MAX_RECURRING_SERIES
+from app.capacity import eligible_walker_clause, is_date_closed, MAX_RECURRING_SERIES
 from app.forms import BookingForm
 import logging
 import uuid
@@ -336,7 +336,7 @@ def index():
 
     has_drop_in_walkers = Walker.query.join(User).filter(
         Walker.does_drop_ins == True,
-        User.active == True,
+        eligible_walker_clause(),
     ).first() is not None
 
     return render_template("index.html", user=user, client=user.client, dogs=user_dogs,

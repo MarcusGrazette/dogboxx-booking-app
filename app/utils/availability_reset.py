@@ -10,7 +10,10 @@ call sites.
 
 import uuid
 
+from app.models import Booking
 from app.utils.booking_status import bulk_transition
+from app.utils.dates import local_today
+from app.utils.notifications import NotificationBatch
 
 
 def reset_bookings_for_lost_availability(bookings, *, actor_id, batch,
@@ -37,3 +40,21 @@ def reset_bookings_for_lost_availability(bookings, *, actor_id, batch,
         batch.add(b.user_id, 'booking_reset',
                  dog_name=b.dog.name if b.dog else 'Unknown', slot=b.slot, date=b.date,
                  svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
+
+
+def reset_future_bookings_for_walker(walker, *, actor_id, reason):
+    """Reset every future confirmed booking assigned to `walker`, for paths
+    where the walker leaves the pool entirely (deactivation from either the
+    Walkers or Clients page, walker-role removal). Flushes its own
+    NotificationBatch; does not commit. Returns the reset bookings.
+    """
+    affected = Booking.query.filter(
+        Booking.walker_id == walker.id,
+        Booking.date >= local_today(),
+        Booking.status == 'confirmed',
+    ).all()
+    batch = NotificationBatch(actor_id=actor_id)
+    reset_bookings_for_lost_availability(affected, actor_id=actor_id, batch=batch,
+                                         reason=reason)
+    batch.flush()
+    return affected
