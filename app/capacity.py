@@ -3,10 +3,10 @@
 import hashlib
 import struct
 
-from sqlalchemy import func, text
+from sqlalchemy import and_, func, text
 from sqlalchemy.orm import joinedload
 
-from app.models import WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, Booking, ServiceType, Walker, Closure, SlotFreeze
+from app.models import WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, Booking, ServiceType, Walker, Closure, SlotFreeze, User
 from app import db
 
 # Shared between /recurring_booking (client) and /admin/recurring_for_dog —
@@ -33,6 +33,22 @@ def acquire_booking_lock(service_slug: str, booking_date, slot: str | None) -> N
     raw = hashlib.sha256(key_str.encode()).digest()
     lock_key = struct.unpack('>q', raw[:8])[0]  # signed 64-bit for pg bigint
     db.session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_key})
+
+
+def is_eligible_walker(user):
+    """Whether this walker's user may be picked or shown as a walker at all.
+
+    Role is checked as well as `active`: remove_walker_role demotes a user to
+    role='client' but leaves them active, and any availability row that
+    survives the demotion would otherwise put them back in the pool. Keep in
+    lock-step with eligible_walker_clause().
+    """
+    return user.active and user.role == 'walker'
+
+
+def eligible_walker_clause():
+    """SQL form of is_eligible_walker() — for queries joined to User."""
+    return and_(User.active == True, User.role == 'walker')  # noqa: E712
 
 
 def get_available_walkers(date, slot, drop_in=False, ignore_unavailability=False):
@@ -74,7 +90,7 @@ def get_available_walkers(date, slot, drop_in=False, ignore_unavailability=False
         )
         unavail_walker_ids = {u.walker_id for u in unavail}
 
-    # Eager-load user to avoid N+1 on w.user.active
+    # Eager-load user to avoid N+1 in is_eligible_walker()
     all_walkers = (
         Walker.query
         .filter(Walker.id.in_(all_walker_ids))
@@ -83,7 +99,7 @@ def get_available_walkers(date, slot, drop_in=False, ignore_unavailability=False
     )
     walkers = [
         w for w in all_walkers
-        if w.user.active and w.id not in unavail_walker_ids
+        if is_eligible_walker(w.user) and w.id not in unavail_walker_ids
     ]
 
     if drop_in:

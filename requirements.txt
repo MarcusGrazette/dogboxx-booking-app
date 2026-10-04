@@ -46,5 +46,5 @@ rich==13.9.4
 sentry-sdk[flask]==2.64.0
 tomli==2.2.1
 typing_extensions==4.14.1
-urllib3==2.7.0
+urllib3==2.8.0
 wrapt==1.17.3

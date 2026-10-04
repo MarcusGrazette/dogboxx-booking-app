@@ -1,20 +1,18 @@
 """
 PR 4/5 of the activity-feed expansion — WalkerSchedule diff capture in
-app/blueprints/admin/views/walkers.py::walker_schedule (form route) and
-walker_schedule_json (modal API route), both routed through
-app/utils/activity_log.py::record_admin_action via the shared
-_log_schedule_change helper.
+app/blueprints/admin/views/walkers.py::walker_schedule_json (the schedule
+modal's API route), routed through
+app/utils/activity_log.py::record_admin_action via _log_schedule_change.
+(The classic HTML form route that used to share this helper was deleted in
+develop review #6 — it had no in-app link and skipped the booking reset.)
 
-Flagged in the plan doc as the structurally hardest call site: both routes
-fully delete-and-reinsert a walker's WalkerSchedule rows on every save, with
+Flagged in the plan doc as the structurally hardest call site: the route
+fully deletes and reinserts a walker's WalkerSchedule rows on every save, with
 no audit columns on the table at all, so the diff has to be computed from a
 before/after set of (day_of_week, slot) pairs rather than a simple field
 diff. Covers: added/removed diff correctness, the no-op case (resubmitting
 an unchanged schedule logs nothing), that a walker cannot edit any walker's
-schedule including their own (walker_schedule was tightened to admin-only
-partway through this PR — see the 403 test below; walker_profile.html
-already told walkers to contact the admin for changes, so the route's prior
-self-service branch just contradicted its own UI), and that the existing
+schedule including their own (see the 403 test below), and that the existing
 booking-reset behaviour on removed combos is unaffected by this change.
 """
 import datetime
@@ -192,61 +190,24 @@ class TestScheduleJsonModal:
             assert row.changes['removed'] == [[0, 'Morning']]
 
 
-class TestScheduleFormRoute:
-    """POST /admin/walkers/<walker_id>/schedule (classic form, admin only)."""
-
-    def _post_form(self, flask_client, walker_id, entries):
-        """entries: iterable of (day_name, slot) e.g. ('monday', 'morning')."""
-        data = {}
-        for day_name, slot in entries:
-            data[f'{day_name}-{slot}'] = 'y'
-        return flask_client.post(f'/admin/walkers/{walker_id}/schedule', data=data,
-                                  follow_redirects=True)
-
-    def test_admin_edit_logs_diff(self, app, client):
-        with app.app_context():
-            admin = _make_admin()
-            admin_email = admin.id, admin.email
-            _, walker = _make_walker(schedule=[(0, 'Morning')])
-            walker_id = walker.id
-
-        _login(client, admin_email[1])
-        self._post_form(client, walker_id, [('tuesday', 'afternoon')])
-
-        with app.app_context():
-            row = ActivityLog.query.filter_by(entity_type='walker_schedule', entity_id=walker_id).first()
-            assert row is not None
-            assert row.actor_id == admin_email[0]
-            assert row.changes['added'] == [[1, 'Afternoon']]
-            assert row.changes['removed'] == [[0, 'Morning']]
+class TestScheduleJsonAdminOnly:
 
     def test_walker_cannot_edit_own_schedule(self, app, client):
-        """walker_schedule is admin-only — a walker (including editing their
-        own schedule) must be forbidden, matching walker_profile.html's copy
-        ("contact the admin for changes") and walker_schedule_json's existing
-        @admin_required. No ActivityLog row should be written either."""
+        """walker_schedule_json is admin-only — a walker (including editing
+        their own schedule) must be forbidden, matching walker_profile.html's
+        copy ("contact the admin for changes"). No ActivityLog row should be
+        written either."""
         with app.app_context():
             walker_user, walker = _make_walker(schedule=[])
             walker_email = walker_user.email
             walker_id = walker.id
 
         _login(client, walker_email)
-        resp = self._post_form(client, walker_id, [('wednesday', 'morning')])
+        resp = client.post(f'/admin/walkers/{walker_id}/schedule-json', json={
+            'schedules': [{'day': 2, 'slot': 'Morning'}],
+        })
         assert resp.status_code == 403
 
         with app.app_context():
             assert ActivityLog.query.filter_by(entity_type='walker_schedule', entity_id=walker_id).count() == 0
             assert WalkerSchedule.query.filter_by(walker_id=walker_id, active=True).count() == 0
-
-    def test_resubmitting_same_schedule_logs_nothing(self, app, client):
-        with app.app_context():
-            admin = _make_admin()
-            admin_email = admin.email
-            _, walker = _make_walker(schedule=[(4, 'Morning')])
-            walker_id = walker.id
-
-        _login(client, admin_email)
-        self._post_form(client, walker_id, [('friday', 'morning')])
-
-        with app.app_context():
-            assert ActivityLog.query.filter_by(entity_type='walker_schedule', entity_id=walker_id).count() == 0

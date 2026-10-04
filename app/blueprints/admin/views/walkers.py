@@ -9,12 +9,16 @@ from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
 from app.models import (
     User, Booking, Walker, Client, WalkerSchedule, WalkerUnavailability,
-    WalkerAdHocAvailability, PushSubscription,
+    WalkerAdHocAvailability, PushSubscription, ServiceType,
 )
 from app import db
-from app.forms import WalkerCreateForm, WalkerScheduleForm
+from app.capacity import eligible_walker_clause
+from app.forms import WalkerCreateForm
+from app.utils.dates import local_today
 from app.utils.notifications import NotificationBatch
-from app.utils.availability_reset import reset_bookings_for_lost_availability
+from app.utils.availability_reset import (
+    reset_bookings_for_lost_availability, reset_future_bookings_for_walker,
+)
 from app.utils.activity_log import record_admin_action, diff_fields
 from werkzeug.security import generate_password_hash
 import secrets
@@ -114,6 +118,30 @@ def toggle_walker_drop_ins(walker_user_id):
         return jsonify(success=False, message="No walker record found."), 400
     before = {'does_drop_ins': target.walker.does_drop_ins}
     target.walker.does_drop_ins = not target.walker.does_drop_ins
+
+    # Disabling drop-ins drops this walker out of every drop-in column, so
+    # their future confirmed drop-ins would stay 'confirmed' yet render
+    # nowhere on the board — reset them like any other lost availability.
+    affected = []
+    if not target.walker.does_drop_ins:
+        affected = (
+            Booking.query
+            .join(ServiceType)
+            .filter(
+                Booking.walker_id == target.walker.id,
+                Booking.status == 'confirmed',
+                Booking.date >= local_today(),
+                ServiceType.slug == ServiceType.DROP_IN,
+            )
+            .all()
+        )
+        client_batch = NotificationBatch(actor_id=current_user.id)
+        reset_bookings_for_lost_availability(
+            affected, actor_id=current_user.id, batch=client_batch,
+            reason=f"{target.firstname} stopped doing drop-in visits",
+        )
+        client_batch.flush()
+
     changes = diff_fields(before, target.walker, ['does_drop_ins'])
     if changes:
         verb = "Enabled" if target.walker.does_drop_ins else "Disabled"
@@ -122,7 +150,8 @@ def toggle_walker_drop_ins(walker_user_id):
             summary=f"{verb} drop-in visits for {target.full_name}", changes=changes,
         )
     db.session.commit()
-    return jsonify(success=True, does_drop_ins=target.walker.does_drop_ins)
+    return jsonify(success=True, does_drop_ins=target.walker.does_drop_ins,
+                   affected_count=len(affected))
 
 
 @admin_bp.route("/walkers/<int:walker_user_id>/toggle-client", methods=["POST"])
@@ -164,8 +193,8 @@ def toggle_walker_client(walker_user_id):
 def remove_walker_role(walker_user_id):
     """Transition a dual-role user from walker → client-only.
 
-    Deactivates their walker schedule and reassigns future confirmed bookings,
-    then changes their role to 'client' so they can still log in as a client.
+    Deactivates their walker schedule, deletes their future one-off available
+    days and reassigns future confirmed bookings, then changes their role to 'client' so they can still log in as a client.
     Requires the user to already have a Client record.
     """
     user = User.query.filter_by(id=walker_user_id, role='walker').first_or_404()
@@ -176,24 +205,22 @@ def remove_walker_role(walker_user_id):
     if user.id == current_user.id:
         return jsonify(success=False, message="You cannot remove your own walker role."), 400
 
-    from datetime import date as _date
-    today = _date.today()
-
     # Reassign future confirmed bookings so they stay on the board. Removing
     # the walker role unassigns their confirmed walks just like
     # deactivate_walker — the client must be told their booking reverted to
     # pending, not left to discover it silently (§7.2).
-    affected = Booking.query.filter(
-        Booking.walker_id == user.walker.id,
-        Booking.date >= today,
-        Booking.status == 'confirmed',
-    ).all()
-    client_batch = NotificationBatch(actor_id=current_user.id)
-    reset_bookings_for_lost_availability(
-        affected, actor_id=current_user.id, batch=client_batch,
+    affected = reset_future_bookings_for_walker(
+        user.walker, actor_id=current_user.id,
         reason=f"{user.firstname}'s walker role was removed",
     )
-    client_batch.flush()
+
+    # Future one-off available days would otherwise survive the demotion and
+    # come back if the role is ever re-granted. Past rows stay — they back
+    # the activity feed's history.
+    adhoc_count = WalkerAdHocAvailability.query.filter(
+        WalkerAdHocAvailability.walker_id == user.walker.id,
+        WalkerAdHocAvailability.date >= local_today(),
+    ).delete(synchronize_session=False)
 
     # Loop rather than a bulk .update() — schedule rows are ≤14 per walker,
     # and looping lets a future per-row audit hook see each one, mirroring why
@@ -214,6 +241,7 @@ def remove_walker_role(walker_user_id):
         summary=(
             f"Removed walker role for {user.full_name} "
             f"({sched_count} schedule slot{'s' if sched_count != 1 else ''} cleared, "
+            f"{adhoc_count} one-off day{'s' if adhoc_count != 1 else ''} removed, "
             f"{len(affected)} booking{'s' if len(affected) != 1 else ''} reset)"
         ),
         changes=changes,
@@ -306,19 +334,10 @@ def deactivate_walker(walker_id):
         # Return future confirmed bookings to pending so they stay visible on
         # the board, and notify each affected client (§7.2): one grouped
         # booking_reset per user. Actor = the admin deactivating the walker.
-        from datetime import date as _date
-        today = _date.today()
-        affected = Booking.query.filter(
-            Booking.walker_id == user.walker.id,
-            Booking.date >= today,
-            Booking.status == 'confirmed',
-        ).all()
-        client_batch = NotificationBatch(actor_id=current_user.id)
-        reset_bookings_for_lost_availability(
-            affected, actor_id=current_user.id, batch=client_batch,
+        reset_future_bookings_for_walker(
+            user.walker, actor_id=current_user.id,
             reason=f"{user.firstname} was deactivated",
         )
-        client_batch.flush()
 
         # Loop rather than a bulk .update() — schedule rows are ≤14 per walker
         # (same rationale as remove_walker_role). One combined summary row
@@ -388,87 +407,6 @@ def activate_walker(walker_id):
         db.session.rollback()
         logging.exception(f"Error activating walker {walker_id}: {e}")
         return jsonify(success=False, message="Error activating walker"), 500
-
-
-@admin_bp.route("/walkers/<int:walker_id>/schedule", methods=["GET", "POST"])
-@login_required
-@admin_required
-def walker_schedule(walker_id):
-    """View/edit walker's weekly schedule (admin only — walker_profile.html
-    tells walkers to contact the admin for schedule changes, and there is no
-    in-app link to this route for a walker; self-service editing here would
-    contradict that copy)."""
-# Get walker
-    walker = Walker.query.options(joinedload(Walker.user)).get_or_404(walker_id)
-
-    form = WalkerScheduleForm()
-
-    if form.validate_on_submit():
-        try:
-            # Snapshot before the delete, for the ActivityLog diff below.
-            before_set = {
-                (s.day_of_week, s.slot)
-                for s in WalkerSchedule.query.filter_by(walker_id=walker_id, active=True).all()
-            }
-
-            # Clear existing schedules
-            WalkerSchedule.query.filter_by(walker_id=walker_id).delete()
-
-            # Add new schedules based on form data
-            days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
-            after_set = set()
-            for day_index, day_name in enumerate(days):
-                day_form = getattr(form, day_name)
-
-                if day_form.morning.data:
-                    schedule = WalkerSchedule(
-                        walker_id=walker_id,
-                        day_of_week=day_index,
-                        slot='Morning',
-                        active=True
-                    )
-                    db.session.add(schedule)
-                    after_set.add((day_index, 'Morning'))
-
-                if day_form.afternoon.data:
-                    schedule = WalkerSchedule(
-                        walker_id=walker_id,
-                        day_of_week=day_index,
-                        slot='Afternoon',
-                        active=True
-                    )
-                    db.session.add(schedule)
-                    after_set.add((day_index, 'Afternoon'))
-
-            _log_schedule_change(walker, before_set, after_set, actor_id=current_user.id)
-
-            db.session.commit()
-
-            flash("Walker schedule updated successfully.", "success")
-            return redirect(url_for('admin.walkers'))
-
-        except Exception as e:
-            db.session.rollback()
-            logging.exception(f"Error updating walker schedule: {e}")
-            flash("An error occurred while updating the schedule.", "error")
-
-    # Pre-populate form with existing schedule
-    existing_schedules = WalkerSchedule.query.filter_by(walker_id=walker_id, active=True).all()
-    schedule_dict = {}
-    for schedule in existing_schedules:
-        if schedule.day_of_week not in schedule_dict:
-            schedule_dict[schedule.day_of_week] = {'morning': False, 'afternoon': False}
-        schedule_dict[schedule.day_of_week][schedule.slot.lower()] = True
-
-    # Set form values
-    days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
-    for day_index, day_name in enumerate(days):
-        day_form = getattr(form, day_name)
-        if day_index in schedule_dict:
-            day_form.morning.data = schedule_dict[day_index].get('morning', False)
-            day_form.afternoon.data = schedule_dict[day_index].get('afternoon', False)
-
-    return render_template("admin_walker_schedule.html", walker=walker, form=form)
 
 
 @admin_bp.route("/walkers/<int:walker_id>/schedule-json", methods=["GET", "POST"])
@@ -594,7 +532,7 @@ def walker_overrides():
     active_walkers = (
         Walker.query
         .join(Walker.user)
-        .filter(User.active == True, User.role == 'walker')
+        .filter(eligible_walker_clause())
         .order_by(User.lastname, User.firstname)
         .all()
     )
