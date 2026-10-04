@@ -50,6 +50,49 @@ def _double_booked_dog_ids(selected_date):
     return {row.dog_id for row in rows}
 
 
+def _walker_pickup_bookings(walker, selected_date):
+    """The walker's own bookings for selected_date, in pickup order."""
+    return (
+        Booking.query
+        .options(
+            joinedload(Booking.dog),
+            joinedload(Booking.user).joinedload(User.client),
+            joinedload(Booking.service_type),
+        )
+        .filter(
+            Booking.walker_id == walker.id,
+            Booking.date == selected_date,
+            Booking.status.in_(Booking.WALKER_STATUSES),
+        )
+        .order_by(
+            Booking.slot,
+            case((Booking.pickup_order.is_(None), 1), else_=0),
+            Booking.pickup_order,
+        )
+        .all()
+    )
+
+
+def _pickup_contacts(bookings):
+    """Map booking.id -> the User whose address/phone the pickup card shows.
+
+    That is the dog's primary owner, never booking.user — the booker may be
+    a co-owner living elsewhere (or with no Client record at all). Falls back
+    to booking.user only for a dog with no primary owner. One batched query.
+    """
+    dog_ids = {b.dog_id for b in bookings if b.dog_id}
+    primaries = {}
+    if dog_ids:
+        ownerships = (
+            DogOwner.query
+            .filter(DogOwner.dog_id.in_(dog_ids), DogOwner.role == 'primary')
+            .options(joinedload(DogOwner.user).joinedload(User.client))
+            .all()
+        )
+        primaries = {o.dog_id: o.user for o in ownerships}
+    return {b.id: primaries.get(b.dog_id) or b.user for b in bookings}
+
+
 def _build_daily_overview(selected_date):
     """Return the day's bookings grouped by slot → walker for the overview view.
 
@@ -888,25 +931,7 @@ def pickups(date_str=None):
         return render_template("walker_pickups.html", **ctx)
 
     # Default: walker's own pickup list
-    bookings = (
-        Booking.query
-        .options(
-            joinedload(Booking.dog),
-            joinedload(Booking.user).joinedload(User.client),
-            joinedload(Booking.service_type),
-        )
-        .filter(
-            Booking.walker_id == walker.id,
-            Booking.date == selected_date,
-            Booking.status.in_(Booking.WALKER_STATUSES),
-        )
-        .order_by(
-            Booking.slot,
-            case((Booking.pickup_order.is_(None), 1), else_=0),
-            Booking.pickup_order,
-        )
-        .all()
-    )
+    bookings = _walker_pickup_bookings(walker, selected_date)
 
     # Order: AM drop-ins → AM walks → PM walks → PM drop-ins
     ctx['morning_drop_ins']   = [b for b in bookings if b.slot == 'Morning'   and     _is_drop_in(b)]
@@ -915,6 +940,7 @@ def pickups(date_str=None):
     ctx['afternoon_drop_ins'] = [b for b in bookings if b.slot == 'Afternoon' and     _is_drop_in(b)]
     ctx['has_pickups'] = len(bookings) > 0
     ctx['double_booked_dog_ids'] = _double_booked_dog_ids(selected_date)
+    ctx['pickup_contacts'] = _pickup_contacts(bookings)
 
     return render_template("walker_pickups.html", **ctx)
 
@@ -1149,25 +1175,7 @@ def api_pickup_list(date_str):
     except ValueError:
         return "Invalid date", 400
 
-    bookings = (
-        Booking.query
-        .options(
-            joinedload(Booking.dog),
-            joinedload(Booking.user).joinedload(User.client),
-            joinedload(Booking.service_type),
-        )
-        .filter(
-            Booking.walker_id == walker.id,
-            Booking.date == selected_date,
-            Booking.status.in_(Booking.WALKER_STATUSES),
-        )
-        .order_by(
-            Booking.slot,
-            case((Booking.pickup_order.is_(None), 1), else_=0),
-            Booking.pickup_order,
-        )
-        .all()
-    )
+    bookings = _walker_pickup_bookings(walker, selected_date)
 
     morning_drop_ins   = [b for b in bookings if b.slot == 'Morning'   and     _is_drop_in(b)]
     morning_pickups    = [b for b in bookings if b.slot == 'Morning'   and not _is_drop_in(b)]
@@ -1186,7 +1194,8 @@ def api_pickup_list(date_str):
                            afternoon_drop_ins=afternoon_drop_ins,
                            has_pickups=len(bookings) > 0,
                            daily_message=daily_message,
-                           double_booked_dog_ids=double_booked_dog_ids)
+                           double_booked_dog_ids=double_booked_dog_ids,
+                           pickup_contacts=_pickup_contacts(bookings))
 
 
 @walker_bp.route("/api/daily-overview/<date_str>")
