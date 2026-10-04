@@ -1,4 +1,4 @@
-{% macro pickup_card(bookings, slot_name, slot_icon, slot_dot_class, collapse_id, double_booked_ids=none) %}
+{% macro pickup_card(bookings, slot_name, slot_icon, slot_dot_class, collapse_id, double_booked_ids=none, contacts=none) %}
 {% if bookings %}
 <div class="card mb-3">
     <div class="pickup-slot-header"
@@ -21,7 +21,10 @@
                 <div class="d-flex align-items-start gap-3">
 
                     <!-- Left column: avatar + maps link -->
-                    {% set client = b.user.client if b.user else none %}
+                    {# Address, map and phone come from the dog's primary owner (pickup_contacts),
+                       not b.user — the booker may be a co-owner living elsewhere. #}
+                    {% set owner = (contacts.get(b.id) if contacts else none) or b.user %}
+                    {% set client = owner.client if owner else none %}
                     <div class="flex-shrink-0 d-flex flex-column align-items-center gap-1" style="width:64px;">
                         <div class="position-relative" style="width:64px;height:64px;">
                             <img src="{{ '/static/uploads/dogs/' + b.dog.pic if b.dog and b.dog.pic else '/static/uploads/dogs/default-dog.png' }}"
@@ -75,7 +78,7 @@
                         <!-- Row 4: Action buttons -->
                         {% set has_notes = b.dog and (b.dog.pickup_instructions or b.dog.pickup_notes_photo) %}
                         {% set has_whatsapp = b.dog and b.dog.whatsapp_group_url %}
-                        {% set has_phone = b.user and b.user.phone %}
+                        {% set has_phone = owner and owner.phone %}
                         {% if has_notes or has_whatsapp or has_phone %}
                         <div class="d-flex gap-2 mt-2 flex-wrap">
                             {% if has_notes %}
@@ -95,7 +98,7 @@
                                 <i class="bi bi-whatsapp me-1"></i>Group chat
                             </a>
                             {% elif has_phone %}
-                            {% set wa_num = b.user.phone | wa_number %}
+                            {% set wa_num = owner.phone | wa_number %}
                             <a href="https://wa.me/{{ wa_num }}?text=Hi%2C%20I'm%205%20mins%20away%21"
                                target="_blank" rel="noopener"
                                class="btn btn-sm fw-semibold flex-fill"
@@ -190,8 +193,9 @@
 {% set morning_drop_ins   = morning_drop_ins   if morning_drop_ins   is defined else [] %}
 {% set afternoon_drop_ins = afternoon_drop_ins if afternoon_drop_ins is defined else [] %}
 {% set dbl = double_booked_dog_ids if double_booked_dog_ids is defined else none %}
-{{ pickup_card(morning_drop_ins,   'Morning Drop-ins',   'house-door',  'slot-dot-drop-in',         'collapse-morning-dropins',  dbl) }}
-{{ pickup_card(morning_pickups,    'Morning Walks',       'sunrise',     'slot-dot-morning-walk',    'collapse-morning-walks',    dbl) }}
-{{ pickup_card(afternoon_pickups,  'Afternoon Walks',     'sunset',      'slot-dot-afternoon-walk',  'collapse-afternoon-walks',  dbl) }}
-{{ pickup_card(afternoon_drop_ins, 'Afternoon Drop-ins',  'house-door',  'slot-dot-drop-in',         'collapse-afternoon-dropins', dbl) }}
+{% set contacts = pickup_contacts if pickup_contacts is defined else none %}
+{{ pickup_card(morning_drop_ins,   'Morning Drop-ins',   'house-door',  'slot-dot-drop-in',         'collapse-morning-dropins',  dbl, contacts) }}
+{{ pickup_card(morning_pickups,    'Morning Walks',       'sunrise',     'slot-dot-morning-walk',    'collapse-morning-walks',    dbl, contacts) }}
+{{ pickup_card(afternoon_pickups,  'Afternoon Walks',     'sunset',      'slot-dot-afternoon-walk',  'collapse-afternoon-walks',  dbl, contacts) }}
+{{ pickup_card(afternoon_drop_ins, 'Afternoon Drop-ins',  'house-door',  'slot-dot-drop-in',         'collapse-afternoon-dropins', dbl, contacts) }}
 {% endif %}
