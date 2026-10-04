@@ -12,7 +12,7 @@ from app.utils.decorators import admin_required
 from app.utils.db_error_handler import handle_db_errors
 from app.models import User, Booking, Walker, WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, ServiceType, DogOwner, SlotFreeze
 from app import db
-from app.capacity import get_max_per_walker, get_walker_slot_count, get_drop_in_capacity, auto_assign_walker, get_available_walkers, check_availability, acquire_booking_lock
+from app.capacity import get_max_per_walker, get_walker_slot_count, get_drop_in_capacity, auto_assign_walker, get_available_walkers, check_availability, acquire_booking_lock, eligible_walker_clause
 from app.utils.notifications import create_notification
 from app.utils.booking_status import transition_booking, InvalidTransitionError
 
@@ -179,7 +179,7 @@ def drop_in_board_data(date_str):
     walkers = (
         Walker.query.options(joinedload(Walker.user))
         .join(User, Walker.user_id == User.id)
-        .filter(Walker.id.in_(all_board_walker_ids), User.active == True)
+        .filter(Walker.id.in_(all_board_walker_ids), eligible_walker_clause())
         .all()
     ) if all_board_walker_ids else []
 
@@ -264,7 +264,7 @@ def board_data(date_str):
         walkers = (
             Walker.query.options(joinedload(Walker.user))
             .join(User, Walker.user_id == User.id)
-            .filter(Walker.id.in_(all_board_walker_ids), User.active == True)
+            .filter(Walker.id.in_(all_board_walker_ids), eligible_walker_clause())
             .all()
         ) if all_board_walker_ids else []
 

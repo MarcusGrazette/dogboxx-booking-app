@@ -14,6 +14,7 @@ from app.forms import ClientCreateForm
 from app.utils.uploads import process_dog_photo
 from app.utils.sanitize import clean_rich_text_or_none
 from app.utils.activity_log import record_admin_action, diff_fields
+from app.utils.availability_reset import reset_future_bookings_for_walker
 from werkzeug.security import generate_password_hash
 import secrets
 
@@ -730,6 +731,15 @@ def deactivate_client(client_id):
         # user_loader already refuses the next request; push bypasses requests
         # entirely, so drop every device subscription too (review #26).
         PushSubscription.query.filter_by(user_id=user.id).delete(synchronize_session=False)
+        # A dual-role walker deactivated from this page drops out of the
+        # walker pool just as via deactivate_walker, so their future confirmed
+        # walks must go back to pending. Schedule rows are left alone
+        # (harmless while inactive) so activate_client restores them as-is.
+        if user.walker:
+            reset_future_bookings_for_walker(
+                user.walker, actor_id=current_user.id,
+                reason=f"{user.firstname} was deactivated",
+            )
         changes = diff_fields(before, user, ['active'])
         if changes:
             record_admin_action(

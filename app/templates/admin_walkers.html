@@ -327,6 +327,10 @@ document.querySelectorAll('.drop-in-toggle').forEach(function(toggle) {
         .then(function(data) {
             if (data.success) {
                 label.textContent = data.does_drop_ins ? 'Yes' : 'No';
+                if (data.affected_count) {
+                    showToast(data.affected_count + ' upcoming drop-in visit' +
+                        (data.affected_count === 1 ? '' : 's') + ' moved back to pending.', 'warning');
+                }
             } else {
                 toggle.checked = originalChecked;
                 showToast(data.message || 'Could not update drop-in setting.', 'danger');
@@ -385,7 +389,7 @@ function removeWalkerRole(btn) {
     // an apostrophe would close the string early. data-* values only ever
     // need HTML-attribute decoding, never a second pass as JS.
     pendingClientOnlyId = btn.dataset.walkerId;
-    clientOnlyModalBody.textContent = btn.dataset.walkerName + ' will keep client access and can still log in and book walks. Their future assigned walks will be moved back to pending.';
+    clientOnlyModalBody.textContent = btn.dataset.walkerName + ' will keep client access and can still log in and book walks. Their future assigned walks will be moved back to pending, and their upcoming one-off available days removed.';
     clientOnlyModal.show();
 }
 

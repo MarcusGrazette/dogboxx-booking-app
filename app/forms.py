@@ -1,5 +1,5 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, BooleanField, SubmitField, TextAreaField, HiddenField, SelectField, DateField, FieldList, FormField
+from wtforms import StringField, PasswordField, BooleanField, SubmitField, TextAreaField, HiddenField, SelectField, DateField
 from wtforms.validators import DataRequired, Email, Length, EqualTo, Optional, URL
 from flask_wtf.file import FileField, FileAllowed
 from .validators import wtforms_password_validator
@@ -381,23 +381,6 @@ class PasswordChangeForm(FlaskForm):
     )
     submit = SubmitField('Change Password')
 
-
-class WalkerScheduleSlotForm(FlaskForm):
-    """Single day/slot form for walker schedule"""
-    morning = BooleanField('Morning')
-    afternoon = BooleanField('Afternoon')
-
-
-class WalkerScheduleForm(FlaskForm):
-    """Form for admin to manage walker's weekly schedule"""
-    monday = FormField(WalkerScheduleSlotForm, label='Monday')
-    tuesday = FormField(WalkerScheduleSlotForm, label='Tuesday')
-    wednesday = FormField(WalkerScheduleSlotForm, label='Wednesday')
-    thursday = FormField(WalkerScheduleSlotForm, label='Thursday')
-    friday = FormField(WalkerScheduleSlotForm, label='Friday')
-    saturday = FormField(WalkerScheduleSlotForm, label='Saturday')
-    sunday = FormField(WalkerScheduleSlotForm, label='Sunday')
-    submit = SubmitField('Update Schedule')
 
 class ForgotPasswordForm(FlaskForm):
     """Form for requesting a password reset email."""
