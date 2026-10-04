@@ -19,6 +19,13 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 82 | P3 | L | 📋 | **One typed invoice calculator** | Every billing page reads its numbers from one calculation instead of re-deriving them. |
 | 83 | P3 | M | 🔲 | **De-duplicate admin + walker notifications** | An admin who is also the assigned walker gets one notification per booking, not both the "assigned a walk" and "client booked" ones. |
 | 85 | P3 | S | 🔲 | **Notification bell badge alignment** | The unread-count pill sits in the same place on the bell in every browser (client and admin). |
+| 86 | P3 | M | 📋 | **Simplify 1 — dead code & one-offs** | Remove unused imports, scripts and pins; inline single-use helpers; use the shared toast on the board. |
+| 87 | P3 | M | 📋 | **Simplify 2 — capacity & board data** | One capacity/summary helper for walks and drop-ins; one board-data builder behind both board endpoints. |
+| 88 | P3 | M | 📋 | **Simplify 3 — shared utilities** | Shared email shell, dashboard chart payload, simpler link sanitizing and device detection. |
+| 89 | P3 | L | 📋 | **Simplify 4 — admin & walker view helpers** | Shared helpers for client detail, availability changes, bulk-cancel filters and profile photos. |
+| 90 | P3 | M | 📋 | **Simplify 5 — database error handling** | Replace the error-handler module with a small decorator, with tests. |
+| 91 | P3 | M | 📋 | **Simplify 6 — front-end helpers** | Merge duplicated confirm-modal, card and alert code in the client and admin scripts. |
+| 92 | P3 | L | 📋 | **Simplify 7 — booking request validation** | One validation/conflict path for the walk and drop-in booking routes; ship alone. |
 | 24 | P3 | L | 🔲 | **Dental cleans service type** | Admin-managed time slots that clients book into. |
 | 74 | P4 | S | 🔲 | **Drop `User.notification_preference`** | Remove a column that only ever holds `'email'`. |
 | 76 | P4 | L | 🔲 | **Keyboard operability** | Make the calendar and assignment board fully keyboard-usable. |
