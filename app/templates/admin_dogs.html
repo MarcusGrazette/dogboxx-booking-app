@@ -373,7 +373,7 @@
                 <div class="rounded p-3 mt-3" style="background:#e8f4fd;color:#0a58ca;border-left:3px solid #3d8bcd;">
                     <div class="small fw-semibold mb-1"><i class="bi bi-info-circle me-1"></i>Pickup notes</div>
                     {% if dog.pickup_notes_photo %}
-                    <img src="{{ url_for('static', filename='uploads/pickup_notes/' + dog.pickup_notes_photo) }}"
+                    <img src="{{ url_for('media.pickup_photo', filename=dog.pickup_notes_photo) }}"
                          class="img-fluid rounded mb-2" alt="Pickup reference photo" style="max-height:220px;object-fit:cover;">
                     {% endif %}
                     {% if dog.pickup_instructions %}
@@ -399,7 +399,7 @@
                         data-dog-dob="{{ dog.date_of_birth.isoformat() if dog.date_of_birth else '' }}"
                         data-dog-allergies="{{ dog.allergies or '' }}"
                         data-dog-pickup="{{ dog.pickup_instructions or '' }}"
-                        data-dog-pickup-photo-url="{{ url_for('static', filename='uploads/pickup_notes/' + dog.pickup_notes_photo) if dog.pickup_notes_photo else '' }}"
+                        data-dog-pickup-photo-url="{{ url_for('media.pickup_photo', filename=dog.pickup_notes_photo) if dog.pickup_notes_photo else '' }}"
                         data-dog-whatsapp="{{ dog.whatsapp_group_url or '' }}"
                         data-dog-hold-key="{{ 'true' if dog.hold_key else 'false' }}"
                         data-view-modal="dog-view-{{ dog.id }}">
