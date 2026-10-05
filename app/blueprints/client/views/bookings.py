@@ -1109,18 +1109,23 @@ def cancel_booking():
 
         date_str_fmt = booking.date.strftime('%a %-d %b')
         dog_name = booking.dog.name if booking.dog else 'Unknown dog'
+        service_label = (
+            'drop-in'
+            if booking.service_type and booking.service_type.slug == ServiceType.DROP_IN
+            else 'walk'
+        )
+        what = f"{dog_name}'s {booking.slot.lower()} {service_label} on {date_str_fmt}"
+        # Admins notified below — the walker step skips them so an admin who
+        # is also the assigned walker (the owner, a covering walker) gets one
+        # notification, not two.
+        notified_admin_ids = set()
 
         if is_admin_cancel:
-            # Notify the client their walk was cancelled by admin
-            service_label = (
-                'drop-in'
-                if booking.service_type and booking.service_type.slug == ServiceType.DROP_IN
-                else 'walk'
-            )
+            # Notify the client their booking was cancelled by admin
             create_notification(
                 recipient_id=booking.user_id,
                 notification_type='booking_cancelled',
-                title=f"{dog_name}'s {booking.slot.lower()} {service_label} on {date_str_fmt} has been cancelled",
+                title=f"{what} has been cancelled",
                 body="Please get in touch if you'd like to discuss.",
                 link='/',
                 sender_id=current_user.id,
@@ -1128,42 +1133,39 @@ def cancel_booking():
         else:
             # Notify all admins that a client cancelled
             admins = User.query.filter_by(is_admin=True).all()
-            client_name = current_user.full_name
             for admin in admins:
                 create_notification(
                     recipient_id=admin.id,
                     notification_type='booking_cancelled',
-                    title=f"{client_name} cancelled {dog_name}'s {booking.slot.lower()} walk on {date_str_fmt}",
+                    title=f"{current_user.firstname} cancelled {what}",
                     link=f'/admin/clients/{booking.user_id}',
                     sender_id=current_user.id,
                 )
+                notified_admin_ids.add(admin.id)
             # Notify any co-owners of the dog (e.g. primary owner if secondary cancelled)
             if booking.dog_id:
                 other_owners = DogOwner.query.filter(
                     DogOwner.dog_id == booking.dog_id,
                     DogOwner.user_id != current_user.id,
                 ).all()
-                co_service_label = (
-                    'drop-in'
-                    if booking.service_type and booking.service_type.slug == ServiceType.DROP_IN
-                    else 'walk'
-                )
                 for ownership in other_owners:
                     if not (ownership.user and ownership.user.is_admin):
                         create_notification(
                             recipient_id=ownership.user_id,
                             notification_type='booking_cancelled',
-                            title=f"{current_user.firstname} cancelled {dog_name}'s {booking.slot.lower()} {co_service_label} on {date_str_fmt}",
+                            title=f"{current_user.firstname} cancelled {what}",
                             link='/',
                             sender_id=current_user.id,
                         )
 
-        # Notify the walker who had this booking assigned (skip if they cancelled it themselves).
-        if prior_walker_user_id and prior_walker_user_id != current_user.id:
+        # Notify the walker who had this booking assigned (skip if they cancelled
+        # it themselves, or already heard as an admin above).
+        if (prior_walker_user_id and prior_walker_user_id != current_user.id
+                and prior_walker_user_id not in notified_admin_ids):
             if is_admin_cancel:
-                walker_title = f"{dog_name}'s {booking.slot.lower()} walk on {date_str_fmt} was cancelled"
+                walker_title = f"{what} was cancelled"
             else:
-                walker_title = f"{current_user.firstname} cancelled {dog_name}'s {booking.slot.lower()} walk on {date_str_fmt}"
+                walker_title = f"{current_user.firstname} cancelled {what}"
             create_notification(
                 recipient_id=prior_walker_user_id,
                 notification_type='booking_cancelled',
