@@ -142,7 +142,7 @@
             </div>
             <div class="modal-body" style="font-size:0.95rem;line-height:1.6;text-align:left;">
                 {% if b.dog.pickup_notes_photo %}
-                <img src="{{ url_for('static', filename='uploads/pickup_notes/' + b.dog.pickup_notes_photo) }}"
+                <img src="{{ url_for('media.pickup_photo', filename=b.dog.pickup_notes_photo) }}"
                      class="img-fluid rounded mb-3 d-block mx-auto" alt="Pickup reference photo" style="max-height:280px;object-fit:cover;">
                 {% endif %}
                 {{ b.dog.pickup_instructions | safe }}

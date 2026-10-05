@@ -904,7 +904,7 @@ def upload_client_pickup_photo(client_id):
         )
         db.session.commit()
 
-        url = url_for('static', filename=f'uploads/pickup_notes/{filename}')
+        url = url_for('media.pickup_photo', filename=filename)
         logging.info(f"Pickup notes photo updated for dog {dog.id} by admin {current_user.email}: {filename}")
         return jsonify(success=True, url=url)
 

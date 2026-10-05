@@ -300,7 +300,7 @@
                 <div id="pickup-read-view">
                     <div id="read-pickup-instructions" class="small">{{ (dog.pickup_instructions if dog and dog.pickup_instructions else '—') | safe }}</div>
                     {% if dog and dog.pickup_notes_photo %}
-                    <img src="{{ url_for('static', filename='uploads/pickup_notes/' + dog.pickup_notes_photo) }}"
+                    <img src="{{ url_for('media.pickup_photo', filename=dog.pickup_notes_photo) }}"
                          class="pickup-photo-thumb mt-2" alt="Pickup reference photo">
                     {% endif %}
                 </div>
@@ -314,7 +314,7 @@
                     {% if dog %}
                     <div class="d-flex align-items-center gap-2 mb-3">
                         {% if dog.pickup_notes_photo %}
-                        <img src="{{ url_for('static', filename='uploads/pickup_notes/' + dog.pickup_notes_photo) }}"
+                        <img src="{{ url_for('media.pickup_photo', filename=dog.pickup_notes_photo) }}"
                              class="pickup-photo-thumb" id="pickup-photo-thumb-{{ dog.id }}" alt="Pickup reference photo">
                         {% else %}
                         <img src="" class="pickup-photo-thumb d-none" id="pickup-photo-thumb-{{ dog.id }}" alt="Pickup reference photo">

@@ -18,6 +18,7 @@ Usage
         return jsonify(success=False, message="Unauthorized"), 403
 """
 
+from app.capacity import is_eligible_walker
 from app.models import DogOwner, Booking
 
 
@@ -47,3 +48,16 @@ def user_can_access_booking(user, booking: Booking) -> bool:
     if user.is_admin:
         return True
     return DogOwner.query.filter_by(dog_id=booking.dog_id, user_id=user.id).first() is not None
+
+
+def user_can_view_pickup_details(user, dog_id: int) -> bool:
+    """Return True if the user may see a dog's pickup-notes photo.
+
+    Admins and eligible walkers (any dog — /walker/dogs already lists every
+    dog's pickup notes, and a covering walker needs them at short notice),
+    plus the dog's current owners. A revoked co-owner or a demoted/deactivated
+    walker is refused.
+    """
+    if user.is_admin or is_eligible_walker(user):
+        return True
+    return DogOwner.query.filter_by(dog_id=dog_id, user_id=user.id).first() is not None

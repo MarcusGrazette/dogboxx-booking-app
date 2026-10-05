@@ -1,4 +1,4 @@
-from flask import Flask, request, redirect, render_template, g, session
+from flask import Flask, abort, request, redirect, render_template, g, session
 from flask_session import Session
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, current_user
@@ -336,6 +336,25 @@ def create_app(config_name=None):
             session['_touched'] = today
 
     @app.before_request
+    def block_private_uploads():
+        """404 the public /static URL for pickup-notes photos (key safes,
+        buzzers) — they're served only via media.pickup_photo, which checks
+        who's asking. Compared on the resolved path, so `uploads/dogs/../
+        pickup_notes/x` or a doubled slash can't slip past a prefix check.
+        """
+        if request.endpoint != 'static':
+            return
+        from app.blueprints.media.routes import pickup_notes_dir
+        filename = (request.view_args or {}).get('filename', '')
+        target = os.path.realpath(os.path.join(app.static_folder, filename))
+        private_dirs = {
+            os.path.realpath(os.path.join(app.static_folder, 'uploads', 'pickup_notes')),
+            os.path.realpath(pickup_notes_dir()),
+        }
+        if any(target == d or target.startswith(d + os.sep) for d in private_dirs):
+            abort(404)
+
+    @app.before_request
     def set_csp_nonce():
         """Generate a fresh CSP nonce per request. Inline <script> tags carry
         nonce="{{ csp_nonce }}"; add_security_headers appends 'nonce-{value}'
@@ -437,6 +456,8 @@ def create_app(config_name=None):
                 response.headers["Cache-Control"] = "public, max-age=3600"
         elif request.endpoint == 'service_worker':
             pass  # /sw.js route already set Cache-Control: no-cache
+        elif request.endpoint == 'media.pickup_photo':
+            pass  # route already set Cache-Control: private, no-store
         else:
             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
             response.headers["Expires"] = "0"

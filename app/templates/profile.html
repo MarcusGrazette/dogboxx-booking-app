@@ -376,7 +376,7 @@
                        dogs → each dog gets its own right-aligned photo row. #}
                     {% macro pickup_photo_thumb(d) %}
                         {% if d.pickup_notes_photo %}
-                        <img src="{{ url_for('static', filename='uploads/pickup_notes/' + d.pickup_notes_photo) }}"
+                        <img src="{{ url_for('media.pickup_photo', filename=d.pickup_notes_photo) }}"
                              class="pickup-photo-thumb" id="pickup-photo-thumb-{{ d.id }}" alt="Pickup reference photo">
                         {% else %}
                         <img src="" class="pickup-photo-thumb d-none" id="pickup-photo-thumb-{{ d.id }}" alt="Pickup reference photo">

@@ -34,3 +34,7 @@ def register_blueprints(app):
     # Import and register Notifications blueprint
     from app.blueprints.notifications import notifications_bp
     app.register_blueprint(notifications_bp)
+
+    # Import and register Media blueprint (authorized uploads)
+    from app.blueprints.media import media_bp
+    app.register_blueprint(media_bp)

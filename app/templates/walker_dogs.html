@@ -134,7 +134,7 @@
                 <div class="rounded p-3 {% if dog.allergies %}mb-3{% endif %}" style="background:#e8f4fd;color:#0a58ca;border-left:3px solid #3d8bcd;text-align:left;">
                     <div class="small fw-semibold mb-1"><i class="bi bi-info-circle me-1"></i>Pickup notes</div>
                     {% if dog.pickup_notes_photo %}
-                    <img src="{{ url_for('static', filename='uploads/pickup_notes/' + dog.pickup_notes_photo) }}"
+                    <img src="{{ url_for('media.pickup_photo', filename=dog.pickup_notes_photo) }}"
                          class="img-fluid rounded mb-2 d-block mx-auto" alt="Pickup reference photo" style="max-height:220px;object-fit:cover;">
                     {% endif %}
                     {% if dog.pickup_instructions %}
