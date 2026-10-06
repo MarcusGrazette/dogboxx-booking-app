@@ -27,11 +27,16 @@
  *                      shared device (e.g. walkers handing off a shared
  *                      phone at shift change) can't get served a stale
  *                      offline page containing the previous user's data.
+ *
+ * Pickup-notes photos (key safes, buzzers) are in neither: they're served
+ * from /media/pickup-notes/ (outside /static/, not HTML) with
+ * `private, no-store`, so every strategy below lets them pass straight
+ * through to the network and its per-request permission check.
  */
 
 // ── Cache config ──────────────────────────────────────────────────────────────
 
-const CACHE_VERSION   = 'v36';
+const CACHE_VERSION   = 'v37';
 const CACHE_NAME      = `dogboxx-${CACHE_VERSION}`;
 const PAGE_CACHE_NAME = `dogboxx-pages-${CACHE_VERSION}`;
 

@@ -153,7 +153,7 @@ class TestAdminDogsPickupPhotoUpload:
         assert resp.status_code == 200
         data = resp.get_json()
         assert data['success'] is True
-        assert 'pickup_notes' in data['url']
+        assert data['url'].startswith('/media/pickup-notes/')
 
         with app.app_context():
             refreshed = db.session.get(Dog, dog_id)
@@ -204,4 +204,4 @@ class TestAdminDogsPickupPhotoUpload:
         resp = client.get('/admin/dogs')
         assert resp.status_code == 200
         html = resp.data.decode()
-        assert 'data-dog-pickup-photo-url="/static/uploads/pickup_notes/abc123.png"' in html
+        assert 'data-dog-pickup-photo-url="/media/pickup-notes/abc123.png"' in html
