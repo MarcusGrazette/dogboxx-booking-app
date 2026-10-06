@@ -53,17 +53,39 @@
     width: 100%;
     min-width: 0;
   }
+}
 
-  /* Assign modal: claim near-full viewport on small screens.
-     Bootstrap's modal-xl falls back to lg/md max-widths with
-     auto-margins below 1200px, which on landscape phones leaves
-     ~60px gutters on each side — wasted space for the embedded
-     board. Drop max-width and tighten margin so the board has
-     room to breathe. */
+/* Assign modal on landscape phones: claim near-full viewport. Bootstrap's
+   modal-xl falls back to lg/md max-widths with auto-margins below 1200px,
+   leaving ~60px gutters each side — wasted space for the embedded board.
+   (Portrait phones get modal-fullscreen-md-down instead; this rule must not
+   reach them, or its margin would push the full-height dialog off-screen.) */
+@media (min-width: 768px) and (orientation: landscape) and (max-height: 500px) {
   #assignModal .modal-dialog {
     max-width: none;
     margin: 0.5rem;
   }
+}
+
+/* Assign modal body: the embedded board (not the modal body) is the scroll
+   container, so its walker-name header row can stick while lanes scroll.
+   The body becomes a non-scrolling flex column and the board fills whatever
+   height is left under the hint bar. */
+#assign-modal-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#assign-modal-body #board-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#assign-modal-body #board-columns {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
 }
 .cal-card-header {
   padding: 14px 16px 10px;
@@ -553,7 +575,7 @@
 
 <!-- Assign modal — board fragment is injected into #assign-modal-body on open -->
 <div class="modal fade" id="assignModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable modal-fullscreen-md-down">
     <div class="modal-content border-0 shadow">
       <div class="modal-header py-2">
         <h6 class="modal-title fw-bold mb-0" id="assign-modal-title">Assign walks</h6>
