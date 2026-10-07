@@ -2,13 +2,12 @@
 /* Three shared rows — header · Morning · Afternoon — with one grid column per
    board column. Each .board-column is a subgrid spanning all three rows, so a
    row is as tall as its tallest lane and every walker's Afternoon lane starts
-   at the same height. The board is its own scroll container in both
-   directions (bounded by max-height) so the header row can stick to its top;
-   an overflow-x-only scroller would trap position:sticky.
-   Rows are max-content, not auto: when the board is given a definite height
-   (the dashboard modal stretches it to fill), auto rows shrink to the lanes'
-   min-height and the cards spill out — max-content keeps every lane as tall
-   as its cards and the board scrolls instead. */
+   at the same height. The board only scrolls sideways; vertical scrolling is
+   left to the page (or the Assign modal body), so there's one scroller per
+   direction and walker names scroll away with the lanes.
+   Rows are max-content so every lane is always at least as tall as its cards,
+   even if a caller ever gives the board a fixed height (auto rows would then
+   shrink to the lanes' min-height and the cards would spill out). */
 #board-columns {
     display: grid;
     grid-template-rows: max-content max-content max-content;
@@ -17,9 +16,7 @@
     grid-auto-columns: minmax(150px, calc(25% - 9px));
     gap: 8px 12px;
     width: 100%;
-    overflow: auto;
-    max-height: calc(100vh - 140px);
-    max-height: calc(100dvh - 140px);
+    overflow-x: auto;
     padding-bottom: 8px;
 }
 
@@ -224,10 +221,6 @@
     align-items: center;
     justify-content: space-between;
     gap: 4px;
-    /* Stays visible while the board scrolls vertically */
-    position: sticky;
-    top: 0;
-    z-index: 2;
 }
 
 .board-col-header.pending-header {
