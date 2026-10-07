@@ -149,6 +149,9 @@
   transition: border-color .15s, background .15s;
   overflow: visible;
   position: relative;
+  /* Disables iOS double-tap-to-zoom so a quick second tap on the
+     selected day reaches the click handler (opens the Assign modal). */
+  touch-action: manipulation;
 }
 .cal-cell:hover { border-color: #E02FAC88; }
 .cal-cell--today { border: 2px solid #1B1B1B !important; }
@@ -284,6 +287,10 @@
   white-space: nowrap;
   margin-top: 2px;
 }
+/* A span continuing from / into the neighbouring day bleeds across the
+   cell padding so consecutive days read as one bar. */
+.span-bar--cont-l { margin-left: -10px; }
+.span-bar--cont-r { margin-right: -10px; }
 .span-avatar {
   display: inline-flex;
   align-items: center;
@@ -449,6 +456,60 @@
   border-radius: 5px;
 }
 
+/* ── Selected-day summary strip (stacked layout only) ────────────────── */
+.cal-strip { display: none; }
+
+/* ── Compact month grid (stacked layout — same breakpoint as .dash-wrap)
+   Shrinks day cells so a whole month fits a portrait phone screen: drops
+   the counts, the drop-in badge, span labels and the Assign button (tap the
+   selected day again, or use the summary strip's Assign button, instead). */
+@media (max-width: 767.98px),
+       (orientation: landscape) and (max-height: 500px) {
+  .cal-grid-wrap { padding: 8px 8px 10px; }
+  .cal-grid, .cal-dow-row { gap: 4px; }
+  .cal-cell,
+  .cal-cell--empty {
+    min-height: 60px;
+    padding: 5px 5px 4px;
+    border-radius: 8px;
+  }
+  .cal-assign-btn { display: none; }
+  .cal-cap-bars { flex: 0 0 auto; }
+  .cal-cap-row { grid-template-columns: 14px 1fr; column-gap: 2px; }
+  .cal-cap-count,
+  .cal-di-badge { display: none; }
+  .cal-cap-label { font-size: 8px; letter-spacing: 0; }
+  .cal-cap-track { height: 5px; }
+  .span-bar { height: 4px; }
+  .span-bar--cont-l { margin-left: -5px; }
+  .span-bar--cont-r { margin-right: -5px; }
+  .span-avatar,
+  .span-label { display: none; }
+
+  .cal-strip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-top: 1px solid #f0f0f0;
+  }
+  .cal-strip-info { flex: 1; min-width: 0; }
+  .cal-strip-date { font-size: 14px; font-weight: 800; color: #1B1B1B; line-height: 1.2; }
+  .cal-strip-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 10px;
+    font-size: 12px;
+    color: #666;
+    margin-top: 2px;
+  }
+  .cal-strip-stat { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .cal-strip-stat strong { color: #1B1B1B; }
+  .cal-strip-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .cal-strip-wl { color: #ef4444; font-weight: 800; }
+  .cal-strip-pending { color: #a16207; font-weight: 700; }
+}
+
 </style>
 {% endblock %}
 
@@ -472,6 +533,11 @@
       </div>
     </div>
     <div class="cal-grid-wrap" id="calGridWrap">
+      <!-- rendered by JS -->
+    </div>
+    <!-- Selected-day summary + Assign — shown only in the stacked (phone)
+         layout, where the detail card sits below the fold -->
+    <div class="cal-strip" id="calStrip">
       <!-- rendered by JS -->
     </div>
   </div>
@@ -599,8 +665,7 @@ window._DASH = {
     else if (isEnd)        br = '0 4px 4px 0';
     else                   br = '0';
 
-    const ml = isStart ? '0'     : '-10px';
-    const mr = isEnd   ? '0'     : '-10px';
+    const cont = (isStart ? '' : ' span-bar--cont-l') + (isEnd ? '' : ' span-bar--cont-r');
     const bl = isStart ? `3px solid ${c}` : 'none';
     const pl = isStart ? '4px'   : '0';
 
@@ -610,8 +675,8 @@ window._DASH = {
               `<span class="span-label" style="color:${c};">${esc(span.walker_firstname)} &middot; ${esc(span.reason)}</span>`;
     }
 
-    return `<div class="span-bar" style="background:${c}22;border-left:${bl};border-radius:${br};` +
-           `margin-left:${ml};margin-right:${mr};padding-left:${pl};">${label}</div>`;
+    return `<div class="span-bar${cont}" style="background:${c}22;border-left:${bl};border-radius:${br};` +
+           `padding-left:${pl};">${label}</div>`;
   }
 
   /* ── Capacity bar row ───────────────────────────────────────────────── */
@@ -695,6 +760,58 @@ window._DASH = {
     }
     html += `</div>`;
     return html;
+  }
+
+  /* ── Selected-day summary strip (stacked layout) ────────────────────── */
+  // Reads the month cell first so the strip updates the instant a day is
+  // tapped, without waiting for the day-detail fetch. Falls back to the
+  // detail payload (same am/pm shape) when the selected day is in a month
+  // other than the one on screen.
+  function findCell(monthData, dateStr) {
+    for (const week of monthData.calendar_weeks) {
+      for (const cell of week) {
+        if (cell && cell.date_str === dateStr) return cell;
+      }
+    }
+    return null;
+  }
+
+  function renderStripStat(slot, label) {
+    const wl = slot.waitlist > 0 ? ` <span class="cal-strip-wl">+${slot.waitlist} WL</span>` : '';
+    return `<span class="cal-strip-stat">` +
+      `<span class="cal-strip-dot" style="background:${capColor(slot)};"></span>` +
+      `<span>${label} <strong>${slot.confirmed}</strong>/${slot.capacity}${wl}</span>` +
+      `</span>`;
+  }
+
+  function renderStrip(monthData, detail, selectedDate) {
+    const cell = findCell(monthData, selectedDate);
+    const src  = cell || (detail.date_str === selectedDate ? detail : null);
+    if (!src) return '';
+
+    const dateLabel = new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-GB', {
+      weekday: 'short', day: 'numeric', month: 'short',
+    });
+    if (cell && cell.is_closed) {
+      return `<div class="cal-strip-info">` +
+        `<div class="cal-strip-date">${esc(dateLabel)}</div>` +
+        `<div class="cal-strip-stats">Closed</div>` +
+        `</div>`;
+    }
+
+    const pendingTotal = (src.am.pending || 0) + (src.pm.pending || 0);
+    const pendingHtml = pendingTotal > 0
+      ? `<span class="cal-strip-stat cal-strip-pending"><i class="bi bi-hourglass"></i>${pendingTotal} pending</span>`
+      : '';
+    return `<div class="cal-strip-info">` +
+        `<div class="cal-strip-date">${esc(dateLabel)}</div>` +
+        `<div class="cal-strip-stats">` +
+          renderStripStat(src.am, 'AM') + renderStripStat(src.pm, 'PM') + pendingHtml +
+        `</div>` +
+      `</div>` +
+      `<button type="button" class="btn btn-sm btn-primary cal-strip-assign" data-date="${selectedDate}">` +
+        `<i class="bi bi-person-walking me-1"></i>Assign` +
+      `</button>`;
   }
 
   /* ── Pill helper ────────────────────────────────────────────────────── */
@@ -825,17 +942,21 @@ window._DASH = {
   let selectedDate      = D.selected;
 
   /* ── Initial render ─────────────────────────────────────────────────── */
+  function paintGrid() {
+    document.getElementById('calGridWrap').innerHTML = renderGrid(currentMonthData, selectedDate);
+    document.getElementById('calStrip').innerHTML    = renderStrip(currentMonthData, currentDetailData, selectedDate);
+  }
   function paint() {
     document.getElementById('calMonthTitle').textContent = currentMonthData.month_name;
-    document.getElementById('calGridWrap').innerHTML    = renderGrid(currentMonthData, selectedDate);
+    paintGrid();
     document.getElementById('dayDetail').innerHTML      = renderDetail(currentDetailData);
   }
   paint();
 
-  // Delegated on the wrapper elements (not document) since #calGridWrap and
-  // #dayDetail get their innerHTML replaced wholesale on every repaint —
-  // the wrapper itself never gets swapped, so one listener here survives
-  // across renders instead of needing to be re-attached each time.
+  // Delegated on the wrapper elements (not document) since #calGridWrap,
+  // #calStrip and #dayDetail get their innerHTML replaced wholesale on every
+  // repaint — the wrapper itself never gets swapped, so one listener here
+  // survives across renders instead of needing to be re-attached each time.
   document.getElementById('calGridWrap').addEventListener('click', function (e) {
     const assignBtn = e.target.closest('.cal-assign-btn');
     if (assignBtn) {
@@ -844,7 +965,20 @@ window._DASH = {
       return;
     }
     const cell = e.target.closest('.cal-cell--clickable');
-    if (cell) _selectDay(cell.dataset.date);
+    if (!cell) return;
+    // First tap selects; tapping the already-selected day opens the Assign
+    // modal. Compared by date, not element — selecting repaints the grid, so
+    // a quick double tap's second click lands on a fresh cell element.
+    if (cell.dataset.date === selectedDate) {
+      _openAssignModal(cell.dataset.date);
+    } else {
+      _selectDay(cell.dataset.date);
+    }
+  });
+
+  document.getElementById('calStrip').addEventListener('click', function (e) {
+    const assignBtn = e.target.closest('.cal-strip-assign');
+    if (assignBtn) _openAssignModal(assignBtn.dataset.date);
   });
 
   document.getElementById('dayDetail').addEventListener('click', function (e) {
@@ -860,7 +994,7 @@ window._DASH = {
       if (!res.ok) throw new Error(res.status);
       currentMonthData = await res.json();
       document.getElementById('calMonthTitle').textContent = currentMonthData.month_name;
-      document.getElementById('calGridWrap').innerHTML    = renderGrid(currentMonthData, selectedDate);
+      paintGrid();
     } catch (e) {
       console.error('month-data fetch failed', e);
     }
@@ -883,14 +1017,15 @@ window._DASH = {
   /* ── Day selection ──────────────────────────────────────────────────── */
   async function _selectDay(dateStr) {
     selectedDate = dateStr;
-    // Move selection border immediately
-    document.getElementById('calGridWrap').innerHTML = renderGrid(currentMonthData, selectedDate);
+    // Move selection border (and the summary strip) immediately
+    paintGrid();
     // Fetch detail
     try {
       const res = await fetch(`/admin/api/day-detail?date=${dateStr}`);
       if (!res.ok) throw new Error(res.status);
       currentDetailData = await res.json();
       document.getElementById('dayDetail').innerHTML = renderDetail(currentDetailData);
+      document.getElementById('calStrip').innerHTML  = renderStrip(currentMonthData, currentDetailData, selectedDate);
     } catch (e) {
       console.error('day-detail fetch failed', e);
     }
