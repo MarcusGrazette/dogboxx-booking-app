@@ -1106,8 +1106,8 @@ window._DASH = {
   }
 
   async function _openAssignModal(dateStr) {
-    document.getElementById('assign-modal-title').textContent =
-      `Assign walks — ${fmtDateLabel(dateStr)}`;
+    // Date only — a longer "Assign walks — …" title wrapped on phones.
+    document.getElementById('assign-modal-title').textContent = fmtDateLabel(dateStr);
     document.getElementById('assign-modal-body').innerHTML =
       '<div class="text-center py-5 text-muted">'
       + '<div class="spinner-border spinner-border-sm text-primary"></div>'
