@@ -10,6 +10,8 @@
  * and matchMedia('(display-mode: standalone)') (Android Chrome + modern iOS).
  *
  * Opt out per-element with data-no-ptr (e.g. on horizontally-scrolling lists).
+ * A pull never starts while a modal is open, or from inside an element that is
+ * scrolled down (it scrolls itself back up instead).
  */
 (function () {
     var isStandalone = window.navigator.standalone === true ||
@@ -57,8 +59,24 @@
         window.location.reload();
     }
 
+    // True when the touch starts inside an element that is itself scrolled
+    // down (a scrollable modal body, the day-detail walker list, the bell
+    // list…). Dragging down there should scroll that element back up, not
+    // pull the page — window.scrollY alone can't tell, since the page behind
+    // stays at the top.
+    function insideScrolledElement(el) {
+        for (; el && el !== document.body && el !== document.documentElement; el = el.parentElement) {
+            if (el.scrollTop > 0) return true;
+        }
+        return false;
+    }
+
     document.addEventListener('touchstart', function (e) {
         if (window.scrollY > 0) return;
+        // Never reload behind an open modal — it would discard whatever the
+        // user was doing in it (Bootstrap sets .modal-open on <body>).
+        if (document.body.classList.contains('modal-open')) return;
+        if (insideScrolledElement(e.target)) return;
         if (e.target.closest && e.target.closest('[data-no-ptr]')) return;
         startY = e.touches[0].clientY;
         pulling = true;
