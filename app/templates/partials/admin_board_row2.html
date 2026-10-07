@@ -10,7 +10,12 @@
 <div id="selection-hint" class="alert d-flex align-items-center gap-2 py-2 mb-3"
      style="font-size:0.88rem; background:#f8f9fa; border-color:#dee2e6; color:#6c757d;">
     <i class="bi bi-cursor" id="hint-icon"></i>
-    <span id="hint-text">Select a dog to assign</span>
+    <span id="hint-text" class="flex-grow-1">Select a dog to assign</span>
+    {# Frozen-slot note — JS fills the slot names and toggles d-none #}
+    <span id="hint-frozen" class="d-none text-primary fw-semibold text-nowrap small"
+          title="Auto-confirm paused — new requests need manual review">
+        <i class="bi bi-snow me-1"></i><span id="hint-frozen-text"></span>
+    </span>
     <button class="btn btn-sm ms-auto py-0 d-none" id="hint-deselect"
             style="border-color:#C0258F; color:#C0258F;">Cancel</button>
 </div>

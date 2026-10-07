@@ -1,18 +1,34 @@
 /* ── Assignment board layout ───────────────────────────────────────────────── */
+/* Three shared rows — header · Morning · Afternoon — with one grid column per
+   board column. Each .board-column is a subgrid spanning all three rows, so a
+   row is as tall as its tallest lane and every walker's Afternoon lane starts
+   at the same height. The board only scrolls sideways; vertical scrolling is
+   left to the page (or the Assign modal body), so there's one scroller per
+   direction and walker names scroll away with the lanes.
+   Rows are max-content so every lane is always at least as tall as its cards,
+   even if a caller ever gives the board a fixed height (auto rows would then
+   shrink to the lanes' min-height and the cards would spill out). */
 #board-columns {
-    display: flex;
-    gap: 12px;
-    align-items: flex-start;
+    display: grid;
+    grid-template-rows: max-content max-content max-content;
+    grid-auto-flow: column;
+    /* col-3 equivalent (25% minus gap share), never narrower than 150px */
+    grid-auto-columns: minmax(150px, calc(25% - 9px));
+    gap: 8px 12px;
     width: 100%;
     overflow-x: auto;
     padding-bottom: 8px;
 }
 
-/* All columns: col-3 equivalent (25% minus gap share) */
 .board-column {
-    flex: 0 0 calc(25% - 9px);
-    min-width: 150px;
+    display: grid;
+    grid-row: 1 / -1;
+    grid-template-rows: subgrid;
+    min-width: 0;
 }
+
+.lane-row-am { grid-row: 2; }
+.lane-row-pm { grid-row: 3; }
 
 /* ── Lane (Morning / Afternoon within a column) ────────────────────────────── */
 .board-lane {
@@ -20,7 +36,6 @@
     border: 2px solid #dee2e6;
     border-radius: 8px;
     padding: 8px;
-    margin-bottom: 8px;
     min-height: 80px;
     transition: border-color 0.15s, background 0.15s;
 }
@@ -200,7 +215,6 @@
     font-weight: 700;
     padding: 6px 8px;
     border-radius: 6px;
-    margin-bottom: 8px;
     color: #fff;
     background: #1B1B1B;
     display: flex;
