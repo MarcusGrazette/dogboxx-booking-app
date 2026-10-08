@@ -48,6 +48,11 @@
     border-radius: 8px;
     padding: 8px;
     min-height: 80px;
+    /* Lanes are grid items (in the column's subgrid), whose automatic minimum
+       width is their content's — and card names are nowrap. Without this a
+       long owner name ("John & Casey …") widens the lane past its column and
+       over the next one; with it the name ellipsises instead. */
+    min-width: 0;
     transition: border-color 0.15s, background 0.15s;
 }
 
