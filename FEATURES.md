@@ -10,7 +10,6 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 
 | # | Priority | Effort | Status | Feature | Summary |
 |---|---|---|---|---|---|
-| 84 | P2 | L | 🔲 | **Phone-friendly walk assignment** | Easier assigning on the `/admin/` dashboard on a phone (e.g. tap a date to open the assign modal), and a mobile-friendly assign modal. |
 | 58 | P3 | M | 📋 | **QuickBooks Online export** | Send monthly invoices to QBO — CSV export first, API push only if needed. |
 | 67 | P3 | L | 🔲 | **Progress indicator for large recurring bookings** | Warn before submitting a very long series; show progress while it's created. |
 | 69 | P3 | M | 🔲 | **Build pipeline hardening** | Tighten how the production image is built. |
@@ -27,6 +26,8 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 91 | P3 | M | 📋 | **Simplify 6 — front-end helpers** | Merge duplicated confirm-modal, card and alert code in the client and admin scripts. |
 | 92 | P3 | L | 📋 | **Simplify 7 — booking request validation** | One validation/conflict path for the walk and drop-in booking routes; ship alone. |
 | 93 | P2 | M | 📋 | **London date everywhere** | Every "today" check uses the London date, so pages don't show yesterday's view just after midnight in summer. |
+| 94 | P3 | M | 📋 | **Simplify 8 — one month calendar** | The drop-in board uses the dashboard's month calendar (compact, with drop-in counts) instead of its own. |
+| 95 | P3 | S | 📋 | **Simplify 9 — retire the old assignment page** | Remove the unlinked standalone walk board and its unused charts; walks are assigned from the dashboard. |
 | 24 | P3 | L | 🔲 | **Dental cleans service type** | Admin-managed time slots that clients book into. |
 | 74 | P4 | S | 🔲 | **Drop `User.notification_preference`** | Remove a column that only ever holds `'email'`. |
 | 76 | P4 | L | 🔲 | **Keyboard operability** | Make the calendar and assignment board fully keyboard-usable. |
@@ -68,6 +69,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 71 | Safe concurrent walker assignment | Simultaneous assignments can't over-fill a walker. |
 | 73 | Slot freeze | Hold new bookings for a date/slot as requests instead of auto-confirming. |
 | 79 | Double-slot discount fix | The discount only applies when the dog actually gets both walks. |
+| 84 | Phone-friendly walk assignment | Compact dashboard calendar on phones (tap a day twice to assign), a full-screen assign board with Morning/Afternoon lined up across walkers, and a simpler drop-in board. |
 
 ### Walker
 
