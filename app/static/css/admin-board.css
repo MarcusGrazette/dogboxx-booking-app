@@ -220,6 +220,23 @@
 }
 
 
+/* ── Requested column show/hide (admin-board-core.js render()) ─────────────── */
+/* Durations match COL_FADE_MS in the JS. Reduced-motion users skip the
+   animation entirely (the JS checks prefers-reduced-motion). */
+.pending-column {
+    transition: opacity 0.15s ease;
+}
+.pending-column.col-fade-out {
+    opacity: 0;
+}
+.pending-column.col-fade-in {
+    animation: board-col-fade-in 0.2s ease;
+}
+@keyframes board-col-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
 /* ── Column headers ────────────────────────────────────────────────────────── */
 .board-col-header {
     font-size: 0.8rem;
