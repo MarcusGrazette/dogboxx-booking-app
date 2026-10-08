@@ -146,7 +146,76 @@
         }
 
         // ── Render ────────────────────────────────────────────────────────────
+        // ── Requested-column show/hide animation ──────────────────────────────
+        // The board is rebuilt from scratch on every render, so when the last
+        // pending booking is assigned the Requested column would vanish and
+        // every walker column jump one slot left. Instead: fade the column out,
+        // rebuild, then FLIP the walker columns from their old on-screen
+        // positions to their new ones. Unassigning back into an empty Requested
+        // column does the reverse (walkers slide right, Requested fades in).
+        const COL_FADE_MS  = 150;
+        const COL_SLIDE_MS = 250;
+        let pendingShown = null;   // Requested visibility at the last render; null = fresh date
+        let fadeTimer    = null;
+
+        function prefersReducedMotion() {
+            return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        }
+
         function render() {
+            const wrap = document.getElementById('board-columns');
+            if (fadeTimer) { clearTimeout(fadeTimer); fadeTimer = null; }
+
+            const showPending = state.pending.length > 0;
+            const toggling = pendingShown !== null && pendingShown !== showPending
+                && wrap.style.display !== 'none' && !prefersReducedMotion();
+            pendingShown = showPending;
+            if (!toggling) { renderBoard(); return; }
+
+            // Remember where each walker column is before the rebuild
+            const before = new Map();
+            wrap.querySelectorAll('.board-column[data-walker-id]').forEach(col =>
+                before.set(col.dataset.walkerId, col.getBoundingClientRect().left));
+
+            const oldPending = wrap.querySelector('.pending-column');
+            if (!showPending && oldPending) {
+                oldPending.classList.add('col-fade-out');
+                fadeTimer = setTimeout(() => {
+                    fadeTimer = null;
+                    renderBoard();
+                    slideWalkerColumns(wrap, before);
+                }, COL_FADE_MS);
+                return;
+            }
+
+            renderBoard();
+            slideWalkerColumns(wrap, before);
+            if (showPending) wrap.querySelector('.pending-column')?.classList.add('col-fade-in');
+        }
+
+        // FLIP: offset each walker column back to its old position, then let
+        // it transition to its new one.
+        function slideWalkerColumns(wrap, before) {
+            const moved = [];
+            wrap.querySelectorAll('.board-column[data-walker-id]').forEach(col => {
+                const was = before.get(col.dataset.walkerId);
+                if (was === undefined) return;
+                const dx = was - col.getBoundingClientRect().left;
+                if (Math.abs(dx) < 1) return;
+                col.style.transition = 'none';
+                col.style.transform  = `translateX(${dx}px)`;
+                moved.push(col);
+            });
+            if (!moved.length) return;
+            wrap.getBoundingClientRect();   // flush styles so the offset applies before the transition
+            moved.forEach(col => {
+                col.style.transition = `transform ${COL_SLIDE_MS}ms ease`;
+                col.style.transform  = '';
+                col.addEventListener('transitionend', () => { col.style.transition = ''; }, { once: true });
+            });
+        }
+
+        function renderBoard() {
             const wrap        = document.getElementById('board-columns');
             const placeholder = document.getElementById('board-placeholder');
             wrap.innerHTML = '';
@@ -225,6 +294,7 @@
 
             const col = document.createElement('div');
             col.className = 'board-column';
+            col.dataset.walkerId = walker.id;   // lets render() FLIP columns across rebuilds
 
             const header = document.createElement('div');
             header.className = 'board-col-header';
@@ -487,6 +557,9 @@
 
         // ── Board load ─────────────────────────────────────────────────────────
         async function loadBoard(dateStr) {
+            // A Requested fade-out still in flight would repaint the previous
+            // date's board over the loading spinner.
+            if (fadeTimer) { clearTimeout(fadeTimer); fadeTimer = null; }
             state.date       = dateStr;
             state.selectedId = null;
             const placeholder = document.getElementById('board-placeholder');
