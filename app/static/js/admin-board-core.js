@@ -146,28 +146,112 @@
         }
 
         // ── Render ────────────────────────────────────────────────────────────
+        // ── Requested-column show/hide animation ──────────────────────────────
+        // The board is rebuilt from scratch on every render, so when the last
+        // pending booking is assigned the Requested column would vanish and
+        // every walker column jump one slot left. Instead: fade the column out,
+        // rebuild, then FLIP the walker columns from their old on-screen
+        // positions to their new ones. Unassigning back into an empty Requested
+        // column does the reverse (walkers slide right, Requested fades in).
+        const COL_FADE_MS  = 150;
+        const COL_SLIDE_MS = 250;
+        let pendingShown = null;   // Requested visibility at the last render; null = fresh date
+        let fadeTimer    = null;
+
+        function prefersReducedMotion() {
+            return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        }
+
         function render() {
+            const wrap = document.getElementById('board-columns');
+            if (fadeTimer) { clearTimeout(fadeTimer); fadeTimer = null; }
+
+            const showPending = state.pending.length > 0;
+            const toggling = pendingShown !== null && pendingShown !== showPending
+                && wrap.style.display !== 'none' && !prefersReducedMotion();
+            pendingShown = showPending;
+            if (!toggling) { renderBoard(); return; }
+
+            // Remember where each walker column is before the rebuild
+            const before = new Map();
+            wrap.querySelectorAll('.board-column[data-walker-id]').forEach(col =>
+                before.set(col.dataset.walkerId, col.getBoundingClientRect().left));
+
+            const oldPending = wrap.querySelector('.pending-column');
+            if (!showPending && oldPending) {
+                oldPending.classList.add('col-fade-out');
+                fadeTimer = setTimeout(() => {
+                    fadeTimer = null;
+                    renderBoard();
+                    slideWalkerColumns(wrap, before);
+                }, COL_FADE_MS);
+                return;
+            }
+
+            renderBoard();
+            slideWalkerColumns(wrap, before);
+            if (showPending) wrap.querySelector('.pending-column')?.classList.add('col-fade-in');
+        }
+
+        // FLIP: offset each walker column back to its old position, then let
+        // it transition to its new one.
+        function slideWalkerColumns(wrap, before) {
+            const moved = [];
+            wrap.querySelectorAll('.board-column[data-walker-id]').forEach(col => {
+                const was = before.get(col.dataset.walkerId);
+                if (was === undefined) return;
+                const dx = was - col.getBoundingClientRect().left;
+                if (Math.abs(dx) < 1) return;
+                col.style.transition = 'none';
+                col.style.transform  = `translateX(${dx}px)`;
+                moved.push(col);
+            });
+            if (!moved.length) return;
+            wrap.getBoundingClientRect();   // flush styles so the offset applies before the transition
+            moved.forEach(col => {
+                col.style.transition = `transform ${COL_SLIDE_MS}ms ease`;
+                col.style.transform  = '';
+                col.addEventListener('transitionend', () => { col.style.transition = ''; }, { once: true });
+            });
+        }
+
+        function renderBoard() {
             const wrap        = document.getElementById('board-columns');
             const placeholder = document.getElementById('board-placeholder');
             wrap.innerHTML = '';
 
-            if (!state.walkers.length && !state.pending.length && !state.assigned.length) {
-                placeholder.style.display = '';
-                wrap.style.display = 'none';
-                placeholder.innerHTML =
-                    `<i class="bi ${cfg.emptyIcon} fs-3 d-block mb-2 text-muted"></i>${cfg.emptyText}`;
-                return;
-            }
-            placeholder.style.display = 'none';
-            wrap.style.display = 'flex';
-
-            wrap.appendChild(makePendingColumn());
+            // The Requested column only appears while something is waiting to
+            // be assigned (requested or waitlisted) — once everything is
+            // placed it disappears rather than showing an empty column.
+            if (state.pending.length) wrap.appendChild(makePendingColumn());
             state.walkers.forEach(w => {
                 const col = makeWalkerColumn(w);
                 if (col) wrap.appendChild(col);
             });
 
+            if (!wrap.children.length) {
+                // Nothing pending and no walker available that day
+                placeholder.style.display = '';
+                wrap.style.display = 'none';
+                placeholder.innerHTML =
+                    `<i class="bi ${cfg.emptyIcon} fs-3 d-block mb-2 text-muted"></i>${cfg.emptyText}`;
+            } else {
+                placeholder.style.display = 'none';
+                wrap.style.display = 'grid';
+            }
+
+            updateFrozenNote();
             updateSelectionUI();
+        }
+
+        // Frozen (date, slot)s are flagged in the hint bar, since the Requested
+        // column — which also marks them with a lane — is hidden when empty.
+        function updateFrozenNote() {
+            const note = document.getElementById('hint-frozen');
+            if (!note) return;
+            const frozen = ['Morning', 'Afternoon'].filter(s => (state.frozenSlots || []).includes(s));
+            note.classList.toggle('d-none', !frozen.length);
+            document.getElementById('hint-frozen-text').textContent = `${frozen.join(' & ')} frozen`;
         }
 
         function makePendingColumn() {
@@ -192,13 +276,6 @@
                 col.appendChild(lane);
             });
 
-            if (!state.pending.length) {
-                const empty = document.createElement('div');
-                empty.className = 'text-muted text-center py-3 small';
-                empty.innerHTML = '<i class="bi bi-check-circle text-success"></i> All assigned';
-                col.appendChild(empty);
-            }
-
             return col;
         }
 
@@ -217,6 +294,7 @@
 
             const col = document.createElement('div');
             col.className = 'board-column';
+            col.dataset.walkerId = walker.id;   // lets render() FLIP columns across rebuilds
 
             const header = document.createElement('div');
             header.className = 'board-col-header';
@@ -251,6 +329,13 @@
             return col;
         }
 
+        // Pins a lane to the board grid's Morning or Afternoon row, so every
+        // column's lanes line up even when a column (e.g. Requested) only has
+        // an Afternoon lane.
+        function laneRowClass(slot) {
+            return slot === 'Morning' ? 'lane-row-am' : 'lane-row-pm';
+        }
+
         function makeNotScheduledLane(slot) {
             // Placeholder for a slot the walker isn't scheduled for today.
             // No walkerId dataset and no click handler, so an assignment
@@ -258,7 +343,7 @@
             // `lane-unavailable` (admin-override yellow) — this grey signals
             // "not on the schedule" rather than "blocked".
             const wrap = document.createElement('div');
-            wrap.className = 'board-lane lane-not-scheduled';
+            wrap.className = 'board-lane lane-not-scheduled ' + laneRowClass(slot);
 
             const hdr = document.createElement('div');
             hdr.className = 'lane-header';
@@ -279,7 +364,7 @@
             const isTarget = state.selectedId !== null && isWalkerLane && !isFull;
 
             const wrap = document.createElement('div');
-            wrap.className = 'board-lane'
+            wrap.className = 'board-lane ' + laneRowClass(slot)
                 + (isFull    ? ' lane-full'        : '')
                 + (isTarget  ? ' lane-target'      : '')
                 + (isUnavail ? ' lane-unavailable' : '')
@@ -472,6 +557,9 @@
 
         // ── Board load ─────────────────────────────────────────────────────────
         async function loadBoard(dateStr) {
+            // A Requested fade-out still in flight would repaint the previous
+            // date's board over the loading spinner.
+            if (fadeTimer) { clearTimeout(fadeTimer); fadeTimer = null; }
             state.date       = dateStr;
             state.selectedId = null;
             const placeholder = document.getElementById('board-placeholder');
