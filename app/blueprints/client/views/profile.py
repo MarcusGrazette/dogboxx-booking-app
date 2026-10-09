@@ -26,9 +26,10 @@ from app.utils.activity_log import record_admin_action, diff_fields
 # content, not raw HTML, since Quill re-serializes on every save even with zero
 # real edits). Deliberately narrower than the admin-side USER_AUDIT_FIELDS/
 # CLIENT_AUDIT_FIELDS in clients.py — this route never lets a client change
-# their own email/phone, and dog name/gender/breed stay admin-managed.
-USER_AUDIT_FIELDS = ['firstname', 'lastname', 'email_marketing']
-CLIENT_AUDIT_FIELDS = ['street_address', 'postal_code', 'maps_url']
+# their own name, email, phone or address, and dog name/gender/breed stay
+# admin-managed.
+USER_AUDIT_FIELDS = ['email_marketing']
+CLIENT_AUDIT_FIELDS = ['maps_url']
 
 
 @client_bp.route("/profile", methods=["GET", "POST"])
@@ -123,9 +124,9 @@ def profile():
             secondary_pickup_dog = secondary_dogs[0]['dog'] if (not primary_dogs and secondary_dogs) else None
             secondary_pickup_before = secondary_pickup_dog.pickup_instructions if secondary_pickup_dog else None
 
-            # Personal info
-            current_user.firstname = form.firstname.data.strip()
-            current_user.lastname = form.lastname.data.strip()
+            # Name and address are admin-managed and not part of this form —
+            # never read them from the request (a tampered field would rename
+            # the client or move their pickup address).
 
             # Create a Client record on first save if this is a secondary-only owner
             if not client:
@@ -133,13 +134,6 @@ def profile():
                                 onboarding_completed_at=datetime.now(timezone.utc))
                 db.session.add(client)
 
-            # Address
-            client.street_address = form.address_line_1.data.strip()
-            if form.address_line_2.data:
-                client.street_address += '\n' + form.address_line_2.data.strip()
-            if form.address_line_3.data:
-                client.street_address += '\n' + form.address_line_3.data.strip()
-            client.postal_code = form.postcode.data.strip()
             client.maps_url = form.maps_url.data.strip() if form.maps_url.data else None
 
             # Pickup notes live on the dog, not the client
@@ -166,7 +160,7 @@ def profile():
             # activity-feed review, 2026-09-06). dob and allergies are the
             # actual client-editable dog fields, via per-dog raw fields below.
 
-            # Activity log — one merged 'client' row for name/address/newsletter
+            # Activity log — one merged 'client' row for maps pin/newsletter
             # (mirrors the admin-side edit_client convention of treating User+
             # Client as one logical entity), plus one 'dog' row per touched
             # dog's pickup instructions. Actor == subject here, so summaries
@@ -238,17 +232,7 @@ def profile():
 
     elif request.method == 'GET':
         # Pre-fill form with existing data
-        form.firstname.data = current_user.firstname
-        form.lastname.data = current_user.lastname
-
-        # Split street_address back into lines
-        if client and client.street_address:
-            address_lines = client.street_address.split('\n')
-            form.address_line_1.data = address_lines[0] if len(address_lines) > 0 else ''
-            form.address_line_2.data = address_lines[1] if len(address_lines) > 1 else ''
-            form.address_line_3.data = address_lines[2] if len(address_lines) > 2 else ''
         if client:
-            form.postcode.data = client.postal_code
             form.maps_url.data = client.maps_url
 
         # Pickup notes: primary dogs use per-dog raw fields in template;

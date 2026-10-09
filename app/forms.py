@@ -109,38 +109,10 @@ class BookingForm(FlaskForm):
 
 
 class ProfileForm(FlaskForm):
-    """Form for clients to edit their profile, address, notification prefs and dog info."""
-    # Personal info
-    firstname = StringField(
-        'First Name',
-        validators=[DataRequired(), Length(min=2, max=80)]
-    )
-    lastname = StringField(
-        'Last Name',
-        validators=[DataRequired(), Length(min=2, max=80)]
-    )
-
-    # Address
-    address_line_1 = StringField(
-        'Address Line 1',
-        validators=[DataRequired(), Length(max=200)],
-        render_kw={"placeholder": "Street address"}
-    )
-    address_line_2 = StringField(
-        'Address Line 2',
-        validators=[Optional(), Length(max=200)],
-        render_kw={"placeholder": "Flat, floor, etc. (optional)"}
-    )
-    address_line_3 = StringField(
-        'Address Line 3',
-        validators=[Optional(), Length(max=200)],
-        render_kw={"placeholder": "Area / neighbourhood (optional)"}
-    )
-    postcode = StringField(
-        'Postcode',
-        validators=[DataRequired(), Length(max=20)],
-        render_kw={"placeholder": "e.g. SE1 3QJ"}
-    )
+    """Form for clients to edit their pickup details, notification prefs and dog info."""
+    # Name and address are admin-managed (shown read-only on /profile) and
+    # deliberately not form fields: the server must never take them from the
+    # client. Address is set at onboarding or by an admin.
     pickup_instructions = TextAreaField(
         "Access instructions (optional)",
         validators=[Length(max=20000)],

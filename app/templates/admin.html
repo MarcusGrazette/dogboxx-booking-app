@@ -298,6 +298,8 @@
   justify-self: start;
 }
 .cal-di-badge i { font-size: 8px; line-height: 1; }
+.cal-day-label { display: inline-flex; align-items: center; gap: 3px; }
+.cal-di-icon { display: none; font-size: 10px; color: #52525b; line-height: 1; }
 
 /* ── Span bars ───────────────────────────────────────────────────────── */
 .cal-spans { margin-top: auto; padding-top: 3px; }
@@ -500,6 +502,7 @@
   .cal-cap-row { grid-template-columns: 14px 1fr; column-gap: 2px; }
   .cal-cap-count,
   .cal-di-badge { display: none; }
+  .cal-di-icon { display: inline-block; }
   .cal-cap-label { font-size: 8px; letter-spacing: 0; }
   .cal-cap-track { height: 5px; }
   .span-bar { height: 4px; }
@@ -747,6 +750,13 @@ window._DASH = {
       ? `<div class="cal-spans">${spans.map(renderSpanBar).join('')}</div>`
       : '';
 
+    // Drop-in reminder beside the date. Compact (phone) layout only — the
+    // full layout already shows a per-slot drop-in badge with a count.
+    const dropInTotal = (am.drop_ins || 0) + (pm.drop_ins || 0);
+    const dropInIcon = dropInTotal > 0
+      ? `<i class="bi bi-house-door-fill cal-di-icon" title="${dropInTotal} drop-in${dropInTotal !== 1 ? 's' : ''}"></i>`
+      : '';
+
     const pendingTotal = (am.pending || 0) + (pm.pending || 0);
     const pendingBadge = pendingTotal > 0
       ? `<span class="cal-pending-badge" title="${pendingTotal} pending booking${pendingTotal !== 1 ? 's' : ''}">` +
@@ -756,7 +766,7 @@ window._DASH = {
 
     return `<div class="${cls} cal-cell--clickable" data-date="${date_str}">` +
       `<div class="cal-cell-top">` +
-        `<span class="cal-day-num">${day_num}</span>` +
+        `<span class="cal-day-label"><span class="cal-day-num">${day_num}</span>${dropInIcon}</span>` +
         `<div class="cal-cell-actions">` +
           pendingBadge +
           `<button type="button" class="cal-assign-btn" data-date="${date_str}" ` +

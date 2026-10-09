@@ -90,8 +90,8 @@
             el.innerHTML = `
                 <img src="${imgSrc(b.dog_pic)}" class="board-dog-img">
                 <div class="board-card-info">
-                    <div class="board-card-name">${b.dog_name}</div>
-                    <div class="board-card-owner">${b.owner_name}</div>
+                    <div class="board-card-name">${escHtml(b.dog_name)}</div>
+                    <div class="board-card-owner">${escHtml(b.owner_name)}</div>
                 </div>
                 <div class="d-flex gap-1 align-items-center flex-shrink-0">
                     ${b.status === 'waitlisted' ? '<span class="modifier-pill modifier-waitlisted" title="Waitlisted"><i class="bi bi-clock-history"></i></span>' : ''}
@@ -132,8 +132,8 @@
             el.innerHTML = `
                 <img src="${imgSrc(b.dog_pic)}" class="board-dog-img">
                 <div class="board-card-info">
-                    <div class="board-card-name">${b.dog_name}</div>
-                    <div class="board-card-owner">${b.owner_name}</div>
+                    <div class="board-card-name">${escHtml(b.dog_name)}</div>
+                    <div class="board-card-owner">${escHtml(b.owner_name)}</div>
                 </div>
                 ${extraContent}`;
 
@@ -305,7 +305,7 @@
                         title="Marked unavailable — admin override active">
                         <i class="bi bi-exclamation-triangle-fill me-1"></i>Unavailable ${unavailSlots.join(', ')}</span>`
                 : '';
-            header.innerHTML = `<span><i class="bi bi-person-walking me-1"></i>${walker.name}</span>`
+            header.innerHTML = `<span><i class="bi bi-person-walking me-1"></i>${escHtml(walker.name)}</span>`
                 + unavailBadge;
             col.appendChild(header);
 
