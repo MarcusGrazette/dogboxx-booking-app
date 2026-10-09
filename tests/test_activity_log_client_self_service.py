@@ -80,8 +80,6 @@ class TestProfilePostContactAndDogEdits:
 
     def _base_form(self, dog_name, dog_gender, dog_breed):
         return {
-            'firstname': 'Jane', 'lastname': 'Smith',
-            'address_line_1': '1 Old Road', 'postcode': 'OLD 123',
             'dog_name': dog_name, 'dog_gender': dog_gender, 'dog_breed': dog_breed or '',
             'notify_email': 'y',
         }
@@ -95,8 +93,7 @@ class TestProfilePostContactAndDogEdits:
 
         _login(client, email)
         form = self._base_form(dog_name, dog_gender, dog_breed)
-        form['firstname'] = 'Janet'
-        form['address_line_1'] = '2 New Road'
+        form['maps_url'] = 'https://maps.app.goo.gl/abc123'
         client.post('/profile', data=form)
 
         with app.app_context():
@@ -104,11 +101,62 @@ class TestProfilePostContactAndDogEdits:
             assert row is not None
             assert row.action == 'updated'
             assert row.actor_id == user_id
-            assert row.summary.startswith('Janet Smith')
-            assert row.changes['firstname'] == ['Jane', 'Janet']
-            # street_address is a REDACTED_FIELDS member — key present, value not.
-            assert row.changes['street_address'] == ['(redacted)', '(redacted)']
-            assert 'New Road' not in row.summary
+            assert row.summary == 'Jane Smith updated contact details'
+            # maps_url is a REDACTED_FIELDS member — key present, value not.
+            assert row.changes['maps_url'] == ['(redacted)', '(redacted)']
+            assert 'goo.gl' not in row.summary
+
+    def test_tampered_name_and_address_fields_are_ignored(self, app, client):
+        """Regression: name and address are admin-managed and not part of
+        the /profile form. A client posting them anyway (devtools, or a
+        replayed request) must not rename themselves or move their pickup
+        address — and nothing should be logged."""
+        with app.app_context():
+            user, dog = _make_client_with_dog()
+            email = user.email
+            user_id = user.id
+            dog_name, dog_gender, dog_breed = dog.name, dog.gender, dog.breed
+
+        _login(client, email)
+        form = self._base_form(dog_name, dog_gender, dog_breed)
+        form.update({
+            'firstname': '<b>Janet</b>', 'lastname': 'Tampered',
+            'address_line_1': '99 Elsewhere', 'postcode': 'ZZ9 9ZZ',
+        })
+        resp = client.post('/profile', data=form)
+        assert resp.status_code == 302
+
+        with app.app_context():
+            fresh = db.session.get(User, user_id)
+            assert (fresh.firstname, fresh.lastname) == ('Jane', 'Smith')
+            c = Client.query.filter_by(user_id=user_id).one()
+            assert (c.street_address, c.postal_code) == ('1 Old Road', 'OLD 123')
+            assert ActivityLog.query.count() == 0
+
+    def test_client_without_address_can_save(self, app, client):
+        """Regression: address used to be a required (hidden) form field, so
+        a client created with no address (/admin/clients/new allows that)
+        could never save /profile."""
+        with app.app_context():
+            user, dog = _make_client_with_dog()
+            c = Client.query.filter_by(user_id=user.id).one()
+            c.street_address = None
+            c.postal_code = None
+            db.session.commit()
+            email = user.email
+            user_id = user.id
+            dog_name, dog_gender, dog_breed = dog.name, dog.gender, dog.breed
+
+        _login(client, email)
+        form = self._base_form(dog_name, dog_gender, dog_breed)
+        form['maps_url'] = 'https://maps.app.goo.gl/xyz789'
+        resp = client.post('/profile', data=form)
+        assert resp.status_code == 302
+
+        with app.app_context():
+            c = Client.query.filter_by(user_id=user_id).one()
+            assert c.maps_url == 'https://maps.app.goo.gl/xyz789'
+            assert c.street_address is None
 
     def test_newsletter_only_change_via_main_form_uses_newsletter_wording(self, app, client):
         """Regression: the main /profile form and the AJAX
@@ -224,7 +272,7 @@ class TestSecondaryOnlyOwnerFirstSave:
 
         _login(client, email)
         client.post('/profile', data={
-            'firstname': 'Sec', 'lastname': 'Owner',
+            # Posted but ignored — address isn't client-editable on /profile
             'address_line_1': '5 New Rd', 'postcode': 'CD2',
             'dog_name': dog_name, 'dog_gender': dog_gender, 'dog_breed': dog_breed or '',
             'notify_email': 'y',
@@ -233,7 +281,7 @@ class TestSecondaryOnlyOwnerFirstSave:
         with app.app_context():
             new_client = Client.query.filter_by(user_id=sec_id).first()
             assert new_client is not None
-            assert new_client.street_address == '5 New Rd'
+            assert new_client.street_address is None
 
             row = ActivityLog.query.filter_by(entity_type='client', entity_id=sec_id).first()
             assert row is not None

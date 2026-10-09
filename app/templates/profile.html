@@ -146,12 +146,6 @@
            style="display:none;" aria-hidden="true">
 
     {# ── Hidden fields: read-only data that must still round-trip for form validation ── #}
-    {{ form.firstname(type="hidden") }}
-    {{ form.lastname(type="hidden") }}
-    {{ form.address_line_1(type="hidden") }}
-    {{ form.address_line_2(type="hidden") }}
-    {{ form.address_line_3(type="hidden") }}
-    {{ form.postcode(type="hidden") }}
     {{ form.dog_name(type="hidden") }}
     {# dog_gender is a SelectField — type="hidden" doesn't work on <select>, use raw input #}
     <input type="hidden" name="dog_gender" value="{{ form.dog_gender.data or '' }}">
