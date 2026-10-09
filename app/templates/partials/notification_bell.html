@@ -1,21 +1,21 @@
 {# Bell icon dropdown — include in any navbar.
    Requires: unread_notification_count, recent_notifications, notification_meta (from context processor) #}
 <div class="dropdown" id="notification-bell">
-    <a class="nav-link lh-1 position-relative px-3" href="#"
+    <a class="nav-link lh-1 px-3" href="#"
        role="button" data-bs-toggle="dropdown" aria-expanded="false"
        aria-label="Notifications" style="outline:none;">
-        <i class="bi bi-bell-fill fs-5"></i>
-        {% if unread_notification_count > 0 %}
-        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill"
-              style="background:#E02FAC; font-size:0.6rem; margin-top:4px; margin-left:-12px;"
-              id="notif-badge">
-            {{ unread_notification_count if unread_notification_count < 100 else '99+' }}
+        {# The badge is anchored to the icon (not the padded link), so Bootstrap's
+           corner placement lands in the same spot in every browser. d-inline-flex,
+           not inline-block: an inline-block wrapper gets its own line box, whose
+           strut + the icon's vertical-align leave browser-dependent slack. One
+           badge span; applyBadgeCount() owns its text and d-none. #}
+        <span class="position-relative d-inline-flex">
+            <i class="bi bi-bell-fill fs-5"></i>
+            <span id="notif-badge"
+                  class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-primary notif-badge{{ '' if unread_notification_count > 0 else ' d-none' }}">
+                {{ unread_notification_count if unread_notification_count < 100 else '99+' }}
+            </span>
         </span>
-        {% else %}
-        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill d-none"
-              style="background:#E02FAC; font-size:0.6rem; margin-top:4px; margin-left:-12px;"
-              id="notif-badge">0</span>
-        {% endif %}
     </a>
 
     <div class="dropdown-menu dropdown-menu-end shadow p-0 notif-dropdown-panel"

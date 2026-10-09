@@ -17,7 +17,6 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 72 | P3 | S | 🔲 | **Handle rate-limited push re-registration** | Back off quietly when push re-subscription is throttled. |
 | 82 | P3 | L | 📋 | **One typed invoice calculator** | Every billing page reads its numbers from one calculation instead of re-deriving them. |
 | 83 | P3 | M | 🔲 | **De-duplicate admin + walker notifications** | An admin who is also the assigned walker gets one notification per booking, not both the "assigned a walk" and "client booked" ones. |
-| 85 | P3 | S | 🔲 | **Notification bell badge alignment** | The unread-count pill sits in the same place on the bell in every browser (client and admin). |
 | 86 | P3 | M | 📋 | **Simplify 1 — dead code & one-offs** | Remove unused imports, scripts and pins; inline single-use helpers; use the shared toast on the board. |
 | 87 | P3 | M | 📋 | **Simplify 2 — capacity & board data** | One capacity/summary helper for walks and drop-ins; one board-data builder behind both board endpoints. |
 | 88 | P3 | M | 📋 | **Simplify 3 — shared utilities** | Shared email shell, dashboard chart payload, simpler link sanitizing and device detection. |
@@ -102,6 +101,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 48 | Web Push | Push notifications and home-screen badge for the installed app (iOS and Android). |
 | 60 | Newsletter | Rich-text newsletter with merge tags and test send. |
 | 61 | Email opt-out | One-click unsubscribe link in every newsletter. |
+| 85 | Notification bell badge alignment | The unread-count pill sits on the bell's corner in the same place in every browser, client and admin. |
 
 ### Platform & quality
 

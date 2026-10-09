@@ -161,6 +161,15 @@
   background-color: #E02FAC !important;
 }
 
+/* Bell unread pill — sizing only; placement is Bootstrap's translate-middle
+   (anchored to the icon in partials/notification_bell.html), colour is
+   .badge.bg-primary above. */
+.notif-badge {
+  font-size: 0.6rem;
+  line-height: 1;
+  padding: 0.25em 0.4em;
+}
+
 /* ---- Tables ---- */
 .table thead th {
   background-color: #1B1B1B;
