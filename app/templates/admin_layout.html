@@ -213,8 +213,8 @@
                         <a href="{{ url_for('admin.drop_in_board') }}"
                            class="nav-link d-flex align-items-center justify-content-between {% if request.endpoint == 'admin.drop_in_board' %}active{% endif %}">
                             <span><i class="bi bi-house-door me-2"></i>Drop Ins</span>
-                            <span class="badge rounded-pill ms-1" id="pending-badge-drop-ins"
-                                  style="background:#E02FAC; font-size:0.65rem; {% if pending_drop_ins == 0 %}display:none;{% endif %}">{{ pending_drop_ins }}</span>
+                            <span class="badge rounded-pill bg-primary ms-1" id="pending-badge-drop-ins"
+                                  style="font-size:0.65rem; {% if pending_drop_ins == 0 %}display:none;{% endif %}">{{ pending_drop_ins }}</span>
                         </a>
                     </li>
                     <li class="nav-item">
