@@ -1,0 +1,8 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "flask send-walker-summaries"
+# UTC. 07/08 cover 08:00 London in BST/GMT, 14/15 cover 15:00; the command
+# checks the London clock and only the matching run sends.
+cronSchedule = "0 7,8,14,15 * * 1-5"

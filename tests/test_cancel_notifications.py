@@ -6,6 +6,7 @@
 - The client is named by first name, like every other bell title.
 """
 from datetime import date
+from unittest.mock import patch
 
 import pytest
 
@@ -51,6 +52,16 @@ def _titles_for(user_id):
 def _cancel(client, booking):
     resp = client.post('/cancel_booking', data={'booking_id': booking.id})
     assert resp.get_json()['success'] is True
+
+
+@pytest.fixture(autouse=True)
+def _walk_inside_walker_window():
+    """Walkers only hear instantly about walks within WALKER_NOTICE_DAYS of
+    today (notifications.walker_notify_now). Pin that "today" to the day
+    before the fixed 2099 booking so the walker copies are still sent and
+    the titles here can stay literal."""
+    with patch('app.utils.notifications.local_today', return_value=date(2099, 6, 1)):
+        yield
 
 
 @pytest.fixture
