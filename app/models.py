@@ -759,6 +759,26 @@ class Broadcast(db.Model):
                 f'→ {self.recipient_count} recipients>')
 
 
+class WalkerSummarySent(db.Model):
+    """One row per daily walker summary sent — app/utils/walker_summaries.py.
+    The unique key makes a re-run of the cron job (a Railway retry, or both
+    UTC hours of the BST/GMT pair landing on 08:00 London) a no-op for any
+    walker already sent that summary."""
+    __tablename__ = 'walker_summaries_sent'
+    __table_args__ = (
+        db.UniqueConstraint('walker_id', 'date', 'kind', name='uq_walker_summary_sent'),
+    )
+
+    KINDS = ('preview', 'morning')
+
+    id = db.Column(db.Integer, primary_key=True)
+    walker_id = db.Column(db.Integer, db.ForeignKey('walkers.id', ondelete='CASCADE'),
+                          nullable=False)
+    date = db.Column(db.Date, nullable=False)       # the day the summary describes
+    kind = db.Column(db.String(10), nullable=False)  # 'preview' (15:00 day before) / 'morning' (08:00)
+    sent_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
 class DailyMessage(db.Model):
     """A message from the business owner to the walker team, shown at the top
     of the pickup list for a given date. One message per day (UNIQUE on date).

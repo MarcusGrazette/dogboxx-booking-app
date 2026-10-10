@@ -132,6 +132,47 @@ def reconcile_uploads_cmd():
             click.echo("All volume files present in R2 with matching sizes.")
 
 
+@app.cli.command("send-walker-summaries")
+@click.option("--kind", type=click.Choice(["preview", "morning"]), default=None,
+              help="Send this summary now instead of the one due by the London clock.")
+@click.option("--date", "date_str", default=None,
+              help="YYYY-MM-DD the summary describes (with --kind; default: the due date).")
+def send_walker_summaries_cmd(kind, date_str):
+    """Send the daily walker summaries (app/utils/walker_summaries.py). With no
+    options, sends whichever is due now — 'morning' at 08:00 London, 'preview'
+    at 15:00 — and does nothing at any other hour; the walker-summaries cron
+    service runs it at both UTC hours of each so BST and GMT are covered.
+    Safe to re-run: walkers already sent that summary are skipped."""
+    from datetime import date
+    import gevent
+    from app.utils.walker_summaries import (
+        due_summary, next_working_day, send_walker_summaries,
+    )
+    from app.utils.dates import local_today
+
+    with app.app_context():
+        if kind:
+            if date_str:
+                target = date.fromisoformat(date_str)
+            else:
+                today = local_today()
+                target = today if kind == "morning" else next_working_day(today)
+        else:
+            due = due_summary()
+            if due is None:
+                click.echo("No walker summary due at this hour (London).")
+                return
+            kind, target = due
+
+        sent = send_walker_summaries(kind, target)
+        click.echo(f"Sent {sent} walker {kind} summar{'y' if sent == 1 else 'ies'} for {target}.")
+
+    # Web Push goes out from greenlets spawned in the after_commit hook
+    # (app/__init__.py). Gunicorn's gevent worker runs those; a CLI process
+    # only does when it yields to the hub, so wait for them before exiting.
+    gevent.wait(timeout=120)
+
+
 @app.cli.command("sweep-push-subscriptions")
 def sweep_push_subscriptions_cmd():
     """Delete push subscriptions not seen in 90+ days (M31). A still-valid

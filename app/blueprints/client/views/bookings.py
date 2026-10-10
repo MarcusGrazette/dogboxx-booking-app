@@ -18,7 +18,7 @@ import uuid
 from datetime import datetime, timezone, timedelta, date as date_type
 
 from app.blueprints.client import client_bp
-from app.utils.notifications import create_notification, NotificationBatch
+from app.utils.notifications import create_notification, NotificationBatch, walker_notify_now
 from app.utils.booking_status import (
     transition_booking, bulk_transition,
     InvalidTransitionError,
@@ -300,7 +300,7 @@ def index():
                                   dog_name=dog_name, slot=booking_slot, date=booking_date,
                                   walker_name=walker_first, svc_label='walk')
                     if walker and walker.user_id != current_user.id:
-                        batch.add(walker.user_id, 'walker_assigned',
+                        batch.add_for_walker(walker.user_id, 'walker_assigned',
                                   dog_name=dog_name, slot=booking_slot, date=booking_date,
                                   svc_label='walk')
                     batch.flush()
@@ -463,7 +463,7 @@ def book():
                           dog_name=dog.name, slot=booking_slot, date=booking_date,
                           walker_name=walker_first, svc_label='walk')
             if walker and walker.user_id != current_user.id:
-                batch.add(walker.user_id, 'walker_assigned',
+                batch.add_for_walker(walker.user_id, 'walker_assigned',
                           dog_name=dog.name, slot=booking_slot, date=booking_date,
                           svc_label='walk')
             batch.flush()
@@ -691,7 +691,7 @@ def book_both():
         if b.status == 'confirmed' and b.walker_id and b.walker:
             wuid = b.walker.user_id
             if wuid and wuid != current_user.id:
-                walker_batch.add(wuid, 'walker_assigned',
+                walker_batch.add_for_walker(wuid, 'walker_assigned',
                                  dog_name=dog.name, slot=slot, date=booking_date)
     walker_batch.flush()
 
@@ -1000,7 +1000,7 @@ def pause_walks():
         if (b.walker_id and b.walker and b.walker.user_id
                 and b.walker.user_id != current_user.id
                 and b.walker.user_id not in admin_ids):
-            notif_batch.add(b.walker.user_id, 'booking_cancelled', actor_first=actor_name,
+            notif_batch.add_for_walker(b.walker.user_id, 'booking_cancelled', actor_first=actor_name,
                             link='/walker/schedule', **payload)
 
     # One batch_id ties together every cancellation in this pause action so the
@@ -1159,9 +1159,11 @@ def cancel_booking():
                         )
 
         # Notify the walker who had this booking assigned (skip if they cancelled
-        # it themselves, or already heard as an admin above).
+        # it themselves, already heard as an admin above, or the walk is beyond
+        # the walker notice window — it drops out of their daily summary instead).
         if (prior_walker_user_id and prior_walker_user_id != current_user.id
-                and prior_walker_user_id not in notified_admin_ids):
+                and prior_walker_user_id not in notified_admin_ids
+                and walker_notify_now(booking.date)):
             if is_admin_cancel:
                 walker_title = f"{what} was cancelled"
             else:
@@ -1448,7 +1450,7 @@ def recurring_booking():
             walker_batch = NotificationBatch(actor_id=current_user.id)
             for b in confirmed_bookings:
                 if b.walker_id and b.walker and b.walker.user_id != current_user.id:
-                    walker_batch.add(b.walker.user_id, 'walker_assigned',
+                    walker_batch.add_for_walker(b.walker.user_id, 'walker_assigned',
                                      dog_name=dog.name, slot=b.slot, date=b.date,
                                      svc_label=svc_label)
             walker_batch.flush()

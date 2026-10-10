@@ -14,14 +14,21 @@ Usage:
     )
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from app import db
 from app.models import Notification
+from app.utils.dates import local_today
 
 # ── Caps ──────────────────────────────────────────────────────────────────────
 NOTIF_DB_CAP   = 100  # max stored per user (oldest pruned at insert time)
 NOTIF_PAGE_CAP = 50   # max shown on the full notifications page
 NOTIF_BELL_CAP = 5    # max shown in the navbar bell dropdown
+
+# Walkers hear about a change to one of their walks straight away only when
+# the walk is within this many days of today (London). Changes further out
+# are left to the daily summaries (app/utils/walker_summaries.py), which are
+# built from the live bookings when they are sent — so nothing is lost.
+WALKER_NOTICE_DAYS = 7
 
 
 # ── Type metadata ─────────────────────────────────────────────────────────────
@@ -35,6 +42,7 @@ NOTIFICATION_META = {
     'same_day_request':     ('bi-lightning-fill',      '#fd7e14'),   # orange — urgent same-day
     'walker_assigned':      ('bi-person-check-fill',   '#0d6efd'),   # blue
     'walker_availability':  ('bi-calendar-x-fill',     '#fd7e14'),   # orange
+    'walker_summary':       ('bi-calendar-day-fill',   '#0d6efd'),   # blue
     'system':               ('bi-info-circle-fill',    '#6c757d'),   # grey
 }
 
@@ -47,6 +55,16 @@ def get_meta(notification_type):
 
 
 # ── Core helpers ──────────────────────────────────────────────────────────────
+
+def walker_notify_now(booking_date, today=None):
+    """Whether a walker should be notified instantly about a change to a walk
+    on booking_date: today up to WALKER_NOTICE_DAYS ahead. Past walks and
+    walks further out get nothing — the latter reach the walker through the
+    daily summaries instead. Every walker-recipient notification goes
+    through this (or NotificationBatch.add_for_walker)."""
+    today = today or local_today()
+    return today <= booking_date <= today + timedelta(days=WALKER_NOTICE_DAYS)
+
 
 def create_notification(recipient_id, notification_type, title,
                         body=None, link=None, sender_id=None):
@@ -393,6 +411,13 @@ class NotificationBatch:
             grp = {'actor_first': actor_first, 'link': link, 'payloads': []}
             self._groups[key] = grp
         grp['payloads'].append(payload)
+        return self
+
+    def add_for_walker(self, recipient_id, kind, **kwargs):
+        """add() for a walker recipient — dropped unless the walk's date
+        passes walker_notify_now(). Use this, not add(), for every walker."""
+        if walker_notify_now(kwargs['date']):
+            self.add(recipient_id, kind, **kwargs)
         return self
 
     def flush(self):
