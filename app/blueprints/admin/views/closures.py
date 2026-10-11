@@ -163,7 +163,7 @@ def add_closure():
             if booking.walker_id and booking.walker:
                 walker_uid = booking.walker.user_id
                 if walker_uid and walker_uid != current_user.id:
-                    batch.add(walker_uid, 'booking_cancelled', **payload)
+                    batch.add_for_walker(walker_uid, 'booking_cancelled', **payload)
 
         batch.flush()
         db.session.commit()
