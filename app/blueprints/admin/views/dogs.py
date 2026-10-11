@@ -220,7 +220,6 @@ def book_for_dog():
 
         is_drop_in = service.slug == ServiceType.DROP_IN
 
-        from datetime import date as date_type
         try:
             booking_date = datetime.strptime(date_str, '%Y-%m-%d').date()
         except ValueError:
@@ -307,7 +306,6 @@ def book_for_dog():
         date_str_fmt     = booking_date.strftime('%a %-d %b')
         admin_first      = current_user.firstname or 'Admin'
         admin_books_self = (current_user.id == int(user_id))
-        is_past          = booking_date < date_type.today()
         # 'walk' / 'drop-in' is the canonical client- AND walker-facing label
         # (§7.7). service.name ("Group Walk" / "Drop In") stays admin-facing
         # (the JSON response message below).
@@ -322,10 +320,10 @@ def book_for_dog():
                 batch.add(user_id, 'booking_confirmed', actor_first=client_actor,
                           dog_name=dog.name, slot=b.slot, date=booking_date,
                           svc_label=svc_label, walker_name=walker_first)
-                # Skip the walker ping for past dates — the walk already happened
-                # (or didn't); pinging the walker about it is noise.
-                if b.walker and b.walker.user_id != current_user.id and not is_past:
-                    batch.add(b.walker.user_id, 'walker_assigned',
+                # add_for_walker skips past dates (pinging the walker about a walk
+                # that already happened is noise) and dates beyond the 7-day window.
+                if b.walker and b.walker.user_id != current_user.id:
+                    batch.add_for_walker(b.walker.user_id, 'walker_assigned',
                               dog_name=dog.name, slot=b.slot, date=booking_date,
                               svc_label=svc_label)
             elif b.status == 'waitlisted':
@@ -512,7 +510,7 @@ def recurring_for_dog():
                 batch.add(user_id, 'booking_confirmed', actor_first=client_actor,
                           dog_name=dog.name, slot=slot, date=d, walker_name=walker_first)
                 if walker and walker.user_id != current_user.id:
-                    batch.add(walker.user_id, 'walker_assigned',
+                    batch.add_for_walker(walker.user_id, 'walker_assigned',
                               dog_name=dog.name, slot=slot, date=d)
             elif booking.status == 'waitlisted':
                 waitlisted += 1
@@ -788,7 +786,7 @@ def dog_bulk_cancel(dog_id):
                           dog_name=dog.name, slot=b.slot, date=b.date, svc_label=b_svc)
     for wuid, payloads in walker_payloads.items():
         for p in payloads:
-            batch.add(wuid, 'booking_cancelled', **p)
+            batch.add_for_walker(wuid, 'booking_cancelled', **p)
     batch.flush()
 
     try:
