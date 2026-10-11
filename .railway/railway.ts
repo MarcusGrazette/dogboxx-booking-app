@@ -14,8 +14,8 @@ export const partial = "dogboxx-app";
 export default defineRailway(() => {
   const repo = github("MarcusGrazette/dogboxx-booking-app", { branch: "main", checkSuites: false });
   const region = "europe-west4-drams3a";
-  // Every service built with nixpacks under Config as Code; scripts rely on
-  // its /opt/venv layout (e.g. `railway ssh … /opt/venv/bin/flask`).
+  // Nixpacks, as under the old railway*.toml files — scripts and runbooks rely
+  // on its /opt/venv layout (e.g. `railway ssh … /opt/venv/bin/flask`).
   const build = { builder: "NIXPACKS" as const };
 
   // Photo uploads, mounted on web only. Destructive if removed or shrunk.
@@ -29,12 +29,13 @@ export default defineRailway(() => {
   const web = service("web", {
     source: repo,
     build,
-    // Volume symlink → migrations → gunicorn (gevent). Not the old dashboard
-    // command: that one has no gevent worker and no uploads symlink.
+    // Volume symlink → migrations → gunicorn (gevent worker) — see the script.
     start: "bash scripts/start.sh",
     healthcheck: "/health",
     healthcheckTimeout: 60,
-    deploy: { restartPolicyType: "ON_FAILURE", restartPolicyMaxRetries: 3 },
+    // Restart policy is ON_FAILURE, Railway's default — it stores the default
+    // as null, so declaring it here would show as a change on every plan.
+    deploy: { restartPolicyMaxRetries: 3 },
     replicas: { [region]: 1 },
     domains: ["app.dogboxx.org"],
     volumeMounts: { "/data/uploads": webVolume },

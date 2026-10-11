@@ -9,7 +9,7 @@ set -e
 #   - all existing /static/uploads/... URLs work unchanged
 #   - local dev and CI (no volume) are completely unaffected
 #
-# Mount point configured in railway.toml: /data/uploads
+# Mount point configured in .railway/railway.ts: /data/uploads
 
 echo "=== Volume diagnostics ==="
 echo "/data exists:         $([ -e /data ] && echo YES || echo NO)"
