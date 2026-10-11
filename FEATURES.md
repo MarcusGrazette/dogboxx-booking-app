@@ -26,7 +26,6 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 92 | P3 | L | 📋 | **Simplify 7 — booking request validation** | One validation/conflict path for the walk and drop-in booking routes; ship alone. |
 | 93 | P2 | M | 📋 | **London date everywhere** | Every "today" check uses the London date, so pages don't show yesterday's view just after midnight in summer. |
 | 94 | P3 | M | 📋 | **Simplify 8 — one month calendar** | The drop-in board uses the dashboard's month calendar (compact, with drop-in counts) instead of its own. |
-| 96 | P2 | M | 🔧 | **Walker daily summaries** | Walkers get one summary of their dogs per slot at 15:00 for the next working day and at 08:00 for today; instant notifications only for walks within a week. |
 | 95 | P3 | S | 📋 | **Simplify 9 — retire the old assignment page** | Remove the unlinked standalone walk board and its unused charts; walks are assigned from the dashboard. |
 | 24 | P3 | L | 🔲 | **Dental cleans service type** | Admin-managed time slots that clients book into. |
 | 74 | P4 | S | 🔲 | **Drop `User.notification_preference`** | Remove a column that only ever holds `'email'`. |
@@ -103,6 +102,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 60 | Newsletter | Rich-text newsletter with merge tags and test send. |
 | 61 | Email opt-out | One-click unsubscribe link in every newsletter. |
 | 85 | Notification bell badge alignment | The unread-count pill sits on the bell's corner in the same place in every browser, client and admin. |
+| 96 | Walker daily summaries | One summary of each walker's dogs per slot at 15:00 for the next working day and at 08:00 for today; instant walker notifications only for walks within a week. |
 
 ### Platform & quality
 
@@ -124,6 +124,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 70 | Login lockout | Temporary per-account lockout after repeated wrong passwords. |
 | 80 | Code tidy-up | Unused variables removed during the client routes split. |
 | 81 | Lighter session storage | Login sessions are saved once a day instead of on every request. |
+| 97 | Hosting settings as code | Railway service settings (start commands, schedules, healthcheck, volume) live in the repo as Infrastructure as Code, replacing the retired config files. |
 
 ## Dropped
 
