@@ -27,6 +27,7 @@
     function createBoard(cfg) {
         const CSRF        = document.querySelector('meta[name="csrf-token"]')?.content;
         const DECLINE_URL = id => `/admin/booking/${id}/decline`;
+        const NOTE_URL    = id => `/admin/booking/${id}/note`;
 
         // ── State ─────────────────────────────────────────────────────────────
         const state = {
@@ -78,6 +79,26 @@
         }
 
         // ── Card rendering ────────────────────────────────────────────────────
+        // Walk-note button: highlighted when the booking has a note (its text
+        // doubles as the hover tooltip), faded like the decline ✕ otherwise.
+        function noteBtnHtml(b) {
+            const hasNote = !!b.client_notes;
+            return `<button type="button" class="btn btn-link p-0 ms-1 note-btn ${hasNote ? 'text-primary' : 'text-muted'}"
+                            title="${hasNote ? escHtml(b.client_notes) : 'Add walk note'}"
+                            aria-label="${hasNote ? 'Edit walk note' : 'Add walk note'}"
+                            style="font-size:0.9rem; line-height:1;${hasNote ? '' : ' opacity:0.55;'}">
+                        <i class="bi bi-pencil-square"></i>
+                    </button>`;
+        }
+
+        // stopPropagation: a tap on the note button must not also select the card.
+        function wireNoteBtn(el, b) {
+            el.querySelector('.note-btn').addEventListener('click', function (e) {
+                e.stopPropagation();
+                openNoteModal(b.id);
+            });
+        }
+
         function makePendingCard(b) {
             const el = document.createElement('div');
             el.className = 'board-card'
@@ -97,6 +118,7 @@
                     ${b.status === 'waitlisted' ? '<span class="modifier-pill modifier-waitlisted" title="Waitlisted"><i class="bi bi-clock-history"></i></span>' : ''}
                     ${extraBadges}
                     <span class="slot-pill bg-${slotColor} bg-opacity-10 text-${slotColor} border border-${slotColor}">${b.slot === 'Morning' ? 'AM' : 'PM'}</span>
+                    ${noteBtnHtml(b)}
                     <button class="btn btn-link p-0 ms-1 text-muted decline-btn"
                             data-id="${b.id}" data-dog="${escHtml(b.dog_name)}" data-slot="${b.slot}"
                             title="Decline booking"
@@ -118,6 +140,7 @@
                 e.stopPropagation();
                 openDeclineModal(declineBtn);
             });
+            wireNoteBtn(el, b);
 
             el.addEventListener('click', () => selectBooking(b.id));
             return el;
@@ -135,11 +158,13 @@
                     <div class="board-card-name">${escHtml(b.dog_name)}</div>
                     <div class="board-card-owner">${escHtml(b.owner_name)}</div>
                 </div>
-                ${extraContent}`;
+                ${extraContent}
+                <div class="d-flex align-items-center flex-shrink-0">${noteBtnHtml(b)}</div>`;
 
             el.querySelector('.board-dog-img').addEventListener('error', function () {
                 this.src = '/static/uploads/dogs/default-dog.png';
             });
+            wireNoteBtn(el, b);
 
             el.addEventListener('click', () => selectBooking(b.id));
             return el;
@@ -619,6 +644,63 @@
             } catch (err) {
                 console.error(err);
                 showToast(err.message || 'Could not decline — please try again.', 'danger');
+            }
+        });
+
+        // ── Walk note ──────────────────────────────────────────────────────────
+        // Edits the booking's client_notes — one note shared with the client.
+        let _noteBookingId = null;
+        const noteModalEl  = document.getElementById('walkNoteModal');
+        const noteModal    = new bootstrap.Modal(noteModalEl);
+        const noteText     = document.getElementById('walk-note-text');
+        const noteCount    = document.getElementById('walk-note-count');
+        const noteSaveBtn  = document.getElementById('walk-note-save-btn');
+
+        function updateNoteCount() {
+            noteCount.textContent = `${noteText.value.length}/${noteText.maxLength}`;
+        }
+
+        function openNoteModal(id) {
+            const b = findBooking(id);
+            if (!b) return;
+            _noteBookingId = id;
+            const date = state.date
+                ? new Date(state.date + 'T00:00:00').toLocaleDateString('en-GB', {
+                    weekday: 'short', day: 'numeric', month: 'short'
+                  })
+                : '';
+            document.getElementById('walk-note-subtitle').textContent =
+                `${b.dog_name} · ${b.slot.toLowerCase()} ${cfg.declineLabel} · ${date}`;
+            noteText.value = b.client_notes || '';
+            updateNoteCount();
+            noteSaveBtn.disabled = false;
+            noteModal.show();
+        }
+
+        noteText.addEventListener('input', updateNoteCount);
+        noteModalEl.addEventListener('shown.bs.modal', () => noteText.focus());
+
+        noteSaveBtn.addEventListener('click', async () => {
+            if (!_noteBookingId) return;
+            const id = _noteBookingId;
+            noteSaveBtn.disabled = true;
+            try {
+                const res  = await fetch(NOTE_URL(id), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+                    body: JSON.stringify({ note: noteText.value }),
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.message || 'Could not save note');
+                const b = findBooking(id);
+                if (b) b.client_notes = data.note;
+                noteModal.hide();
+                render();
+                showToast(data.note ? 'Note saved.' : 'Note removed.', 'success');
+            } catch (err) {
+                console.error(err);
+                noteSaveBtn.disabled = false;
+                showToast(escHtml(err.message || 'Could not save note — please try again.'), 'danger');
             }
         });
 
