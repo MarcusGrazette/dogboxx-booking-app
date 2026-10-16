@@ -1490,8 +1490,9 @@ def update_booking_note(booking_id):
 
     data = request.get_json(silent=True) or {}
     note = (data.get('note') or '').strip()
-    if len(note) > 500:
-        return jsonify(success=False, message="Note must be 500 characters or fewer"), 400
+    if len(note) > Booking.NOTE_MAX_LENGTH:
+        return jsonify(success=False,
+                       message=f"Note must be {Booking.NOTE_MAX_LENGTH} characters or fewer"), 400
 
     booking.client_notes = note or None
     db.session.commit()

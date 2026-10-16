@@ -360,6 +360,9 @@ class Booking(db.Model):
     WALKER_STATUSES = ('confirmed',)                                  # shown on walker pickup list
     INVOICE_STATUSES = ('confirmed', 'cancelled')                     # billable activity ('completed' is unused)
 
+    # Per-walk note (client_notes) — shared by client and admin, shown to walkers
+    NOTE_MAX_LENGTH = 500
+
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     dog_id = db.Column(db.Integer, db.ForeignKey('dogs.id'), nullable=False)

@@ -78,6 +78,34 @@
         }
 
         // ── Card rendering ────────────────────────────────────────────────────
+        // Walk-note button: highlighted when the booking has a note, faded like
+        // the decline ✕ otherwise. The note itself shows on the card (noteHtml).
+        function noteBtnHtml(b) {
+            const hasNote = !!b.client_notes;
+            return `<button type="button" class="btn btn-link p-0 ms-1 note-btn ${hasNote ? 'text-primary' : 'text-muted'}"
+                            title="${hasNote ? 'Edit walk note' : 'Add walk note'}"
+                            aria-label="${hasNote ? 'Edit walk note' : 'Add walk note'}"
+                            style="font-size:0.9rem; line-height:1;${hasNote ? '' : ' opacity:0.55;'}">
+                        <i class="bi bi-pencil-square"></i>
+                    </button>`;
+        }
+
+        // The walk note as a full-width amber line under the card's top row
+        // (same look as the walker pickup list), clamped to two lines.
+        function noteHtml(b) {
+            return b.client_notes
+                ? `<div class="board-card-note">${escHtml(b.client_notes)}</div>`
+                : '';
+        }
+
+        // stopPropagation: a tap on the note button must not also select the card.
+        function wireNoteBtn(el, b) {
+            el.querySelector('.note-btn').addEventListener('click', function (e) {
+                e.stopPropagation();
+                openNoteModal(b.id);
+            });
+        }
+
         function makePendingCard(b) {
             const el = document.createElement('div');
             el.className = 'board-card'
@@ -97,13 +125,15 @@
                     ${b.status === 'waitlisted' ? '<span class="modifier-pill modifier-waitlisted" title="Waitlisted"><i class="bi bi-clock-history"></i></span>' : ''}
                     ${extraBadges}
                     <span class="slot-pill bg-${slotColor} bg-opacity-10 text-${slotColor} border border-${slotColor}">${b.slot === 'Morning' ? 'AM' : 'PM'}</span>
+                    ${noteBtnHtml(b)}
                     <button class="btn btn-link p-0 ms-1 text-muted decline-btn"
                             data-id="${b.id}" data-dog="${escHtml(b.dog_name)}" data-slot="${b.slot}"
                             title="Decline booking"
                             style="font-size:0.9rem; opacity:0.55; line-height:1;">
                         <i class="bi bi-x-circle"></i>
                     </button>
-                </div>`;
+                </div>
+                ${noteHtml(b)}`;
 
             // el is a freshly created node not yet inserted into the DOM, so these
             // listeners are attached once per card instance directly — no CSP-inline-
@@ -118,6 +148,7 @@
                 e.stopPropagation();
                 openDeclineModal(declineBtn);
             });
+            wireNoteBtn(el, b);
 
             el.addEventListener('click', () => selectBooking(b.id));
             return el;
@@ -135,11 +166,14 @@
                     <div class="board-card-name">${escHtml(b.dog_name)}</div>
                     <div class="board-card-owner">${escHtml(b.owner_name)}</div>
                 </div>
-                ${extraContent}`;
+                ${extraContent}
+                <div class="note-btn-wrap d-flex align-items-center flex-shrink-0">${noteBtnHtml(b)}</div>
+                ${noteHtml(b)}`;
 
             el.querySelector('.board-dog-img').addEventListener('error', function () {
                 this.src = '/static/uploads/dogs/default-dog.png';
             });
+            wireNoteBtn(el, b);
 
             el.addEventListener('click', () => selectBooking(b.id));
             return el;
@@ -621,6 +655,30 @@
                 showToast(err.message || 'Could not decline — please try again.', 'danger');
             }
         });
+
+        // ── Walk note ──────────────────────────────────────────────────────────
+        // The shared modal (walk-note-modal.js) edits the booking's client_notes.
+        function openNoteModal(id) {
+            const b = findBooking(id);
+            if (!b) return;
+            const date = state.date
+                ? new Date(state.date + 'T00:00:00').toLocaleDateString('en-GB', {
+                    weekday: 'short', day: 'numeric', month: 'short'
+                  })
+                : '';
+            global.WalkNoteModal.open({
+                bookingId: id,
+                subtitle:  `${b.dog_name} · ${b.slot.toLowerCase()} ${cfg.declineLabel} · ${date}`,
+                note:      b.client_notes,
+                onSaved(note) {
+                    const booking = findBooking(id);
+                    if (booking) booking.client_notes = note;
+                    render();
+                    showToast(note ? 'Note saved.' : 'Note removed.', 'success');
+                },
+                onError(message) { showToast(escHtml(message), 'danger'); },
+            });
+        }
 
         // ── Public API ─────────────────────────────────────────────────────────
         function setDate(dateStr) {
