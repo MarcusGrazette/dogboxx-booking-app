@@ -141,6 +141,7 @@
 /* ── Board cards ───────────────────────────────────────────────────────────── */
 .board-card {
     display: flex;
+    flex-wrap: wrap;   /* lets .board-card-note take its own full-width row */
     align-items: center;
     gap: 8px;
     padding: 6px 8px;
@@ -198,6 +199,24 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* Walk note (client_notes) — same amber as the walker pickup list's note box */
+.board-card-note {
+    flex: 1 1 100%;
+    min-width: 0;
+    background: #fff8e1;
+    color: #7a5800;
+    border-left: 3px solid #ffc107;
+    border-radius: 4px;
+    padding: 3px 7px;
+    font-size: 0.74rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
 .board-card-owner {

@@ -79,16 +79,24 @@
         }
 
         // ── Card rendering ────────────────────────────────────────────────────
-        // Walk-note button: highlighted when the booking has a note (its text
-        // doubles as the hover tooltip), faded like the decline ✕ otherwise.
+        // Walk-note button: highlighted when the booking has a note, faded like
+        // the decline ✕ otherwise. The note itself shows on the card (noteHtml).
         function noteBtnHtml(b) {
             const hasNote = !!b.client_notes;
             return `<button type="button" class="btn btn-link p-0 ms-1 note-btn ${hasNote ? 'text-primary' : 'text-muted'}"
-                            title="${hasNote ? escHtml(b.client_notes) : 'Add walk note'}"
+                            title="${hasNote ? 'Edit walk note' : 'Add walk note'}"
                             aria-label="${hasNote ? 'Edit walk note' : 'Add walk note'}"
                             style="font-size:0.9rem; line-height:1;${hasNote ? '' : ' opacity:0.55;'}">
                         <i class="bi bi-pencil-square"></i>
                     </button>`;
+        }
+
+        // The walk note as a full-width amber line under the card's top row
+        // (same look as the walker pickup list), clamped to two lines.
+        function noteHtml(b) {
+            return b.client_notes
+                ? `<div class="board-card-note">${escHtml(b.client_notes)}</div>`
+                : '';
         }
 
         // stopPropagation: a tap on the note button must not also select the card.
@@ -125,7 +133,8 @@
                             style="font-size:0.9rem; opacity:0.55; line-height:1;">
                         <i class="bi bi-x-circle"></i>
                     </button>
-                </div>`;
+                </div>
+                ${noteHtml(b)}`;
 
             // el is a freshly created node not yet inserted into the DOM, so these
             // listeners are attached once per card instance directly — no CSP-inline-
@@ -159,7 +168,8 @@
                     <div class="board-card-owner">${escHtml(b.owner_name)}</div>
                 </div>
                 ${extraContent}
-                <div class="note-btn-wrap d-flex align-items-center flex-shrink-0">${noteBtnHtml(b)}</div>`;
+                <div class="note-btn-wrap d-flex align-items-center flex-shrink-0">${noteBtnHtml(b)}</div>
+                ${noteHtml(b)}`;
 
             el.querySelector('.board-dog-img').addEventListener('error', function () {
                 this.src = '/static/uploads/dogs/default-dog.png';
