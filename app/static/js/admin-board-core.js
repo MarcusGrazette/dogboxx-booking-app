@@ -159,7 +159,7 @@
                     <div class="board-card-owner">${escHtml(b.owner_name)}</div>
                 </div>
                 ${extraContent}
-                <div class="d-flex align-items-center flex-shrink-0">${noteBtnHtml(b)}</div>`;
+                <div class="note-btn-wrap d-flex align-items-center flex-shrink-0">${noteBtnHtml(b)}</div>`;
 
             el.querySelector('.board-dog-img').addEventListener('error', function () {
                 this.src = '/static/uploads/dogs/default-dog.png';
