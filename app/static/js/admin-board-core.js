@@ -27,7 +27,6 @@
     function createBoard(cfg) {
         const CSRF        = document.querySelector('meta[name="csrf-token"]')?.content;
         const DECLINE_URL = id => `/admin/booking/${id}/decline`;
-        const NOTE_URL    = id => `/admin/booking/${id}/note`;
 
         // ── State ─────────────────────────────────────────────────────────────
         const state = {
@@ -658,61 +657,28 @@
         });
 
         // ── Walk note ──────────────────────────────────────────────────────────
-        // Edits the booking's client_notes — one note shared with the client.
-        let _noteBookingId = null;
-        const noteModalEl  = document.getElementById('walkNoteModal');
-        const noteModal    = new bootstrap.Modal(noteModalEl);
-        const noteText     = document.getElementById('walk-note-text');
-        const noteCount    = document.getElementById('walk-note-count');
-        const noteSaveBtn  = document.getElementById('walk-note-save-btn');
-
-        function updateNoteCount() {
-            noteCount.textContent = `${noteText.value.length}/${noteText.maxLength}`;
-        }
-
+        // The shared modal (walk-note-modal.js) edits the booking's client_notes.
         function openNoteModal(id) {
             const b = findBooking(id);
             if (!b) return;
-            _noteBookingId = id;
             const date = state.date
                 ? new Date(state.date + 'T00:00:00').toLocaleDateString('en-GB', {
                     weekday: 'short', day: 'numeric', month: 'short'
                   })
                 : '';
-            document.getElementById('walk-note-subtitle').textContent =
-                `${b.dog_name} · ${b.slot.toLowerCase()} ${cfg.declineLabel} · ${date}`;
-            noteText.value = b.client_notes || '';
-            updateNoteCount();
-            noteSaveBtn.disabled = false;
-            noteModal.show();
+            global.WalkNoteModal.open({
+                bookingId: id,
+                subtitle:  `${b.dog_name} · ${b.slot.toLowerCase()} ${cfg.declineLabel} · ${date}`,
+                note:      b.client_notes,
+                onSaved(note) {
+                    const booking = findBooking(id);
+                    if (booking) booking.client_notes = note;
+                    render();
+                    showToast(note ? 'Note saved.' : 'Note removed.', 'success');
+                },
+                onError(message) { showToast(escHtml(message), 'danger'); },
+            });
         }
-
-        noteText.addEventListener('input', updateNoteCount);
-        noteModalEl.addEventListener('shown.bs.modal', () => noteText.focus());
-
-        noteSaveBtn.addEventListener('click', async () => {
-            if (!_noteBookingId) return;
-            const id = _noteBookingId;
-            noteSaveBtn.disabled = true;
-            try {
-                const res  = await fetch(NOTE_URL(id), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
-                    body: JSON.stringify({ note: noteText.value }),
-                });
-                const data = await res.json();
-                if (!data.success) throw new Error(data.message || 'Could not save note');
-                const b = findBooking(id);
-                if (b) b.client_notes = data.note;
-                noteModal.hide();
-                render();
-                showToast(data.note ? 'Note saved.' : 'Note removed.', 'success');
-            } catch (err) {
-                console.error(err);
-                noteSaveBtn.disabled = false;
-                showToast(escHtml(err.message || 'Could not save note — please try again.'), 'danger');
-            }
-        });
 
         // ── Public API ─────────────────────────────────────────────────────────
         function setDate(dateStr) {

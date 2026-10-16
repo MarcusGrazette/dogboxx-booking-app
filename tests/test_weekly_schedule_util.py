@@ -23,6 +23,9 @@ from app.utils.weekly_schedule import (
     build_week_by_walker,
     format_walker_week_text,
     day_slot_parts,
+    fetch_week_active_bookings,
+    build_week_grid,
+    both_walks_keys,
     WEEKDAYS,
     WEEKDAY_LABELS,
 )
@@ -224,3 +227,84 @@ class TestBuildWeekByDayAndByWalker:
         sarah_entry = next(e for e in by_walker if e['walker'].id == sarah.id)
         assert list(sarah_entry['days'].keys()) == [MON]
         assert len(sarah_entry['days'][MON]) == 1
+
+
+def _active(user, dog, service_type, date, slot, status, walker=None, pickup_order=None):
+    b = Booking(user_id=user.id, dog_id=dog.id, service_type_id=service_type.id,
+                date=date, slot=slot, status=status, pickup_order=pickup_order,
+                walker_id=walker.id if walker else None)
+    db.session.add(b)
+    db.session.commit()
+    return b
+
+
+class TestBuildWeekGrid:
+    """build_week_grid / fetch_week_active_bookings / both_walks_keys — the
+    admin Week view's rows (per day: AM drop-ins, AM walks, PM walks, PM
+    drop-ins) and walker cells."""
+
+    def _setup(self):
+        walk = _service_type('group-walk', 'Group Walk')
+        drop = _service_type('drop-in', 'Drop In')
+        sarah = _make_walker('Sarah', 'sarah_grid@test.org')
+        priya = _make_walker('Priya', 'priya_grid@test.org')
+        user, rex = _make_dog('Rex', 'rex_grid@test.org')
+        _, bella = _make_dog('Bella', 'bella_grid@test.org')
+        return walk, drop, sarah, priya, user, rex, bella
+
+    def test_fetch_includes_unassigned_excludes_cancelled_and_other_weeks(self, app):
+        walk, drop, sarah, priya, user, rex, bella = self._setup()
+        _active(user, rex, walk, MON, 'Morning', 'confirmed', sarah)
+        _active(user, bella, walk, MON, 'Morning', 'requested')
+        _active(user, rex, walk, TUE, 'Morning', 'waitlisted')
+        _active(user, bella, walk, TUE, 'Afternoon', 'cancelled')
+        _active(user, rex, walk, MON + datetime.timedelta(days=7), 'Morning', 'confirmed', sarah)
+        got = fetch_week_active_bookings(MON)
+        assert sorted(b.status for b in got) == ['confirmed', 'requested', 'waitlisted']
+
+    def test_rows_cells_and_unassigned_counts(self, app):
+        walk, drop, sarah, priya, user, rex, bella = self._setup()
+        _active(user, rex, walk, MON, 'Morning', 'confirmed', sarah, pickup_order=2)
+        _active(user, bella, walk, MON, 'Morning', 'confirmed', sarah, pickup_order=1)
+        _active(user, rex, walk, MON, 'Afternoon', 'confirmed', priya)
+        _active(user, bella, walk, MON, 'Afternoon', 'requested')
+        _active(user, bella, walk, TUE, 'Morning', 'waitlisted')
+
+        grid = build_week_grid(fetch_week_active_bookings(MON), MON, [sarah.id, priya.id])
+        assert [d['label'] for d in grid] == WEEKDAY_LABELS
+        mon = grid[0]
+        # No drop-ins on Monday: only the two walk rows, AM first.
+        assert [(r['slot'], r['is_drop_in']) for r in mon['rows']] == [
+            ('Morning', False), ('Afternoon', False)]
+        am, pm = mon['rows']
+        assert [[b.dog.name for b in cell] for cell in am['cells']] == [['Bella', 'Rex'], []]
+        assert am['unassigned'] == 0
+        assert [[b.dog.name for b in cell] for cell in pm['cells']] == [[], ['Rex']]
+        assert pm['unassigned'] == 1
+        # A waitlisted booking counts as unassigned and isn't in any cell.
+        tue_am = grid[1]['rows'][0]
+        assert tue_am['unassigned'] == 1 and tue_am['cells'] == [[], []]
+        # Empty days still get both walk rows.
+        assert len(grid[4]['rows']) == 2
+
+    def test_drop_in_row_appears_only_when_that_slot_has_drop_ins(self, app):
+        walk, drop, sarah, priya, user, rex, bella = self._setup()
+        _active(user, rex, drop, MON, 'Afternoon', 'confirmed', priya)
+        _active(user, bella, drop, TUE, 'Morning', 'requested')   # unassigned still shows the row
+        grid = build_week_grid(fetch_week_active_bookings(MON), MON, [sarah.id, priya.id])
+        assert [(r['slot'], r['is_drop_in']) for r in grid[0]['rows']] == [
+            ('Morning', False), ('Afternoon', False), ('Afternoon', True)]
+        assert [(r['slot'], r['is_drop_in']) for r in grid[1]['rows']] == [
+            ('Morning', True), ('Morning', False), ('Afternoon', False)]
+        assert [[b.dog.name for b in c] for c in grid[0]['rows'][2]['cells']] == [[], ['Rex']]
+        assert grid[1]['rows'][0]['unassigned'] == 1
+
+    def test_both_walks_needs_walks_in_both_slots_same_day(self, app):
+        walk, drop, sarah, priya, user, rex, bella = self._setup()
+        _active(user, rex, walk, MON, 'Morning', 'confirmed', sarah)
+        _active(user, rex, walk, MON, 'Afternoon', 'requested')
+        _active(user, bella, walk, MON, 'Morning', 'confirmed', sarah)
+        _active(user, bella, drop, MON, 'Afternoon', 'confirmed', priya)   # a drop-in doesn't count
+        _active(user, bella, walk, TUE, 'Afternoon', 'confirmed', priya)   # different day
+        keys = both_walks_keys(fetch_week_active_bookings(MON))
+        assert keys == {(rex.id, MON)}

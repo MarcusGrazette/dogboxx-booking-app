@@ -654,6 +654,7 @@ window._DASH = {
 {% block scripts %}
 {{ super() }}
 <!-- Board JS — used by the Assign modal embedded on the dashboard -->
+<script src="{{ url_for('static', filename='js/walk-note-modal.js') }}"></script>
 <script src="{{ url_for('static', filename='js/admin-board-core.js') }}"></script>
 <!-- Override form JS — used by the Schedule Override modal -->
 <script src="{{ url_for('static', filename='js/admin-override-form.js') }}"></script>

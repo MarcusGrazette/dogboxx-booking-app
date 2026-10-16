@@ -1,12 +1,13 @@
 """
-Admin weekly overview — a manual check-in tool for the owner: a top-of-page
-card showing which walkers are on AM/PM each day, then a per-walker list
-with a day-by-day breakdown and a Copy button for pasting a plain-text
-summary into email/WhatsApp, then a read-only "Walk notes this week" list.
+Admin "Week view" — the week as a grid: one column per walker with a booking
+that week, each weekday a band of rows (AM drop-ins, AM walks, PM walks, PM
+drop-ins), dogs as cards showing their walk note with a pencil to edit it.
+Each row counts its unassigned (requested/waitlisted) bookings, linking to
+the dashboard on that day. Phones get the same data as a stacked list.
 
-Data source is identical to the walker-facing weekly overview (same
-app.utils.weekly_schedule helpers) — "scheduled to work" means actually has
-a dog booked, not just generic availability.
+Copy buttons (per walker, and the whole team) carry plain-text summaries for
+email/WhatsApp, built from confirmed bookings only and never including notes.
+Shares app.utils.weekly_schedule with the walker-facing weekly view.
 """
 from datetime import datetime, timezone, timedelta
 
@@ -14,22 +15,21 @@ from flask import request, render_template, flash, redirect, url_for
 from flask_login import login_required
 
 from app.blueprints.admin import admin_bp
+from app.blueprints.admin.views.board import _batch_owners_display
+from app.models import Booking
 from app.utils.decorators import admin_required
 from app.utils.weekly_schedule import (
     get_week_start,
-    fetch_week_bookings,
-    fetch_week_notes,
+    fetch_week_active_bookings,
     build_week_by_day,
     build_week_by_walker,
+    build_week_grid,
+    both_walks_keys,
     format_walker_week_text,
     format_roster_week_text,
-    day_slot_parts,
-    day_walker_names,
     WEEKDAYS,
-    WEEKDAY_LABELS,
 )
 from app.utils.walker_visuals import walker_color, walker_initials
-from app.utils.pricing import is_drop_in
 
 
 @admin_bp.route("/weekly-overview")
@@ -37,8 +37,8 @@ from app.utils.pricing import is_drop_in
 @login_required
 @admin_required
 def weekly_overview(date_str=None):
-    """List every walker with a booking this week, each with a day-by-day
-    breakdown and a ready-to-copy plain-text summary of their week."""
+    """The admin Week view grid for the Mon-Fri week containing the given
+    date (default: this week)."""
     today = datetime.now(timezone.utc).date()
 
     raw_date = date_str or request.args.get('date')
@@ -54,78 +54,36 @@ def weekly_overview(date_str=None):
     week_start = get_week_start(anchor_date)
     week_end = week_start + timedelta(days=WEEKDAYS - 1)
 
-    bookings = fetch_week_bookings(week_start)
+    bookings = fetch_week_active_bookings(week_start)
+    # Copy text and walker columns come from confirmed, walker-assigned
+    # bookings only — the same set the walker-facing weekly view uses.
+    confirmed = [b for b in bookings
+                 if b.status in Booking.WALKER_STATUSES and b.walker_id]
 
-    # Top-of-page "who's working, by day" summary — same underlying grouping
-    # the walker weekly view uses, just rendered as AM/PM walker names
-    # instead of per-slot walker cards.
-    week_by_day = build_week_by_day(bookings, week_start)
-    roster_by_day = [
-        {
-            'label': WEEKDAY_LABELS[i],
-            'date': week_start + timedelta(days=i),
-            'parts': day_walker_names(week_by_day[week_start + timedelta(days=i)]),
-        }
-        for i in range(WEEKDAYS)
-    ]
-    roster_copy_text = format_roster_week_text(week_by_day, week_start)
+    team_copy_text = format_roster_week_text(build_week_by_day(confirmed, week_start), week_start)
 
-    walker_weeks = []
-    for entry in build_week_by_walker(bookings):
+    walkers = []
+    for entry in build_week_by_walker(confirmed):
         walker = entry['walker']
-        days = entry['days']
-
-        day_rows = []
-        total_dogs = 0
-        for i in range(WEEKDAYS):
-            d = week_start + timedelta(days=i)
-            day_bookings = days.get(d, [])
-            total_dogs += len(day_bookings)
-            day_rows.append({
-                'label': WEEKDAY_LABELS[i],
-                'parts': day_slot_parts(day_bookings),
-            })
-
-        walker_weeks.append({
-            'walker': walker,
+        walkers.append({
+            'id': walker.id,
+            'name': walker.user.firstname if walker.user else 'Walker',
             'color': walker_color(walker.id),
             'initials': walker_initials(walker),
-            'day_rows': day_rows,
-            'total_dogs': total_dogs,
-            'copy_text': format_walker_week_text(walker, days, week_start),
-        })
-
-    # "Walk notes this week" — read-only; each row links to that day on the
-    # dashboard, where the board's pencil edits the note.
-    notes_by_day = []
-    for b in fetch_week_notes(week_start):
-        if not notes_by_day or notes_by_day[-1]['date'] != b.date:
-            notes_by_day.append({
-                'label': WEEKDAY_LABELS[b.date.weekday()],
-                'date': b.date,
-                'link': url_for('admin.index', date=b.date.isoformat()),
-                'rows': [],
-            })
-        notes_by_day[-1]['rows'].append({
-            'dog_name': b.dog.name if b.dog else 'Unknown dog',
-            'abbrev': 'AM' if b.slot == 'Morning' else 'PM',
-            'is_drop_in': is_drop_in(b),
-            'walker_name': (b.walker.user.firstname
-                            if b.status == 'confirmed' and b.walker and b.walker.user else None),
-            'status': b.status,
-            'note': b.client_notes,
+            'total_dogs': sum(len(day) for day in entry['days'].values()),
+            'copy_text': format_walker_week_text(walker, entry['days'], week_start),
         })
 
     return render_template(
-        "admin_weekly_overview.html",
+        "admin_week_view.html",
         week_start=week_start,
         week_end=week_end,
         at_current_week=(week_start == get_week_start(today)),
-        roster_by_day=roster_by_day,
-        roster_copy_text=roster_copy_text,
-        walker_weeks=walker_weeks,
-        notes_by_day=notes_by_day,
-        notes_count=sum(len(d['rows']) for d in notes_by_day),
+        walkers=walkers,
+        days=build_week_grid(bookings, week_start, [w['id'] for w in walkers]),
+        both_walks=both_walks_keys(bookings),
+        owners=_batch_owners_display({b.dog_id for b in bookings if b.dog_id}),
+        team_copy_text=team_copy_text,
         prev_week=(week_start - timedelta(days=7)).strftime('%Y-%m-%d'),
         next_week=(week_start + timedelta(days=7)).strftime('%Y-%m-%d'),
     )

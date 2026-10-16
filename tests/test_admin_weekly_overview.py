@@ -1,11 +1,13 @@
 """
-Route tests for GET /admin/weekly-overview — the admin's manual weekly
-check-in page: a list of walkers scheduled that week, each with a Copy
-button carrying a plain-text summary of their week (data-copy-text).
+Route tests for GET /admin/weekly-overview — the admin "Week view": a grid
+with one column per walker booked that week and, per weekday, rows for AM
+drop-ins, AM walks, PM walks and PM drop-ins. Dogs are cards showing their
+walk note with a pencil to edit it; each row counts its unassigned bookings.
+Copy buttons (per walker + team) carry plain-text summaries (data-copy-text)
+built from confirmed bookings only, never including notes.
 
-Same booking-driven data source as the walker weekly view, grouped by
-walker instead of by day. DogBoxx only operates Monday-Friday, so the page
-and the copy text must never surface Saturday/Sunday.
+DogBoxx only operates Monday-Friday, so the page and the copy text must
+never surface Saturday/Sunday.
 """
 import datetime
 
@@ -13,6 +15,8 @@ from app import db
 from app.models import Booking, Walker
 from app.utils.weekly_schedule import get_week_start
 from tests.conftest import login, make_user
+
+WEEK = datetime.date(2026, 10, 19)  # a Monday — pinned, for tests that don't need "this week"
 
 
 def _confirm_booking(user, dog, walker, service_type, date, slot):
@@ -43,21 +47,25 @@ class TestWeeklyOverviewAccess:
     def test_admin_can_access(self, logged_in_admin):
         resp = logged_in_admin.get('/admin/weekly-overview')
         assert resp.status_code == 200
-        assert b'Weekly Overview' in resp.data
+        assert b'Week view' in resp.data
 
-    def test_sidebar_link_present_and_highlighted(self, logged_in_admin):
+    def test_sidebar_link_present_highlighted_and_between_dashboard_and_activity(self, logged_in_admin):
         resp = logged_in_admin.get('/admin/weekly-overview')
         html = resp.data.decode()
         assert '/admin/weekly-overview' in html
         # active class only proves the nav-link's endpoint check works
         assert 'nav-link active' in html
+        assert '<span>Week view</span>' in html
+        assert 'Weekly Overview' not in html
+        assert (html.index('<span>Dashboard</span>') < html.index('<span>Week view</span>')
+                < html.index('<span>Activity</span>'))
 
 
 class TestWeeklyOverviewContent:
 
     def test_empty_week_shows_empty_state(self, logged_in_admin):
         resp = logged_in_admin.get('/admin/weekly-overview')
-        assert b'No walkers scheduled this week.' in resp.data
+        assert b'No walks assigned this week' in resp.data
 
     def test_walker_with_bookings_appears_with_copy_text(
         self, app, logged_in_admin, dog, service_type, client_user
@@ -112,74 +120,39 @@ class TestWeeklyOverviewContent:
         assert f'/admin/weekly-overview/{next_week}' in html
 
 
-class TestRosterByDayCard:
-    """The top-of-page "Who's working, by day" card — AM/PM walker names
-    per weekday, independent of the per-walker list below it."""
+class TestTeamCopy:
+    """The "Copy team schedule" button — AM/PM walker names per weekday."""
 
-    def test_card_lists_am_and_pm_walkers_per_day(
-        self, app, logged_in_admin, dog, service_type, client_user
-    ):
+    def _two_walkers(self, prefix):
         sarah = make_user(firstname='Sarah', lastname='S', role='walker',
-                           email='sarah_roster@test.dogboxx.org')
-        sarah_w = Walker(user_id=sarah.id)
+                           email=f'sarah_{prefix}@test.dogboxx.org')
         priya = make_user(firstname='Priya', lastname='P', role='walker',
-                           email='priya_roster@test.dogboxx.org')
-        priya_w = Walker(user_id=priya.id)
+                           email=f'priya_{prefix}@test.dogboxx.org')
+        sarah_w, priya_w = Walker(user_id=sarah.id), Walker(user_id=priya.id)
         db.session.add_all([sarah_w, priya_w])
         db.session.commit()
+        return sarah_w, priya_w
 
+    def test_team_and_walker_copy_buttons(self, app, logged_in_admin, dog, service_type, client_user):
+        sarah_w, priya_w = self._two_walkers('copy')
         week_start = get_week_start(datetime.date.today())
         _confirm_booking(client_user, dog, sarah_w, service_type, week_start, 'Morning')
         _confirm_booking(client_user, dog, priya_w, service_type, week_start, 'Afternoon')
 
-        resp = logged_in_admin.get('/admin/weekly-overview')
-        html = resp.data.decode()
-
-        assert "Who's working, by day" in html
-        assert f'Mon {week_start.strftime("%-d %b")}' in html  # e.g. "Mon 27 Jul"
-        assert 'AM</strong> Sarah' in html
-        assert 'PM</strong> Priya' in html
-
-    def test_card_has_its_own_copy_button_with_team_wide_text(
-        self, app, logged_in_admin, dog, service_type, client_user
-    ):
-        sarah = make_user(firstname='Sarah', lastname='S', role='walker',
-                           email='sarah_roster_copy@test.dogboxx.org')
-        sarah_w = Walker(user_id=sarah.id)
-        priya = make_user(firstname='Priya', lastname='P', role='walker',
-                           email='priya_roster_copy@test.dogboxx.org')
-        priya_w = Walker(user_id=priya.id)
-        db.session.add_all([sarah_w, priya_w])
-        db.session.commit()
-
-        week_start = get_week_start(datetime.date.today())
-        _confirm_booking(client_user, dog, sarah_w, service_type, week_start, 'Morning')
-        _confirm_booking(client_user, dog, priya_w, service_type, week_start, 'Afternoon')
-
-        resp = logged_in_admin.get('/admin/weekly-overview')
-        html = resp.data.decode()
-
-        # 3 buttons (this card's + one per walker) + 2 fixed mentions in the
-        # shared clipboard JS (admin_layout.html's comment + CSS selector).
+        html = logged_in_admin.get('/admin/weekly-overview').data.decode()
+        # 3 buttons (team + one per walker) + 2 fixed mentions in the shared
+        # clipboard JS (admin_layout.html's comment + selector).
         assert html.count('copy-week-btn') == 5
         assert f'Team schedule — week of {week_start.strftime("%-d %b")}' in html
         assert 'Mon: AM Sarah · PM Priya' in html  # inside data-copy-text (raw, not HTML-entity)
 
-    def test_card_copy_text_is_all_dashes_for_empty_week(self, logged_in_admin):
-        resp = logged_in_admin.get('/admin/weekly-overview')
-        html = resp.data.decode()
-        # Just the by-day card's button (no walkers) + the 2 fixed JS mentions.
+    def test_team_copy_text_is_all_dashes_for_empty_week(self, logged_in_admin):
+        html = logged_in_admin.get('/admin/weekly-overview').data.decode()
+        # Just the team button (no walkers) + the 2 fixed JS mentions.
         assert html.count('copy-week-btn') == 3
         assert 'Mon: —\nTue: —\nWed: —\nThu: —\nFri: —' in html
 
-    def test_card_shows_no_walkers_scheduled_for_empty_week(self, logged_in_admin):
-        resp = logged_in_admin.get('/admin/weekly-overview')
-        html = resp.data.decode()
-        # 5 empty day rows in the by-day card + the page's own "no walkers
-        # scheduled this week" empty state below it.
-        assert html.count('No walkers scheduled') == 6
-
-    def test_card_dedupes_walker_with_walk_and_dropin_in_same_slot(
+    def test_team_copy_dedupes_walker_with_walk_and_dropin_in_same_slot(
         self, app, logged_in_admin, dog, service_type, client_user
     ):
         from app.models import Dog, DogOwner, ServiceType
@@ -187,14 +160,7 @@ class TestRosterByDayCard:
                               capacity_model='walker_assigned', slot_type='morning_afternoon',
                               requires_walker=True, default_max_capacity=6, active=True)
         db.session.add(dropin)
-        db.session.commit()
-
-        sarah = make_user(firstname='Sarah', lastname='S', role='walker',
-                           email='sarah_dedupe@test.dogboxx.org')
-        sarah_w = Walker(user_id=sarah.id)
-        db.session.add(sarah_w)
-        db.session.commit()
-
+        sarah_w, _ = self._two_walkers('dedupe')
         second_dog = Dog(name='Rex', breed='Mixed')
         db.session.add(second_dog)
         db.session.flush()
@@ -205,14 +171,21 @@ class TestRosterByDayCard:
         _confirm_booking(client_user, dog, sarah_w, service_type, week_start, 'Morning')
         _confirm_booking(client_user, second_dog, sarah_w, dropin, week_start, 'Morning')
 
-        resp = logged_in_admin.get('/admin/weekly-overview')
-        html = resp.data.decode()
-        # Sarah has two groups that day (a walk + a drop-in) but the by-day
-        # card must list her once per slot, not "Sarah, Sarah".
-        assert 'AM</strong> Sarah' in html
+        html = logged_in_admin.get('/admin/weekly-overview').data.decode()
+        assert 'Mon: AM Sarah\n' in html
         assert 'Sarah, Sarah' not in html
 
-    def test_card_reflects_prev_next_week_navigation(
+    def test_copy_text_never_includes_notes(self, app, logged_in_admin, dog, service_type, client_user):
+        sarah_w, _ = self._two_walkers('nonotes')
+        b = _confirm_booking(client_user, dog, sarah_w, service_type, WEEK, 'Morning')
+        b.client_notes = 'Gate code 4471'
+        db.session.commit()
+        html = logged_in_admin.get(f'/admin/weekly-overview/{WEEK.isoformat()}').data.decode()
+        for chunk in html.split('data-copy-text="')[1:]:
+            assert 'Gate code' not in chunk.split('"', 1)[0]
+        assert 'Gate code 4471' in html  # but it is on the dog card
+
+    def test_walker_column_reflects_prev_next_week_navigation(
         self, app, logged_in_admin, dog, service_type, client_user
     ):
         walker_u = make_user(firstname='Priya', lastname='P', role='walker',
@@ -225,22 +198,23 @@ class TestRosterByDayCard:
         next_week_start = week_start + datetime.timedelta(days=7)
         _confirm_booking(client_user, dog, walker, service_type, next_week_start, 'Morning')
 
-        # Not on the current week's card...
-        resp = logged_in_admin.get('/admin/weekly-overview')
-        assert 'Priya' not in resp.data.decode()
-
-        # ...but present once navigated to next week.
+        assert 'Priya' not in logged_in_admin.get('/admin/weekly-overview').data.decode()
         resp = logged_in_admin.get(f'/admin/weekly-overview/{next_week_start.strftime("%Y-%m-%d")}')
         assert 'Priya' in resp.data.decode()
 
 
-class TestWalkNotesCard:
-    """The "Walk notes this week" card — every active booking with a note
-    (assigned or not, any service), read-only, grouped by day."""
+class TestWeekGrid:
+    """The grid itself: walker columns, row labels, unassigned counts, dog
+    cards with notes, the pencil and the both-walks marker."""
 
-    WEEK = datetime.date(2026, 10, 19)  # a Monday — pinned, not "this week"
+    def _walker(self, first, email):
+        u = make_user(firstname=first, lastname='W', role='walker', email=email)
+        w = Walker(user_id=u.id)
+        db.session.add(w)
+        db.session.commit()
+        return w
 
-    def _booking(self, client_user, dog, service_type, date, slot, *, status='requested',
+    def _booking(self, client_user, dog, service_type, date, slot, *, status='confirmed',
                  walker=None, note=None):
         b = Booking(user_id=client_user.id, dog_id=dog.id, service_type_id=service_type.id,
                     date=date, slot=slot, status=status,
@@ -250,65 +224,58 @@ class TestWalkNotesCard:
         return b
 
     def _html(self, flask_client):
-        return flask_client.get(f'/admin/weekly-overview/{self.WEEK.isoformat()}').data.decode()
+        return flask_client.get(f'/admin/weekly-overview/{WEEK.isoformat()}').data.decode()
 
-    def test_empty_state(self, logged_in_admin):
-        html = self._html(logged_in_admin)
-        assert 'Walk notes this week' in html
-        assert 'No walk notes this week.' in html
-
-    def test_lists_active_notes_with_walker_or_unassigned(
+    def test_cards_show_note_pencil_and_unassigned_count(
         self, app, logged_in_admin, dog, service_type, client_user
     ):
-        walker_u = make_user(firstname='Priya', lastname='P', role='walker',
-                             email='priya_notes@test.dogboxx.org')
-        walker = Walker(user_id=walker_u.id)
-        db.session.add(walker)
-        db.session.commit()
-        tue = self.WEEK + datetime.timedelta(days=1)
-        wed = self.WEEK + datetime.timedelta(days=2)
-        self._booking(client_user, dog, service_type, self.WEEK, 'Morning',
-                      status='confirmed', walker=walker, note='Confirmed note')
-        self._booking(client_user, dog, service_type, tue, 'Morning', note='Requested note')
-        self._booking(client_user, dog, service_type, wed, 'Morning',
-                      status='waitlisted', note='Waitlisted note')
-        # Excluded: cancelled, no note, next week
-        self._booking(client_user, dog, service_type, wed, 'Afternoon',
-                      status='cancelled', note='Cancelled note')
-        self._booking(client_user, dog, service_type, tue, 'Afternoon')
-        self._booking(client_user, dog, service_type, self.WEEK + datetime.timedelta(days=7),
-                      'Morning', note='Next week note')
-
+        sarah = self._walker('Sarah', 'sarah_grid_page@test.dogboxx.org')
+        b = self._booking(client_user, dog, service_type, WEEK, 'Morning', walker=sarah,
+                          note='Bring the long lead')
+        self._booking(client_user, dog, service_type, WEEK, 'Afternoon', status='requested',
+                      note='Unassigned note')
         html = self._html(logged_in_admin)
-        card = html[html.index('Walk notes this week'):]
-        assert 'Confirmed note' in card and 'Priya' in card
-        assert 'Requested note' in card and 'Unassigned' in card
-        assert 'Waitlisted note' in card and '(waitlisted)' in card
-        assert 'Cancelled note' not in card
-        assert 'Next week note' not in card
-        assert card.index('Confirmed note') < card.index('Requested note') < card.index('Waitlisted note')
-        assert f'/admin/?date={tue.isoformat()}' in card
-        assert '>3</span>' in html  # count badge
 
-    def test_morning_sorts_before_afternoon(
+        assert 'Sarah' in html
+        assert 'Bring the long lead' in html
+        assert f'data-booking-id="{b.id}"' in html
+        assert 'wv-note-btn has-note' in html
+        assert 'bi-pencil-square' in html
+        # Unassigned bookings are counted (linking to the dashboard day), not carded.
+        assert '1 unassigned' in html
+        assert f'/admin/?date={WEEK.isoformat()}' in html
+        assert 'Unassigned note' not in html
+        # The shared note modal and its script are on the page.
+        assert 'id="walkNoteModal"' in html
+        assert 'walk-note-modal.js' in html
+
+    def test_both_walks_marker(self, app, logged_in_admin, dog, service_type, client_user):
+        sarah = self._walker('Sarah', 'sarah_both@test.dogboxx.org')
+        self._booking(client_user, dog, service_type, WEEK, 'Morning', walker=sarah)
+        self._booking(client_user, dog, service_type, WEEK, 'Afternoon', walker=sarah)
+        html = self._html(logged_in_admin)
+        # Two cards (grid) x two layouts (grid + phone list)
+        assert html.count('bi-layers-fill') == 4
+
+    def test_drop_in_rows_only_on_days_with_drop_ins(
         self, app, logged_in_admin, dog, service_type, client_user
     ):
-        # Inserted PM first; "Afternoon" < "Morning" as strings, so a string
-        # sort would also put PM first.
-        self._booking(client_user, dog, service_type, self.WEEK, 'Afternoon', note='PM note')
-        self._booking(client_user, dog, service_type, self.WEEK, 'Morning', note='AM note')
-        card = self._html(logged_in_admin)
-        assert card.index('AM note') < card.index('PM note')
-
-    def test_drop_in_is_labelled(self, app, logged_in_admin, dog, service_type, client_user):
-        service_type.slug = 'drop-in'
+        from app.models import ServiceType
+        dropin = ServiceType(name='Drop In', slug=ServiceType.DROP_IN,
+                              capacity_model='walker_assigned', slot_type='morning_afternoon',
+                              requires_walker=True, default_max_capacity=6, active=True)
+        db.session.add(dropin)
         db.session.commit()
-        self._booking(client_user, dog, service_type, self.WEEK, 'Morning', note='Key under mat')
         html = self._html(logged_in_admin)
-        assert 'Drop-in' in html
+        assert 'Drop-ins' not in html
+        self._booking(client_user, dog, dropin, WEEK, 'Afternoon', status='requested')
+        html = self._html(logged_in_admin)
+        # One drop-in row, rendered in both layouts.
+        assert html.count('class="wv-chip wv-chip-drop"') == 2
 
     def test_note_text_is_escaped(self, app, logged_in_admin, dog, service_type, client_user):
-        self._booking(client_user, dog, service_type, self.WEEK, 'Morning',
+        sarah = self._walker('Sarah', 'sarah_esc@test.dogboxx.org')
+        self._booking(client_user, dog, service_type, WEEK, 'Morning', walker=sarah,
                       note='<script>alert(1)</script>')
         html = self._html(logged_in_admin)
         assert '<script>alert(1)</script>' not in html
