@@ -116,7 +116,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 53 | Branching model | `develop` for work, `main` for production, PRs between them. |
 | 54 | Test suite | Postgres-backed test suite, run in CI. |
 | 56 | CI | Migrations from scratch, schema-drift check, tests and dependency audit on every push and PR. |
-| 57 | PWA | Installable app with offline shell, pull-to-refresh and per-user page cache. |
+| 57 | PWA | Installable app with offline shell, pull-to-refresh, per-user page cache, and an automatic reload when returning after an hour away. |
 | 59 | July 2026 code review | All findings resolved. |
 | 62 | Monitoring | Error tracking and uptime checks via Sentry. |
 | 63 | Backup confidence | Tested database restore and upload-backup reconciliation. |
