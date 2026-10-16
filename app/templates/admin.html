@@ -1172,6 +1172,18 @@ window._DASH = {
     }
   };
 
+  // Escape inside a modal nested in the board (decline, slot override, walk
+  // note) must close only that modal. Bootstrap listens for Escape on each
+  // modal element, and these sit inside #assign-modal-body, so the keydown
+  // would bubble on to assignModalEl and close the board too. This listener
+  // sits between the two and stops it; Escape on the board itself still
+  // closes the Assign modal.
+  document.getElementById('assign-modal-body').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && e.target.closest('.modal') !== assignModalEl) {
+      e.stopPropagation();
+    }
+  });
+
   assignModalEl.addEventListener('hidden.bs.modal', (e) => {
     // hidden.bs.modal bubbles — nested confirm modals (decline, slot
     // override) would otherwise wipe the board out from under the user.
