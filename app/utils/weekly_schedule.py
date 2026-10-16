@@ -18,7 +18,7 @@ from datetime import timedelta
 from sqlalchemy.orm import joinedload
 
 from app.models import Booking, Walker
-from app.utils.pricing import is_drop_in
+from app.utils.pricing import is_drop_in, SLOT_ORDER
 
 WEEKDAYS = 5
 WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
@@ -53,6 +53,32 @@ def fetch_week_bookings(week_start):
         .all()
     )
 
+
+
+def fetch_week_notes(week_start):
+    """Every active booking (confirmed, requested or waitlisted — any
+    service) in the Mon-Fri window that has a walk note (client_notes),
+    ordered by date then Morning/Afternoon. Unlike fetch_week_bookings this
+    includes unassigned bookings: a note matters most before assignment."""
+    week_end = week_start + timedelta(days=WEEKDAYS - 1)  # Friday
+    bookings = (
+        Booking.query
+        .options(
+            joinedload(Booking.dog),
+            joinedload(Booking.walker).joinedload(Walker.user),
+            joinedload(Booking.service_type),
+        )
+        .filter(
+            Booking.date >= week_start,
+            Booking.date <= week_end,
+            Booking.status.in_(Booking.ACTIVE_STATUSES),
+            Booking.client_notes.isnot(None),
+            Booking.client_notes != '',
+        )
+        .all()
+    )
+    return sorted(bookings, key=lambda b: (b.date, SLOT_ORDER.get(b.slot, 99),
+                                           b.dog.name if b.dog else ''))
 
 def group_bookings_by_slot(bookings):
     """Group one day's bookings into {slot: {'walker_groups': [...], 'dog_count': N}}.

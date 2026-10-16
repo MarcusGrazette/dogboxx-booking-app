@@ -232,3 +232,84 @@ class TestRosterByDayCard:
         # ...but present once navigated to next week.
         resp = logged_in_admin.get(f'/admin/weekly-overview/{next_week_start.strftime("%Y-%m-%d")}')
         assert 'Priya' in resp.data.decode()
+
+
+class TestWalkNotesCard:
+    """The "Walk notes this week" card — every active booking with a note
+    (assigned or not, any service), read-only, grouped by day."""
+
+    WEEK = datetime.date(2026, 10, 19)  # a Monday — pinned, not "this week"
+
+    def _booking(self, client_user, dog, service_type, date, slot, *, status='requested',
+                 walker=None, note=None):
+        b = Booking(user_id=client_user.id, dog_id=dog.id, service_type_id=service_type.id,
+                    date=date, slot=slot, status=status,
+                    walker_id=walker.id if walker else None, client_notes=note)
+        db.session.add(b)
+        db.session.commit()
+        return b
+
+    def _html(self, flask_client):
+        return flask_client.get(f'/admin/weekly-overview/{self.WEEK.isoformat()}').data.decode()
+
+    def test_empty_state(self, logged_in_admin):
+        html = self._html(logged_in_admin)
+        assert 'Walk notes this week' in html
+        assert 'No walk notes this week.' in html
+
+    def test_lists_active_notes_with_walker_or_unassigned(
+        self, app, logged_in_admin, dog, service_type, client_user
+    ):
+        walker_u = make_user(firstname='Priya', lastname='P', role='walker',
+                             email='priya_notes@test.dogboxx.org')
+        walker = Walker(user_id=walker_u.id)
+        db.session.add(walker)
+        db.session.commit()
+        tue = self.WEEK + datetime.timedelta(days=1)
+        wed = self.WEEK + datetime.timedelta(days=2)
+        self._booking(client_user, dog, service_type, self.WEEK, 'Morning',
+                      status='confirmed', walker=walker, note='Confirmed note')
+        self._booking(client_user, dog, service_type, tue, 'Morning', note='Requested note')
+        self._booking(client_user, dog, service_type, wed, 'Morning',
+                      status='waitlisted', note='Waitlisted note')
+        # Excluded: cancelled, no note, next week
+        self._booking(client_user, dog, service_type, wed, 'Afternoon',
+                      status='cancelled', note='Cancelled note')
+        self._booking(client_user, dog, service_type, tue, 'Afternoon')
+        self._booking(client_user, dog, service_type, self.WEEK + datetime.timedelta(days=7),
+                      'Morning', note='Next week note')
+
+        html = self._html(logged_in_admin)
+        card = html[html.index('Walk notes this week'):]
+        assert 'Confirmed note' in card and 'Priya' in card
+        assert 'Requested note' in card and 'Unassigned' in card
+        assert 'Waitlisted note' in card and '(waitlisted)' in card
+        assert 'Cancelled note' not in card
+        assert 'Next week note' not in card
+        assert card.index('Confirmed note') < card.index('Requested note') < card.index('Waitlisted note')
+        assert f'/admin/?date={tue.isoformat()}' in card
+        assert '>3</span>' in html  # count badge
+
+    def test_morning_sorts_before_afternoon(
+        self, app, logged_in_admin, dog, service_type, client_user
+    ):
+        # Inserted PM first; "Afternoon" < "Morning" as strings, so a string
+        # sort would also put PM first.
+        self._booking(client_user, dog, service_type, self.WEEK, 'Afternoon', note='PM note')
+        self._booking(client_user, dog, service_type, self.WEEK, 'Morning', note='AM note')
+        card = self._html(logged_in_admin)
+        assert card.index('AM note') < card.index('PM note')
+
+    def test_drop_in_is_labelled(self, app, logged_in_admin, dog, service_type, client_user):
+        service_type.slug = 'drop-in'
+        db.session.commit()
+        self._booking(client_user, dog, service_type, self.WEEK, 'Morning', note='Key under mat')
+        html = self._html(logged_in_admin)
+        assert 'Drop-in' in html
+
+    def test_note_text_is_escaped(self, app, logged_in_admin, dog, service_type, client_user):
+        self._booking(client_user, dog, service_type, self.WEEK, 'Morning',
+                      note='<script>alert(1)</script>')
+        html = self._html(logged_in_admin)
+        assert '<script>alert(1)</script>' not in html
+        assert '&lt;script&gt;alert(1)&lt;/script&gt;' in html

@@ -98,6 +98,18 @@
     background: var(--db-surface, #F6F6F6);
   }
 
+  /* ---- Walk notes: same amber as the walker pickup list's note box ---- */
+  .wo-note-text {
+    background: #fff8e1;
+    color: #7a5800;
+    border-left: 3px solid #ffc107;
+    border-radius: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    margin-top: 0.2rem;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+  }
+
   /* ---- Mobile ---- */
   @media (max-width: 767.98px) {
     .wo-card .card-header {
@@ -220,5 +232,43 @@
 </div>
 
 {% endif %}
+
+{# "Walk notes this week" — every active booking with a note (assigned or
+   not), read-only. Notes are edited from the board's pencil; each day links
+   to the dashboard on that date. #}
+<div class="card wo-card mt-4">
+    <div class="card-header fw-semibold d-flex align-items-center justify-content-between gap-2">
+        <span><i class="bi bi-pencil-square me-2" style="color:var(--db-primary, #E02FAC);"></i>Walk notes this week</span>
+        {% if notes_count %}<span class="badge rounded-pill text-bg-light border">{{ notes_count }}</span>{% endif %}
+    </div>
+    {% if not notes_by_day %}
+    <div class="card-body small text-muted fst-italic">No walk notes this week.</div>
+    {% else %}
+    <ul class="list-unstyled small mb-0 wo-list">
+        {% for day in notes_by_day %}
+        <li class="py-2 px-3{% if not loop.last %} border-bottom{% endif %}">
+            <div class="d-flex align-items-center justify-content-between gap-2 mb-1">
+                <span class="fw-semibold">{{ day.label }} {{ day.date.strftime('%-d %b') }}</span>
+                <a href="{{ day.link }}" class="text-primary text-decoration-none text-nowrap">Open day <i class="bi bi-arrow-right"></i></a>
+            </div>
+            {% for row in day.rows %}
+            <div class="d-flex align-items-start gap-2{% if not loop.last %} mb-2{% endif %}">
+                <strong class="wo-chip {{ 'wo-chip-am' if row.abbrev == 'AM' else 'wo-chip-pm' }} mt-1">{{ row.abbrev }}</strong>
+                <div class="flex-grow-1" style="min-width:0;">
+                    <span class="fw-semibold">{{ row.dog_name }}</span>
+                    <span class="text-muted">
+                        {%- if row.is_drop_in %} &middot; Drop-in{% endif %}
+                        &middot; {{ row.walker_name or 'Unassigned' }}
+                        {%- if row.status == 'waitlisted' %} (waitlisted){% endif %}
+                    </span>
+                    <div class="wo-note-text">{{ row.note }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</div>
 
 {% endblock %}

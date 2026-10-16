@@ -2,7 +2,7 @@
 Admin weekly overview — a manual check-in tool for the owner: a top-of-page
 card showing which walkers are on AM/PM each day, then a per-walker list
 with a day-by-day breakdown and a Copy button for pasting a plain-text
-summary into email/WhatsApp.
+summary into email/WhatsApp, then a read-only "Walk notes this week" list.
 
 Data source is identical to the walker-facing weekly overview (same
 app.utils.weekly_schedule helpers) — "scheduled to work" means actually has
@@ -18,6 +18,7 @@ from app.utils.decorators import admin_required
 from app.utils.weekly_schedule import (
     get_week_start,
     fetch_week_bookings,
+    fetch_week_notes,
     build_week_by_day,
     build_week_by_walker,
     format_walker_week_text,
@@ -28,6 +29,7 @@ from app.utils.weekly_schedule import (
     WEEKDAY_LABELS,
 )
 from app.utils.walker_visuals import walker_color, walker_initials
+from app.utils.pricing import is_drop_in
 
 
 @admin_bp.route("/weekly-overview")
@@ -93,6 +95,27 @@ def weekly_overview(date_str=None):
             'copy_text': format_walker_week_text(walker, days, week_start),
         })
 
+    # "Walk notes this week" — read-only; each row links to that day on the
+    # dashboard, where the board's pencil edits the note.
+    notes_by_day = []
+    for b in fetch_week_notes(week_start):
+        if not notes_by_day or notes_by_day[-1]['date'] != b.date:
+            notes_by_day.append({
+                'label': WEEKDAY_LABELS[b.date.weekday()],
+                'date': b.date,
+                'link': url_for('admin.index', date=b.date.isoformat()),
+                'rows': [],
+            })
+        notes_by_day[-1]['rows'].append({
+            'dog_name': b.dog.name if b.dog else 'Unknown dog',
+            'abbrev': 'AM' if b.slot == 'Morning' else 'PM',
+            'is_drop_in': is_drop_in(b),
+            'walker_name': (b.walker.user.firstname
+                            if b.status == 'confirmed' and b.walker and b.walker.user else None),
+            'status': b.status,
+            'note': b.client_notes,
+        })
+
     return render_template(
         "admin_weekly_overview.html",
         week_start=week_start,
@@ -101,6 +124,8 @@ def weekly_overview(date_str=None):
         roster_by_day=roster_by_day,
         roster_copy_text=roster_copy_text,
         walker_weeks=walker_weeks,
+        notes_by_day=notes_by_day,
+        notes_count=sum(len(d['rows']) for d in notes_by_day),
         prev_week=(week_start - timedelta(days=7)).strftime('%Y-%m-%d'),
         next_week=(week_start + timedelta(days=7)).strftime('%Y-%m-%d'),
     )
