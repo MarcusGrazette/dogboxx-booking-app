@@ -27,7 +27,6 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 93 | P2 | M | 📋 | **London date everywhere** | Every "today" check uses the London date, so pages don't show yesterday's view just after midnight in summer. |
 | 94 | P3 | M | 📋 | **Simplify 8 — one month calendar** | The drop-in board uses the dashboard's month calendar (compact, with drop-in counts) instead of its own. |
 | 95 | P3 | S | 📋 | **Simplify 9 — retire the old assignment page** | Remove the unlinked standalone walk board and its unused charts; walks are assigned from the dashboard. |
-| 98 | P2 | L | 🔧 | **Admin walk notes + Week view** | Admins see and edit a walk's note on the assignment board (shared with the client, shown to walkers); Weekly Overview becomes "Week view", a walker-by-day grid of dog cards with their notes. |
 | 24 | P3 | L | 🔲 | **Dental cleans service type** | Admin-managed time slots that clients book into. |
 | 74 | P4 | S | 🔲 | **Drop `User.notification_preference`** | Remove a column that only ever holds `'email'`. |
 | 76 | P4 | L | 🔲 | **Keyboard operability** | Make the calendar and assignment board fully keyboard-usable. |
@@ -70,6 +69,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 73 | Slot freeze | Hold new bookings for a date/slot as requests instead of auto-confirming. |
 | 79 | Double-slot discount fix | The discount only applies when the dog actually gets both walks. |
 | 84 | Phone-friendly walk assignment | Compact dashboard calendar on phones (tap a day twice to assign), a full-screen assign board with Morning/Afternoon lined up across walkers, and a simpler drop-in board. |
+| 98 | Admin walk notes + Week view | Admins see and edit a walk's note on the assignment board (shared with the client, shown to walkers); Weekly Overview becomes "Week view", a walker-by-day grid of dog cards with their notes. |
 
 ### Walker
 
