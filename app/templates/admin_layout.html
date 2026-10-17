@@ -200,6 +200,13 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a href="{{ url_for('admin.weekly_overview') }}"
+                           class="nav-link {% if request.endpoint == 'admin.weekly_overview' %}active{% endif %}">
+                            <i class="bi bi-calendar-week me-2"></i>
+                            <span>Week view</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a href="{{ url_for('admin.activity_feed') }}"
                            class="nav-link {% if request.endpoint == 'admin.activity_feed' %}active{% endif %}">
                             <i class="bi bi-activity me-2"></i>
@@ -253,13 +260,6 @@
                            class="nav-link {% if request.endpoint in ['admin.walkers', 'admin.new_walker', 'admin.edit_walker', 'admin.walker_overrides'] %}active{% endif %}">
                             <i class="bi bi-person-walking me-2"></i>
                             <span>Walkers</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="{{ url_for('admin.weekly_overview') }}"
-                           class="nav-link {% if request.endpoint == 'admin.weekly_overview' %}active{% endif %}">
-                            <i class="bi bi-calendar-week me-2"></i>
-                            <span>Weekly Overview</span>
                         </a>
                     </li>
 
@@ -404,6 +404,7 @@ document.addEventListener('hide.bs.modal', function (event) {
 </script>
 
 <script src="{{ url_for('static', filename='js/pwa-pull-to-refresh.js') }}" nonce="{{ csp_nonce }}"></script>
+<script src="{{ url_for('static', filename='js/resume-refresh.js') }}" nonce="{{ csp_nonce }}"></script>
 <script src="{{ url_for('static', filename='js/toast.js') }}" nonce="{{ csp_nonce }}"></script>
 <script src="{{ url_for('static', filename='js/confirm-modal.js') }}" nonce="{{ csp_nonce }}"></script>
 
@@ -430,7 +431,7 @@ function _setPendingBadge(id, count) {
 <script nonce="{{ csp_nonce }}">
 // Copy-to-clipboard for any admin page — event-delegated on document so a
 // new page just needs a button with class="copy-week-btn" and
-// data-copy-text="..." (see admin_weekly_overview.html) to get this for free.
+// data-copy-text="..." (see admin_week_view.html) to get this for free.
 document.addEventListener('click', function (e) {
     var btn = e.target.closest('.copy-week-btn');
     if (!btn) return;

@@ -654,6 +654,7 @@ window._DASH = {
 {% block scripts %}
 {{ super() }}
 <!-- Board JS — used by the Assign modal embedded on the dashboard -->
+<script src="{{ url_for('static', filename='js/walk-note-modal.js') }}"></script>
 <script src="{{ url_for('static', filename='js/admin-board-core.js') }}"></script>
 <!-- Override form JS — used by the Schedule Override modal -->
 <script src="{{ url_for('static', filename='js/admin-override-form.js') }}"></script>
@@ -1171,10 +1172,28 @@ window._DASH = {
     }
   };
 
+  // Escape inside a modal nested in the board (decline, slot override, walk
+  // note) must close only that modal. Bootstrap listens for Escape on each
+  // modal element, and these sit inside #assign-modal-body, so the keydown
+  // would bubble on to assignModalEl and close the board too. This listener
+  // sits between the two and stops it; Escape on the board itself still
+  // closes the Assign modal.
+  document.getElementById('assign-modal-body').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && e.target.closest('.modal') !== assignModalEl) {
+      e.stopPropagation();
+    }
+  });
+
   assignModalEl.addEventListener('hidden.bs.modal', (e) => {
     // hidden.bs.modal bubbles — nested confirm modals (decline, slot
     // override) would otherwise wipe the board out from under the user.
-    if (e.target !== assignModalEl) return;
+    if (e.target !== assignModalEl) {
+      // A nested modal closed. Bootstrap leaves focus on <body> (they're
+      // opened from code, not a data-bs-toggle button), so move it back into
+      // the Assign modal — otherwise a second Escape does nothing.
+      if (assignModalEl.classList.contains('show')) assignModalEl.focus();
+      return;
+    }
     document.getElementById('assign-modal-body').innerHTML = '';
     if (modalDirty) {
       modalDirty = false;

@@ -15,6 +15,7 @@ from app import db
 from app.capacity import get_max_per_walker, get_walker_slot_count, get_drop_in_capacity, auto_assign_walker, get_available_walkers, check_availability, acquire_booking_lock, eligible_walker_clause
 from app.utils.notifications import create_notification, walker_notify_now
 from app.utils.booking_status import transition_booking, InvalidTransitionError
+from app.utils.activity_log import record_admin_action
 
 
 def _batch_owners_display(dog_ids):
@@ -55,6 +56,7 @@ def _booking_dict(b, both_slots_dog_ids=None, owners_display_map=None):
         'pickup_order': b.pickup_order,
         'walker_id': b.walker_id,
         'has_notes': bool(b.dog and b.dog.pickup_instructions),
+        'client_notes': b.client_notes,
     }
     if both_slots_dog_ids is not None:
         d['has_both_slots'] = b.dog_id in both_slots_dog_ids
@@ -593,6 +595,47 @@ def decline_booking(booking_id):
         db.session.rollback()
         logging.exception('Error declining booking %s: %s', booking_id, e)
         return jsonify(success=False, message="Server error"), 500
+
+
+@admin_bp.route("/booking/<int:booking_id>/note", methods=["POST"])
+@login_required
+@admin_required
+def update_booking_note_admin(booking_id):
+    """Save or clear a booking's per-walk note from the assignment board.
+
+    The note is the client's own `client_notes` field, shared by design: the
+    client sees and can edit what the admin writes, and walkers see it on the
+    pickup list. Unlike the client route (client.update_booking_note) this
+    one writes an ActivityLog row, without the note text — it can hold
+    health details.
+    """
+    data = request.get_json(silent=True) or {}
+    note = (data.get('note') or '').strip() or None
+    if note and len(note) > Booking.NOTE_MAX_LENGTH:
+        return jsonify(success=False,
+                       message=f"Note must be {Booking.NOTE_MAX_LENGTH} characters or fewer"), 400
+
+    booking = db.session.get(Booking, booking_id)
+    if not booking:
+        return jsonify(success=False, message="Booking not found"), 404
+
+    old = booking.client_notes
+    if note == old:
+        return jsonify(success=True, note=note)
+
+    action, verb = (('added', 'Added') if not old
+                    else ('removed', 'Removed') if not note
+                    else ('updated', 'Edited'))
+    service_label = 'drop-in' if (booking.service_type and booking.service_type.slug == ServiceType.DROP_IN) else 'walk'
+    dog_name = booking.dog.name if booking.dog else 'Unknown dog'
+    booking.client_notes = note
+    record_admin_action(
+        'booking_note', booking.id, action, actor_id=current_user.id,
+        summary=(f"{verb} the note on {dog_name}'s {booking.slot.lower()} "
+                 f"{service_label} on {booking.date.strftime('%a %-d %b')}"),
+    )
+    db.session.commit()
+    return jsonify(success=True, note=note)
 
 
 @admin_bp.route("/calendar_data/<int:year>/<int:month>")

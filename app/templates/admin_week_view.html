@@ -1,0 +1,421 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}Admin — Week view{% endblock %}
+{% block page_title %}Week view{% endblock %}
+{% block page_subtitle %}Who's walking which dogs this week, with walk notes{% endblock %}
+
+{% block head_extra %}
+<style>
+  /* ---- Week nav pill ---- */
+  .wv-nav-pill {
+    background: #fff;
+    border: 1px solid var(--db-primary-subtle, #fce8f6);
+    border-radius: 999px;
+    padding: 0.25rem;
+    box-shadow: 0 1px 3px rgba(27, 27, 27, 0.06);
+  }
+  .wv-nav-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 50%;
+    color: var(--db-dark, #1B1B1B);
+    transition: background 0.15s, color 0.15s;
+  }
+  .wv-nav-btn:hover {
+    background: var(--db-primary-subtle, #fce8f6);
+    color: var(--db-primary, #E02FAC);
+  }
+  .wv-nav-btn:focus-visible {
+    outline: 2px solid var(--db-primary, #E02FAC);
+    outline-offset: 2px;
+  }
+  .wv-nav-range {
+    font-weight: 700;
+    padding: 0 0.75rem;
+    white-space: nowrap;
+  }
+
+  /* ---- Grid (tablet/desktop): label column + one column per walker ---- */
+  .wv-grid {
+    display: grid;
+    grid-template-columns: 9.5rem repeat(var(--wv-cols), minmax(0, 1fr));
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 1px 2px rgba(27, 27, 27, 0.05), 0 8px 24px rgba(27, 27, 27, 0.07);
+  }
+  /* Walker headers stay pinned under the fixed top bar while scrolling the week. */
+  .wv-colhead {
+    position: sticky;
+    top: var(--db-header-height, 57px);
+    z-index: 5;
+    background: #fff;
+    border-bottom: 2px solid #dee2e6;
+    padding: 0.6rem 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+  .wv-colhead:first-child {
+    border-top-left-radius: 14px;
+    color: var(--db-muted, #5E5E5E);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .wv-colhead:last-child { border-top-right-radius: 14px; }
+  .wv-colhead-name { font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wv-colhead-count { font-size: 0.75rem; color: var(--db-muted, #5E5E5E); }
+  .wv-dayband {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    background: var(--db-surface, #F6F6F6);
+    border-top: 1px solid #dee2e6;
+    border-bottom: 1px solid #dee2e6;
+    font-weight: 800;
+  }
+  .wv-rowlabel {
+    padding: 0.5rem 0.6rem;
+    border-bottom: 1px solid #eef0f2;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.3rem;
+  }
+  .wv-cell {
+    padding: 0.4rem;
+    border-bottom: 1px solid #eef0f2;
+    border-left: 1px solid #f1f3f5;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    min-width: 0;
+  }
+  .wv-cell-empty::after { content: "—"; color: #c2c7cc; text-align: center; padding-top: 0.4rem; }
+  .wv-no-walkers { color: var(--db-muted, #5E5E5E); font-style: italic; }
+
+  /* Row tint matches the row's chip: AM walks pink, PM walks indigo, drop-ins teal. */
+  .wv-r-am   { background: #fdf5fa; }
+  .wv-r-pm   { background: #f6f6fd; }
+  .wv-r-drop { background: #f2faf9; }
+
+  /* ---- Chips + unassigned count ---- */
+  .wv-chip {
+    display: inline-block;
+    padding: 0.05rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+  }
+  .wv-chip-am   { background: var(--db-primary-subtle, #fce8f6); color: var(--db-primary-dark, #C0258F); }
+  .wv-chip-pm   { background: var(--db-pm-chip-bg, rgba(99, 102, 241, 0.12)); color: var(--db-pm-chip-text, #4338ca); }
+  .wv-chip-drop { background: #e7f6f4; color: #0f766e; }
+  .wv-rowlabel-text { display: flex; align-items: center; gap: 0.35rem; font-weight: 700; font-size: 0.85rem; }
+  .wv-unassigned {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.74rem;
+    font-weight: 800;
+    background: #fff3cd;
+    color: #8a6500;
+    border-radius: 999px;
+    padding: 0.1rem 0.5rem;
+    text-decoration: none;
+  }
+  .wv-unassigned:hover { color: #6b4e00; background: #ffeaa6; }
+
+  /* ---- Walker avatar ---- */
+  .wv-avatar {
+    width: 2.1rem;
+    height: 2.1rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 800;
+    font-size: 0.78rem;
+    flex-shrink: 0;
+    /* Two palette colours (amber, lime) are too light for white text alone. */
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+  }
+  .wv-avatar-sm { width: 1.5rem; height: 1.5rem; font-size: 0.6rem; }
+
+  /* ---- Dog card (assignment-board look) ---- */
+  .wv-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.15rem 0.5rem;
+    background: #fff;
+    border: 2px solid #dee2e6;
+    border-radius: 8px;
+    padding: 0.35rem 0.35rem 0.35rem 0.5rem;
+  }
+  .wv-dog-img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+  .wv-dog-name { font-weight: 700; font-size: 0.84rem; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wv-dog-owner { font-size: 0.7rem; color: #6c757d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wv-card-icons { display: flex; align-items: center; }
+  /* Both icons plain, same size: the both-walks marker is amber, the pencil
+     pink when the walk has a note and grey when it doesn't. */
+  .wv-both, .wv-note-btn {
+    width: 2rem;
+    height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+    line-height: 1;
+  }
+  .wv-both { color: #c99a06; }
+  .wv-note-btn {
+    border: 0;
+    background: transparent;
+    border-radius: 8px;
+    color: #8a9096;
+  }
+  .wv-note-btn:hover { background: var(--db-primary-subtle, #fce8f6); color: var(--db-primary, #E02FAC); }
+  .wv-note-btn.has-note { color: var(--db-primary, #E02FAC); }
+  /* Same amber as the walker pickup list's note box */
+  .wv-note {
+    grid-column: 1 / -1;
+    background: #fff8e1;
+    color: #7a5800;
+    border-left: 3px solid #ffc107;
+    border-radius: 4px;
+    padding: 0.2rem 0.45rem;
+    font-size: 0.76rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* ---- Stacked layout (phones) ---- */
+  .wv-stack { display: none; flex-direction: column; gap: 0.9rem; }
+  .wv-sday {
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 1px 2px rgba(27, 27, 27, 0.05), 0 8px 24px rgba(27, 27, 27, 0.07);
+    overflow: hidden;
+  }
+  .wv-sday .wv-dayband { border-top: 0; }
+  .wv-srow { padding: 0.6rem 0.75rem; border-bottom: 1px solid #eef0f2; display: flex; flex-direction: column; gap: 0.5rem; }
+  .wv-srow:last-child { border-bottom: 0; }
+  .wv-srow-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+  .wv-swalker { display: flex; flex-direction: column; gap: 0.4rem; }
+  .wv-swalker-head { display: flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 0.85rem; }
+  .wv-snone { color: var(--db-muted, #5E5E5E); font-style: italic; font-size: 0.85rem; }
+
+  @media (max-width: 767.98px) {
+    .wv-grid { display: none; }
+    .wv-stack { display: flex; }
+    .wv-note-btn, .wv-both { width: 2.5rem; height: 2.5rem; font-size: 1.05rem; }  /* tap target */
+    .wv-nav-range { font-size: 0.9rem; padding: 0 0.5rem; }
+    .wv-copybtn { min-height: 44px; }
+  }
+</style>
+{% endblock %}
+
+{% macro row_label(row, day) %}
+    {%- set chip = 'wv-chip-drop' if row.is_drop_in else ('wv-chip-am' if row.slot == 'Morning' else 'wv-chip-pm') -%}
+    <span class="wv-rowlabel-text">
+        <span class="wv-chip {{ chip }}">{{ 'AM' if row.slot == 'Morning' else 'PM' }}</span>{{ row.label }}
+    </span>
+    {%- if row.unassigned %}
+    <a href="{{ url_for('admin.index', date=day.date.isoformat()) }}" class="wv-unassigned"
+       title="Assign on the dashboard">{{ row.unassigned }} unassigned <i class="bi bi-arrow-right"></i></a>
+    {%- endif %}
+{% endmacro %}
+
+{% macro row_tint(row) -%}
+    {{ 'wv-r-drop' if row.is_drop_in else ('wv-r-am' if row.slot == 'Morning' else 'wv-r-pm') }}
+{%- endmacro %}
+
+{% macro dog_card(b, day) %}
+    {%- set dog_name = b.dog.name if b.dog else 'Unknown dog' -%}
+    {%- set service = 'drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk' -%}
+    <div class="wv-card" data-booking-id="{{ b.id }}">
+        <img class="wv-dog-img" alt=""
+             src="{{ url_for('static', filename='uploads/dogs/' ~ b.dog.pic) if b.dog and b.dog.pic else url_for('static', filename='uploads/dogs/default-dog.png') }}"
+             data-fallback="{{ url_for('static', filename='uploads/dogs/default-dog.png') }}">
+        <div style="min-width:0;">
+            <div class="wv-dog-name">{{ dog_name }}</div>
+            <div class="wv-dog-owner">{{ owners.get(b.dog_id, '') }}</div>
+        </div>
+        <div class="wv-card-icons">
+            {% if (b.dog_id, b.date) in both_walks %}
+            <span class="wv-both" title="Booked for both walks today"><i class="bi bi-layers-fill" aria-hidden="true"></i><span class="visually-hidden">Booked for both walks today</span></span>
+            {% endif %}
+            <button type="button" class="wv-note-btn{{ ' has-note' if b.client_notes }}"
+                    data-booking-id="{{ b.id }}"
+                    data-note="{{ b.client_notes or '' }}"
+                    data-subtitle="{{ dog_name }} · {{ b.slot | lower }} {{ service }} · {{ day.date.strftime('%a %-d %b') }}"
+                    title="{{ 'Edit walk note' if b.client_notes else 'Add walk note' }}"
+                    aria-label="{{ 'Edit' if b.client_notes else 'Add' }} walk note for {{ dog_name }}">
+                <i class="bi bi-pencil-square" aria-hidden="true"></i>
+            </button>
+        </div>
+        <div class="wv-note"{% if not b.client_notes %} hidden{% endif %}>{{ b.client_notes or '' }}</div>
+    </div>
+{% endmacro %}
+
+{% block main %}
+
+{# Week navigation + team copy. Plain page loads — a week-level view doesn't
+   need day-level picking. #}
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+    <div class="d-flex align-items-center gap-2">
+        <div class="wv-nav-pill d-inline-flex align-items-center">
+            <a href="{{ url_for('admin.weekly_overview', date_str=prev_week) }}"
+               class="wv-nav-btn" aria-label="Previous week">
+                <i class="bi bi-chevron-left"></i>
+            </a>
+            <span class="wv-nav-range">{{ week_start.strftime('%-d %b') }} – {{ week_end.strftime('%-d %b') }}</span>
+            <a href="{{ url_for('admin.weekly_overview', date_str=next_week) }}"
+               class="wv-nav-btn" aria-label="Next week">
+                <i class="bi bi-chevron-right"></i>
+            </a>
+        </div>
+        {% if not at_current_week %}
+        <a href="{{ url_for('admin.weekly_overview') }}"
+           class="btn btn-sm btn-outline-primary d-none d-md-inline-flex align-items-center">This week</a>
+        {% endif %}
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-primary copy-week-btn wv-copybtn"
+            data-copy-text="{{ team_copy_text }}">
+        <i class="bi bi-clipboard me-1"></i>Copy team schedule
+    </button>
+</div>
+
+{# ── Grid (tablet/desktop) ─────────────────────────────────────────────── #}
+<div class="wv-grid" style="--wv-cols: {{ walkers | length or 1 }};">
+    <div class="wv-colhead">Slot</div>
+    {% for w in walkers %}
+    <div class="wv-colhead">
+        <div class="wv-avatar" style="background:{{ w.color }};" aria-hidden="true">{{ w.initials }}</div>
+        <div class="flex-grow-1" style="min-width:0;">
+            <div class="wv-colhead-name">{{ w.name }}</div>
+            <div class="wv-colhead-count">{{ w.total_dogs }} {{ 'dog' if w.total_dogs == 1 else 'dogs' }}</div>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-primary copy-week-btn flex-shrink-0"
+                data-copy-text="{{ w.copy_text }}"
+                title="Copy {{ w.name }}'s week" aria-label="Copy {{ w.name }}'s week">
+            <i class="bi bi-clipboard"></i>
+        </button>
+    </div>
+    {% else %}
+    <div class="wv-colhead wv-no-walkers">No walks assigned this week</div>
+    {% endfor %}
+
+    {% for day in days %}
+    <div class="wv-dayband">
+        <span>{{ day.label }} {{ day.date.strftime('%-d %b') }}</span>
+        <a href="{{ url_for('admin.index', date=day.date.isoformat()) }}"
+           class="text-primary text-decoration-none small fw-bold">Open day <i class="bi bi-arrow-right"></i></a>
+    </div>
+        {% for row in day.rows %}
+        <div class="wv-rowlabel {{ row_tint(row) }}">{{ row_label(row, day) }}</div>
+            {% for cell in row.cells %}
+            <div class="wv-cell {{ row_tint(row) }}{{ ' wv-cell-empty' if not cell }}">
+                {% for b in cell %}{{ dog_card(b, day) }}{% endfor %}
+            </div>
+            {% else %}
+            <div class="wv-cell {{ row_tint(row) }} wv-cell-empty"></div>
+            {% endfor %}
+        {% endfor %}
+    {% endfor %}
+</div>
+
+{# ── Stacked list (phones) — same data, one card per day ───────────────── #}
+<div class="wv-stack">
+    {% for day in days %}
+    <section class="wv-sday">
+        <div class="wv-dayband">
+            <span>{{ day.label }} {{ day.date.strftime('%-d %b') }}</span>
+            <a href="{{ url_for('admin.index', date=day.date.isoformat()) }}"
+               class="text-primary text-decoration-none small fw-bold">Open day <i class="bi bi-arrow-right"></i></a>
+        </div>
+        {% for row in day.rows %}
+        <div class="wv-srow {{ row_tint(row) }}">
+            <div class="wv-srow-head">{{ row_label(row, day) }}</div>
+            {% set ns = namespace(any=false) %}
+            {% for cell in row.cells %}{% if cell %}
+            {% set ns.any = true %}
+            {% set w = walkers[loop.index0] %}
+            <div class="wv-swalker">
+                <div class="wv-swalker-head">
+                    <div class="wv-avatar wv-avatar-sm" style="background:{{ w.color }};" aria-hidden="true">{{ w.initials }}</div>{{ w.name }}
+                </div>
+                {% for b in cell %}{{ dog_card(b, day) }}{% endfor %}
+            </div>
+            {% endif %}{% endfor %}
+            {% if not ns.any %}<div class="wv-snone">No walks assigned</div>{% endif %}
+        </div>
+        {% endfor %}
+    </section>
+    {% endfor %}
+</div>
+
+{% include 'partials/walk_note_modal.html' %}
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/walk-note-modal.js') }}"></script>
+<script nonce="{{ csp_nonce }}">
+(function () {
+    'use strict';
+
+    // Missing dog photos fall back to the default (error doesn't bubble, so capture).
+    document.addEventListener('error', function (e) {
+        const img = e.target;
+        if (img.classList && img.classList.contains('wv-dog-img') && img.dataset.fallback
+                && !img.src.endsWith(img.dataset.fallback)) {
+            img.src = img.dataset.fallback;
+        }
+    }, true);
+
+    // Each booking's card is rendered twice (grid + phone list), so a saved
+    // note updates every copy.
+    function applyNote(bookingId, note) {
+        document.querySelectorAll(`.wv-card[data-booking-id="${bookingId}"]`).forEach(function (card) {
+            const btn  = card.querySelector('.wv-note-btn');
+            const text = card.querySelector('.wv-note');
+            btn.dataset.note = note || '';
+            btn.classList.toggle('has-note', !!note);
+            btn.title = note ? 'Edit walk note' : 'Add walk note';
+            text.textContent = note || '';
+            text.hidden = !note;
+        });
+    }
+
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('.wv-note-btn');
+        if (!btn) return;
+        const bookingId = btn.dataset.bookingId;
+        WalkNoteModal.open({
+            bookingId: bookingId,
+            subtitle:  btn.dataset.subtitle,
+            note:      btn.dataset.note,
+            onSaved(note) {
+                applyNote(bookingId, note);
+                showToast(note ? 'Note saved.' : 'Note removed.', 'success');
+            },
+            onError(message) { showToast(message, 'danger'); },
+        });
+    });
+}());
+</script>
+{% endblock %}
