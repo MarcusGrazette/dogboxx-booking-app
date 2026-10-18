@@ -38,7 +38,7 @@ def test_single_confirmed_no_walker():
     title, body, _, _ = summarise('booking_confirmed', [
         {'dog_name': 'Daisy', 'slot': 'Morning', 'date': date(2026, 6, 1)},
     ])
-    assert body == "Walker assigned."
+    assert body is None
 
 
 def test_single_requested_reflexive():

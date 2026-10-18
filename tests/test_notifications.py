@@ -566,7 +566,7 @@ class TestBookingNotifications:
 
     def test_booking_request_notifies_admins(self, app, client):
         """When a client makes a booking with a walker available, it auto-confirms
-        and the client receives a booking_confirmed notification (not admin)."""
+        and admins receive a booking_confirmed notification."""
         client_email  = 'notif_cl_br@test.com'
         admin_email   = 'notif_adm_br@test.com'
         walker_email  = 'notif_wlk_br@test.com'
@@ -582,15 +582,15 @@ class TestBookingNotifications:
         }, follow_redirects=True)
 
         with app.app_context():
-            # Auto-assign fires: client gets confirmed notification, not admin request
-            client_notifs = Notification.query.filter_by(
-                recipient_id=client_id,
+            admin_notifs = Notification.query.filter_by(
+                recipient_id=admin_id,
                 notification_type='booking_confirmed',
             ).all()
-            assert len(client_notifs) >= 1, "Client should receive a booking_confirmed notification on auto-assign"
+            assert len(admin_notifs) == 1, "Admins should hear about an auto-confirmed client booking"
 
-    def test_booking_confirm_notifies_client(self, app, client):
-        """Client receives a booking_confirmed notification — via auto-assign on creation."""
+    def test_booking_confirm_sends_client_no_receipt(self, app, client):
+        """An auto-confirmed booking sends the client who made it nothing — the
+        toast already told them (booking_notify.py: the actor is never told)."""
         client_email = 'notif_cl_bc@test.com'
         admin_email  = 'notif_adm_bc@test.com'
         walker_email = 'notif_wlk_bc@test.com'
@@ -612,9 +612,4 @@ class TestBookingNotifications:
             assert booking is not None
             assert booking.walker_id is not None
 
-            # Client should have received a confirmed notification
-            client_notifs = Notification.query.filter_by(
-                recipient_id=client_id,
-                notification_type='booking_confirmed',
-            ).all()
-            assert len(client_notifs) >= 1, "Client should receive a booking_confirmed notification"
+            assert Notification.query.filter_by(recipient_id=client_id).count() == 0

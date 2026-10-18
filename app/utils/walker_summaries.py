@@ -7,8 +7,8 @@ Two runs per weekday, both London time:
 
 Walkers with no confirmed walks that day get nothing. The summary is built
 from the live confirmed bookings at send time, which is what makes it safe
-for instant walker notifications to stop beyond WALKER_NOTICE_DAYS
-(notifications.py::walker_notify_now): a change made weeks ahead is never
+for instant walker notifications to wait until the preview has gone out
+(notifications.py::walker_notify_now): a change made before then is never
 lost, it just shows up here instead.
 
 Run by `flask send-walker-summaries` from the walker-summaries Railway cron
@@ -25,13 +25,13 @@ from app import db
 from app.capacity import eligible_walker_clause
 from app.models import Booking, DailyMessage, ServiceType, User, Walker, WalkerSummarySent
 from app.utils.dates import LOCAL_TZ
-from app.utils.notifications import create_notification
+from app.utils.notifications import WALKER_PREVIEW_HOUR, create_notification
 from app.utils.pricing import SLOT_ORDER
 from app.utils.sanitize import rich_text_to_plain
 
 logger = logging.getLogger(__name__)
 
-PREVIEW_HOUR = 15   # London — previews the next working day
+PREVIEW_HOUR = WALKER_PREVIEW_HOUR   # London — previews the next working day
 MORNING_HOUR = 8    # London — today
 
 MESSAGE_MAX_CHARS = 200

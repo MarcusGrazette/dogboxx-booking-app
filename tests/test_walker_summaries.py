@@ -1,7 +1,8 @@
-"""Daily walker summaries + the 7-day instant-notification window for walkers.
+"""Daily walker summaries + the walkers' urgent window for instant notifications.
 
-- walker_notify_now(): instant walker notifications only for walks from
-  today to WALKER_NOTICE_DAYS ahead; further out is left to the summaries.
+- walker_notify_now(): instant walker notifications only once the walk's
+  15:00 preview has gone out (today; tomorrow after 15:00; Monday from
+  Friday 15:00); anything earlier is left to the summaries.
 - due_summary(): 08:00 London → today's 'morning', 15:00 → next working
   day's 'preview' (Friday → Monday), in both GMT and BST; nothing at weekends.
 - build_summary(): slot order, walks before drop-ins, pickup order, the day's
@@ -19,10 +20,8 @@ from app.models import (
     Booking, DailyMessage, Dog, DogOwner, Notification, ServiceType, Walker,
     WalkerSummarySent,
 )
-from app.utils.dates import local_today
-from app.utils.notifications import (
-    WALKER_NOTICE_DAYS, NotificationBatch, walker_notify_now,
-)
+from app.utils.dates import LOCAL_TZ, local_today
+from app.utils.notifications import NotificationBatch, walker_notify_now
 from app.utils import walker_summaries
 from app.utils.walker_summaries import (
     build_summary, due_summary, next_working_day, send_walker_summaries,
@@ -72,24 +71,44 @@ def walker(walker_user):
     return Walker.query.filter_by(user_id=walker_user.id).one()
 
 
-# ── 7-day window ────────────────────────────────────────────────────────────
+# ── Urgent window ───────────────────────────────────────────────────────────
+
+def _london(y, m, d, h, minute=0):
+    return datetime(y, m, d, h, minute, tzinfo=LOCAL_TZ)
+
 
 class TestWalkerNotifyNow:
-    def test_window_edges(self):
-        today = date(2026, 10, 12)
-        assert walker_notify_now(today, today)
-        assert walker_notify_now(today + timedelta(days=WALKER_NOTICE_DAYS), today)
-        assert not walker_notify_now(today + timedelta(days=WALKER_NOTICE_DAYS + 1), today)
-        assert not walker_notify_now(today - timedelta(days=1), today)
+    # Tue 13 Oct 2026 … Mon 19 Oct 2026
+    def test_today_always(self):
+        assert walker_notify_now(date(2026, 10, 13), _london(2026, 10, 13, 7))
+        assert walker_notify_now(date(2026, 10, 13), _london(2026, 10, 13, 23, 59))
 
-    def test_batch_add_for_walker_drops_far_future(self, app, walker_user):
+    def test_past_never(self):
+        assert not walker_notify_now(date(2026, 10, 12), _london(2026, 10, 13, 16))
+
+    def test_tomorrow_only_after_the_preview(self):
+        assert not walker_notify_now(date(2026, 10, 14), _london(2026, 10, 13, 14, 59))
+        assert walker_notify_now(date(2026, 10, 14), _london(2026, 10, 13, 15))
+
+    def test_monday_from_friday_preview_through_the_weekend(self):
+        monday = date(2026, 10, 19)
+        assert not walker_notify_now(monday, _london(2026, 10, 16, 14, 59))
+        assert walker_notify_now(monday, _london(2026, 10, 16, 15))
+        assert walker_notify_now(monday, _london(2026, 10, 17, 10))   # Saturday
+
+    def test_later_days_wait_for_their_own_preview(self):
+        # Saturday: Tuesday's preview is Monday 15:00
+        assert not walker_notify_now(date(2026, 10, 20), _london(2026, 10, 17, 10))
+        assert not walker_notify_now(date(2026, 10, 16), _london(2026, 10, 13, 16))
+
+    def test_batch_add_for_walker_drops_walks_before_their_preview(self, app, walker_user):
         today = local_today()
         batch = NotificationBatch(actor_id=None)
         batch.add_for_walker(walker_user.id, 'walker_assigned', dog_name='Rex',
                              slot='Morning', date=today + timedelta(days=30))
         assert batch.flush() == []
         batch.add_for_walker(walker_user.id, 'walker_assigned', dog_name='Rex',
-                             slot='Morning', date=today + timedelta(days=2))
+                             slot='Morning', date=today)
         assert len(batch.flush()) == 1
 
 
@@ -110,10 +129,9 @@ class TestCancelRespectsWindow:
         login(client, client_user.email)
         assert self._cancel_titles(client, b, walker_user) == []
 
-    def test_near_future_cancel_sent_to_walker(
+    def test_same_day_cancel_sent_to_walker(
             self, app, client, client_user, dog, service_type, walker_user, walker):
-        b = _booking(client_user, dog, service_type, walker,
-                     day=local_today() + timedelta(days=3))
+        b = _booking(client_user, dog, service_type, walker, day=local_today())
         login(client, client_user.email)
         assert len(self._cancel_titles(client, b, walker_user)) == 1
 
