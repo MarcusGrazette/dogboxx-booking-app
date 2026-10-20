@@ -232,6 +232,8 @@ def upload_profile_photo():
     if 'file' not in request.files:
         return jsonify(success=False, error="No file provided"), 400
 
+    filename = None
+    committed = False
     try:
         filename = process_cropped_photo(request.files['file'], subfolder='profiles')
         if not filename:
@@ -240,6 +242,7 @@ def upload_profile_photo():
         old_filename = current_user.profile_pic
         current_user.profile_pic = filename
         db.session.commit()
+        committed = True
         delete_replaced_photo(old_filename, 'profiles')
 
         url = url_for('static', filename=f'uploads/profiles/{filename}')
@@ -250,6 +253,8 @@ def upload_profile_photo():
         return jsonify(success=False, error=str(e)), 400
     except Exception as e:
         db.session.rollback()
+        if not committed:
+            delete_replaced_photo(filename, 'profiles')  # the unsaved new file
         logging.exception(f"Error saving walker profile photo for {current_user.email}: {e}")
         return jsonify(success=False, error="Server error saving photo"), 500
 

@@ -346,6 +346,8 @@ def upload_dog_photo():
     if 'file' not in request.files:
         return jsonify(success=False, error="No file provided"), 400
 
+    filename = None
+    committed = False
     try:
         filename = process_cropped_photo(request.files['file'])
         if not filename:
@@ -354,6 +356,7 @@ def upload_dog_photo():
         old_filename = dog.pic
         dog.pic = filename
         db.session.commit()
+        committed = True
         delete_replaced_photo(old_filename, 'dogs')
 
         url = url_for('static', filename=f'uploads/dogs/{filename}')
@@ -364,6 +367,8 @@ def upload_dog_photo():
         return jsonify(success=False, error=str(e)), 400
     except Exception as e:
         db.session.rollback()
+        if not committed:
+            delete_replaced_photo(filename, 'dogs')  # the unsaved new file
         logging.exception(f"Error saving cropped dog photo for {current_user.email}: {e}")
         return jsonify(success=False, error="Server error saving photo"), 500
 
@@ -378,6 +383,8 @@ def upload_profile_photo():
     if 'file' not in request.files:
         return jsonify(success=False, error="No file provided"), 400
 
+    filename = None
+    committed = False
     try:
         filename = process_cropped_photo(request.files['file'], subfolder='profiles')
         if not filename:
@@ -386,6 +393,7 @@ def upload_profile_photo():
         old_filename = current_user.profile_pic
         current_user.profile_pic = filename
         db.session.commit()
+        committed = True
         delete_replaced_photo(old_filename, 'profiles')
 
         url = url_for('static', filename=f'uploads/profiles/{filename}')
@@ -396,6 +404,8 @@ def upload_profile_photo():
         return jsonify(success=False, error=str(e)), 400
     except Exception as e:
         db.session.rollback()
+        if not committed:
+            delete_replaced_photo(filename, 'profiles')  # the unsaved new file
         logging.exception(f"Error saving profile photo for {current_user.email}: {e}")
         return jsonify(success=False, error="Server error saving photo"), 500
 
@@ -418,6 +428,8 @@ def upload_pickup_photo(dog_id):
     if 'file' not in request.files:
         return jsonify(success=False, error="No file provided"), 400
 
+    filename = None
+    committed = False
     try:
         filename = process_dog_photo(request.files['file'], subfolder='pickup_notes')
         if not filename:
@@ -431,6 +443,7 @@ def upload_pickup_photo(dog_id):
             changes={'pickup_notes_photo': [old_filename, filename]},
         )
         db.session.commit()
+        committed = True
         delete_replaced_photo(old_filename, 'pickup_notes')
 
         url = url_for('media.pickup_photo', filename=filename)
@@ -441,6 +454,8 @@ def upload_pickup_photo(dog_id):
         return jsonify(success=False, error=str(e)), 400
     except Exception as e:
         db.session.rollback()
+        if not committed:
+            delete_replaced_photo(filename, 'pickup_notes')  # the unsaved new file
         logging.exception(f"Error saving pickup notes photo for dog {dog_id}: {e}")
         return jsonify(success=False, error="Server error saving photo"), 500
 

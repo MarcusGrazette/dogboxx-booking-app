@@ -67,6 +67,8 @@ def onboard():
     form = OnboardingForm()
 
     if form.validate_on_submit():
+        pic_filename = None
+        committed = False
         try:
             # Handle file upload FIRST, before touching the Client record.
             # Both error branches below return a rendered template without
@@ -78,7 +80,6 @@ def onboard():
             # keyed on an error status would have caught it either.
             # process_dog_photo() only writes a file and returns a name; it
             # touches no DB state, so hoisting it is behaviour-preserving.
-            pic_filename = None
             if 'file' in request.files:
                 try:
                     pic_filename = process_dog_photo(request.files['file'])
@@ -140,6 +141,7 @@ def onboard():
                 db.session.add(DogOwner(dog_id=new_dog.id, user_id=current_user.id, role='primary'))
 
             db.session.commit()
+            committed = True
             delete_replaced_photo(replaced_pic, 'dogs')
 
             flash(f"Welcome to our platform, {current_user.firstname}! Your profile is now complete.", "success")
@@ -147,6 +149,8 @@ def onboard():
 
         except Exception as e:
             db.session.rollback()
+            if not committed:
+                delete_replaced_photo(pic_filename, 'dogs')  # the unsaved new file
             logging.exception(f"Error during onboarding for user {current_user.email}: {e}")
             logging.debug(f"Exception details: {traceback.format_exc()}")
 

@@ -97,6 +97,33 @@ class TestDeleteReplacedPhoto:
         assert os.path.exists(victim)
         assert spawned == []
 
+    @pytest.mark.parametrize('filename', ['bad\x00name.jpg', '\x00'])
+    def test_malformed_name_never_raises(self, app, spawned, filename):
+        """realpath()/remove() raise ValueError (not OSError) on an embedded
+        NUL; that must not escape — every caller would turn an already
+        committed upload into a 500."""
+        with app.app_context():
+            uploads_mod.delete_replaced_photo(filename, 'dogs')  # must not raise
+        assert spawned == []
+
+
+class TestBackupToR2:
+
+    def test_uploads_the_file_when_configured(self, monkeypatch):
+        """Pins _backup_to_r2 after the _r2_client() extraction."""
+        uploaded = []
+        fake_client = types.SimpleNamespace(
+            upload_file=lambda *args: uploaded.append(args))
+        monkeypatch.setattr(uploads_mod, '_r2_client',
+                            lambda: (fake_client, 'bucket'))
+        uploads_mod._backup_to_r2('/vol/dogs/new.jpg', 'dogs/new.jpg')
+        assert uploaded == [('/vol/dogs/new.jpg', 'bucket', 'dogs/new.jpg')]
+
+    def test_unconfigured_is_a_no_op(self, monkeypatch):
+        for var in ('R2_ENDPOINT_URL', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'):
+            monkeypatch.delenv(var, raising=False)
+        uploads_mod._backup_to_r2('/vol/dogs/new.jpg', 'dogs/new.jpg')  # must not raise
+
 
 class TestDeleteFromR2:
 
@@ -239,23 +266,66 @@ class TestRoutesDeleteThePreviousPhoto:
         assert _r2_deletes(spawned) == []
 
 
-class TestFailedSaveKeepsThePreviousPhoto:
+def _fail(*args, **kwargs):
+    raise RuntimeError('simulated failure')
 
-    def test_old_photo_survives_a_failed_commit(self, app, logged_in_client, dog,
-                                                spawned, monkeypatch):
-        """The cleanup runs only after the commit: if the save fails, the
-        column still points at the old file, so it must still be on disk."""
+
+class TestFailedSave:
+
+    def test_keeps_old_photo_and_discards_the_unsaved_new_one(
+            self, app, logged_in_client, dog, spawned, monkeypatch):
+        """If the commit fails the column still points at the old file, so it
+        must stay; the new file was written before the commit and is now
+        referenced by nothing, so it (and its R2 copy) goes."""
         old = _place_file(app, 'pickup_notes', 'keep-me.png')
         db.session.get(Dog, dog.id).pickup_notes_photo = 'keep-me.png'
         db.session.commit()
+        before = set(os.listdir(_folder(app, 'pickup_notes')))
 
-        def fail(*args, **kwargs):
-            raise RuntimeError('simulated failure before commit')
-        monkeypatch.setattr('app.blueprints.client.views.profile.record_admin_action', fail)
-
+        monkeypatch.setattr('app.blueprints.client.views.profile.record_admin_action', _fail)
         resp = _post_file(logged_in_client, f'/profile/dog/{dog.id}/pickup-photo')
         assert resp.status_code == 500
 
         assert os.path.exists(old)
-        assert _r2_deletes(spawned) == []
         assert db.session.get(Dog, dog.id).pickup_notes_photo == 'keep-me.png'
+        assert set(os.listdir(_folder(app, 'pickup_notes'))) == before, \
+            'the unsaved new file was left on disk'
+        discarded = _r2_deletes(spawned)
+        assert len(discarded) == 1 and discarded[0] != 'pickup_notes/keep-me.png'
+
+    def test_error_after_the_commit_keeps_the_new_photo(
+            self, app, logged_in_client, dog, spawned, monkeypatch):
+        """An exception after a successful commit (here url_for) must not
+        discard the photo the row now points at — the `committed` guard."""
+        monkeypatch.setattr('app.blueprints.client.views.profile.url_for', _fail)
+        resp = _post_file(logged_in_client, f'/profile/dog/{dog.id}/pickup-photo')
+        assert resp.status_code == 500
+
+        new = db.session.get(Dog, dog.id).pickup_notes_photo
+        assert new is not None
+        assert os.path.exists(os.path.join(_folder(app, 'pickup_notes'), new))
+        assert f'pickup_notes/{new}' not in _r2_deletes(spawned)
+
+    def test_onboarding_discards_the_unsaved_new_photo(self, app, client, spawned,
+                                                       monkeypatch):
+        with app.app_context():
+            user = make_user(email='onboard-fail@test.dogboxx.org')
+            db.session.add(Client(user_id=user.id, onboarding_completed=False))
+            db.session.commit()
+            email = user.email
+        login(client, email)
+        before = set(os.listdir(_folder(app, 'dogs')))
+
+        monkeypatch.setattr(
+            'app.blueprints.client.views.onboarding.clean_rich_text_or_none', _fail)
+        client.post('/onboard', data={
+            'address_line_1': '1 Test Street',
+            'postcode': 'SW1A 1AA',
+            'dog_name': 'Rex',
+            'dog_gender': 'male',
+            'file': (_png(), 'rex.png'),
+        }, content_type='multipart/form-data')
+
+        assert set(os.listdir(_folder(app, 'dogs'))) == before, \
+            'the unsaved new file was left on disk'
+        assert len(_r2_deletes(spawned)) == 1

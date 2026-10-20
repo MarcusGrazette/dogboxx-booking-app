@@ -25,6 +25,13 @@ CROPPED_SIZE = (400, 400)  # square output for cropper uploads
 Image.MAX_IMAGE_PIXELS = 50_000_000
 
 
+def subfolder_dir(subfolder):
+    """On-disk folder for an upload subfolder ('dogs', 'profiles',
+    'pickup_notes'). UPLOAD_FOLDER is always <uploads>/dogs, so every
+    subfolder is a sibling of it."""
+    return os.path.join(os.path.dirname(current_app.config["UPLOAD_FOLDER"]), subfolder)
+
+
 def _r2_client():
     """Return (client, bucket) for the R2 uploads backup, or None when R2
     isn't configured (local dev / CI)."""
@@ -93,7 +100,10 @@ def delete_replaced_photo(filename, subfolder):
     failed cleanup must not turn the upload into an error.
 
     Call only AFTER the commit that stops referencing `filename`: deleting
-    first would lose the photo if that commit then failed. The R2 copy has to
+    first would lose the photo if that commit then failed. The upload routes
+    also call it the other way round — on the NEW file when their commit
+    fails (guarded by a `committed` flag, since an exception after a
+    successful commit must not delete the photo just saved). The R2 copy has to
     go too, not just the local file — scripts/start.sh's disaster-recovery
     restore copies every R2 object back onto an empty volume.
 
@@ -109,24 +119,28 @@ def delete_replaced_photo(filename, subfolder):
     if filename.startswith('default-'):
         return
 
-    base_dir = os.path.dirname(current_app.config["UPLOAD_FOLDER"])
-    target_dir = os.path.realpath(os.path.join(base_dir, subfolder))
-    path = os.path.realpath(os.path.join(target_dir, filename))
-    # A stored filename is always a bare UUID name we generated — anything
-    # resolving outside its folder (`../`, an absolute path) is refused.
-    if os.path.dirname(path) != target_dir:
-        logging.warning(f"Refused to delete photo outside {subfolder}/: {filename!r}")
-        return
-
+    # One broad except, not a list of expected errors: a malformed stored
+    # name (e.g. an embedded NUL) makes realpath()/remove() raise ValueError,
+    # not OSError, and every caller sits inside a try whose handler rolls
+    # back and returns 500 — on a photo that has already been committed.
     try:
-        os.remove(path)
-        logging.info(f"Deleted replaced photo ({subfolder}): {filename}")
-    except FileNotFoundError:
-        pass  # already gone — still clear the R2 copy below
-    except OSError as e:
-        logging.warning(f"Could not delete replaced photo {subfolder}/{filename}: {e}")
+        target_dir = os.path.realpath(subfolder_dir(subfolder))
+        path = os.path.realpath(os.path.join(target_dir, filename))
+        # A stored filename is always a bare UUID name we generated — anything
+        # resolving outside its folder (`../`, an absolute path) is refused.
+        if os.path.dirname(path) != target_dir:
+            logging.warning(f"Refused to delete photo outside {subfolder}/: {filename!r}")
+            return
 
-    gevent.spawn(_delete_from_r2, f"{subfolder}/{filename}")
+        try:
+            os.remove(path)
+            logging.info(f"Deleted photo ({subfolder}): {filename}")
+        except FileNotFoundError:
+            pass  # already gone — still clear the R2 copy below
+
+        gevent.spawn(_delete_from_r2, f"{subfolder}/{filename}")
+    except Exception as e:
+        logging.warning(f"Could not delete photo {subfolder}/{filename!r}: {e}")
 
 
 def process_dog_photo(file_storage, subfolder=None):
@@ -172,13 +186,9 @@ def process_dog_photo(file_storage, subfolder=None):
 
     # 4. Save with a UUID filename
     unique_filename = f"{uuid.uuid4()}{file_extension}"
-    if subfolder:
-        base_dir = os.path.dirname(current_app.config["UPLOAD_FOLDER"])
-        target_dir = os.path.join(base_dir, subfolder)
-        os.makedirs(target_dir, exist_ok=True)
-    else:
-        subfolder = "dogs"
-        target_dir = current_app.config["UPLOAD_FOLDER"]
+    subfolder = subfolder or "dogs"
+    target_dir = subfolder_dir(subfolder)
+    os.makedirs(target_dir, exist_ok=True)
     upload_path = os.path.join(target_dir, unique_filename)
 
     format_map = {
@@ -240,9 +250,7 @@ def process_cropped_photo(file_storage, subfolder='dogs'):
     # Resize to square output size
     img = img.resize(CROPPED_SIZE, Image.LANCZOS)
 
-    # Resolve the target directory from UPLOAD_FOLDER base + subfolder
-    base_dir = os.path.dirname(current_app.config["UPLOAD_FOLDER"])
-    target_dir = os.path.join(base_dir, subfolder)
+    target_dir = subfolder_dir(subfolder)
     os.makedirs(target_dir, exist_ok=True)
 
     unique_filename = f"{uuid.uuid4()}.jpg"

@@ -5,20 +5,19 @@ uploads/pickup_notes/ (the Railway volume, R2 backup and reconcile-uploads all
 assume that layout), but the public /static URL for that folder is blocked in
 app/__init__.py::block_private_uploads and they are served only from here.
 """
-import os
-
-from flask import abort, current_app, send_from_directory
+from flask import abort, send_from_directory
 from flask_login import current_user, login_required
 
 from . import media_bp
 from app.models import Dog
 from app.utils.booking_access import user_can_view_pickup_details
+from app.utils.uploads import subfolder_dir
 
 
 def pickup_notes_dir():
     """On-disk folder for pickup-notes photos — same path process_dog_photo
-    writes to (UPLOAD_FOLDER's parent + 'pickup_notes')."""
-    return os.path.join(os.path.dirname(current_app.config['UPLOAD_FOLDER']), 'pickup_notes')
+    writes to."""
+    return subfolder_dir('pickup_notes')
 
 
 @media_bp.route('/pickup-notes/<filename>')

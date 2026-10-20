@@ -164,6 +164,8 @@ def upload_dog_pickup_photo(dog_id):
     if 'file' not in request.files:
         return jsonify(success=False, message="No file provided"), 400
 
+    filename = None
+    committed = False
     try:
         filename = process_dog_photo(request.files['file'], subfolder='pickup_notes')
         if not filename:
@@ -177,6 +179,7 @@ def upload_dog_pickup_photo(dog_id):
             changes={'pickup_notes_photo': [old_filename, filename]},
         )
         db.session.commit()
+        committed = True
         delete_replaced_photo(old_filename, 'pickup_notes')
 
         url = url_for('media.pickup_photo', filename=filename)
@@ -187,6 +190,8 @@ def upload_dog_pickup_photo(dog_id):
         return jsonify(success=False, message=str(e)), 400
     except Exception as e:
         db.session.rollback()
+        if not committed:
+            delete_replaced_photo(filename, 'pickup_notes')  # the unsaved new file
         logging.exception(f"Error saving pickup notes photo for dog {dog.id}: {e}")
         return jsonify(success=False, message="Server error saving photo"), 500
 
