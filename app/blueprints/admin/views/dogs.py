@@ -18,7 +18,7 @@ from app.capacity import MAX_RECURRING_SERIES, check_availability
 from app.utils.invoicing import is_late_cancellation, group_by_bill_cancellation
 from app.utils.dates import local_today
 from app.utils.sanitize import clean_rich_text_or_none
-from app.utils.uploads import process_dog_photo
+from app.utils.uploads import process_dog_photo, delete_replaced_photo
 from app.utils.activity_log import record_admin_action, diff_fields
 
 # Mirrors clients.py's DOG_AUDIT_FIELDS — see app/utils/activity_log.py for
@@ -177,6 +177,7 @@ def upload_dog_pickup_photo(dog_id):
             changes={'pickup_notes_photo': [old_filename, filename]},
         )
         db.session.commit()
+        delete_replaced_photo(old_filename, 'pickup_notes')
 
         url = url_for('media.pickup_photo', filename=filename)
         logging.info(f"Pickup notes photo updated for dog {dog.id} by admin {current_user.email}: {filename}")

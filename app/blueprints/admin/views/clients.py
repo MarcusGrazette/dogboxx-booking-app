@@ -11,7 +11,7 @@ from app.utils.decorators import admin_required
 from app.models import User, Dog, Client, DogOwner, Notification, PushSubscription
 from app import db
 from app.forms import ClientCreateForm
-from app.utils.uploads import process_dog_photo
+from app.utils.uploads import process_dog_photo, delete_replaced_photo
 from app.utils.sanitize import clean_rich_text_or_none
 from app.utils.activity_log import record_admin_action, diff_fields
 from app.utils.availability_reset import reset_future_bookings_for_walker
@@ -903,6 +903,7 @@ def upload_client_pickup_photo(client_id):
             changes={'pickup_notes_photo': [old_filename, filename]},
         )
         db.session.commit()
+        delete_replaced_photo(old_filename, 'pickup_notes')
 
         url = url_for('media.pickup_photo', filename=filename)
         logging.info(f"Pickup notes photo updated for dog {dog.id} by admin {current_user.email}: {filename}")

@@ -8,7 +8,7 @@ from flask_login import login_required, current_user
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from app.models import Client, Dog, DogOwner
 from app import db
-from app.utils.uploads import process_dog_photo
+from app.utils.uploads import process_dog_photo, delete_replaced_photo
 from app.utils.sanitize import clean_rich_text_or_none
 from app.forms import OnboardingForm
 import logging
@@ -114,6 +114,7 @@ def onboard():
             dog_allergies = form.dog_allergies.data.strip() if form.dog_allergies.data else ""
 
             pickup_notes = clean_rich_text_or_none(form.pickup_instructions.data)
+            replaced_pic = None
             if existing_dog:
                 existing_dog.name = dog_name
                 existing_dog.gender = dog_gender
@@ -122,6 +123,7 @@ def onboard():
                 existing_dog.date_of_birth = dog_dob
                 existing_dog.pickup_instructions = pickup_notes
                 if pic_filename:
+                    replaced_pic = existing_dog.pic
                     existing_dog.pic = pic_filename
             else:
                 new_dog = Dog(
@@ -138,6 +140,7 @@ def onboard():
                 db.session.add(DogOwner(dog_id=new_dog.id, user_id=current_user.id, role='primary'))
 
             db.session.commit()
+            delete_replaced_photo(replaced_pic, 'dogs')
 
             flash(f"Welcome to our platform, {current_user.firstname}! Your profile is now complete.", "success")
             return redirect(url_for('client.index'))

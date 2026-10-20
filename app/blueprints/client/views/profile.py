@@ -7,7 +7,7 @@ from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user
 from app.models import User, Client, Dog, Booking, DogOwner
 from app import db
-from app.utils.uploads import process_dog_photo, process_cropped_photo
+from app.utils.uploads import process_dog_photo, process_cropped_photo, delete_replaced_photo
 from app.utils.booking_access import get_accessible_dog_ids
 from app.utils.sanitize import clean_rich_text_or_none
 from app.forms import ProfileForm
@@ -351,8 +351,10 @@ def upload_dog_photo():
         if not filename:
             return jsonify(success=False, error="Empty file"), 400
 
+        old_filename = dog.pic
         dog.pic = filename
         db.session.commit()
+        delete_replaced_photo(old_filename, 'dogs')
 
         url = url_for('static', filename=f'uploads/dogs/{filename}')
         logging.info(f"Dog photo updated for client {current_user.email}: {filename}")
@@ -381,8 +383,10 @@ def upload_profile_photo():
         if not filename:
             return jsonify(success=False, error="Empty file"), 400
 
+        old_filename = current_user.profile_pic
         current_user.profile_pic = filename
         db.session.commit()
+        delete_replaced_photo(old_filename, 'profiles')
 
         url = url_for('static', filename=f'uploads/profiles/{filename}')
         logging.info(f"Profile photo updated for user {current_user.email}: {filename}")
@@ -427,6 +431,7 @@ def upload_pickup_photo(dog_id):
             changes={'pickup_notes_photo': [old_filename, filename]},
         )
         db.session.commit()
+        delete_replaced_photo(old_filename, 'pickup_notes')
 
         url = url_for('media.pickup_photo', filename=filename)
         logging.info(f"Pickup notes photo updated for dog {dog.id} by {current_user.email}: {filename}")
