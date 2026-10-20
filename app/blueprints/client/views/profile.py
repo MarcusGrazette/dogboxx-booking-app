@@ -7,7 +7,7 @@ from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user
 from app.models import User, Client, Dog, Booking, DogOwner
 from app import db
-from app.utils.uploads import process_dog_photo, process_cropped_photo
+from app.utils.uploads import process_dog_photo, process_cropped_photo, delete_replaced_photo
 from app.utils.booking_access import get_accessible_dog_ids
 from app.utils.sanitize import clean_rich_text_or_none
 from app.forms import ProfileForm
@@ -346,13 +346,18 @@ def upload_dog_photo():
     if 'file' not in request.files:
         return jsonify(success=False, error="No file provided"), 400
 
+    filename = None
+    committed = False
     try:
         filename = process_cropped_photo(request.files['file'])
         if not filename:
             return jsonify(success=False, error="Empty file"), 400
 
+        old_filename = dog.pic
         dog.pic = filename
         db.session.commit()
+        committed = True
+        delete_replaced_photo(old_filename, 'dogs')
 
         url = url_for('static', filename=f'uploads/dogs/{filename}')
         logging.info(f"Dog photo updated for client {current_user.email}: {filename}")
@@ -362,6 +367,8 @@ def upload_dog_photo():
         return jsonify(success=False, error=str(e)), 400
     except Exception as e:
         db.session.rollback()
+        if not committed:
+            delete_replaced_photo(filename, 'dogs')  # the unsaved new file
         logging.exception(f"Error saving cropped dog photo for {current_user.email}: {e}")
         return jsonify(success=False, error="Server error saving photo"), 500
 
@@ -376,13 +383,18 @@ def upload_profile_photo():
     if 'file' not in request.files:
         return jsonify(success=False, error="No file provided"), 400
 
+    filename = None
+    committed = False
     try:
         filename = process_cropped_photo(request.files['file'], subfolder='profiles')
         if not filename:
             return jsonify(success=False, error="Empty file"), 400
 
+        old_filename = current_user.profile_pic
         current_user.profile_pic = filename
         db.session.commit()
+        committed = True
+        delete_replaced_photo(old_filename, 'profiles')
 
         url = url_for('static', filename=f'uploads/profiles/{filename}')
         logging.info(f"Profile photo updated for user {current_user.email}: {filename}")
@@ -392,6 +404,8 @@ def upload_profile_photo():
         return jsonify(success=False, error=str(e)), 400
     except Exception as e:
         db.session.rollback()
+        if not committed:
+            delete_replaced_photo(filename, 'profiles')  # the unsaved new file
         logging.exception(f"Error saving profile photo for {current_user.email}: {e}")
         return jsonify(success=False, error="Server error saving photo"), 500
 
@@ -414,6 +428,8 @@ def upload_pickup_photo(dog_id):
     if 'file' not in request.files:
         return jsonify(success=False, error="No file provided"), 400
 
+    filename = None
+    committed = False
     try:
         filename = process_dog_photo(request.files['file'], subfolder='pickup_notes')
         if not filename:
@@ -427,6 +443,8 @@ def upload_pickup_photo(dog_id):
             changes={'pickup_notes_photo': [old_filename, filename]},
         )
         db.session.commit()
+        committed = True
+        delete_replaced_photo(old_filename, 'pickup_notes')
 
         url = url_for('media.pickup_photo', filename=filename)
         logging.info(f"Pickup notes photo updated for dog {dog.id} by {current_user.email}: {filename}")
@@ -436,6 +454,8 @@ def upload_pickup_photo(dog_id):
         return jsonify(success=False, error=str(e)), 400
     except Exception as e:
         db.session.rollback()
+        if not committed:
+            delete_replaced_photo(filename, 'pickup_notes')  # the unsaved new file
         logging.exception(f"Error saving pickup notes photo for dog {dog_id}: {e}")
         return jsonify(success=False, error="Server error saving photo"), 500
 

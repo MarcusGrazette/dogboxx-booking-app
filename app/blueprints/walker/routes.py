@@ -226,19 +226,24 @@ def api_schedule_changes():
 @walker_required
 def upload_profile_photo():
     """AJAX endpoint: accept a cropped image blob and save as the walker's profile photo."""
-    from app.utils.uploads import process_cropped_photo
+    from app.utils.uploads import process_cropped_photo, delete_replaced_photo
     import logging
 
     if 'file' not in request.files:
         return jsonify(success=False, error="No file provided"), 400
 
+    filename = None
+    committed = False
     try:
         filename = process_cropped_photo(request.files['file'], subfolder='profiles')
         if not filename:
             return jsonify(success=False, error="Empty file"), 400
 
+        old_filename = current_user.profile_pic
         current_user.profile_pic = filename
         db.session.commit()
+        committed = True
+        delete_replaced_photo(old_filename, 'profiles')
 
         url = url_for('static', filename=f'uploads/profiles/{filename}')
         logging.info(f"Profile photo updated for walker {current_user.email}: {filename}")
@@ -248,6 +253,8 @@ def upload_profile_photo():
         return jsonify(success=False, error=str(e)), 400
     except Exception as e:
         db.session.rollback()
+        if not committed:
+            delete_replaced_photo(filename, 'profiles')  # the unsaved new file
         logging.exception(f"Error saving walker profile photo for {current_user.email}: {e}")
         return jsonify(success=False, error="Server error saving photo"), 500
 
