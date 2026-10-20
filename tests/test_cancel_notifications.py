@@ -5,13 +5,14 @@
 - Titles say "drop-in" for a drop-in, for every recipient.
 - The client is named by first name, like every other bell title.
 """
-from datetime import date
+from datetime import date, datetime
 from unittest.mock import patch
 
 import pytest
 
 from app import db as _db
 from app.models import Booking, DogOwner, Notification, ServiceType, Walker
+from app.utils.dates import LOCAL_TZ
 from tests.conftest import login, make_user
 
 
@@ -56,11 +57,12 @@ def _cancel(client, booking):
 
 @pytest.fixture(autouse=True)
 def _walk_inside_walker_window():
-    """Walkers only hear instantly about walks within WALKER_NOTICE_DAYS of
-    today (notifications.walker_notify_now). Pin that "today" to the day
-    before the fixed 2099 booking so the walker copies are still sent and
-    the titles here can stay literal."""
-    with patch('app.utils.notifications.local_today', return_value=date(2099, 6, 1)):
+    """Walkers only hear instantly about a walk once its 15:00 preview has gone
+    out (notifications.walker_notify_now). Pin "now" to the evening before the
+    fixed 2099 booking so the walker copies are still sent and the titles here
+    can stay literal."""
+    with patch('app.utils.notifications._london_now',
+               return_value=datetime(2099, 6, 1, 18, tzinfo=LOCAL_TZ)):
         yield
 
 

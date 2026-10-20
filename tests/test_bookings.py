@@ -867,18 +867,22 @@ class TestAdminCalendarPendingDates:
 # ---------------------------------------------------------------------------
 
 class TestBookingClientNotifications:
+    """The client who books gets no bell entry (the toast told them); the
+    dog's co-owner gets the household notification (booking_notify.py)."""
 
     def _setup_user_dog(self, email):
         user = make_user(email)
         make_client_profile(user.id)
         d = make_dog()
         attach_dog(d.id, user.id)
+        co = make_user(f'co_{email}')
+        db.session.add(DogOwner(dog_id=d.id, user_id=co.id, role='secondary'))
+        db.session.flush()
+        self.co_id = co.id
         return user, d
 
-    def test_single_slot_waitlist_writes_client_notification(self, app, client):
-        """Regression: /index POST waitlist used to ping admins only — client's
-        bell stayed silent. Now the actor receives a 'your walk is on the
-        waitlist' notification too."""
+    def test_single_slot_waitlist_notifies_co_owner_not_client(self, app, client):
+        """/index POST waitlist: the co-owner hears, the client who booked doesn't."""
         from app.models import Notification
         with app.app_context():
             tom = tomorrow()
@@ -906,18 +910,16 @@ class TestBookingClientNotifications:
         }, follow_redirects=True)
 
         with app.app_context():
-            client_notifs = Notification.query.filter_by(recipient_id=user_id).all()
-            assert len(client_notifs) == 1, \
-                f"expected 1 client notification, got {len(client_notifs)}"
-            n = client_notifs[0]
-            assert 'waitlist' in n.title.lower()
-            assert 'morning' in n.title.lower()
+            assert Notification.query.filter_by(recipient_id=user_id).count() == 0
+            co_notifs = Notification.query.filter_by(recipient_id=self.co_id).all()
+            assert [n.notification_type for n in co_notifs] == ['booking_requested']
+            assert co_notifs[0].title == (
+                f"Test requested Buddy's morning walk on {tom.strftime('%a %-d %b')}")
+            assert 'waitlist' in co_notifs[0].body.lower()
 
-    def test_book_both_mixed_outcome_writes_one_consolidated_notification(self, app, client):
-        """Regression: /book_both with one confirmed + one waitlisted slot used
-        to write a single 'walk confirmed' notification and silently drop the
-        waitlisted slot. Now the client gets exactly one consolidated
-        notification mentioning both outcomes."""
+    def test_book_both_mixed_outcome_notifies_co_owner_of_both(self, app, client):
+        """/book_both with one confirmed + one waitlisted slot: the co-owner hears
+        about both outcomes (one notification per outcome); the client nothing."""
         from app.models import Notification
         with app.app_context():
             tom = tomorrow()
@@ -957,21 +959,17 @@ class TestBookingClientNotifications:
         assert slot_statuses['Morning'] == 'confirmed'
         assert slot_statuses['Afternoon'] == 'waitlisted'
 
-        # Exactly one client notification covering both outcomes
         with app.app_context():
-            client_notifs = Notification.query.filter_by(recipient_id=user_id).all()
-            assert len(client_notifs) == 1, \
-                f"expected 1 consolidated notification, got {len(client_notifs)}"
-            n = client_notifs[0]
-            body_lower = (n.body or '').lower()
-            assert 'morning' in body_lower
-            assert 'afternoon' in body_lower
-            assert 'confirmed' in body_lower
-            assert 'waitlist' in body_lower
+            assert Notification.query.filter_by(recipient_id=user_id).count() == 0
+            day = tom.strftime('%a %-d %b')
+            titles = sorted(n.title for n in
+                            Notification.query.filter_by(recipient_id=self.co_id))
+            assert titles == [f"Test booked Buddy's morning walk on {day}",
+                              f"Test requested Buddy's afternoon walk on {day}"]
 
-    def test_book_both_both_confirmed_writes_one_notification(self, app, client):
-        """When both slots auto-confirm, the client should still get just ONE
-        notification ('walks on X are confirmed'), not two separate ones."""
+    def test_book_both_both_confirmed_writes_one_co_owner_notification(self, app, client):
+        """When both slots auto-confirm, the co-owner gets ONE grouped
+        notification, not two; the client gets none."""
         from app.models import Notification
         with app.app_context():
             tom = tomorrow()
@@ -996,14 +994,11 @@ class TestBookingClientNotifications:
         assert all(b['status'] == 'confirmed' for b in data['bookings'])
 
         with app.app_context():
-            client_notifs = Notification.query.filter_by(recipient_id=user_id).all()
-            assert len(client_notifs) == 1, \
-                f"expected 1 consolidated notification, got {len(client_notifs)}"
-            n = client_notifs[0]
-            assert 'confirmed' in n.title.lower()
-            body_lower = (n.body or '').lower()
-            assert 'morning' in body_lower
-            assert 'afternoon' in body_lower
+            assert Notification.query.filter_by(recipient_id=user_id).count() == 0
+            co_notifs = Notification.query.filter_by(recipient_id=self.co_id).all()
+            assert len(co_notifs) == 1
+            assert co_notifs[0].title == (
+                f"Test booked Buddy's 2 walks ({tom.strftime('%a %-d %b')})")
 
 
 # ---------------------------------------------------------------------------

@@ -14,21 +14,22 @@ Usage:
     )
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from app import db
 from app.models import Notification
-from app.utils.dates import local_today
+from app.utils.dates import LOCAL_TZ
 
 # ── Caps ──────────────────────────────────────────────────────────────────────
 NOTIF_DB_CAP   = 100  # max stored per user (oldest pruned at insert time)
 NOTIF_PAGE_CAP = 50   # max shown on the full notifications page
 NOTIF_BELL_CAP = 5    # max shown in the navbar bell dropdown
 
-# Walkers hear about a change to one of their walks straight away only when
-# the walk is within this many days of today (London). Changes further out
-# are left to the daily summaries (app/utils/walker_summaries.py), which are
-# built from the live bookings when they are sent — so nothing is lost.
-WALKER_NOTICE_DAYS = 7
+# London hour of the walker 'preview' summary of the next working day
+# (app/utils/walker_summaries.py). Walkers hear about a change to one of their
+# walks straight away only once that day's preview has gone out; earlier
+# changes are carried by the preview itself, which is built from the live
+# bookings when it is sent — so nothing is lost.
+WALKER_PREVIEW_HOUR = 15
 
 
 # ── Type metadata ─────────────────────────────────────────────────────────────
@@ -56,14 +57,33 @@ def get_meta(notification_type):
 
 # ── Core helpers ──────────────────────────────────────────────────────────────
 
-def walker_notify_now(booking_date, today=None):
+def _london_now():
+    return datetime.now(LOCAL_TZ)
+
+
+def _previous_working_day(d):
+    """The Mon-Fri date before d (Monday → Friday)."""
+    d -= timedelta(days=1)
+    while d.weekday() >= 5:
+        d -= timedelta(days=1)
+    return d
+
+
+def walker_notify_now(booking_date, now=None):
     """Whether a walker should be notified instantly about a change to a walk
-    on booking_date: today up to WALKER_NOTICE_DAYS ahead. Past walks and
-    walks further out get nothing — the latter reach the walker through the
-    daily summaries instead. Every walker-recipient notification goes
-    through this (or NotificationBatch.add_for_walker)."""
-    today = today or local_today()
-    return today <= booking_date <= today + timedelta(days=WALKER_NOTICE_DAYS)
+    on booking_date: only once that day's preview summary has gone out
+    (WALKER_PREVIEW_HOUR on the working day before), i.e. today, tomorrow
+    after 15:00, Monday from Friday 15:00. Anything earlier reaches the walker
+    through the preview; past walks get nothing. Keyed on the clock, not on
+    WalkerSummarySent, so a failed preview run can't make changes silent.
+    Every walker-recipient notification goes through this (or
+    NotificationBatch.add_for_walker)."""
+    now = now or _london_now()
+    if booking_date < now.date():
+        return False
+    cutoff = datetime.combine(_previous_working_day(booking_date),
+                              time(WALKER_PREVIEW_HOUR), tzinfo=now.tzinfo)
+    return now >= cutoff
 
 
 def create_notification(recipient_id, notification_type, title,
@@ -324,7 +344,7 @@ def summarise(kind, payloads, *, actor_first=None):
             title = f"{actor_first} {verb} {dog_pfx}{slot_lower} {svc} on {when}"
             if kind == 'booking_confirmed':
                 w = p.get('walker_name')
-                body = f"Booked with {w}." if w else "Walker assigned."
+                body = f"Booked with {w}." if w else None
             elif kind == 'booking_waitlisted':
                 body = "On the waitlist — we'll let you know when a spot opens up."
             elif kind == 'booking_cancelled':
@@ -335,7 +355,7 @@ def summarise(kind, payloads, *, actor_first=None):
             if kind == 'booking_confirmed':
                 title = f"{dog_pfx}{slot_lower} {svc} on {when} confirmed"
                 w = p.get('walker_name')
-                body = f"Booked with {w}." if w else "Walker assigned."
+                body = f"Booked with {w}." if w else None
             elif kind == 'booking_requested':
                 title = f"{dog_pfx}{slot_lower} {svc} on {when} requested"
                 body = "We'll confirm shortly."
