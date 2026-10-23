@@ -13,9 +13,10 @@ did; the toast already said so):
 
 One notification per person per action: when someone fits more than one
 audience, household beats admin beats walker. Covers new bookings, the board
-(assign / reassign / unassign / slot move / decline), cancellations and
-closures; walker availability resets still use availability_reset.py. The
-full matrix is in the handbook, deep-dives/notifications.md "Notification
+(assign / reassign / unassign / slot move / decline), cancellations,
+closures, and the admin notice for a walker's own drop-out (the resets
+themselves, and the walker's notice, are in availability_reset.py). The full
+matrix is in the handbook, deep-dives/notifications.md "Notification
 redesign".
 
 Like NotificationBatch, nothing here commits — the caller does.
@@ -286,3 +287,18 @@ def notify_cancelled(bookings, *, actor, by_admin, reason=None):
             batch.add_for_walker(walker_uid, 'booking_cancelled', actor_first=actor_first,
                                  link='/walker/schedule', **payload)
     batch.flush()
+
+
+def notify_walker_dropout(actor, *, title, affected):
+    """A walker's own availability change (time off, an extra day removed)
+    left `affected` confirmed walks to reassign: tell the admins. Nothing when
+    an admin made the change — it's in the activity feed — or when no walks
+    are affected. The reset itself, and the walker's own notice when someone
+    else made the change, are in availability_reset.py."""
+    if actor.is_admin or not affected:
+        return
+    body = f"{affected} booking{'s need' if affected != 1 else ' needs'} reassigning"
+    for uid in _admin_ids():
+        if uid != actor.id:
+            create_notification(recipient_id=uid, notification_type='walker_availability',
+                                title=title, body=body, link='/admin', sender_id=actor.id)

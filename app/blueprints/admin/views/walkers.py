@@ -15,7 +15,6 @@ from app import db
 from app.capacity import eligible_walker_clause
 from app.forms import WalkerCreateForm
 from app.utils.dates import local_today
-from app.utils.notifications import NotificationBatch
 from app.utils.availability_reset import (
     reset_bookings_for_lost_availability, reset_future_bookings_for_walker,
 )
@@ -135,12 +134,10 @@ def toggle_walker_drop_ins(walker_user_id):
             )
             .all()
         )
-        client_batch = NotificationBatch(actor_id=current_user.id)
         reset_bookings_for_lost_availability(
-            affected, actor_id=current_user.id, batch=client_batch,
+            affected, actor_id=current_user.id,
             reason=f"{target.firstname} stopped doing drop-in visits",
         )
-        client_batch.flush()
 
     changes = diff_fields(before, target.walker, ['does_drop_ins'])
     if changes:
@@ -332,8 +329,7 @@ def deactivate_walker(walker_id):
         PushSubscription.query.filter_by(user_id=user.id).delete(synchronize_session=False)
 
         # Return future confirmed bookings to pending so they stay visible on
-        # the board, and notify each affected client (§7.2): one grouped
-        # booking_reset per user. Actor = the admin deactivating the walker.
+        # the board. Actor = the admin deactivating the walker.
         reset_future_bookings_for_walker(
             user.walker, actor_id=current_user.id,
             reason=f"{user.firstname} was deactivated",
@@ -449,8 +445,8 @@ def walker_schedule_json(walker_id):
 
         # Confirmed future bookings on the now-removed (weekday, slot) combos
         # are no longer guaranteed — reset them to 'requested' (walker_id=None)
-        # so they surface in the pending column on the board for reassignment,
-        # and notify each affected client with a grouped booking_reset (§7.1).
+        # so they surface in the pending column on the board for reassignment;
+        # the walker is told they're off their list (inside the urgent window).
         affected_count = 0
         if removed:
             from datetime import date as _date
@@ -465,12 +461,10 @@ def walker_schedule_json(walker_id):
                 .all()
             )
             affected = [b for b in future_confirmed if (b.date.weekday(), b.slot) in removed]
-            client_batch = NotificationBatch(actor_id=current_user.id)
             reset_bookings_for_lost_availability(
-                affected, actor_id=current_user.id, batch=client_batch,
+                affected, actor_id=current_user.id,
                 reason=f"{walker.user.firstname}'s recurring schedule changed",
             )
-            client_batch.flush()
             affected_count = len(affected)
 
         db.session.commit()
@@ -654,12 +648,10 @@ def admin_delete_adhoc(walker_id, adhoc_id):
             walker_id=adhoc.walker_id, date=adhoc.date, slot=adhoc.slot, status='confirmed',
         ).all()
 
-    client_batch = NotificationBatch(actor_id=current_user.id)
     reset_bookings_for_lost_availability(
-        affected, actor_id=current_user.id, batch=client_batch,
+        affected, actor_id=current_user.id,
         reason=f"{adhoc.walker.user.firstname}'s availability was removed",
     )
-    client_batch.flush()
 
     db.session.delete(adhoc)
     db.session.commit()
@@ -698,17 +690,15 @@ def admin_add_unavailability(walker_id):
 
     # Any confirmed bookings this walker held for this date/slot are no longer
     # guaranteed — reset them to requested so they surface as pending on the
-    # board, and notify each affected client (§7.2): one grouped
-    # booking_reset per user. Actor = the admin marking the walker unavailable.
+    # board; the walker is told they're off their list (inside the urgent
+    # window). Actor = the admin marking the walker unavailable.
     affected = Booking.query.filter_by(
         walker_id=walker.id, date=unavail_date, slot=slot, status='confirmed',
     ).all()
-    client_batch = NotificationBatch(actor_id=current_user.id)
     reset_bookings_for_lost_availability(
-        affected, actor_id=current_user.id, batch=client_batch,
+        affected, actor_id=current_user.id,
         reason=f"{walker.user.firstname} marked unavailable",
     )
-    client_batch.flush()
 
     db.session.commit()
 

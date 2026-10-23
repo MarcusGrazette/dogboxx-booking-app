@@ -15,6 +15,7 @@ and each affected client gets one 'system' notification.
 import datetime
 import json
 import pytest
+from unittest.mock import patch
 from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 
@@ -23,6 +24,7 @@ from app.models import (
     Booking, BookingStatusChange, Client, Dog, DogOwner, Notification,
     ServiceType, User, Walker, WalkerSchedule,
 )
+from app.utils.dates import LOCAL_TZ
 
 
 TRUNCATE_ORDER = [
@@ -131,10 +133,11 @@ def _post_schedule(flask_client, walker_id, schedules):
 
 class TestScheduleModalResetsAffectedBookings:
     """When removing a (weekday, slot) from a walker's schedule, future
-    confirmed bookings on that combo must be reset to 'requested' and the
-    client must be notified."""
+    confirmed bookings on that combo must be reset to 'requested'. The client
+    isn't told (a reset is silent until re-confirmed or cancelled); the walker
+    is told the walks are off their list, inside the urgent window."""
 
-    def test_removed_combo_resets_booking_and_notifies_client(self, app, client):
+    def test_removed_combo_resets_booking_silently_for_client(self, app, client):
         monday = _next_weekday(0)
         with app.app_context():
             admin = _make_admin()
@@ -177,12 +180,7 @@ class TestScheduleModalResetsAffectedBookings:
             assert rows[0].to_status == 'requested'
             assert rows[0].changed_by_id == admin_id
 
-            notifs = Notification.query.filter_by(recipient_id=client_user_id).all()
-            assert len(notifs) == 1
-            n = notifs[0]
-            assert n.notification_type == 'system'
-            assert "Buddy's" in n.title and "needs a new walker" in n.title
-            assert "No action needed" in n.body
+            assert Notification.query.filter_by(recipient_id=client_user_id).count() == 0
 
     def test_kept_combo_leaves_booking_assigned(self, app, client):
         """A schedule POST that doesn't remove the booking's (weekday, slot)
@@ -259,13 +257,14 @@ class TestScheduleModalResetsAffectedBookings:
             assert b.walker_id == walker_id
             assert b.status == 'confirmed'
 
-    def test_multiple_clients_each_get_one_notification(self, app, client):
-        """If 3 bookings across 2 clients are affected, each client gets
-        exactly one notification carrying their own per-client count."""
+    def test_walker_gets_one_grouped_notice(self, app, client):
+        """3 bookings across 2 clients reset by an admin's schedule edit: the
+        walker gets one grouped "off your list" notice; the clients nothing.
+        "Now" is pinned to the Sunday before, inside Monday's urgent window."""
         monday = _next_weekday(0)
         with app.app_context():
             admin = _make_admin()
-            _, walker = _make_walker()
+            walker_u, walker = _make_walker()
             client_a = _make_client(email='client_a@test.com')
             client_b = _make_client(email='client_b@test.com')
             dog_a1 = _make_dog(owner_id=client_a.id, name='AlphaOne')
@@ -282,21 +281,24 @@ class TestScheduleModalResetsAffectedBookings:
             db.session.commit()
             admin_email = admin.email
             walker_id = walker.id
+            walker_uid = walker_u.id
             a_id, b_id = client_a.id, client_b.id
 
         _login(client, admin_email)
-        resp = _post_schedule(client, walker_id, [])
+        sunday_noon = datetime.datetime.combine(
+            monday - datetime.timedelta(days=1), datetime.time(12), tzinfo=LOCAL_TZ)
+        with patch('app.utils.notifications._london_now', return_value=sunday_noon):
+            resp = _post_schedule(client, walker_id, [])
 
         assert resp.get_json()['affected_count'] == 3
         with app.app_context():
-            a_notifs = Notification.query.filter_by(recipient_id=a_id).all()
-            b_notifs = Notification.query.filter_by(recipient_id=b_id).all()
-            assert len(a_notifs) == 1
-            assert len(b_notifs) == 1
-            # Client A has 2 bookings across 2 dogs → grouped "2 of your walks…"
-            assert "2 of your walks" in a_notifs[0].title
-            # Client B has 1 booking → single-item "BetaOne's … needs a new walker"
-            assert "BetaOne's" in b_notifs[0].title and "needs a new walker" in b_notifs[0].title
+            assert Notification.query.filter_by(recipient_id=a_id).count() == 0
+            assert Notification.query.filter_by(recipient_id=b_id).count() == 0
+            walker_notifs = Notification.query.filter_by(recipient_id=walker_uid).all()
+            assert [(n.notification_type, n.title, n.body) for n in walker_notifs] == [
+                ('walker_removed',
+                 f"3 walks are off your list ({monday.strftime('%a %-d %b')})",
+                 'AlphaOne, AlphaTwo, BetaOne')]
 
             # Session 1: all 3 resets share one batch_id so the feed can cluster
             # them, and each is a distinct confirmed→requested BSC row.

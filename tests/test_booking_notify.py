@@ -13,7 +13,8 @@ import pytest
 
 from app import db as _db
 from app.models import (
-    Booking, DogOwner, Notification, ServiceType, Walker, WalkerSchedule,
+    Booking, DogOwner, Notification, ServiceType, Walker, WalkerAdHocAvailability,
+    WalkerSchedule,
 )
 from app.services import booking_service
 from app.utils.booking_notify import notify_created
@@ -395,3 +396,98 @@ class TestCancel:
             assert len(notifs) == 1
             assert notifs[0][0] == 'booking_cancelled'
             assert 'Storm' in notifs[0][2]
+
+
+# ── Walker availability (redesign PR 3) ─────────────────────────────────────
+
+class TestWalkerAvailability:
+    """Resets are silent to the household; the walker hears when someone else
+    took their walks; admins hear only when a walker's own change leaves walks
+    to reassign."""
+
+    def test_walker_time_off_with_walks_tells_admins_only(
+            self, app, client, client_user, dog, co_owner, admin_user, walker_user,
+            service_type):
+        walker = _schedule(walker_user)
+        b = _walk(client_user, dog, service_type, walker=walker)
+        login(client, walker_user.email)
+        resp = client.post('/walker/unavailability', json={'date': DAY.isoformat(),
+                                                             'slot': 'Morning'})
+        assert resp.status_code == 201
+
+        assert (_db.session.get(Booking, b.id).status) == 'requested'
+        assert _notifs(client_user) == []
+        assert _notifs(co_owner) == []
+        assert _notifs(walker_user) == []
+        assert _notifs(admin_user) == [
+            ('walker_availability', f"Walker is unavailable — Morning on {TITLE_DAY}",
+             '1 booking needs reassigning')]
+
+    def test_walker_time_off_without_walks_tells_nobody(
+            self, app, client, admin_user, walker_user, service_type):
+        _schedule(walker_user)
+        login(client, walker_user.email)
+        client.post('/walker/unavailability', json={'date': DAY.isoformat(), 'slot': 'Morning'})
+        assert _notifs(admin_user) == []
+
+    def test_walker_adding_a_day_tells_nobody(self, app, client, admin_user, walker_user):
+        _schedule(walker_user)                         # Morning only
+        login(client, walker_user.email)
+        resp = client.post('/walker/adhoc', json={'date': DAY.isoformat(), 'slot': 'Afternoon'})
+        assert resp.status_code == 201
+        assert _notifs(admin_user) == []
+
+    def test_walker_removing_a_day_with_walks_tells_admins(
+            self, app, client, client_user, dog, admin_user, walker_user, service_type):
+        walker = _schedule(walker_user)
+        adhoc = WalkerAdHocAvailability(walker_id=walker.id, date=DAY, slot='Afternoon')
+        _db.session.add(adhoc)
+        _db.session.commit()
+        _walk(client_user, dog, service_type, walker=walker, slot='Afternoon')
+        login(client, walker_user.email)
+        assert client.delete(f'/walker/adhoc/{adhoc.id}').get_json()['success'] is True
+
+        assert _notifs(client_user) == []
+        assert _notifs(admin_user) == [
+            ('walker_availability',
+             f"Walker removed their Afternoon availability — {TITLE_DAY}",
+             '1 booking needs reassigning')]
+
+    def test_admin_marking_walker_off_tells_the_walker(
+            self, app, client, client_user, dog, co_owner, admin_user, walker_user,
+            service_type):
+        walker = _schedule(walker_user)
+        _walk(client_user, dog, service_type, walker=walker)
+        login(client, admin_user.email)
+        resp = client.post(f'/admin/walkers/{walker.id}/unavailability',
+                           json={'date': DAY.isoformat(), 'slot': 'Morning'})
+        assert resp.get_json()['success'] is True
+
+        assert _notifs(client_user) == []
+        assert _notifs(co_owner) == []
+        assert _notifs(admin_user) == []
+        assert _notifs(walker_user) == [
+            ('walker_removed', f"Buddy's morning walk on {TITLE_DAY} is off your list", None)]
+
+    def test_admin_walker_marking_herself_off_tells_nobody(
+            self, app, client, client_user, dog, admin_user, service_type):
+        other_admin = make_user(firstname='Other', email='other-admin@test.dogboxx.org',
+                                role='walker', is_admin=True)
+        walker = _schedule(admin_user)
+        _walk(client_user, dog, service_type, walker=walker)
+        login(client, admin_user.email)
+        client.post('/walker/unavailability', json={'date': DAY.isoformat(), 'slot': 'Morning'})
+
+        assert _notifs(other_admin) == []
+        assert _notifs(client_user) == []
+
+    def test_deactivating_a_walker_tells_nobody(
+            self, app, client, client_user, dog, admin_user, walker_user, service_type):
+        walker = _schedule(walker_user)
+        b = _walk(client_user, dog, service_type, walker=walker)
+        login(client, admin_user.email)
+        assert client.post(f'/admin/walkers/{walker_user.id}/deactivate').get_json()['success'] is True
+
+        assert _db.session.get(Booking, b.id).status == 'requested'
+        assert _notifs(client_user) == []
+        assert _notifs(walker_user) == []
