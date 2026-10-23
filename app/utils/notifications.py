@@ -42,6 +42,7 @@ NOTIFICATION_META = {
     'booking_requested':    ('bi-calendar-plus-fill',  '#E02FAC'),   # pink
     'same_day_request':     ('bi-lightning-fill',      '#fd7e14'),   # orange — urgent same-day
     'walker_assigned':      ('bi-person-check-fill',   '#0d6efd'),   # blue
+    'walker_removed':       ('bi-person-dash-fill',    '#6c757d'),   # grey — walk moved off a walker's list
     'walker_availability':  ('bi-calendar-x-fill',     '#fd7e14'),   # orange
     'walker_summary':       ('bi-calendar-day-fill',   '#0d6efd'),   # blue
     'system':               ('bi-info-circle-fill',    '#6c757d'),   # grey

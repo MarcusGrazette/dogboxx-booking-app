@@ -221,3 +221,177 @@ class TestRecurringPartialFailure:
         expected = ["Admin booked Buddy's 2 walks (Tue 2 – Wed 3 Jun)"]
         assert [n[1] for n in _notifs(client_user)] == expected
         assert [n[1] for n in _notifs(co_owner)] == expected
+
+
+# ── Board actions, cancellations, closures (redesign PR 2) ──────────────────
+
+def _second_walker():
+    u = make_user(firstname='Bea', lastname='Walker', email='bea@test.dogboxx.org', role='walker')
+    return u, _schedule(u, slots=('Morning', 'Afternoon'))
+
+
+def _walk(owner, dog, service_type, *, status='confirmed', walker=None,
+          confirmed=True, slot='Morning'):
+    b = Booking(user_id=owner.id, dog_id=dog.id, service_type_id=service_type.id,
+                date=DAY, slot=slot, status=status,
+                walker_id=walker.id if walker else None,
+                confirmed_at=datetime(2099, 5, 1) if confirmed else None)
+    _db.session.add(b)
+    _db.session.commit()
+    return b
+
+
+def _assign(flask_client, booking, walker, **extra):
+    return flask_client.post('/admin/assign_walker', json={
+        'booking_id': booking.id, 'walker_id': walker.id if walker else None, **extra})
+
+
+class TestBoard:
+    def test_first_confirmation_tells_household_and_walker(
+            self, app, client, client_user, dog, co_owner, admin_user, walker_user,
+            service_type):
+        walker = _schedule(walker_user)
+        b = _walk(client_user, dog, service_type, status='requested', confirmed=False)
+        login(client, admin_user.email)
+        assert _assign(client, b, walker).get_json()['success'] is True
+
+        expected = [('booking_confirmed', f"Buddy's morning walk on {TITLE_DAY} confirmed", None)]
+        assert _notifs(client_user) == expected
+        assert _notifs(co_owner) == expected
+        assert [n[0] for n in _notifs(walker_user)] == ['walker_assigned']
+        assert _notifs(admin_user) == []
+
+    def test_reassign_is_silent_to_household(
+            self, app, client, client_user, dog, co_owner, admin_user, walker_user,
+            service_type):
+        old = _schedule(walker_user)
+        bea, new = _second_walker()
+        b = _walk(client_user, dog, service_type, walker=old)
+        login(client, admin_user.email)
+        assert _assign(client, b, new).get_json()['success'] is True
+
+        assert _notifs(client_user) == []
+        assert _notifs(co_owner) == []
+        assert _notifs(walker_user) == [
+            ('walker_removed', f"Buddy's morning walk on {TITLE_DAY} is off your list", None)]
+        assert [n[0] for n in _notifs(bea)] == ['walker_assigned']
+
+    def test_reconfirm_after_reset_is_silent_to_household(
+            self, app, client, client_user, dog, co_owner, admin_user, service_type):
+        bea, new = _second_walker()
+        b = _walk(client_user, dog, service_type, status='requested')   # reset: confirmed before
+        login(client, admin_user.email)
+        assert _assign(client, b, new).get_json()['success'] is True
+
+        assert _notifs(client_user) == []
+        assert _notifs(co_owner) == []
+        assert [n[0] for n in _notifs(bea)] == ['walker_assigned']
+
+    def test_unassign_tells_only_the_walker(
+            self, app, client, client_user, dog, co_owner, admin_user, walker_user,
+            service_type):
+        walker = _schedule(walker_user)
+        b = _walk(client_user, dog, service_type, walker=walker)
+        login(client, admin_user.email)
+        assert _assign(client, b, None).get_json()['success'] is True
+
+        assert _notifs(client_user) == []
+        assert _notifs(co_owner) == []
+        assert _notifs(walker_user) == [
+            ('walker_removed', f"Buddy's morning walk on {TITLE_DAY} is off your list", None)]
+
+    def test_slot_move_same_walker(
+            self, app, client, client_user, dog, co_owner, admin_user, walker_user,
+            service_type):
+        walker = _schedule(walker_user)
+        b = _walk(client_user, dog, service_type, walker=walker)
+        login(client, admin_user.email)
+        resp = _assign(client, b, walker, slot='Afternoon', slot_override=True)
+        assert resp.get_json()['success'] is True
+
+        expected = [('system', f"Buddy's walk on {TITLE_DAY} has moved to the afternoon",
+                     'Originally booked for morning.')]
+        assert _notifs(client_user) == expected
+        assert _notifs(co_owner) == expected
+        assert _notifs(walker_user) == [
+            ('system', f"Buddy's morning walk on {TITLE_DAY} has moved to the afternoon", None)]
+
+    def test_pending_walk_confirmed_and_moved_is_one_message(
+            self, app, client, client_user, dog, co_owner, admin_user, walker_user,
+            service_type):
+        walker = _schedule(walker_user)
+        b = _walk(client_user, dog, service_type, status='requested', confirmed=False)
+        login(client, admin_user.email)
+        resp = _assign(client, b, walker, slot='Afternoon', slot_override=True)
+        assert resp.get_json()['success'] is True
+
+        assert _notifs(co_owner) == [
+            ('booking_confirmed', f"Buddy's walk on {TITLE_DAY} is confirmed for the afternoon",
+             'Originally booked for morning.')]
+
+    def test_admin_who_is_the_old_walker_hears_nothing(
+            self, app, client, client_user, dog, admin_user, service_type):
+        old = _schedule(admin_user)
+        bea, new = _second_walker()
+        b = _walk(client_user, dog, service_type, walker=old)
+        login(client, admin_user.email)
+        _assign(client, b, new)
+        assert _notifs(admin_user) == []
+
+    def test_decline_tells_whole_household(
+            self, app, client, client_user, dog, co_owner, admin_user, service_type):
+        b = _walk(client_user, dog, service_type, status='requested', confirmed=False)
+        login(client, admin_user.email)
+        assert client.post(f'/admin/booking/{b.id}/decline').get_json()['success'] is True
+
+        expected = [('booking_cancelled', f"Buddy's morning walk on {TITLE_DAY} has been declined",
+                     "Please contact Lydia if this is unexpected!")]
+        assert _notifs(client_user) == expected
+        assert _notifs(co_owner) == expected
+
+
+class TestCancel:
+    def test_co_owner_cancels(self, app, client, client_user, dog, co_owner, admin_user,
+                              walker_user, service_type):
+        walker = _schedule(walker_user)
+        b = _walk(client_user, dog, service_type, walker=walker)
+        login(client, co_owner.email)
+        assert client.post('/cancel_booking', data={'booking_id': b.id}).get_json()['success']
+
+        title = f"Casey cancelled Buddy's morning walk on {TITLE_DAY}"
+        assert _notifs(co_owner) == []
+        assert [n[1] for n in _notifs(client_user)] == [title]
+        assert [n[1] for n in _notifs(admin_user)] == [title]
+        assert [n[1] for n in _notifs(walker_user)] == [title]
+
+    def test_admin_cancel_tells_whole_household(
+            self, app, client, client_user, dog, co_owner, admin_user, walker_user,
+            service_type):
+        other_admin = make_user(firstname='Other', email='other-admin@test.dogboxx.org',
+                                role='walker', is_admin=True)
+        walker = _schedule(walker_user)
+        b = _walk(client_user, dog, service_type, walker=walker)
+        login(client, admin_user.email)
+        assert client.post('/cancel_booking', data={'booking_id': b.id}).get_json()['success']
+
+        expected = [('booking_cancelled', f"Buddy's morning walk on {TITLE_DAY} cancelled",
+                     "Please contact Lydia if this is unexpected!")]
+        assert _notifs(client_user) == expected
+        assert _notifs(co_owner) == expected
+        assert _notifs(walker_user) == [
+            ('booking_cancelled', f"Buddy's morning walk on {TITLE_DAY} cancelled", None)]
+        assert _notifs(other_admin) == []
+
+    def test_closure_tells_household_with_reason(
+            self, app, client, client_user, dog, co_owner, admin_user, walker_user,
+            service_type):
+        walker = _schedule(walker_user)
+        _walk(client_user, dog, service_type, walker=walker)
+        login(client, admin_user.email)
+        client.post('/admin/closures', json={'date': DAY.isoformat(), 'reason': 'Storm'})
+
+        for user in (client_user, co_owner, walker_user):
+            notifs = _notifs(user)
+            assert len(notifs) == 1
+            assert notifs[0][0] == 'booking_cancelled'
+            assert 'Storm' in notifs[0][2]
