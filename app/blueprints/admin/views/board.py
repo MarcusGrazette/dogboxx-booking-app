@@ -13,7 +13,7 @@ from app.utils.db_error_handler import handle_db_errors
 from app.models import User, Booking, Walker, WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, ServiceType, DogOwner, SlotFreeze
 from app import db
 from app.capacity import get_max_per_walker, get_walker_slot_count, get_drop_in_capacity, auto_assign_walker, get_available_walkers, check_availability, acquire_booking_lock, eligible_walker_clause
-from app.utils.notifications import create_notification, walker_notify_now
+from app.utils.booking_notify import notify_assigned, notify_declined, notify_unassigned
 from app.utils.booking_status import transition_booking, InvalidTransitionError
 from app.utils.activity_log import record_admin_action
 
@@ -365,9 +365,12 @@ def assign_walker():
         # commit, so a concurrent cancel can't land between check and write.
         if walker_id is None:
             db.session.refresh(booking, with_for_update=True)
+            old_walker_user_id = booking.walker.user_id if booking.walker else None
             transition_booking(booking, 'requested', actor_id=current_user.id,
                                walker_id=None, allowed_from={'confirmed'})
             booking.pickup_order = None
+            notify_unassigned(booking, actor=current_user,
+                              old_walker_user_id=old_walker_user_id)
             db.session.commit()
 
             return jsonify(
@@ -473,6 +476,10 @@ def assign_walker():
         # activity feed can tell a slot change apart from a plain re-confirm
         # (otherwise both look like a confirmed→confirmed row with no detail).
         slot_was_changed = bool(slot_override and slot and old_slot and old_slot != slot)
+        # Pre-change state for the notifications below. confirmed_at is never
+        # cleared, so a walk reset to requested still counts as confirmed before.
+        was_confirmed = booking.confirmed_at is not None
+        old_walker_user_id = booking.walker.user_id if booking.walker else None
         bsc_notes = f"slot {old_slot} → {slot}" if slot_was_changed else None
         # allowed_from covers both a fresh assign (requested/waitlisted) and a
         # reassign between walkers (confirmed) — but rejects a booking the
@@ -495,42 +502,8 @@ def assign_walker():
             service_slug=booking.service_type.slug if booking.service_type else ServiceType.WALK,
         )
 
-        # Notify client + walker — label differs by service type
-        date_str_fmt = booking.date.strftime('%a %-d %b')
-        dog_name = booking.dog.name if booking.dog else 'your dog'
-        service_label = 'drop-in' if (booking.service_type and booking.service_type.slug == ServiceType.DROP_IN) else 'walk'
-        walker_first = walker.user.firstname if walker.user else None
-
-        # Send slot-change notification if the slot was overridden
-        if slot_was_changed:
-            create_notification(
-                recipient_id=booking.user_id,
-                notification_type='system',
-                title=f"{dog_name}'s {service_label} on {date_str_fmt} has been moved to {slot.lower()}",
-                body=f'Originally booked for {old_slot.lower()}.',
-                link='/',
-                sender_id=current_user.id,
-            )
-
-        if not slot_was_changed:
-            create_notification(
-                recipient_id=booking.user_id,
-                notification_type='booking_confirmed',
-                title=f"{dog_name}'s {booking.slot.lower()} {service_label} on {date_str_fmt} has been confirmed",
-                body=f'Booked with {walker_first}.' if walker_first else 'Walker assigned.',
-                link='/',
-                sender_id=current_user.id,
-            )
-
-        if walker.user_id != current_user.id and walker_notify_now(booking.date):
-            create_notification(
-                recipient_id=walker.user_id,
-                notification_type='walker_assigned',
-                title=f'You have been assigned a {service_label} on {date_str_fmt}',
-                body=f'{dog_name} — {booking.slot}',
-                link=f'/walker/pickups?date={booking.date.isoformat()}',
-                sender_id=current_user.id,
-            )
+        notify_assigned(booking, actor=current_user, was_confirmed=was_confirmed,
+                        old_walker_user_id=old_walker_user_id, old_slot=old_slot)
 
         db.session.commit()
 
@@ -576,18 +549,7 @@ def decline_booking(booking_id):
         transition_booking(booking, 'rejected', actor_id=current_user.id,
                            cancelled_by='admin')
 
-        service_label = 'drop-in' if (booking.service_type and booking.service_type.slug == ServiceType.DROP_IN) else 'walk'
-        dog_name = booking.dog.name if booking.dog else 'your dog'
-        date_str = booking.date.strftime('%a %-d %b')
-
-        create_notification(
-            recipient_id=booking.user_id,
-            notification_type='booking_cancelled',
-            title=f"{dog_name}'s {booking.slot.lower()} {service_label} on {date_str} has been declined",
-            body="Please get in touch if you'd like to discuss.",
-            link='/',
-            sender_id=current_user.id,
-        )
+        notify_declined(booking, actor=current_user)
 
         db.session.commit()
         return jsonify(success=True)

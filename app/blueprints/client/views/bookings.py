@@ -18,8 +18,7 @@ import uuid
 from datetime import datetime, timezone, timedelta, date as date_type
 
 from app.blueprints.client import client_bp
-from app.utils.notifications import create_notification, NotificationBatch, walker_notify_now
-from app.utils.booking_notify import notify_created
+from app.utils.booking_notify import notify_cancelled, notify_created
 from app.utils.booking_status import (
     transition_booking, bulk_transition,
     InvalidTransitionError,
@@ -674,38 +673,8 @@ def pause_walks():
         return jsonify(success=True, cancelled_count=0)
 
     n          = len(bookings)
-    admins     = User.query.filter_by(is_admin=True).all()
-    admin_ids  = {a.id for a in admins}
-    actor_name = current_user.firstname
-    admin_link = f'/admin/clients/{current_user.id}'
-
-    # Build the notification batch before bulk_transition clears walker_id.
-    # NotificationBatch groups by (recipient_id, kind) so each person gets
-    # exactly one grouped notice regardless of how many bookings are in scope.
-    notif_batch = NotificationBatch(actor_id=current_user.id)
-    for b in bookings:
-        if not b.dog:
-            continue
-        svc_label = 'drop-in' if b.service_type and b.service_type.slug == ServiceType.DROP_IN else 'walk'
-        payload = dict(dog_name=b.dog.name, slot=b.slot, date=b.date, svc_label=svc_label)
-
-        for admin in admins:
-            notif_batch.add(admin.id, 'booking_cancelled', actor_first=actor_name,
-                            link=admin_link, **payload)
-
-        for ownership in DogOwner.query.filter(
-            DogOwner.dog_id == b.dog_id,
-            DogOwner.user_id != current_user.id,
-        ).all():
-            co_user = db.session.get(User, ownership.user_id)
-            if co_user and not co_user.is_admin:
-                notif_batch.add(co_user.id, 'booking_cancelled', actor_first=actor_name, **payload)
-
-        if (b.walker_id and b.walker and b.walker.user_id
-                and b.walker.user_id != current_user.id
-                and b.walker.user_id not in admin_ids):
-            notif_batch.add_for_walker(b.walker.user_id, 'booking_cancelled', actor_first=actor_name,
-                            link='/walker/schedule', **payload)
+    # Notifications before bulk_transition, which clears the walker they read.
+    notify_cancelled(bookings, actor=current_user, by_admin=False)
 
     # One batch_id ties together every cancellation in this pause action so the
     # activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
@@ -720,7 +689,6 @@ def pause_walks():
                         walker_id=None, cancelled_by='client', batch_id=batch_id,
                         bill_cancellation=bill)
 
-    notif_batch.flush()
     db.session.commit()
     return jsonify(success=True, cancelled_count=n)
 
@@ -776,10 +744,6 @@ def cancel_booking():
         if not is_admin_cancel and booking.date < today:
             return jsonify(success=False, message="This booking is in the past and can't be cancelled"), 400
 
-        # Capture the assigned walker's user_id before clearing the FK below —
-        # we notify them at the end so they know the walk is off their schedule.
-        prior_walker_user_id = booking.walker.user_id if booking.walker else None
-
         # Late-cancel billing override (admin cancels only). When an admin cancels
         # a booking inside the notice window, bill by default and let them waive
         # via `waive_late_fee` — see app/utils/invoicing.py.
@@ -798,6 +762,11 @@ def cancel_booking():
             today=today, admin_override=admin_override,
         )
 
+        # Notifications first: they read the walker, which the cancel clears.
+        # Nothing commits until the end, so a rejected transition below rolls
+        # these back too.
+        notify_cancelled([booking], actor=current_user, by_admin=is_admin_cancel)
+
         # transition_booking sets status, cancelled_at and logs the BSC row.
         # cancelled_by records who cancelled (admin acting on a client's booking
         # vs the client/owner themselves); walker_id=None unassigns.
@@ -807,79 +776,6 @@ def cancel_booking():
                             cancelled_by='admin' if is_admin_cancel else 'client',
                             walker_id=None, bill_cancellation=bill_cancellation,
                             allowed_from={'requested', 'waitlisted', 'confirmed'})
-        # Do NOT commit here — notifications are added below and everything
-        # commits atomically at the end. An early commit would make the
-        # cancellation irreversible if the notification step later raises.
-
-        date_str_fmt = booking.date.strftime('%a %-d %b')
-        dog_name = booking.dog.name if booking.dog else 'Unknown dog'
-        service_label = (
-            'drop-in'
-            if booking.service_type and booking.service_type.slug == ServiceType.DROP_IN
-            else 'walk'
-        )
-        what = f"{dog_name}'s {booking.slot.lower()} {service_label} on {date_str_fmt}"
-        # Admins notified below — the walker step skips them so an admin who
-        # is also the assigned walker (the owner, a covering walker) gets one
-        # notification, not two.
-        notified_admin_ids = set()
-
-        if is_admin_cancel:
-            # Notify the client their booking was cancelled by admin
-            create_notification(
-                recipient_id=booking.user_id,
-                notification_type='booking_cancelled',
-                title=f"{what} has been cancelled",
-                body="Please get in touch if you'd like to discuss.",
-                link='/',
-                sender_id=current_user.id,
-            )
-        else:
-            # Notify all admins that a client cancelled
-            admins = User.query.filter_by(is_admin=True).all()
-            for admin in admins:
-                create_notification(
-                    recipient_id=admin.id,
-                    notification_type='booking_cancelled',
-                    title=f"{current_user.firstname} cancelled {what}",
-                    link=f'/admin/clients/{booking.user_id}',
-                    sender_id=current_user.id,
-                )
-                notified_admin_ids.add(admin.id)
-            # Notify any co-owners of the dog (e.g. primary owner if secondary cancelled)
-            if booking.dog_id:
-                other_owners = DogOwner.query.filter(
-                    DogOwner.dog_id == booking.dog_id,
-                    DogOwner.user_id != current_user.id,
-                ).all()
-                for ownership in other_owners:
-                    if not (ownership.user and ownership.user.is_admin):
-                        create_notification(
-                            recipient_id=ownership.user_id,
-                            notification_type='booking_cancelled',
-                            title=f"{current_user.firstname} cancelled {what}",
-                            link='/',
-                            sender_id=current_user.id,
-                        )
-
-        # Notify the walker who had this booking assigned (skip if they cancelled
-        # it themselves, already heard as an admin above, or the walk is outside
-        # the walker urgent window — it drops out of their daily summary instead).
-        if (prior_walker_user_id and prior_walker_user_id != current_user.id
-                and prior_walker_user_id not in notified_admin_ids
-                and walker_notify_now(booking.date)):
-            if is_admin_cancel:
-                walker_title = f"{what} was cancelled"
-            else:
-                walker_title = f"{current_user.firstname} cancelled {what}"
-            create_notification(
-                recipient_id=prior_walker_user_id,
-                notification_type='booking_cancelled',
-                title=walker_title,
-                link='/walker/schedule',
-                sender_id=current_user.id,
-            )
-
         db.session.commit()
         return jsonify(success=True, message="Booking successfully cancelled")
 

@@ -119,7 +119,8 @@ class TestAdminCancel:
         booking = _booking(client_user, dog, drop_in, walker)
         login(client, admin_user.email)
         _cancel(client, booking)
+        # Same shared wording as closures and bulk cancels (summarise()).
         assert _titles_for(walker_user.id) == [
-            "Buddy's morning drop-in on Tue 2 Jun was cancelled"]
+            "Buddy's morning drop-in on Tue 2 Jun cancelled"]
         assert _titles_for(client_user.id) == [
-            "Buddy's morning drop-in on Tue 2 Jun has been cancelled"]
+            "Buddy's morning drop-in on Tue 2 Jun cancelled"]

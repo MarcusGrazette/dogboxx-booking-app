@@ -10,8 +10,7 @@ from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
 from app.models import User, Booking, Dog, DogOwner, ServiceType
 from app import db
-from app.utils.notifications import NotificationBatch
-from app.utils.booking_notify import notify_created
+from app.utils.booking_notify import notify_cancelled, notify_created
 from app.utils.booking_status import bulk_transition
 from app.services.booking_service import create_booking, CapacityError
 from app.capacity import MAX_RECURRING_SERIES, check_availability
@@ -710,17 +709,8 @@ def dog_bulk_cancel(dog_id):
 
     n = len(bookings)
 
-    # Capture walker IDs before bulk_transition clears them (§7.4).
-    # Maps walker.user_id → list of (slot, date, svc_label) for notifications.
-    walker_payloads = {}
-    for b in bookings:
-        if b.walker_id and b.walker and b.walker.user_id:
-            wuid = b.walker.user_id
-            if wuid != current_user.id:
-                b_svc = 'drop-in' if b.service_type and b.service_type.slug == ServiceType.DROP_IN else 'walk'
-                walker_payloads.setdefault(wuid, []).append(
-                    dict(dog_name=dog.name, slot=b.slot, date=b.date, svc_label=b_svc)
-                )
+    # Notifications before bulk_transition, which clears the walker they read.
+    notify_cancelled(bookings, actor=current_user, by_admin=True)
 
     # One batch_id ties together every cancellation in this bulk-cancel action
     # so the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
@@ -742,23 +732,6 @@ def dog_bulk_cancel(dog_id):
         bulk_transition(group, 'cancelled', actor_id=current_user.id,
                         walker_id=None, cancelled_by='admin', batch_id=batch_id,
                         bill_cancellation=bill)
-
-    # Notify dog owners (excluding admins) and assigned walkers (§7.4) —
-    # one grouped notice each.
-    batch = NotificationBatch(actor_id=current_user.id)
-    owners = DogOwner.query.filter_by(dog_id=dog_id).all()
-    for o in owners:
-        owner_user = db.session.get(User, o.user_id)
-        if owner_user and not owner_user.is_admin:
-            for b in bookings:
-                b_svc = ('drop-in' if b.service_type
-                         and b.service_type.slug == ServiceType.DROP_IN else 'walk')
-                batch.add(owner_user.id, 'booking_cancelled',
-                          dog_name=dog.name, slot=b.slot, date=b.date, svc_label=b_svc)
-    for wuid, payloads in walker_payloads.items():
-        for p in payloads:
-            batch.add_for_walker(wuid, 'booking_cancelled', **p)
-    batch.flush()
 
     try:
         db.session.commit()

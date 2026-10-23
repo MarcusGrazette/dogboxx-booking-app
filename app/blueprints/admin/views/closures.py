@@ -9,9 +9,9 @@ import logging
 
 from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
-from app.models import User, Booking, DogOwner, ServiceType, Closure
+from app.models import Booking, Closure
 from app import db
-from app.utils.notifications import NotificationBatch
+from app.utils.booking_notify import notify_cancelled
 from app.utils.booking_status import transition_booking
 from app.utils.date_ranges import parse_range, dates_in_range, range_label
 
@@ -114,22 +114,11 @@ def add_closure():
         batch_id = uuid.uuid4().hex
         body_text = f"DogBoxx is closed {range_label(new_dates)}" + (f" — {reason}." if reason else ".")
 
-        # Batch-fetch co-owners to avoid N+1 (one DogOwner query per booking).
-        dog_ids = [b.dog_id for b in bookings if b.dog_id]
-        if dog_ids:
-            ownerships = DogOwner.query.filter(DogOwner.dog_id.in_(dog_ids)).all()
-            co_users = {u.id: u for u in User.query.filter(
-                User.id.in_({o.user_id for o in ownerships})).all()}
-            owners_by_dog = {}
-            for o in ownerships:
-                owners_by_dog.setdefault(o.dog_id, []).append(o)
-        else:
-            owners_by_dog, co_users = {}, {}
+        # Owners and assigned walkers each get one grouped notice, even across
+        # several dates in the range. Sent before the transitions, as on every
+        # cancel path.
+        notify_cancelled(bookings, actor=current_user, by_admin=True, reason=body_text)
 
-        # Grouped per recipient: primary owner, co-owners, and assigned walker
-        # each get one consolidated notice — even across multiple cancelled
-        # bookings spanning several dates in the range.
-        batch = NotificationBatch(actor_id=current_user.id)
         for booking in bookings:
             # Closure cancel intentionally leaves walker_id set (unlike client
             # cancellations) — preserve that by not passing walker_id.
@@ -139,33 +128,7 @@ def add_closure():
             transition_booking(booking, 'cancelled', actor_id=current_user.id,
                                cancelled_by='admin', batch_id=batch_id,
                                bill_cancellation=False)
-            svc_label = (
-                'drop-in'
-                if booking.service_type and booking.service_type.slug == ServiceType.DROP_IN
-                else 'walk'
-            )
-            dog_name = booking.dog.name if booking.dog else 'Your dog'
-            payload = dict(dog_name=dog_name, slot=booking.slot,
-                            date=booking.date, svc_label=svc_label, reason=body_text)
 
-            # Primary owner
-            batch.add(booking.user_id, 'booking_cancelled', **payload)
-
-            # Co-owners: other non-admin users who share this dog
-            for o in owners_by_dog.get(booking.dog_id, []):
-                if o.user_id == booking.user_id:
-                    continue
-                co_user = co_users.get(o.user_id)
-                if co_user and not co_user.is_admin:
-                    batch.add(co_user.id, 'booking_cancelled', **payload)
-
-            # Assigned walker: skip if unset or if it's the acting admin
-            if booking.walker_id and booking.walker:
-                walker_uid = booking.walker.user_id
-                if walker_uid and walker_uid != current_user.id:
-                    batch.add_for_walker(walker_uid, 'booking_cancelled', **payload)
-
-        batch.flush()
         db.session.commit()
         return jsonify(
             success=True,
