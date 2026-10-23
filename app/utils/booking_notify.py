@@ -21,6 +21,8 @@ redesign".
 Like NotificationBatch, nothing here commits — the caller does.
 """
 
+from flask import current_app
+
 from app import db
 from app.models import DogOwner, ServiceType, User, Walker
 from app.utils.notifications import NotificationBatch, create_notification, walker_notify_now
@@ -131,6 +133,11 @@ def notify_created(bookings, *, actor, by_admin, same_day=False):
     batch.flush()
 
 
+def _contact_owner():
+    """Body for a decline or admin cancel sent to the household."""
+    return f"Please contact {current_app.config['OWNER_FIRSTNAME']} if this is unexpected!"
+
+
 def _slot_word(slot):
     return 'the afternoon' if slot == 'Afternoon' else 'the morning'
 
@@ -231,7 +238,7 @@ def notify_declined(booking, *, actor):
     once = _Once(actor)
     for uid in _household_ids([booking.dog_id]).get(booking.dog_id, []):
         once.send(uid, 'booking_cancelled', f"{_what(booking)} has been declined",
-                  "Please get in touch if you'd like to discuss.")
+                  _contact_owner())
 
 
 def notify_cancelled(bookings, *, actor, by_admin, reason=None):
@@ -241,8 +248,9 @@ def notify_cancelled(bookings, *, actor, by_admin, reason=None):
 
     by_admin: the household (all owners) is told without an actor name, with
     `reason` as the body (a closure's reason; the household's defaults to
-    "please get in touch"); other admins aren't told. Otherwise a client/co-owner cancel: the
-    rest of the household and the admins are told "<Name> cancelled …".
+    _contact_owner()); other admins aren't told. Otherwise a client/co-owner
+    cancel: the rest of the household and the admins are told
+    "<Name> cancelled …".
     The walker who had each walk is told inside the urgent window.
     """
     bookings = [b for b in bookings if b is not None]
@@ -260,7 +268,7 @@ def notify_cancelled(bookings, *, actor, by_admin, reason=None):
     actor_first = None if by_admin else actor.firstname
     household_reason = reason
     if by_admin and reason is None:
-        household_reason = "Please get in touch if you'd like to discuss."
+        household_reason = _contact_owner()
 
     batch = NotificationBatch(actor_id=actor.id)
     for b in bookings:

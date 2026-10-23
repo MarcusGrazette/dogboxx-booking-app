@@ -345,7 +345,7 @@ class TestBoard:
         assert client.post(f'/admin/booking/{b.id}/decline').get_json()['success'] is True
 
         expected = [('booking_cancelled', f"Buddy's morning walk on {TITLE_DAY} has been declined",
-                     "Please get in touch if you'd like to discuss.")]
+                     "Please contact Lydia if this is unexpected!")]
         assert _notifs(client_user) == expected
         assert _notifs(co_owner) == expected
 
@@ -375,7 +375,7 @@ class TestCancel:
         assert client.post('/cancel_booking', data={'booking_id': b.id}).get_json()['success']
 
         expected = [('booking_cancelled', f"Buddy's morning walk on {TITLE_DAY} cancelled",
-                     "Please get in touch if you'd like to discuss.")]
+                     "Please contact Lydia if this is unexpected!")]
         assert _notifs(client_user) == expected
         assert _notifs(co_owner) == expected
         assert _notifs(walker_user) == [
