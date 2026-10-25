@@ -157,65 +157,6 @@ def test_range_crosses_month():
     assert "(Sat 30 May – Tue 2 Jun)" in title
 
 
-# ── summarise(): walker_assigned ─────────────────────────────────────────────
-
-def test_walker_assigned_single():
-    title, body, ntype, link = summarise('walker_assigned', [
-        {'dog_name': 'Daisy', 'slot': 'Morning', 'date': date(2026, 6, 1)},
-    ])
-    assert title == "You have been assigned a walk on 1 Jun 2026"
-    assert body == "Daisy — Morning"
-    assert ntype == 'walker_assigned'
-    assert link == '/walker/pickups?date=2026-06-01'
-
-
-def test_walker_assigned_grouped():
-    payloads = [
-        {'dog_name': 'Rex',   'slot': 'Morning', 'date': date(2026, 6, 1)},
-        {'dog_name': 'Daisy', 'slot': 'Morning', 'date': date(2026, 6, 5)},
-    ]
-    title, body, _, link = summarise('walker_assigned', payloads)
-    assert title == "You have been assigned 2 walks (Mon 1 – Fri 5 Jun)"
-    assert body == "Daisy, Rex"          # sorted dog names
-    assert link == '/walker/schedule'
-
-
-# ── summarise(): walker_removed (walk off a walker's list) ──────────────────
-
-def test_walker_removed_single_dropin_label():
-    title, body, ntype, link = summarise('walker_removed', [
-        {'dog_name': 'Daisy', 'slot': 'Morning', 'date': date(2026, 6, 1),
-         'svc_label': 'drop-in'},
-    ])
-    assert title == "Daisy's morning drop-in on Mon 1 Jun is off your list"
-    assert body is None
-    assert ntype == 'walker_removed'
-    assert link == '/walker/pickups?date=2026-06-01'
-
-
-def test_walker_removed_grouped_dropin_label():
-    """Grouped must use svc_label, not hard-coded 'walks' (the old F5 bug)."""
-    payloads = [
-        {'dog_name': 'Daisy', 'slot': 'Morning', 'date': date(2026, 6, 1),
-         'svc_label': 'drop-in'},
-        {'dog_name': 'Daisy', 'slot': 'Morning', 'date': date(2026, 6, 2),
-         'svc_label': 'drop-in'},
-    ]
-    title, body, _, _ = summarise('walker_removed', payloads)
-    assert title == "2 drop-ins are off your list (Mon 1 – Tue 2 Jun)"
-    assert body == 'Daisy'
-
-
-def test_walker_removed_grouped_walk_label():
-    payloads = [
-        {'dog_name': 'Daisy', 'slot': 'Morning', 'date': date(2026, 6, 1)},
-        {'dog_name': 'Rex',   'slot': 'Morning', 'date': date(2026, 6, 2)},
-    ]
-    title, body, _, _ = summarise('walker_removed', payloads)
-    assert title == "2 walks are off your list (Mon 1 – Tue 2 Jun)"
-    assert body == 'Daisy, Rex'
-
-
 # ── summarise(): contract guards ─────────────────────────────────────────────
 
 def test_empty_payloads_raises():
@@ -226,7 +167,7 @@ def test_empty_payloads_raises():
 def test_kind_ntype_mapping_complete():
     # Every kind summarise() accepts must have a styling key.
     for kind in ('booking_confirmed', 'booking_requested', 'booking_waitlisted',
-                 'booking_cancelled', 'walker_assigned'):
+                 'booking_cancelled'):
         assert kind in _KIND_NTYPE
 
 

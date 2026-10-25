@@ -13,11 +13,10 @@ import uuid
 from app.models import Booking
 from app.utils.booking_status import bulk_transition
 from app.utils.dates import local_today
-from app.utils.notifications import NotificationBatch
 
 
 def reset_bookings_for_lost_availability(bookings, *, actor_id, transition_batch_id=None,
-                                          reason=None, notify_walker=True):
+                                          reason=None):
     """Reset `bookings` to requested/unassigned.
 
     `reason` is a short human-readable clause (no trailing punctuation, e.g.
@@ -27,44 +26,27 @@ def reset_bookings_for_lost_availability(bookings, *, actor_id, transition_batch
     instead of a bare "Reset ... to requested". Every call site should pass
     one; omit only for a reset with no availability-change cause to report.
 
-    Notifications (notification redesign): the household is not told — a
-    reset walk is reassigned by an admin, and the household only hears again
-    if it ends up cancelled. The walker who had each walk is told it's off
-    their list (grouped, inside the urgent window) unless they made the
-    change themselves; `notify_walker=False` for a walker leaving the pool
-    (deactivated, walker role removed). Admins are told by the caller, and
-    only for a walker's own change (booking_notify.notify_walker_dropout).
-    Does not commit.
+    Nobody is notified here (notification redesign): the household only
+    hears again if the walk is cancelled, and walkers only get the daily
+    summary. Admins are told by the caller, and only for a walker's own
+    change (booking_notify.notify_walker_dropout). Does not commit.
     """
     if not bookings:
         return
-    batch = NotificationBatch(actor_id=actor_id)
-    if notify_walker:
-        # Read before bulk_transition clears walker_id.
-        for b in bookings:
-            walker_uid = b.walker.user_id if b.walker_id and b.walker else None
-            if walker_uid and walker_uid != actor_id:
-                batch.add_for_walker(
-                    walker_uid, 'walker_removed',
-                    dog_name=b.dog.name if b.dog else 'Unknown dog', slot=b.slot, date=b.date,
-                    svc_label='drop-in' if b.service_type and b.service_type.slug == 'drop-in' else 'walk')
     bulk_transition(bookings, 'requested', actor_id=actor_id, walker_id=None,
                     batch_id=transition_batch_id or uuid.uuid4().hex, notes=reason)
-    batch.flush()
 
 
 def reset_future_bookings_for_walker(walker, *, actor_id, reason):
     """Reset every future confirmed booking assigned to `walker`, for paths
     where the walker leaves the pool entirely (deactivation from either the
-    Walkers or Clients page, walker-role removal). Nobody is notified: the
-    household never hears about resets and the walker is leaving. Does not
-    commit. Returns the reset bookings.
+    Walkers or Clients page, walker-role removal). Does not commit. Returns
+    the reset bookings.
     """
     affected = Booking.query.filter(
         Booking.walker_id == walker.id,
         Booking.date >= local_today(),
         Booking.status == 'confirmed',
     ).all()
-    reset_bookings_for_lost_availability(affected, actor_id=actor_id, reason=reason,
-                                         notify_walker=False)
+    reset_bookings_for_lost_availability(affected, actor_id=actor_id, reason=reason)
     return affected

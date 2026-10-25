@@ -673,7 +673,7 @@ def pause_walks():
         return jsonify(success=True, cancelled_count=0)
 
     n          = len(bookings)
-    # Notifications before bulk_transition, which clears the walker they read.
+    # Queued in the same transaction as the cancel; nothing commits until the end.
     notify_cancelled(bookings, actor=current_user, by_admin=False)
 
     # One batch_id ties together every cancellation in this pause action so the
@@ -762,9 +762,8 @@ def cancel_booking():
             today=today, admin_override=admin_override,
         )
 
-        # Notifications first: they read the walker, which the cancel clears.
         # Nothing commits until the end, so a rejected transition below rolls
-        # these back too.
+        # these notifications back too.
         notify_cancelled([booking], actor=current_user, by_admin=is_admin_cancel)
 
         # transition_booking sets status, cancelled_at and logs the BSC row.

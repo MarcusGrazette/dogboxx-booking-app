@@ -1,18 +1,17 @@
 """Bell notifications from cancel_booking.
 
 - An admin who is also the assigned walker (the owner, a covering walker)
-  gets one notification, not an admin copy plus a walker copy.
+  gets the admin copy; plain walkers get nothing (their one push is the
+  10:00 daily summary).
 - Titles say "drop-in" for a drop-in, for every recipient.
 - The client is named by first name, like every other bell title.
 """
-from datetime import date, datetime
-from unittest.mock import patch
+from datetime import date
 
 import pytest
 
 from app import db as _db
 from app.models import Booking, DogOwner, Notification, ServiceType, Walker
-from app.utils.dates import LOCAL_TZ
 from tests.conftest import login, make_user
 
 
@@ -55,17 +54,6 @@ def _cancel(client, booking):
     assert resp.get_json()['success'] is True
 
 
-@pytest.fixture(autouse=True)
-def _walk_inside_walker_window():
-    """Walkers only hear instantly about a walk once its 15:00 preview has gone
-    out (notifications.walker_notify_now). Pin "now" to the evening before the
-    fixed 2099 booking so the walker copies are still sent and the titles here
-    can stay literal."""
-    with patch('app.utils.notifications._london_now',
-               return_value=datetime(2099, 6, 1, 18, tzinfo=LOCAL_TZ)):
-        yield
-
-
 @pytest.fixture
 def drop_in():
     return _service('drop-in')
@@ -80,15 +68,15 @@ class TestClientCancel:
         assert _titles_for(admin_user.id) == [
             "Client cancelled Buddy's morning drop-in on Tue 2 Jun"]
 
-    def test_plain_walker_and_admin_both_notified(
+    def test_admin_notified_plain_walker_not(
             self, app, client, client_user, dog, admin_user, walker_user, drop_in):
         walker = Walker.query.filter_by(user_id=walker_user.id).one()
         booking = _booking(client_user, dog, drop_in, walker)
         login(client, client_user.email)
         _cancel(client, booking)
-        expected = ["Client cancelled Buddy's morning drop-in on Tue 2 Jun"]
-        assert _titles_for(admin_user.id) == expected
-        assert _titles_for(walker_user.id) == expected
+        assert _titles_for(admin_user.id) == [
+            "Client cancelled Buddy's morning drop-in on Tue 2 Jun"]
+        assert _titles_for(walker_user.id) == []
 
     def test_co_owner_title(self, app, client, client_user, dog, admin_user, walker_user, drop_in):
         co = make_user(firstname='Casey', role='client')
@@ -107,20 +95,18 @@ class TestClientCancel:
         booking = _booking(client_user, dog, walk, walker)
         login(client, client_user.email)
         _cancel(client, booking)
-        expected = ["Client cancelled Buddy's morning walk on Tue 2 Jun"]
-        assert _titles_for(admin_user.id) == expected
-        assert _titles_for(walker_user.id) == expected
+        assert _titles_for(admin_user.id) == [
+            "Client cancelled Buddy's morning walk on Tue 2 Jun"]
 
 
 class TestAdminCancel:
-    def test_walker_title_says_drop_in(
+    def test_title_says_drop_in(
             self, app, client, client_user, dog, admin_user, walker_user, drop_in):
         walker = Walker.query.filter_by(user_id=walker_user.id).one()
         booking = _booking(client_user, dog, drop_in, walker)
         login(client, admin_user.email)
         _cancel(client, booking)
         # Same shared wording as closures and bulk cancels (summarise()).
-        assert _titles_for(walker_user.id) == [
-            "Buddy's morning drop-in on Tue 2 Jun cancelled"]
+        assert _titles_for(walker_user.id) == []
         assert _titles_for(client_user.id) == [
             "Buddy's morning drop-in on Tue 2 Jun cancelled"]

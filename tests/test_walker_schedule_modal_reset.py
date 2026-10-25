@@ -15,7 +15,6 @@ and each affected client gets one 'system' notification.
 import datetime
 import json
 import pytest
-from unittest.mock import patch
 from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 
@@ -24,7 +23,6 @@ from app.models import (
     Booking, BookingStatusChange, Client, Dog, DogOwner, Notification,
     ServiceType, User, Walker, WalkerSchedule,
 )
-from app.utils.dates import LOCAL_TZ
 
 
 TRUNCATE_ORDER = [
@@ -133,9 +131,9 @@ def _post_schedule(flask_client, walker_id, schedules):
 
 class TestScheduleModalResetsAffectedBookings:
     """When removing a (weekday, slot) from a walker's schedule, future
-    confirmed bookings on that combo must be reset to 'requested'. The client
-    isn't told (a reset is silent until re-confirmed or cancelled); the walker
-    is told the walks are off their list, inside the urgent window."""
+    confirmed bookings on that combo must be reset to 'requested'. Nobody is
+    notified: the client hears again only if the walk is cancelled, and the
+    walker's one push is the 10:00 daily summary."""
 
     def test_removed_combo_resets_booking_silently_for_client(self, app, client):
         monday = _next_weekday(0)
@@ -257,10 +255,9 @@ class TestScheduleModalResetsAffectedBookings:
             assert b.walker_id == walker_id
             assert b.status == 'confirmed'
 
-    def test_walker_gets_one_grouped_notice(self, app, client):
-        """3 bookings across 2 clients reset by an admin's schedule edit: the
-        walker gets one grouped "off your list" notice; the clients nothing.
-        "Now" is pinned to the Sunday before, inside Monday's urgent window."""
+    def test_three_resets_notify_nobody(self, app, client):
+        """3 bookings across 2 clients reset by an admin's schedule edit: no
+        notification for the clients or the walker."""
         monday = _next_weekday(0)
         with app.app_context():
             admin = _make_admin()
@@ -285,20 +282,13 @@ class TestScheduleModalResetsAffectedBookings:
             a_id, b_id = client_a.id, client_b.id
 
         _login(client, admin_email)
-        sunday_noon = datetime.datetime.combine(
-            monday - datetime.timedelta(days=1), datetime.time(12), tzinfo=LOCAL_TZ)
-        with patch('app.utils.notifications._london_now', return_value=sunday_noon):
-            resp = _post_schedule(client, walker_id, [])
+        resp = _post_schedule(client, walker_id, [])
 
         assert resp.get_json()['affected_count'] == 3
         with app.app_context():
             assert Notification.query.filter_by(recipient_id=a_id).count() == 0
             assert Notification.query.filter_by(recipient_id=b_id).count() == 0
-            walker_notifs = Notification.query.filter_by(recipient_id=walker_uid).all()
-            assert [(n.notification_type, n.title, n.body) for n in walker_notifs] == [
-                ('walker_removed',
-                 f"3 walks are off your list ({monday.strftime('%a %-d %b')})",
-                 'AlphaOne, AlphaTwo, BetaOne')]
+            assert Notification.query.filter_by(recipient_id=walker_uid).count() == 0
 
             # Session 1: all 3 resets share one batch_id so the feed can cluster
             # them, and each is a distinct confirmed→requested BSC row.

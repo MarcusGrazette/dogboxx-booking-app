@@ -709,7 +709,7 @@ def dog_bulk_cancel(dog_id):
 
     n = len(bookings)
 
-    # Notifications before bulk_transition, which clears the walker they read.
+    # Queued in the same transaction as the cancel; nothing commits until the end.
     notify_cancelled(bookings, actor=current_user, by_admin=True)
 
     # One batch_id ties together every cancellation in this bulk-cancel action

@@ -445,8 +445,7 @@ def walker_schedule_json(walker_id):
 
         # Confirmed future bookings on the now-removed (weekday, slot) combos
         # are no longer guaranteed — reset them to 'requested' (walker_id=None)
-        # so they surface in the pending column on the board for reassignment;
-        # the walker is told they're off their list (inside the urgent window).
+        # so they surface in the pending column on the board for reassignment.
         affected_count = 0
         if removed:
             from datetime import date as _date
@@ -690,8 +689,7 @@ def admin_add_unavailability(walker_id):
 
     # Any confirmed bookings this walker held for this date/slot are no longer
     # guaranteed — reset them to requested so they surface as pending on the
-    # board; the walker is told they're off their list (inside the urgent
-    # window). Actor = the admin marking the walker unavailable.
+    # board. Actor = the admin marking the walker unavailable.
     affected = Booking.query.filter_by(
         walker_id=walker.id, date=unavail_date, slot=slot, status='confirmed',
     ).all()

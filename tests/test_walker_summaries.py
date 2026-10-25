@@ -1,16 +1,15 @@
-"""Daily walker summaries + the walkers' urgent window for instant notifications.
+"""The daily walker summary — walkers' only push about their walks.
 
-- walker_notify_now(): instant walker notifications only once the walk's
-  15:00 preview has gone out (today; tomorrow after 15:00; Monday from
-  Friday 15:00); anything earlier is left to the summaries.
-- due_summary(): 08:00 London → today's 'morning', 15:00 → next working
-  day's 'preview' (Friday → Monday), in both GMT and BST; nothing at weekends.
+- No instant walker notifications: a booking change for a walker's walk
+  (here, a same-day cancel) sends them nothing.
+- due_summary(): 10:00 London → today, in both GMT and BST; nothing at other
+  hours or at weekends.
 - build_summary(): slot order, walks before drop-ins, pickup order, the day's
   admin announcement as plain text.
 - send_walker_summaries(): confirmed bookings of eligible walkers only, one
   per walker, nothing for walkers with no walks, idempotent on re-run.
 """
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from unittest.mock import patch
 
 import pytest
@@ -20,12 +19,9 @@ from app.models import (
     Booking, DailyMessage, Dog, DogOwner, Notification, ServiceType, Walker,
     WalkerSummarySent,
 )
-from app.utils.dates import LOCAL_TZ, local_today
-from app.utils.notifications import NotificationBatch, walker_notify_now
+from app.utils.dates import local_today
 from app.utils import walker_summaries
-from app.utils.walker_summaries import (
-    build_summary, due_summary, next_working_day, send_walker_summaries,
-)
+from app.utils.walker_summaries import build_summary, due_summary, send_walker_summaries
 from tests.conftest import login, make_user
 
 DAY = date(2099, 6, 2)   # a Tuesday
@@ -73,67 +69,14 @@ def walker(walker_user):
 
 # ── Urgent window ───────────────────────────────────────────────────────────
 
-def _london(y, m, d, h, minute=0):
-    return datetime(y, m, d, h, minute, tzinfo=LOCAL_TZ)
-
-
-class TestWalkerNotifyNow:
-    # Tue 13 Oct 2026 … Mon 19 Oct 2026
-    def test_today_always(self):
-        assert walker_notify_now(date(2026, 10, 13), _london(2026, 10, 13, 7))
-        assert walker_notify_now(date(2026, 10, 13), _london(2026, 10, 13, 23, 59))
-
-    def test_past_never(self):
-        assert not walker_notify_now(date(2026, 10, 12), _london(2026, 10, 13, 16))
-
-    def test_tomorrow_only_after_the_preview(self):
-        assert not walker_notify_now(date(2026, 10, 14), _london(2026, 10, 13, 14, 59))
-        assert walker_notify_now(date(2026, 10, 14), _london(2026, 10, 13, 15))
-
-    def test_monday_from_friday_preview_through_the_weekend(self):
-        monday = date(2026, 10, 19)
-        assert not walker_notify_now(monday, _london(2026, 10, 16, 14, 59))
-        assert walker_notify_now(monday, _london(2026, 10, 16, 15))
-        assert walker_notify_now(monday, _london(2026, 10, 17, 10))   # Saturday
-
-    def test_later_days_wait_for_their_own_preview(self):
-        # Saturday: Tuesday's preview is Monday 15:00
-        assert not walker_notify_now(date(2026, 10, 20), _london(2026, 10, 17, 10))
-        assert not walker_notify_now(date(2026, 10, 16), _london(2026, 10, 13, 16))
-
-    def test_batch_add_for_walker_drops_walks_before_their_preview(self, app, walker_user):
-        today = local_today()
-        batch = NotificationBatch(actor_id=None)
-        batch.add_for_walker(walker_user.id, 'walker_assigned', dog_name='Rex',
-                             slot='Morning', date=today + timedelta(days=30))
-        assert batch.flush() == []
-        batch.add_for_walker(walker_user.id, 'walker_assigned', dog_name='Rex',
-                             slot='Morning', date=today)
-        assert len(batch.flush()) == 1
-
-
-class TestCancelRespectsWindow:
-    """cancel_booking's walker notification — one of the direct
-    create_notification walker sends, outside NotificationBatch."""
-
-    def _cancel_titles(self, client, booking, walker_user):
-        resp = client.post('/cancel_booking', data={'booking_id': booking.id})
-        assert resp.get_json()['success'] is True
-        return [n.title for n in Notification.query.filter_by(
-            recipient_id=walker_user.id, notification_type='booking_cancelled')]
-
-    def test_far_future_cancel_not_sent_to_walker(
-            self, app, client, client_user, dog, service_type, walker_user, walker):
-        b = _booking(client_user, dog, service_type, walker,
-                     day=local_today() + timedelta(days=30))
-        login(client, client_user.email)
-        assert self._cancel_titles(client, b, walker_user) == []
-
-    def test_same_day_cancel_sent_to_walker(
+class TestNoInstantWalkerNotifications:
+    def test_same_day_cancel_not_sent_to_walker(
             self, app, client, client_user, dog, service_type, walker_user, walker):
         b = _booking(client_user, dog, service_type, walker, day=local_today())
         login(client, client_user.email)
-        assert len(self._cancel_titles(client, b, walker_user)) == 1
+        resp = client.post('/cancel_booking', data={'booking_id': b.id})
+        assert resp.get_json()['success'] is True
+        assert Notification.query.filter_by(recipient_id=walker_user.id).count() == 0
 
 
 # ── When summaries are due ──────────────────────────────────────────────────
@@ -143,27 +86,21 @@ def _utc(y, m, d, h, minute=0):
 
 
 class TestDueSummary:
-    def test_morning_gmt_and_bst(self):
-        # Mon 2 Nov 2026 is GMT: 08:00 London = 08:00 UTC
-        assert due_summary(_utc(2026, 11, 2, 8)) == ('morning', date(2026, 11, 2))
-        assert due_summary(_utc(2026, 11, 2, 7)) is None
-        # Mon 12 Oct 2026 is BST: 08:00 London = 07:00 UTC
-        assert due_summary(_utc(2026, 10, 12, 7)) == ('morning', date(2026, 10, 12))
-        assert due_summary(_utc(2026, 10, 12, 8)) is None
+    def test_ten_am_gmt_and_bst(self):
+        # Mon 2 Nov 2026 is GMT: 10:00 London = 10:00 UTC
+        assert due_summary(_utc(2026, 11, 2, 10)) == date(2026, 11, 2)
+        assert due_summary(_utc(2026, 11, 2, 9)) is None
+        # Mon 12 Oct 2026 is BST: 10:00 London = 09:00 UTC
+        assert due_summary(_utc(2026, 10, 12, 9)) == date(2026, 10, 12)
+        assert due_summary(_utc(2026, 10, 12, 10)) is None
 
-    def test_preview_targets_next_working_day(self):
-        # Tue 13 Oct 2026, BST: 15:00 London = 14:00 UTC
-        assert due_summary(_utc(2026, 10, 13, 14)) == ('preview', date(2026, 10, 14))
-        # Fri 6 Nov 2026, GMT: Friday's preview covers Monday
-        assert due_summary(_utc(2026, 11, 6, 15)) == ('preview', date(2026, 11, 9))
+    def test_no_other_hour(self):
+        for hour in (7, 8, 14, 15):     # the old 08:00 / 15:00 runs
+            assert due_summary(_utc(2026, 11, 2, hour)) is None
 
     def test_nothing_at_weekends(self):
-        assert due_summary(_utc(2026, 11, 7, 8)) is None    # Saturday
-        assert due_summary(_utc(2026, 11, 8, 15)) is None   # Sunday
-
-    def test_next_working_day(self):
-        assert next_working_day(date(2026, 11, 5)) == date(2026, 11, 6)   # Thu → Fri
-        assert next_working_day(date(2026, 11, 6)) == date(2026, 11, 9)   # Fri → Mon
+        assert due_summary(_utc(2026, 11, 7, 10)) is None   # Saturday
+        assert due_summary(_utc(2026, 11, 8, 10)) is None   # Sunday
 
 
 # ── Summary text ────────────────────────────────────────────────────────────
@@ -180,29 +117,23 @@ class TestBuildSummary:
             _booking(client_user, bella, service_type, walker, slot='Morning', pickup_order=1),
             _booking(client_user, biscuit, drop_in, walker, slot='Morning'),
         ]
-        title, body, link = build_summary('morning', DAY, rows)
+        title, body, link = build_summary(DAY, rows)
         assert title == 'Your walks today (Tue 2 Jun)'
         assert body == ('Morning: Bella, Milo · Morning drop-ins: Biscuit · '
                         'Afternoon: Rex')
         assert link == '/walker/pickups/2099-06-02'
 
-    def test_preview_titles(self, app, client_user, dog, service_type, walker):
-        rows = [_booking(client_user, dog, service_type, walker)]
-        assert build_summary('preview', DAY, rows)[0] == 'Your walks tomorrow (Tue 2 Jun)'
-        monday = date(2099, 6, 1)
-        assert build_summary('preview', monday, rows)[0] == 'Your walks on Monday (Mon 1 Jun)'
-
     def test_daily_message_appended_as_plain_text(
             self, app, client_user, dog, service_type, walker):
         rows = [_booking(client_user, dog, service_type, walker)]
-        _, body, _ = build_summary('morning', DAY, rows,
+        _, body, _ = build_summary(DAY, rows,
                                    '<p>Park gate <strong>closed</strong> &amp; muddy</p>')
         assert body == 'Morning: Buddy · Note: Park gate closed & muddy'
 
     def test_long_daily_message_truncated(
             self, app, client_user, dog, service_type, walker):
         rows = [_booking(client_user, dog, service_type, walker)]
-        _, body, _ = build_summary('morning', DAY, rows, '<p>' + 'x' * 500 + '</p>')
+        _, body, _ = build_summary(DAY, rows, '<p>' + 'x' * 500 + '</p>')
         note = body.split('Note: ', 1)[1]
         assert len(note) == 200 and note.endswith('…')
 
@@ -219,7 +150,7 @@ class TestSendWalkerSummaries:
         _booking(client_user, dog, service_type, walker, slot='Morning')
         _booking(client_user, other, service_type, walker, slot='Afternoon')
 
-        assert send_walker_summaries('morning', DAY) == 1
+        assert send_walker_summaries(DAY) == 1
         notifs = _summaries_for(walker_user.id)
         assert [n.body for n in notifs] == ['Morning: Buddy · Afternoon: Rex']
         assert _summaries_for(idle.id) == []
@@ -232,7 +163,7 @@ class TestSendWalkerSummaries:
         _booking(client_user, dog, service_type, walker, status='cancelled')
         _booking(client_user, other, service_type, walker, status='requested',
                  slot='Afternoon')
-        assert send_walker_summaries('morning', DAY) == 0
+        assert send_walker_summaries(DAY) == 0
         assert _summaries_for(walker_user.id) == []
 
     def test_demoted_walker_skipped(
@@ -240,23 +171,21 @@ class TestSendWalkerSummaries:
         _booking(client_user, dog, service_type, walker)
         walker_user.role = 'client'
         _db.session.commit()
-        assert send_walker_summaries('morning', DAY) == 0
+        assert send_walker_summaries(DAY) == 0
 
     def test_rerun_is_a_noop(self, app, client_user, dog, service_type, walker_user, walker):
         _booking(client_user, dog, service_type, walker)
-        assert send_walker_summaries('morning', DAY) == 1
-        assert send_walker_summaries('morning', DAY) == 0
+        assert send_walker_summaries(DAY) == 1
+        assert send_walker_summaries(DAY) == 0
         assert len(_summaries_for(walker_user.id)) == 1
-        # The preview for the same day is a separate summary.
-        assert send_walker_summaries('preview', DAY) == 1
-        assert WalkerSummarySent.query.filter_by(walker_id=walker.id).count() == 2
+        assert WalkerSummarySent.query.filter_by(walker_id=walker.id).one().kind == 'daily'
 
     def test_includes_daily_message(
             self, app, client_user, dog, service_type, walker_user, walker):
         _booking(client_user, dog, service_type, walker)
         _db.session.add(DailyMessage(date=DAY, content='<p>Bring towels</p>'))
         _db.session.commit()
-        send_walker_summaries('morning', DAY)
+        send_walker_summaries(DAY)
         assert _summaries_for(walker_user.id)[0].body == 'Morning: Buddy · Note: Bring towels'
 
     def test_failure_for_one_walker_does_not_block_others(
@@ -278,7 +207,7 @@ class TestSendWalkerSummaries:
             return original(**kw)
 
         with patch('app.utils.walker_summaries.create_notification', side_effect=flaky):
-            assert send_walker_summaries('morning', DAY) == 1
+            assert send_walker_summaries(DAY) == 1
         # The failed walker has no sent-marker, so a re-run picks them up.
-        assert send_walker_summaries('morning', DAY) == 1
+        assert send_walker_summaries(DAY) == 1
         assert WalkerSummarySent.query.count() == 2

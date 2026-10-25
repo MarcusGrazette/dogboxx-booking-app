@@ -7,7 +7,6 @@ out cancellations/notifications correctly across every date in the range.
 """
 import json
 import datetime
-from unittest.mock import patch
 
 from werkzeug.security import generate_password_hash
 
@@ -15,7 +14,6 @@ from app import db
 from app.models import (
     User, Client, Walker, Dog, DogOwner, Booking, ServiceType, Notification, Closure,
 )
-from app.utils.dates import LOCAL_TZ
 
 
 def _next_weekday(target_dow):
@@ -117,21 +115,15 @@ class TestClosureFanOut:
             assert notifs[0].notification_type == 'booking_cancelled'
             assert 'Luna' in notifs[0].title or 'cancelled' in notifs[0].title
 
-    def test_closure_notifies_assigned_walker(self, app, client):
-        """Assigned walker must receive a booking_cancelled notification (§7.4).
-        "Now" is pinned to the Sunday before: Monday's preview (Friday 15:00)
-        has gone out, so the walk is inside the walker urgent window."""
+    def test_closure_does_not_notify_assigned_walker(self, app, client):
+        """Walkers get no booking notifications — the cancelled walk simply
+        drops out of their 10:00 daily summary."""
         ids = self._setup(app)
         _login(client, ids['admin_email'])
-        sunday_noon = datetime.datetime.combine(
-            ids['monday'] - datetime.timedelta(days=1), datetime.time(12), tzinfo=LOCAL_TZ)
-        with patch('app.utils.notifications._london_now', return_value=sunday_noon):
-            _post_closure(client, ids['monday'].isoformat())
+        _post_closure(client, ids['monday'].isoformat())
 
         with app.app_context():
-            notifs = Notification.query.filter_by(recipient_id=ids['walker_uid']).all()
-            assert len(notifs) == 1, "walker must get exactly one notification"
-            assert notifs[0].notification_type == 'booking_cancelled'
+            assert Notification.query.filter_by(recipient_id=ids['walker_uid']).count() == 0
 
     def test_closure_does_not_double_notify_admin_as_walker(self, app, client):
         """If the acting admin is also the assigned walker, they must NOT get a

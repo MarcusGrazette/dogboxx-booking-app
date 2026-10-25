@@ -1,10 +1,11 @@
-"""Who hears about a new booking — app/utils/booking_notify.py::notify_created.
+"""Who hears about a booking action — app/utils/booking_notify.py.
 
-Exact recipient sets per creation route: the household (every current owner
-of the dog, minus the actor) mirrors one notification; admins hear about
-client bookings only; the walker hears inside the urgent window; the actor
-never hears about their own action; one notification per person. Plus #13:
-a recurring series that fails part-way still notifies for what it saved.
+Exact recipient sets per route: the household (every current owner of the
+dog, minus the actor) mirrors one notification; admins hear about
+client-initiated actions only; walkers are never notified (their one push is
+the 10:00 daily summary); the actor never hears about their own action; one
+notification per person. Plus #13: a recurring series that fails part-way
+still notifies for what it saved.
 """
 from datetime import date, datetime, timedelta
 from unittest.mock import patch
@@ -18,19 +19,10 @@ from app.models import (
 )
 from app.services import booking_service
 from app.utils.booking_notify import notify_created
-from app.utils.dates import LOCAL_TZ
 from tests.conftest import login, make_user
 
 DAY = date(2099, 6, 2)                       # a Tuesday
 TITLE_DAY = 'Tue 2 Jun'
-EVENING_BEFORE = datetime(2099, 6, 1, 18, tzinfo=LOCAL_TZ)   # after Monday's preview
-
-
-@pytest.fixture(autouse=True)
-def _after_the_preview():
-    """Pin "now" so DAY's walks are inside the walker urgent window."""
-    with patch('app.utils.notifications._london_now', return_value=EVENING_BEFORE):
-        yield
 
 
 @pytest.fixture
@@ -73,8 +65,7 @@ class TestClientBooking:
         assert _notifs(client_user) == []
         assert _notifs(co_owner) == [('booking_confirmed', title, None)]
         assert _notifs(admin_user) == [('booking_confirmed', title, 'Booked with Walker.')]
-        assert _notifs(walker_user) == [
-            ('walker_assigned', 'You have been assigned a walk on 2 Jun 2099', 'Buddy — Morning')]
+        assert _notifs(walker_user) == []
 
     def test_drop_in_request(self, app, client, client_user, dog, co_owner, admin_user,
                              walker_user):
@@ -120,7 +111,7 @@ class TestClientBooking:
         client.post('/book', json={'date': DAY.isoformat(), 'slot': 'Morning', 'dog_id': dog.id})
         assert [n[0] for n in _notifs(admin_user)] == ['booking_confirmed']
 
-    def test_recurring_household_grouped_and_walker_windowed(
+    def test_recurring_household_grouped(
             self, app, client, client_user, dog, co_owner, admin_user, walker_user,
             service_type):
         _schedule(walker_user)
@@ -135,9 +126,7 @@ class TestClientBooking:
             ('booking_confirmed', "Client booked Buddy's 6 walks (Tue 2 – Tue 9 Jun)",
              '6 walks booked.')]
         assert len(_notifs(admin_user)) == 1
-        # Only Tue 2 Jun is past its preview; the rest arrive in summaries.
-        assert _notifs(walker_user) == [
-            ('walker_assigned', 'You have been assigned a walk on 2 Jun 2099', 'Buddy — Morning')]
+        assert _notifs(walker_user) == []
 
 
 class TestAdminBooking:
@@ -158,7 +147,7 @@ class TestAdminBooking:
         assert _notifs(co_owner) == expected
         assert _notifs(admin_user) == []
         assert _notifs(other_admin) == []
-        assert [n[0] for n in _notifs(walker_user)] == ['walker_assigned']
+        assert _notifs(walker_user) == []
 
 
 class TestHouseholdIsCurrentOwners:
@@ -248,7 +237,7 @@ def _assign(flask_client, booking, walker, **extra):
 
 
 class TestBoard:
-    def test_first_confirmation_tells_household_and_walker(
+    def test_first_confirmation_tells_household(
             self, app, client, client_user, dog, co_owner, admin_user, walker_user,
             service_type):
         walker = _schedule(walker_user)
@@ -259,10 +248,10 @@ class TestBoard:
         expected = [('booking_confirmed', f"Buddy's morning walk on {TITLE_DAY} confirmed", None)]
         assert _notifs(client_user) == expected
         assert _notifs(co_owner) == expected
-        assert [n[0] for n in _notifs(walker_user)] == ['walker_assigned']
+        assert _notifs(walker_user) == []
         assert _notifs(admin_user) == []
 
-    def test_reassign_is_silent_to_household(
+    def test_reassign_tells_nobody(
             self, app, client, client_user, dog, co_owner, admin_user, walker_user,
             service_type):
         old = _schedule(walker_user)
@@ -273,11 +262,10 @@ class TestBoard:
 
         assert _notifs(client_user) == []
         assert _notifs(co_owner) == []
-        assert _notifs(walker_user) == [
-            ('walker_removed', f"Buddy's morning walk on {TITLE_DAY} is off your list", None)]
-        assert [n[0] for n in _notifs(bea)] == ['walker_assigned']
+        assert _notifs(walker_user) == []
+        assert _notifs(bea) == []
 
-    def test_reconfirm_after_reset_is_silent_to_household(
+    def test_reconfirm_after_reset_tells_nobody(
             self, app, client, client_user, dog, co_owner, admin_user, service_type):
         bea, new = _second_walker()
         b = _walk(client_user, dog, service_type, status='requested')   # reset: confirmed before
@@ -286,9 +274,9 @@ class TestBoard:
 
         assert _notifs(client_user) == []
         assert _notifs(co_owner) == []
-        assert [n[0] for n in _notifs(bea)] == ['walker_assigned']
+        assert _notifs(bea) == []
 
-    def test_unassign_tells_only_the_walker(
+    def test_unassign_tells_nobody(
             self, app, client, client_user, dog, co_owner, admin_user, walker_user,
             service_type):
         walker = _schedule(walker_user)
@@ -298,10 +286,9 @@ class TestBoard:
 
         assert _notifs(client_user) == []
         assert _notifs(co_owner) == []
-        assert _notifs(walker_user) == [
-            ('walker_removed', f"Buddy's morning walk on {TITLE_DAY} is off your list", None)]
+        assert _notifs(walker_user) == []
 
-    def test_slot_move_same_walker(
+    def test_slot_move_tells_household_only(
             self, app, client, client_user, dog, co_owner, admin_user, walker_user,
             service_type):
         walker = _schedule(walker_user)
@@ -314,8 +301,7 @@ class TestBoard:
                      'Originally booked for morning.')]
         assert _notifs(client_user) == expected
         assert _notifs(co_owner) == expected
-        assert _notifs(walker_user) == [
-            ('system', f"Buddy's morning walk on {TITLE_DAY} has moved to the afternoon", None)]
+        assert _notifs(walker_user) == []
 
     def test_pending_walk_confirmed_and_moved_is_one_message(
             self, app, client, client_user, dog, co_owner, admin_user, walker_user,
@@ -363,7 +349,7 @@ class TestCancel:
         assert _notifs(co_owner) == []
         assert [n[1] for n in _notifs(client_user)] == [title]
         assert [n[1] for n in _notifs(admin_user)] == [title]
-        assert [n[1] for n in _notifs(walker_user)] == [title]
+        assert _notifs(walker_user) == []
 
     def test_admin_cancel_tells_whole_household(
             self, app, client, client_user, dog, co_owner, admin_user, walker_user,
@@ -379,8 +365,7 @@ class TestCancel:
                      "Please contact Lydia if this is unexpected!")]
         assert _notifs(client_user) == expected
         assert _notifs(co_owner) == expected
-        assert _notifs(walker_user) == [
-            ('booking_cancelled', f"Buddy's morning walk on {TITLE_DAY} cancelled", None)]
+        assert _notifs(walker_user) == []
         assert _notifs(other_admin) == []
 
     def test_closure_tells_household_with_reason(
@@ -391,19 +376,19 @@ class TestCancel:
         login(client, admin_user.email)
         client.post('/admin/closures', json={'date': DAY.isoformat(), 'reason': 'Storm'})
 
-        for user in (client_user, co_owner, walker_user):
+        for user in (client_user, co_owner):
             notifs = _notifs(user)
             assert len(notifs) == 1
             assert notifs[0][0] == 'booking_cancelled'
             assert 'Storm' in notifs[0][2]
+        assert _notifs(walker_user) == []
 
 
 # ── Walker availability (redesign PR 3) ─────────────────────────────────────
 
 class TestWalkerAvailability:
-    """Resets are silent to the household; the walker hears when someone else
-    took their walks; admins hear only when a walker's own change leaves walks
-    to reassign."""
+    """Resets are silent to the household and the walker; admins hear only when
+    a walker's own change leaves walks to reassign."""
 
     def test_walker_time_off_with_walks_tells_admins_only(
             self, app, client, client_user, dog, co_owner, admin_user, walker_user,
@@ -453,7 +438,7 @@ class TestWalkerAvailability:
              f"Walker removed their Afternoon availability — {TITLE_DAY}",
              '1 booking needs reassigning')]
 
-    def test_admin_marking_walker_off_tells_the_walker(
+    def test_admin_marking_walker_off_tells_nobody(
             self, app, client, client_user, dog, co_owner, admin_user, walker_user,
             service_type):
         walker = _schedule(walker_user)
@@ -466,8 +451,7 @@ class TestWalkerAvailability:
         assert _notifs(client_user) == []
         assert _notifs(co_owner) == []
         assert _notifs(admin_user) == []
-        assert _notifs(walker_user) == [
-            ('walker_removed', f"Buddy's morning walk on {TITLE_DAY} is off your list", None)]
+        assert _notifs(walker_user) == []
 
     def test_admin_walker_marking_herself_off_tells_nobody(
             self, app, client, client_user, dog, admin_user, service_type):

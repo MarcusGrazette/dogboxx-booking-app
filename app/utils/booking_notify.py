@@ -1,6 +1,6 @@
 """Who hears about a booking action — the one place the recipient rules live.
 
-Three audiences, each minus the actor (people are never told what they just
+Two audiences, each minus the actor (people are never told what they just
 did; the toast already said so):
 
   * household — every *current* owner of the booking's dog (DogOwner rows),
@@ -8,25 +8,24 @@ did; the toast already said so):
     only: a revoked co-owner who made a booking stops hearing about it.
   * admins    — every is_admin user, for client-initiated actions only;
     other admins' actions are in the activity feed.
-  * walker    — the walker whose own confirmed list changed, only inside the
-    urgent window (NotificationBatch.add_for_walker → walker_notify_now).
 
-One notification per person per action: when someone fits more than one
-audience, household beats admin beats walker. Covers new bookings, the board
-(assign / reassign / unassign / slot move / decline), cancellations,
-closures, and the admin notice for a walker's own drop-out (the resets
-themselves, and the walker's notice, are in availability_reset.py). The full
-matrix is in the handbook, deep-dives/notifications.md "Notification
-redesign".
+Walkers get no booking notifications: their one push is the 10:00 summary of
+that day's walks (walker_summaries.py). An admin who also walks still gets
+the admin copy.
+
+One notification per person per action: when someone is both, the household
+text wins. Covers new bookings, the board (first confirmation / slot move /
+decline), cancellations, closures, and the admin notice for a walker's own
+drop-out. The full matrix is in the handbook, deep-dives/notifications.md
+"Notification redesign".
 
 Like NotificationBatch, nothing here commits — the caller does.
 """
 
 from flask import current_app
 
-from app import db
-from app.models import DogOwner, ServiceType, User, Walker
-from app.utils.notifications import NotificationBatch, create_notification, walker_notify_now
+from app.models import DogOwner, ServiceType, User
+from app.utils.notifications import NotificationBatch, create_notification
 
 
 def _svc_label(booking):
@@ -95,7 +94,6 @@ def notify_created(bookings, *, actor, by_admin, same_day=False):
                 household.append(uid)
     admins = [] if by_admin else [
         uid for uid in _admin_ids() if uid != actor.id and uid not in household]
-    told = set(household) | set(admins)
 
     batch = NotificationBatch(actor_id=actor.id)
     urgent = []
@@ -104,7 +102,6 @@ def notify_created(bookings, *, actor, by_admin, same_day=False):
         svc = _svc_label(b)
         kind = _kind(b)
         payload = dict(dog_name=dog_name, slot=b.slot, date=b.date, svc_label=svc)
-        walker_user_id = b.walker.user_id if kind == 'booking_confirmed' and b.walker else None
 
         for uid in owners.get(b.dog_id, []):
             if uid in household:
@@ -116,15 +113,13 @@ def notify_created(bookings, *, actor, by_admin, same_day=False):
             urgent.append(b)
         else:
             walker_first = (b.walker.user.firstname
-                            if walker_user_id and b.walker.user else None)
+                            if kind == 'booking_confirmed' and b.walker and b.walker.user
+                            else None)
             link = (f'/admin/clients/{actor.id}' if kind == 'booking_confirmed'
                     else '/admin/drop-in-board' if svc == 'drop-in' else '/admin')
             for uid in admins:
                 batch.add(uid, kind, actor_first=actor.firstname, link=link,
                           walker_name=walker_first, **payload)
-
-        if walker_user_id and walker_user_id != actor.id and walker_user_id not in told:
-            batch.add_for_walker(walker_user_id, 'walker_assigned', **payload)
 
     if urgent and admins:
         title, link = _same_day_admin_notice(urgent, actor)
@@ -151,8 +146,8 @@ def _what(booking, slot=None):
 
 
 class _Once:
-    """One notification per person for a single-booking action: household,
-    then admins, then walkers, each minus the actor and anyone already told."""
+    """One notification per person for a single-booking action, minus the
+    actor and anyone already told."""
 
     def __init__(self, actor):
         self.actor = actor
@@ -166,30 +161,15 @@ class _Once:
                             body=body, link=link, sender_id=self.actor.id)
 
 
-def _walker_added(once, uid, booking):
-    if walker_notify_now(booking.date):
-        once.send(uid, 'walker_assigned',
-                  f"You have been assigned a {_svc_label(booking)} on "
-                  f"{booking.date.strftime('%-d %b %Y')}",
-                  f"{booking.dog.name if booking.dog else 'Unknown dog'} — {booking.slot}",
-                  link=f'/walker/pickups?date={booking.date.isoformat()}')
-
-
-def _walker_removed(once, uid, booking, slot):
-    if walker_notify_now(booking.date):
-        once.send(uid, 'walker_removed', f"{_what(booking, slot)} is off your list",
-                  link=f'/walker/pickups?date={booking.date.isoformat()}')
-
-
-def notify_assigned(booking, *, actor, was_confirmed, old_walker_user_id, old_slot):
+def notify_assigned(booking, *, actor, was_confirmed, old_slot):
     """An admin gave `booking` a walker on the board (assign_walker): a first
     confirmation, a reassignment, a re-confirmation after a reset, and/or a
     slot move. Pass the pre-change state: `was_confirmed` = booking.confirmed_at
-    was already set (it is never cleared, so a reset walk still counts),
-    `old_walker_user_id`, `old_slot`.
+    was already set (it is never cleared, so a reset walk still counts), and
+    `old_slot`.
 
     Household: told on the first confirmation and on a slot move — never on a
-    reassignment or a re-confirmation. Walkers: whoever's list changed.
+    reassignment or a re-confirmation. (Unassigning tells nobody.)
     """
     once = _Once(actor)
     moved = old_slot != booking.slot
@@ -212,27 +192,6 @@ def notify_assigned(booking, *, actor, was_confirmed, old_walker_user_id, old_sl
         for uid in owners:
             once.send(uid, ntype, title, body)
 
-    # By id, not booking.walker: the caller read booking.walker for the old
-    # walker, and setting walker_id doesn't refresh that loaded relationship.
-    new_walker = db.session.get(Walker, booking.walker_id) if booking.walker_id else None
-    new_walker_uid = new_walker.user_id if new_walker else None
-    if old_walker_user_id and old_walker_user_id == new_walker_uid:
-        if moved and walker_notify_now(booking.date):
-            once.send(new_walker_uid, 'system',
-                      f"{_what(booking, old_slot)} has moved to {_slot_word(booking.slot)}",
-                      link=f'/walker/pickups?date={booking.date.isoformat()}')
-        return
-    if old_walker_user_id:
-        _walker_removed(once, old_walker_user_id, booking, old_slot)
-    _walker_added(once, new_walker_uid, booking)
-
-
-def notify_unassigned(booking, *, actor, old_walker_user_id):
-    """An admin took the walker off a confirmed walk (back to requested).
-    Silent to the household; the walker who had it is told inside the window."""
-    if old_walker_user_id:
-        _walker_removed(_Once(actor), old_walker_user_id, booking, booking.slot)
-
 
 def notify_declined(booking, *, actor):
     """An admin declined a request: every owner is told."""
@@ -244,15 +203,13 @@ def notify_declined(booking, *, actor):
 
 def notify_cancelled(bookings, *, actor, by_admin, reason=None):
     """Bookings cancelled by one action — a single cancel, Pause Walks, an
-    admin bulk cancel, a closure. Call it BEFORE the transition: it reads each
-    booking's walker, which the cancel clears.
+    admin bulk cancel, a closure.
 
     by_admin: the household (all owners) is told without an actor name, with
     `reason` as the body (a closure's reason; the household's defaults to
     _contact_owner()); other admins aren't told. Otherwise a client/co-owner
     cancel: the rest of the household and the admins are told
     "<Name> cancelled …".
-    The walker who had each walk is told inside the urgent window.
     """
     bookings = [b for b in bookings if b is not None]
     if not bookings:
@@ -265,7 +222,6 @@ def notify_cancelled(bookings, *, actor, by_admin, reason=None):
                 household.append(uid)
     admins = [] if by_admin else [
         uid for uid in _admin_ids() if uid != actor.id and uid not in household]
-    told = set(household) | set(admins) | {actor.id}
     actor_first = None if by_admin else actor.firstname
     household_reason = reason
     if by_admin and reason is None:
@@ -282,10 +238,6 @@ def notify_cancelled(bookings, *, actor, by_admin, reason=None):
         for uid in admins:
             batch.add(uid, 'booking_cancelled', actor_first=actor_first,
                       link=f'/admin/clients/{actor.id}', **payload)
-        walker_uid = b.walker.user_id if b.walker_id and b.walker else None
-        if walker_uid and walker_uid not in told:
-            batch.add_for_walker(walker_uid, 'booking_cancelled', actor_first=actor_first,
-                                 link='/walker/schedule', **payload)
     batch.flush()
 
 
@@ -293,8 +245,7 @@ def notify_walker_dropout(actor, *, title, affected):
     """A walker's own availability change (time off, an extra day removed)
     left `affected` confirmed walks to reassign: tell the admins. Nothing when
     an admin made the change — it's in the activity feed — or when no walks
-    are affected. The reset itself, and the walker's own notice when someone
-    else made the change, are in availability_reset.py."""
+    are affected. The reset itself is in availability_reset.py."""
     if actor.is_admin or not affected:
         return
     body = f"{affected} booking{'s need' if affected != 1 else ' needs'} reassigning"

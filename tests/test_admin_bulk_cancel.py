@@ -13,13 +13,11 @@ let `_seed_bookings` commit the whole graph in one transaction.
 """
 import datetime
 import json
-from unittest.mock import patch
 
 from werkzeug.security import generate_password_hash
 
 from app import db
 from app.models import Booking, BookingStatusChange, Walker, WalkerSchedule, Notification, ServiceType
-from app.utils.dates import LOCAL_TZ
 
 
 def _make_drop_in_service():
@@ -234,8 +232,8 @@ class TestBulkCancelDayFilter:
 
 
 class TestBulkCancelWalkerNotification:
-    """Session 3 (§7.4): assigned walkers must be notified when their bookings
-    are bulk-cancelled."""
+    """Walkers get no booking notifications (their one push is the 10:00
+    daily summary), so a bulk cancel tells the assigned walker nothing."""
 
     def _make_walker(self, email='walker_bc@test.com'):
         from app.models import User as _User
@@ -246,12 +244,8 @@ class TestBulkCancelWalkerNotification:
         db.session.add(w); db.session.commit()
         return u, w
 
-    def test_bulk_cancel_notifies_assigned_walker(self, client_user, dog, service_type,
-                                                  admin_user, logged_in_admin):
-        """Confirmed bookings assigned to a walker are bulk-cancelled → the walker
-        gets exactly one grouped booking_cancelled notification. "Now" is pinned
-        to Monday evening so both walks are inside the walker urgent window
-        (Monday is today, Tuesday's 15:00 preview has gone out)."""
+    def test_bulk_cancel_does_not_notify_assigned_walker(self, client_user, dog, service_type,
+                                                          admin_user, logged_in_admin):
         mon = _next_weekday(0)
         tue = mon + datetime.timedelta(days=1)
         walker_u, walker = self._make_walker()
@@ -268,21 +262,13 @@ class TestBulkCancelWalkerNotification:
         end   = (tue + datetime.timedelta(days=1)).isoformat()
         walker_uid = walker_u.id
 
-        monday_evening = datetime.datetime.combine(mon, datetime.time(18), tzinfo=LOCAL_TZ)
-        with patch('app.utils.notifications._london_now', return_value=monday_evening):
-            resp = logged_in_admin.post(
-                f'/admin/dogs/{dog.id}/bulk-cancel',
-                data=json.dumps({'start': start, 'end': end}),
-                content_type='application/json',
-            )
+        resp = logged_in_admin.post(
+            f'/admin/dogs/{dog.id}/bulk-cancel',
+            data=json.dumps({'start': start, 'end': end}),
+            content_type='application/json',
+        )
         assert resp.get_json()['cancelled_count'] == 2
-
-        notifs = Notification.query.filter_by(recipient_id=walker_uid).all()
-        assert len(notifs) == 1
-        n = notifs[0]
-        assert n.notification_type == 'booking_cancelled'
-        # Grouped: "Buddy's 2 walks cancelled (Mon … – Tue …)"
-        assert '2 walks cancelled' in n.title
+        assert Notification.query.filter_by(recipient_id=walker_uid).count() == 0
 
 
 class TestBulkCancelLateFeeBilling:
