@@ -13,7 +13,7 @@ from app.utils.db_error_handler import handle_db_errors
 from app.models import User, Booking, Walker, WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, ServiceType, DogOwner, SlotFreeze
 from app import db
 from app.capacity import get_max_per_walker, get_walker_slot_count, get_drop_in_capacity, auto_assign_walker, get_available_walkers, check_availability, acquire_booking_lock, eligible_walker_clause
-from app.utils.booking_notify import notify_assigned, notify_declined, notify_unassigned
+from app.utils.booking_notify import notify_assigned, notify_declined
 from app.utils.booking_status import transition_booking, InvalidTransitionError
 from app.utils.activity_log import record_admin_action
 
@@ -334,8 +334,8 @@ def assign_walker():
 
     Side effects on successful assignment:
         - Sets booking.status = 'confirmed', booking.walker_id, booking.slot
-        - Sends in-app notification to client (booking_confirmed)
-        - Sends in-app notification to walker (walker_assigned)
+        - Notifies the household on a first confirmation or slot move
+          (booking_notify.notify_assigned)
 
     On unassignment (walker_id = null):
         - Clears booking.walker_id, sets status back to 'requested'
@@ -365,12 +365,9 @@ def assign_walker():
         # commit, so a concurrent cancel can't land between check and write.
         if walker_id is None:
             db.session.refresh(booking, with_for_update=True)
-            old_walker_user_id = booking.walker.user_id if booking.walker else None
             transition_booking(booking, 'requested', actor_id=current_user.id,
                                walker_id=None, allowed_from={'confirmed'})
             booking.pickup_order = None
-            notify_unassigned(booking, actor=current_user,
-                              old_walker_user_id=old_walker_user_id)
             db.session.commit()
 
             return jsonify(
@@ -476,10 +473,9 @@ def assign_walker():
         # activity feed can tell a slot change apart from a plain re-confirm
         # (otherwise both look like a confirmed→confirmed row with no detail).
         slot_was_changed = bool(slot_override and slot and old_slot and old_slot != slot)
-        # Pre-change state for the notifications below. confirmed_at is never
+        # Pre-change state for the notification below. confirmed_at is never
         # cleared, so a walk reset to requested still counts as confirmed before.
         was_confirmed = booking.confirmed_at is not None
-        old_walker_user_id = booking.walker.user_id if booking.walker else None
         bsc_notes = f"slot {old_slot} → {slot}" if slot_was_changed else None
         # allowed_from covers both a fresh assign (requested/waitlisted) and a
         # reassign between walkers (confirmed) — but rejects a booking the
@@ -503,7 +499,7 @@ def assign_walker():
         )
 
         notify_assigned(booking, actor=current_user, was_confirmed=was_confirmed,
-                        old_walker_user_id=old_walker_user_id, old_slot=old_slot)
+                        old_slot=old_slot)
 
         db.session.commit()
 

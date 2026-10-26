@@ -114,9 +114,8 @@ def add_closure():
         batch_id = uuid.uuid4().hex
         body_text = f"DogBoxx is closed {range_label(new_dates)}" + (f" — {reason}." if reason else ".")
 
-        # Owners and assigned walkers each get one grouped notice, even across
-        # several dates in the range. Sent before the transitions, as on every
-        # cancel path.
+        # Each owner gets one grouped notice, even across several dates in the
+        # range.
         notify_cancelled(bookings, actor=current_user, by_admin=True, reason=body_text)
 
         for booking in bookings:

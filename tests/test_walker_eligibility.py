@@ -99,10 +99,9 @@ def _assert_untouched(booking_id, walker_id):
 
 
 def _reset_notifications(user_id):
-    # NotificationBatch stores the booking_reset kind as type 'system'
-    # (notifications.py kind→type map); nothing else notifies these owners.
-    return Notification.query.filter_by(recipient_id=user_id,
-                                        notification_type='system').count()
+    # Owners aren't told about resets any more (notification redesign: a reset
+    # walk is silent until it's re-confirmed or cancelled), so this stays 0.
+    return Notification.query.filter_by(recipient_id=user_id).count()
 
 
 class TestDropInToggleOff:
@@ -126,7 +125,7 @@ class TestDropInToggleOff:
         _assert_reset(future_drop, 'stopped doing drop-in visits')
         _assert_untouched(past_drop, walker.id)
         _assert_untouched(future_walk, walker.id)
-        assert _reset_notifications(owner.id) == 1
+        assert _reset_notifications(owner.id) == 0
 
     def test_turning_drop_ins_on_resets_nothing(self, app, client):
         drop_in = _service(ServiceType.DROP_IN)
@@ -161,7 +160,7 @@ class TestRemoveWalkerRole:
         remaining = WalkerAdHocAvailability.query.filter_by(walker_id=walker.id).all()
         assert [a.date for a in remaining] == [PAST]
         _assert_reset(booking_id, "walker role was removed")
-        assert _reset_notifications(owner.id) == 1
+        assert _reset_notifications(owner.id) == 0
 
 
 class TestDeactivateDualRoleFromClients:
@@ -179,7 +178,7 @@ class TestDeactivateDualRoleFromClients:
 
         _assert_reset(future_id, 'was deactivated')
         _assert_untouched(past_id, walker.id)
-        assert _reset_notifications(owner.id) == 1
+        assert _reset_notifications(owner.id) == 0
         assert WalkerSchedule.query.filter_by(walker_id=walker.id, active=True).count() == 1
 
     def test_plain_client_deactivation_unaffected(self, app, client):

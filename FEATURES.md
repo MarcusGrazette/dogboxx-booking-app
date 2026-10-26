@@ -103,7 +103,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 60 | Newsletter | Rich-text newsletter with merge tags and test send. |
 | 61 | Email opt-out | One-click unsubscribe link in every newsletter. |
 | 85 | Notification bell badge alignment | The unread-count pill sits on the bell's corner in the same place in every browser, client and admin. |
-| 96 | Walker daily summaries | One summary of each walker's dogs per slot at 15:00 for the next working day and at 08:00 for today; instant walker notifications only for walks within a week. |
+| 96 | Walker daily summaries | One summary of each walker's dogs per slot at 10:00 on the day — walkers' only notification about their walks. |
 
 ### Platform & quality
 

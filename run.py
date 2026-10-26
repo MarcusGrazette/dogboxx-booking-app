@@ -133,39 +133,30 @@ def reconcile_uploads_cmd():
 
 
 @app.cli.command("send-walker-summaries")
-@click.option("--kind", type=click.Choice(["preview", "morning"]), default=None,
-              help="Send this summary now instead of the one due by the London clock.")
 @click.option("--date", "date_str", default=None,
-              help="YYYY-MM-DD the summary describes (with --kind; default: the due date).")
-def send_walker_summaries_cmd(kind, date_str):
-    """Send the daily walker summaries (app/utils/walker_summaries.py). With no
-    options, sends whichever is due now — 'morning' at 08:00 London, 'preview'
-    at 15:00 — and does nothing at any other hour; the walker-summaries cron
-    service runs it at both UTC hours of each so BST and GMT are covered.
-    Safe to re-run: walkers already sent that summary are skipped."""
+              help="YYYY-MM-DD: send that day's summary now, whatever the time "
+                   "(a manual re-send). Default: today's, only at 10:00 London.")
+def send_walker_summaries_cmd(date_str):
+    """Send the daily walker summary (app/utils/walker_summaries.py). With no
+    options, sends today's at 10:00 London and does nothing at any other hour;
+    the walker-summaries cron service runs it at both UTC hours that can be
+    10:00 London, so BST and GMT are covered. Safe to re-run: walkers already
+    sent that day's summary are skipped."""
     from datetime import date
     import gevent
-    from app.utils.walker_summaries import (
-        due_summary, next_working_day, send_walker_summaries,
-    )
-    from app.utils.dates import local_today
+    from app.utils.walker_summaries import due_summary, send_walker_summaries
 
     with app.app_context():
-        if kind:
-            if date_str:
-                target = date.fromisoformat(date_str)
-            else:
-                today = local_today()
-                target = today if kind == "morning" else next_working_day(today)
+        if date_str:
+            target = date.fromisoformat(date_str)
         else:
-            due = due_summary()
-            if due is None:
+            target = due_summary()
+            if target is None:
                 click.echo("No walker summary due at this hour (London).")
                 return
-            kind, target = due
 
-        sent = send_walker_summaries(kind, target)
-        click.echo(f"Sent {sent} walker {kind} summar{'y' if sent == 1 else 'ies'} for {target}.")
+        sent = send_walker_summaries(target)
+        click.echo(f"Sent {sent} walker summar{'y' if sent == 1 else 'ies'} for {target}.")
 
     # Web Push goes out from greenlets spawned in the after_commit hook
     # (app/__init__.py). Gunicorn's gevent worker runs those; a CLI process
