@@ -14,21 +14,19 @@ Usage:
     )
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from app import db
 from app.models import Notification
-from app.utils.dates import local_today
 
 # ── Caps ──────────────────────────────────────────────────────────────────────
 NOTIF_DB_CAP   = 100  # max stored per user (oldest pruned at insert time)
 NOTIF_PAGE_CAP = 50   # max shown on the full notifications page
 NOTIF_BELL_CAP = 5    # max shown in the navbar bell dropdown
 
-# Walkers hear about a change to one of their walks straight away only when
-# the walk is within this many days of today (London). Changes further out
-# are left to the daily summaries (app/utils/walker_summaries.py), which are
-# built from the live bookings when they are sent — so nothing is lost.
-WALKER_NOTICE_DAYS = 7
+# Walkers get no instant booking notifications (owner decision 2026-10-25):
+# their one push is the 10:00 daily summary of that day's walks
+# (app/utils/walker_summaries.py), built from live bookings. Notifications
+# below go to households and admins only.
 
 
 # ── Type metadata ─────────────────────────────────────────────────────────────
@@ -40,7 +38,10 @@ NOTIFICATION_META = {
     'booking_cancelled':    ('bi-x-circle-fill',       '#dc3545'),   # red
     'booking_requested':    ('bi-calendar-plus-fill',  '#E02FAC'),   # pink
     'same_day_request':     ('bi-lightning-fill',      '#fd7e14'),   # orange — urgent same-day
+    # walker_assigned / walker_removed are no longer sent (walkers only get the
+    # daily summary) but stay here so older bell rows keep their icon.
     'walker_assigned':      ('bi-person-check-fill',   '#0d6efd'),   # blue
+    'walker_removed':       ('bi-person-dash-fill',    '#6c757d'),   # grey
     'walker_availability':  ('bi-calendar-x-fill',     '#fd7e14'),   # orange
     'walker_summary':       ('bi-calendar-day-fill',   '#0d6efd'),   # blue
     'system':               ('bi-info-circle-fill',    '#6c757d'),   # grey
@@ -55,16 +56,6 @@ def get_meta(notification_type):
 
 
 # ── Core helpers ──────────────────────────────────────────────────────────────
-
-def walker_notify_now(booking_date, today=None):
-    """Whether a walker should be notified instantly about a change to a walk
-    on booking_date: today up to WALKER_NOTICE_DAYS ahead. Past walks and
-    walks further out get nothing — the latter reach the walker through the
-    daily summaries instead. Every walker-recipient notification goes
-    through this (or NotificationBatch.add_for_walker)."""
-    today = today or local_today()
-    return today <= booking_date <= today + timedelta(days=WALKER_NOTICE_DAYS)
-
 
 def create_notification(recipient_id, notification_type, title,
                         body=None, link=None, sender_id=None):
@@ -218,12 +209,9 @@ _KIND_NTYPE = {
     'booking_requested':  'booking_requested',
     'booking_waitlisted': 'booking_requested',
     'booking_cancelled':  'booking_cancelled',
-    'booking_reset':      'system',
-    'walker_assigned':    'walker_assigned',
 }
 
 # Actor-prefixed verb per kind ("Lydia booked …", "John cancelled …").
-# booking_reset has no actor-prefixed variant — always client-reflexive.
 _KIND_VERB = {
     'booking_confirmed':  'booked',
     'booking_requested':  'requested',
@@ -235,11 +223,6 @@ _KIND_VERB = {
 def _fmt_day(d):
     """'Mon 1 Jun' — platform %-d (no leading zero)."""
     return d.strftime('%a %-d %b')
-
-
-def _fmt_day_long(d):
-    """'1 Jun 2026' — walker-facing date."""
-    return d.strftime('%-d %b %Y')
 
 
 def _fmt_range(dates):
@@ -287,31 +270,6 @@ def summarise(kind, payloads, *, actor_first=None):
     svc_labels = {p.get('svc_label', 'walk') for p in payloads}
     svc = svc_labels.pop() if len(svc_labels) == 1 else 'walk'
 
-    # ── Booking reset (walker reassignment needed) — always reflexive ────────
-    if kind == 'booking_reset':
-        if n == 1:
-            p = payloads[0]
-            svc = p.get('svc_label', 'walk')
-            title = f"{p['dog_name']}'s {_fmt_day(p['date'])} {svc} needs a new walker"
-            body  = "No action needed — we'll reassign and confirm shortly."
-        else:
-            title = f"{n} of your {_plural(svc, n)} are being reassigned"
-            body  = "No action needed — we'll reassign and confirm shortly."
-        return title, body, 'system', '/notifications'
-
-    # ── Walker assignment — its own template, ignores actor_first ─────────────
-    if kind == 'walker_assigned':
-        if n == 1:
-            p = payloads[0]
-            title = f"You have been assigned a {svc} on {_fmt_day_long(p['date'])}"
-            body  = f"{p['dog_name']} — {p['slot']}"
-            link  = f"/walker/pickups?date={p['date'].isoformat()}"
-        else:
-            title = f"You have been assigned {n} {_plural(svc, n)} ({_fmt_range(dates)})"
-            body  = ', '.join(dog_names)
-            link  = '/walker/schedule'
-        return title, body, ntype, link
-
     # ── Booking events ───────────────────────────────────────────────────────
     dog_pfx = f"{one_dog}'s " if one_dog else ""
 
@@ -324,7 +282,7 @@ def summarise(kind, payloads, *, actor_first=None):
             title = f"{actor_first} {verb} {dog_pfx}{slot_lower} {svc} on {when}"
             if kind == 'booking_confirmed':
                 w = p.get('walker_name')
-                body = f"Booked with {w}." if w else "Walker assigned."
+                body = f"Booked with {w}." if w else None
             elif kind == 'booking_waitlisted':
                 body = "On the waitlist — we'll let you know when a spot opens up."
             elif kind == 'booking_cancelled':
@@ -335,7 +293,7 @@ def summarise(kind, payloads, *, actor_first=None):
             if kind == 'booking_confirmed':
                 title = f"{dog_pfx}{slot_lower} {svc} on {when} confirmed"
                 w = p.get('walker_name')
-                body = f"Booked with {w}." if w else "Walker assigned."
+                body = f"Booked with {w}." if w else None
             elif kind == 'booking_requested':
                 title = f"{dog_pfx}{slot_lower} {svc} on {when} requested"
                 body = "We'll confirm shortly."
@@ -411,13 +369,6 @@ class NotificationBatch:
             grp = {'actor_first': actor_first, 'link': link, 'payloads': []}
             self._groups[key] = grp
         grp['payloads'].append(payload)
-        return self
-
-    def add_for_walker(self, recipient_id, kind, **kwargs):
-        """add() for a walker recipient — dropped unless the walk's date
-        passes walker_notify_now(). Use this, not add(), for every walker."""
-        if walker_notify_now(kwargs['date']):
-            self.add(recipient_id, kind, **kwargs)
         return self
 
     def flush(self):

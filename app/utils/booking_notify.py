@@ -1,0 +1,255 @@
+"""Who hears about a booking action — the one place the recipient rules live.
+
+Two audiences, each minus the actor (people are never told what they just
+did; the toast already said so):
+
+  * household — every *current* owner of the booking's dog (DogOwner rows),
+    all getting the same text. Not booking.user_id, which is attribution
+    only: a revoked co-owner who made a booking stops hearing about it.
+  * admins    — every is_admin user, for client-initiated actions only;
+    other admins' actions are in the activity feed.
+
+Walkers get no booking notifications: their one push is the 10:00 summary of
+that day's walks (walker_summaries.py). An admin who also walks still gets
+the admin copy.
+
+One notification per person per action: when someone is both, the household
+text wins. Covers new bookings, the board (first confirmation / slot move /
+decline), cancellations, closures, and the admin notice for a walker's own
+drop-out. The full matrix is in the handbook, deep-dives/notifications.md
+"Notification redesign".
+
+Like NotificationBatch, nothing here commits — the caller does.
+"""
+
+from flask import current_app
+
+from app.models import DogOwner, ServiceType, User
+from app.utils.notifications import NotificationBatch, create_notification
+
+
+def _svc_label(booking):
+    st = booking.service_type
+    return 'drop-in' if st and st.slug == ServiceType.DROP_IN else 'walk'
+
+
+def _kind(booking):
+    if booking.status == 'confirmed':
+        return 'booking_confirmed'
+    if booking.status == 'waitlisted':
+        return 'booking_waitlisted'
+    return 'booking_requested'
+
+
+def _household_ids(dog_ids):
+    """{dog_id: [user_id, ...]} of current owners, in one query."""
+    owners = {}
+    for o in DogOwner.query.filter(DogOwner.dog_id.in_(dog_ids)).order_by(DogOwner.id):
+        owners.setdefault(o.dog_id, []).append(o.user_id)
+    return owners
+
+
+def _admin_ids():
+    return [u.id for u in User.query.filter_by(is_admin=True).order_by(User.id)]
+
+
+def _fmt_day(d):
+    return d.strftime('%a %-d %b')
+
+
+def _same_day_admin_notice(bookings, actor):
+    """(title, link) of the urgent admin notice for same-day pending bookings.
+    summarise() has no same-day kind, so this stays a direct create_notification."""
+    b0 = bookings[0]
+    svc = _svc_label(b0)
+    dog_names = sorted({b.dog.name for b in bookings if b.dog})
+    slots = ' & '.join(s.lower() for s in sorted({b.slot for b in bookings},
+                                                 key=lambda s: s != 'Morning'))
+    plural = 's' if len(bookings) > 1 else ''
+    title = (f"Same-day request — {actor.firstname} requested "
+             f"{', '.join(dog_names)}'s {slots} {svc}{plural} on {_fmt_day(b0.date)}")
+    link = '/admin/drop-in-board' if svc == 'drop-in' else '/admin'
+    return title, link
+
+
+def notify_created(bookings, *, actor, by_admin, same_day=False):
+    """Notify about bookings just created by one action (a single booking, both
+    slots, or a recurring series). Bookings must be flushed or committed.
+
+    by_admin: an admin booking on a client's behalf (/admin routes) — the
+    household hears, other admins don't. Otherwise a client booking: the
+    household (minus the client) and every admin hear.
+    same_day: a client's same-day booking — pending ones reach admins as one
+    urgent same_day_request notice instead of the grouped kinds.
+    """
+    bookings = [b for b in bookings if b is not None]
+    if not bookings:
+        return
+
+    owners = _household_ids({b.dog_id for b in bookings})
+    household = []
+    for b in bookings:
+        for uid in owners.get(b.dog_id, []):
+            if uid != actor.id and uid not in household:
+                household.append(uid)
+    admins = [] if by_admin else [
+        uid for uid in _admin_ids() if uid != actor.id and uid not in household]
+
+    batch = NotificationBatch(actor_id=actor.id)
+    urgent = []
+    for b in bookings:
+        dog_name = b.dog.name if b.dog else 'Unknown dog'
+        svc = _svc_label(b)
+        kind = _kind(b)
+        payload = dict(dog_name=dog_name, slot=b.slot, date=b.date, svc_label=svc)
+
+        for uid in owners.get(b.dog_id, []):
+            if uid in household:
+                # No walker_name: reassignments are silent to the household,
+                # so "Booked with Alice" could go out of date.
+                batch.add(uid, kind, actor_first=actor.firstname, link='/', **payload)
+
+        if same_day and kind != 'booking_confirmed':
+            urgent.append(b)
+        else:
+            walker_first = (b.walker.user.firstname
+                            if kind == 'booking_confirmed' and b.walker and b.walker.user
+                            else None)
+            link = (f'/admin/clients/{actor.id}' if kind == 'booking_confirmed'
+                    else '/admin/drop-in-board' if svc == 'drop-in' else '/admin')
+            for uid in admins:
+                batch.add(uid, kind, actor_first=actor.firstname, link=link,
+                          walker_name=walker_first, **payload)
+
+    if urgent and admins:
+        title, link = _same_day_admin_notice(urgent, actor)
+        for uid in admins:
+            create_notification(recipient_id=uid, notification_type='same_day_request',
+                                title=title, link=link, sender_id=actor.id)
+    batch.flush()
+
+
+def _contact_owner():
+    """Body for a decline or admin cancel sent to the household."""
+    return f"Please contact {current_app.config['OWNER_FIRSTNAME']} if this is unexpected!"
+
+
+def _slot_word(slot):
+    return 'the afternoon' if slot == 'Afternoon' else 'the morning'
+
+
+def _what(booking, slot=None):
+    """"Rex's morning walk on Tue 21 Oct"."""
+    dog_name = booking.dog.name if booking.dog else 'Unknown dog'
+    return (f"{dog_name}'s {(slot or booking.slot).lower()} {_svc_label(booking)} "
+            f"on {_fmt_day(booking.date)}")
+
+
+class _Once:
+    """One notification per person for a single-booking action, minus the
+    actor and anyone already told."""
+
+    def __init__(self, actor):
+        self.actor = actor
+        self.told = {actor.id}
+
+    def send(self, uid, ntype, title, body=None, link='/'):
+        if uid is None or uid in self.told:
+            return
+        self.told.add(uid)
+        create_notification(recipient_id=uid, notification_type=ntype, title=title,
+                            body=body, link=link, sender_id=self.actor.id)
+
+
+def notify_assigned(booking, *, actor, was_confirmed, old_slot):
+    """An admin gave `booking` a walker on the board (assign_walker): a first
+    confirmation, a reassignment, a re-confirmation after a reset, and/or a
+    slot move. Pass the pre-change state: `was_confirmed` = booking.confirmed_at
+    was already set (it is never cleared, so a reset walk still counts), and
+    `old_slot`.
+
+    Household: told on the first confirmation and on a slot move — never on a
+    reassignment or a re-confirmation. (Unassigning tells nobody.)
+    """
+    once = _Once(actor)
+    moved = old_slot != booking.slot
+    owners = _household_ids([booking.dog_id]).get(booking.dog_id, [])
+    first = not was_confirmed
+    if first or moved:
+        when = f"{_fmt_day(booking.date)}"
+        dog_name = booking.dog.name if booking.dog else 'Unknown dog'
+        svc = _svc_label(booking)
+        if first and moved:
+            title = f"{dog_name}'s {svc} on {when} is confirmed for {_slot_word(booking.slot)}"
+            ntype = 'booking_confirmed'
+        elif first:
+            title = f"{_what(booking)} confirmed"
+            ntype = 'booking_confirmed'
+        else:
+            title = f"{dog_name}'s {svc} on {when} has moved to {_slot_word(booking.slot)}"
+            ntype = 'system'
+        body = f"Originally booked for {old_slot.lower()}." if moved else None
+        for uid in owners:
+            once.send(uid, ntype, title, body)
+
+
+def notify_declined(booking, *, actor):
+    """An admin declined a request: every owner is told."""
+    once = _Once(actor)
+    for uid in _household_ids([booking.dog_id]).get(booking.dog_id, []):
+        once.send(uid, 'booking_cancelled', f"{_what(booking)} has been declined",
+                  _contact_owner())
+
+
+def notify_cancelled(bookings, *, actor, by_admin, reason=None):
+    """Bookings cancelled by one action — a single cancel, Pause Walks, an
+    admin bulk cancel, a closure.
+
+    by_admin: the household (all owners) is told without an actor name, with
+    `reason` as the body (a closure's reason; the household's defaults to
+    _contact_owner()); other admins aren't told. Otherwise a client/co-owner
+    cancel: the rest of the household and the admins are told
+    "<Name> cancelled …".
+    """
+    bookings = [b for b in bookings if b is not None]
+    if not bookings:
+        return
+    owners = _household_ids({b.dog_id for b in bookings})
+    household = []
+    for b in bookings:
+        for uid in owners.get(b.dog_id, []):
+            if uid != actor.id and uid not in household:
+                household.append(uid)
+    admins = [] if by_admin else [
+        uid for uid in _admin_ids() if uid != actor.id and uid not in household]
+    actor_first = None if by_admin else actor.firstname
+    household_reason = reason
+    if by_admin and reason is None:
+        household_reason = _contact_owner()
+
+    batch = NotificationBatch(actor_id=actor.id)
+    for b in bookings:
+        payload = dict(dog_name=b.dog.name if b.dog else 'Unknown dog', slot=b.slot,
+                       date=b.date, svc_label=_svc_label(b), reason=reason)
+        for uid in owners.get(b.dog_id, []):
+            if uid in household:
+                batch.add(uid, 'booking_cancelled', actor_first=actor_first, link='/',
+                          **{**payload, 'reason': household_reason})
+        for uid in admins:
+            batch.add(uid, 'booking_cancelled', actor_first=actor_first,
+                      link=f'/admin/clients/{actor.id}', **payload)
+    batch.flush()
+
+
+def notify_walker_dropout(actor, *, title, affected):
+    """A walker's own availability change (time off, an extra day removed)
+    left `affected` confirmed walks to reassign: tell the admins. Nothing when
+    an admin made the change — it's in the activity feed — or when no walks
+    are affected. The reset itself is in availability_reset.py."""
+    if actor.is_admin or not affected:
+        return
+    body = f"{affected} booking{'s need' if affected != 1 else ' needs'} reassigning"
+    for uid in _admin_ids():
+        if uid != actor.id:
+            create_notification(recipient_id=uid, notification_type='walker_availability',
+                                title=title, body=body, link='/admin', sender_id=actor.id)

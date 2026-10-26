@@ -232,8 +232,8 @@ class TestBulkCancelDayFilter:
 
 
 class TestBulkCancelWalkerNotification:
-    """Session 3 (§7.4): assigned walkers must be notified when their bookings
-    are bulk-cancelled."""
+    """Walkers get no booking notifications (their one push is the 10:00
+    daily summary), so a bulk cancel tells the assigned walker nothing."""
 
     def _make_walker(self, email='walker_bc@test.com'):
         from app.models import User as _User
@@ -244,24 +244,22 @@ class TestBulkCancelWalkerNotification:
         db.session.add(w); db.session.commit()
         return u, w
 
-    def test_bulk_cancel_notifies_assigned_walker(self, client_user, dog, service_type,
-                                                  admin_user, logged_in_admin):
-        """Confirmed bookings assigned to a walker are bulk-cancelled → the walker
-        gets exactly one grouped booking_cancelled notification."""
+    def test_bulk_cancel_does_not_notify_assigned_walker(self, client_user, dog, service_type,
+                                                          admin_user, logged_in_admin):
         mon = _next_weekday(0)
-        wed = _next_weekday(2)
+        tue = mon + datetime.timedelta(days=1)
         walker_u, walker = self._make_walker()
 
         # Seed confirmed bookings assigned to the walker.
-        for d in (mon, wed):
+        for d in (mon, tue):
             b = Booking(user_id=client_user.id, dog_id=dog.id,
                         service_type_id=service_type.id, date=d,
                         slot='Morning', status='confirmed', walker_id=walker.id)
             db.session.add(b)
         db.session.commit()
 
-        start = min(mon, wed).isoformat()
-        end   = (max(mon, wed) + datetime.timedelta(days=1)).isoformat()
+        start = mon.isoformat()
+        end   = (tue + datetime.timedelta(days=1)).isoformat()
         walker_uid = walker_u.id
 
         resp = logged_in_admin.post(
@@ -270,13 +268,7 @@ class TestBulkCancelWalkerNotification:
             content_type='application/json',
         )
         assert resp.get_json()['cancelled_count'] == 2
-
-        notifs = Notification.query.filter_by(recipient_id=walker_uid).all()
-        assert len(notifs) == 1
-        n = notifs[0]
-        assert n.notification_type == 'booking_cancelled'
-        # Grouped: "Buddy's 2 walks cancelled (Mon … – Wed …)"
-        assert '2 walks cancelled' in n.title
+        assert Notification.query.filter_by(recipient_id=walker_uid).count() == 0
 
 
 class TestBulkCancelLateFeeBilling:

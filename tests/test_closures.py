@@ -115,16 +115,15 @@ class TestClosureFanOut:
             assert notifs[0].notification_type == 'booking_cancelled'
             assert 'Luna' in notifs[0].title or 'cancelled' in notifs[0].title
 
-    def test_closure_notifies_assigned_walker(self, app, client):
-        """Assigned walker must receive a booking_cancelled notification (§7.4)."""
+    def test_closure_does_not_notify_assigned_walker(self, app, client):
+        """Walkers get no booking notifications — the cancelled walk simply
+        drops out of their 10:00 daily summary."""
         ids = self._setup(app)
         _login(client, ids['admin_email'])
         _post_closure(client, ids['monday'].isoformat())
 
         with app.app_context():
-            notifs = Notification.query.filter_by(recipient_id=ids['walker_uid']).all()
-            assert len(notifs) == 1, "walker must get exactly one notification"
-            assert notifs[0].notification_type == 'booking_cancelled'
+            assert Notification.query.filter_by(recipient_id=ids['walker_uid']).count() == 0
 
     def test_closure_does_not_double_notify_admin_as_walker(self, app, client):
         """If the acting admin is also the assigned walker, they must NOT get a

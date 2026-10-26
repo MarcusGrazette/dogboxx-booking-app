@@ -64,12 +64,12 @@ export default defineRailway(() => {
     "0 3 * * 1",
     { networking: { privateNetworkEndpoint: "reconcile-web-data-uploads" } },
   );
-  // 07/08 UTC cover 08:00 London in BST/GMT, 14/15 cover 15:00; the command
-  // checks the London clock and only the matching run sends.
+  // 09/10 UTC cover 10:00 London in BST/GMT; the command checks the London
+  // clock and only the matching run sends.
   const walkerSummaries = cron(
     "walker-summaries",
     "flask send-walker-summaries",
-    "0 7,8,14,15 * * 1-5",
+    "0 9,10 * * 1-5",
   );
 
   return project("disciplined-creation", {

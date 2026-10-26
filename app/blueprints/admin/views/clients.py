@@ -11,7 +11,7 @@ from app.utils.decorators import admin_required
 from app.models import User, Dog, Client, DogOwner, Notification, PushSubscription
 from app import db
 from app.forms import ClientCreateForm
-from app.utils.uploads import process_dog_photo
+from app.utils.uploads import process_dog_photo, delete_replaced_photo
 from app.utils.sanitize import clean_rich_text_or_none
 from app.utils.activity_log import record_admin_action, diff_fields
 from app.utils.availability_reset import reset_future_bookings_for_walker
@@ -890,6 +890,8 @@ def upload_client_pickup_photo(client_id):
     if 'file' not in request.files:
         return jsonify(success=False, message="No file provided"), 400
 
+    filename = None
+    committed = False
     try:
         filename = process_dog_photo(request.files['file'], subfolder='pickup_notes')
         if not filename:
@@ -903,6 +905,8 @@ def upload_client_pickup_photo(client_id):
             changes={'pickup_notes_photo': [old_filename, filename]},
         )
         db.session.commit()
+        committed = True
+        delete_replaced_photo(old_filename, 'pickup_notes')
 
         url = url_for('media.pickup_photo', filename=filename)
         logging.info(f"Pickup notes photo updated for dog {dog.id} by admin {current_user.email}: {filename}")
@@ -912,5 +916,7 @@ def upload_client_pickup_photo(client_id):
         return jsonify(success=False, message=str(e)), 400
     except Exception as e:
         db.session.rollback()
+        if not committed:
+            delete_replaced_photo(filename, 'pickup_notes')  # the unsaved new file
         logging.exception(f"Error saving pickup notes photo for dog {dog.id}: {e}")
         return jsonify(success=False, message="Server error saving photo"), 500

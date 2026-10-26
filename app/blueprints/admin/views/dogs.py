@@ -10,14 +10,14 @@ from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
 from app.models import User, Booking, Dog, DogOwner, ServiceType
 from app import db
-from app.utils.notifications import NotificationBatch
+from app.utils.booking_notify import notify_cancelled, notify_created
 from app.utils.booking_status import bulk_transition
 from app.services.booking_service import create_booking, CapacityError
 from app.capacity import MAX_RECURRING_SERIES, check_availability
 from app.utils.invoicing import is_late_cancellation, group_by_bill_cancellation
 from app.utils.dates import local_today
 from app.utils.sanitize import clean_rich_text_or_none
-from app.utils.uploads import process_dog_photo
+from app.utils.uploads import process_dog_photo, delete_replaced_photo
 from app.utils.activity_log import record_admin_action, diff_fields
 
 # Mirrors clients.py's DOG_AUDIT_FIELDS — see app/utils/activity_log.py for
@@ -163,6 +163,8 @@ def upload_dog_pickup_photo(dog_id):
     if 'file' not in request.files:
         return jsonify(success=False, message="No file provided"), 400
 
+    filename = None
+    committed = False
     try:
         filename = process_dog_photo(request.files['file'], subfolder='pickup_notes')
         if not filename:
@@ -176,6 +178,8 @@ def upload_dog_pickup_photo(dog_id):
             changes={'pickup_notes_photo': [old_filename, filename]},
         )
         db.session.commit()
+        committed = True
+        delete_replaced_photo(old_filename, 'pickup_notes')
 
         url = url_for('media.pickup_photo', filename=filename)
         logging.info(f"Pickup notes photo updated for dog {dog.id} by admin {current_user.email}: {filename}")
@@ -185,6 +189,8 @@ def upload_dog_pickup_photo(dog_id):
         return jsonify(success=False, message=str(e)), 400
     except Exception as e:
         db.session.rollback()
+        if not committed:
+            delete_replaced_photo(filename, 'pickup_notes')  # the unsaved new file
         logging.exception(f"Error saving pickup notes photo for dog {dog.id}: {e}")
         return jsonify(success=False, message="Server error saving photo"), 500
 
@@ -304,39 +310,7 @@ def book_for_dog():
         db.session.flush()  # populate booking.ids before notifications
 
         date_str_fmt     = booking_date.strftime('%a %-d %b')
-        admin_first      = current_user.firstname or 'Admin'
-        admin_books_self = (current_user.id == int(user_id))
-        # 'walk' / 'drop-in' is the canonical client- AND walker-facing label
-        # (§7.7). service.name ("Group Walk" / "Drop In") stays admin-facing
-        # (the JSON response message below).
-        svc_label    = 'drop-in' if is_drop_in else 'walk'
-        client_actor = None if admin_books_self else admin_first
-        # Grouped notifications (§9.3/§9.4): AM+PM of one booking action collapse
-        # into a single bell entry per recipient + status.
-        batch = NotificationBatch(actor_id=current_user.id)
-        for b in bookings_created:
-            walker_first = b.walker.user.firstname if b.walker and b.walker.user else None
-            if b.status == 'confirmed':
-                batch.add(user_id, 'booking_confirmed', actor_first=client_actor,
-                          dog_name=dog.name, slot=b.slot, date=booking_date,
-                          svc_label=svc_label, walker_name=walker_first)
-                # add_for_walker skips past dates (pinging the walker about a walk
-                # that already happened is noise) and dates beyond the 7-day window.
-                if b.walker and b.walker.user_id != current_user.id:
-                    batch.add_for_walker(b.walker.user_id, 'walker_assigned',
-                              dog_name=dog.name, slot=b.slot, date=booking_date,
-                              svc_label=svc_label)
-            elif b.status == 'waitlisted':
-                # §7.3: admin-made pending bookings now reach the client.
-                batch.add(user_id, 'booking_waitlisted', actor_first=client_actor,
-                          dog_name=dog.name, slot=b.slot, date=booking_date,
-                          svc_label=svc_label)
-            else:
-                batch.add(user_id, 'booking_requested', actor_first=client_actor,
-                          dog_name=dog.name, slot=b.slot, date=booking_date,
-                          svc_label=svc_label)
-
-        batch.flush()
+        notify_created(bookings_created, actor=current_user, by_admin=True)
         db.session.commit()
 
         if len(bookings_created) == 1:
@@ -456,80 +430,76 @@ def recurring_for_dog():
         # One batch_id ties together every booking in this recurring series so
         # the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
         batch_id = uuid.uuid4().hex
-        # Grouped notifications (§9.3/§9.4): one bell entry per (recipient, kind)
-        # instead of one per booking. Admin acting on behalf → actor-prefixed
-        # wording, unless the admin happens to own this dog.
-        batch = NotificationBatch(actor_id=current_user.id)
-        admin_first  = current_user.firstname or 'Admin'
-        client_actor = None if current_user.id == int(user_id) else admin_first
+        made = []  # committed bookings, for the notifications after the loop
 
-        for d, slot in target_pairs:
-            existing = Booking.query.filter(
-                Booking.dog_id == dog_id,
-                Booking.date == d,
-                Booking.slot == slot,
-                Booking.status.in_(active_statuses)
-            ).first()
-            if existing:
-                skipped += 1
-                continue
+        try:
+            for d, slot in target_pairs:
+                existing = Booking.query.filter(
+                    Booking.dog_id == dog_id,
+                    Booking.date == d,
+                    Booking.slot == slot,
+                    Booking.status.in_(active_statuses)
+                ).first()
+                if existing:
+                    skipped += 1
+                    continue
 
-            day_count = Booking.query.filter(
-                Booking.dog_id == dog_id,
-                Booking.date == d,
-                Booking.status.in_(active_statuses)
-            ).count()
-            if day_count >= 2:
-                skipped += 1
-                continue
+                day_count = Booking.query.filter(
+                    Booking.dog_id == dog_id,
+                    Booking.date == d,
+                    Booking.status.in_(active_statuses)
+                ).count()
+                if day_count >= 2:
+                    skipped += 1
+                    continue
 
-            try:
-                booking, auto_confirmed = create_booking(
-                    dog=dog, user_id=user_id, date=d, slot=slot,
-                    service=default_service, actor_id=current_user.id, batch_id=batch_id,
-                    admin_override=True, created_by_id=current_user.id,
-                )
-            except CapacityError:
-                db.session.rollback()
-                skipped += 1
-                continue
-            except IntegrityError:
-                # Concurrent-duplicate race on this specific date/slot (unique
-                # index on active (dog_id, date, slot)) — someone else booked it
-                # first. With per-booking commits this can no longer roll back
-                # the whole series, so treat it like a capacity conflict: skip
-                # this one slot and keep going.
-                db.session.rollback()
-                skipped += 1
-                continue
+                try:
+                    booking, auto_confirmed = create_booking(
+                        dog=dog, user_id=user_id, date=d, slot=slot,
+                        service=default_service, actor_id=current_user.id, batch_id=batch_id,
+                        admin_override=True, created_by_id=current_user.id,
+                    )
+                except CapacityError:
+                    db.session.rollback()
+                    skipped += 1
+                    continue
+                except IntegrityError:
+                    # Concurrent-duplicate race on this specific date/slot (unique
+                    # index on active (dog_id, date, slot)) — someone else booked it
+                    # first. With per-booking commits this can no longer roll back
+                    # the whole series, so treat it like a capacity conflict: skip
+                    # this one slot and keep going.
+                    db.session.rollback()
+                    skipped += 1
+                    continue
 
-            if booking.status == 'confirmed':
-                confirmed += 1
-                walker = booking.walker
-                walker_first = walker.user.firstname if walker and walker.user else None
-                batch.add(user_id, 'booking_confirmed', actor_first=client_actor,
-                          dog_name=dog.name, slot=slot, date=d, walker_name=walker_first)
-                if walker and walker.user_id != current_user.id:
-                    batch.add_for_walker(walker.user_id, 'walker_assigned',
-                              dog_name=dog.name, slot=slot, date=d)
-            elif booking.status == 'waitlisted':
-                waitlisted += 1
-                batch.add(user_id, 'booking_waitlisted', actor_first=client_actor,
-                          dog_name=dog.name, slot=slot, date=d)
-            else:
-                requested += 1
-                batch.add(user_id, 'booking_requested', actor_first=client_actor,
-                          dog_name=dog.name, slot=slot, date=d)
+                if booking.status == 'confirmed':
+                    confirmed += 1
+                elif booking.status == 'waitlisted':
+                    waitlisted += 1
+                else:
+                    requested += 1
 
-            # Commit per booking, not once at the end: the advisory lock
-            # create_booking() takes is transaction-scoped, so holding one open
-            # uncommitted transaction across the whole series would hold every
-            # lock in it simultaneously for the series' duration, blocking any
-            # other booking on those same (service, date, slot) combos.
-            # Committing here releases each lock within milliseconds instead.
+                # Commit per booking, not once at the end: the advisory lock
+                # create_booking() takes is transaction-scoped, so holding one open
+                # uncommitted transaction across the whole series would hold every
+                # lock in it simultaneously for the series' duration, blocking any
+                # other booking on those same (service, date, slot) combos.
+                # Committing here releases each lock within milliseconds instead.
+                db.session.commit()
+                made.append(booking)
+        except Exception as e:
+            # An unexpected failure mid-series: the bookings committed so far
+            # stay, so still send their notifications. Re-running the same range
+            # skips them and creates the rest.
+            db.session.rollback()
+            logging.exception(f"Admin recurring series failed part-way: {e}")
+            notify_created(made, actor=current_user, by_admin=True)
             db.session.commit()
+            return jsonify(success=False,
+                           message="Some bookings couldn't be made — please try again."), 500
 
-        batch.flush()
+        notify_created(made, actor=current_user, by_admin=True)
         db.session.commit()
         return jsonify(success=True, confirmed=confirmed, requested=requested, waitlisted=waitlisted, skipped=skipped)
 
@@ -739,17 +709,8 @@ def dog_bulk_cancel(dog_id):
 
     n = len(bookings)
 
-    # Capture walker IDs before bulk_transition clears them (§7.4).
-    # Maps walker.user_id → list of (slot, date, svc_label) for notifications.
-    walker_payloads = {}
-    for b in bookings:
-        if b.walker_id and b.walker and b.walker.user_id:
-            wuid = b.walker.user_id
-            if wuid != current_user.id:
-                b_svc = 'drop-in' if b.service_type and b.service_type.slug == ServiceType.DROP_IN else 'walk'
-                walker_payloads.setdefault(wuid, []).append(
-                    dict(dog_name=dog.name, slot=b.slot, date=b.date, svc_label=b_svc)
-                )
+    # Queued in the same transaction as the cancel; nothing commits until the end.
+    notify_cancelled(bookings, actor=current_user, by_admin=True)
 
     # One batch_id ties together every cancellation in this bulk-cancel action
     # so the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
@@ -771,23 +732,6 @@ def dog_bulk_cancel(dog_id):
         bulk_transition(group, 'cancelled', actor_id=current_user.id,
                         walker_id=None, cancelled_by='admin', batch_id=batch_id,
                         bill_cancellation=bill)
-
-    # Notify dog owners (excluding admins) and assigned walkers (§7.4) —
-    # one grouped notice each.
-    batch = NotificationBatch(actor_id=current_user.id)
-    owners = DogOwner.query.filter_by(dog_id=dog_id).all()
-    for o in owners:
-        owner_user = db.session.get(User, o.user_id)
-        if owner_user and not owner_user.is_admin:
-            for b in bookings:
-                b_svc = ('drop-in' if b.service_type
-                         and b.service_type.slug == ServiceType.DROP_IN else 'walk')
-                batch.add(owner_user.id, 'booking_cancelled',
-                          dog_name=dog.name, slot=b.slot, date=b.date, svc_label=b_svc)
-    for wuid, payloads in walker_payloads.items():
-        for p in payloads:
-            batch.add_for_walker(wuid, 'booking_cancelled', **p)
-    batch.flush()
 
     try:
         db.session.commit()

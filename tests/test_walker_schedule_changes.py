@@ -416,7 +416,8 @@ class TestScheduleChangeGrouping:
 
 
 # ---------------------------------------------------------------------------
-# Session 3: client booking_reset notifications on reset paths (§7.1)
+# Reset paths: the client is no longer told (notification redesign — a reset
+# walk is silent until it's re-confirmed or cancelled)
 # ---------------------------------------------------------------------------
 
 def _make_client_with_dog(email):
@@ -448,11 +449,12 @@ def _confirmed_booking(user_id, dog_id, service_type_id, walker_id, date, slot='
 
 
 class TestClientResetNotifications:
-    """Walker self-service unavailability resets must notify affected clients (§7.1)."""
+    """Walker self-service unavailability resets the booking without telling
+    the client."""
 
-    def test_single_unavailability_notifies_client(self, app, client):
+    def test_single_unavailability_resets_silently(self, app, client):
         """POST /walker/unavailability with a slot that has a confirmed booking
-        → the booking owner gets exactly one booking_reset notification."""
+        → the booking resets to requested; the owner gets no notification."""
         monday = _next_weekday(0)
         with app.app_context():
             walker_u, walker = _make_walker(
@@ -473,16 +475,13 @@ class TestClientResetNotifications:
         assert resp.status_code == 201
 
         with app.app_context():
-            notifs = Notification.query.filter_by(recipient_id=client_uid).all()
-            assert len(notifs) == 1
-            n = notifs[0]
-            assert n.notification_type == 'system'
-            assert 'needs a new walker' in n.title
-            assert 'No action needed' in n.body
+            b = Booking.query.filter_by(user_id=client_uid).one()
+            assert (b.status, b.walker_id) == ('requested', None)
+            assert Notification.query.filter_by(recipient_id=client_uid).count() == 0
 
-    def test_batch_unavailable_notifies_client(self, app, client):
+    def test_batch_unavailable_resets_silently(self, app, client):
         """POST /walker/schedule-changes/batch type=unavailable with affected
-        confirmed bookings → the booking owner gets exactly one grouped booking_reset."""
+        confirmed bookings → both reset; the owner gets no notification."""
         monday = _next_weekday(0)
         tuesday = monday + datetime.timedelta(days=1)  # always after monday
         with app.app_context():
@@ -508,20 +507,17 @@ class TestClientResetNotifications:
         assert resp.get_json()['success'] is True
 
         with app.app_context():
-            notifs = Notification.query.filter_by(recipient_id=client_uid).all()
-            # Two bookings → one grouped notification.
-            assert len(notifs) == 1
-            n = notifs[0]
-            assert n.notification_type == 'system'
-            assert '2 of your walks' in n.title
-            assert 'No action needed' in n.body
+            assert [b.status for b in Booking.query.filter_by(user_id=client_uid)] == [
+                'requested', 'requested']
+            assert Notification.query.filter_by(recipient_id=client_uid).count() == 0
 
 
 class TestRemoveWalkerRoleResetNotification:
-    """Removing a walker's role unassigns their confirmed walks — the affected
-    client must get a booking_reset, same as deactivate_walker (F1 / §7.2)."""
+    """Removing a walker's role unassigns their confirmed walks, same as
+    deactivate_walker (F1). Nobody is notified: the client never hears about
+    resets and the walker is leaving the pool."""
 
-    def test_remove_walker_role_notifies_affected_client(self, app, client):
+    def test_remove_walker_role_resets_silently(self, app, client):
         monday = _next_weekday(0)
         with app.app_context():
             # Admin who performs the action.
@@ -554,11 +550,8 @@ class TestRemoveWalkerRoleResetNotification:
             b = Booking.query.filter_by(dog_id=dog_id).first()
             assert b.status == 'requested'
             assert b.walker_id is None
-            # Client told exactly once, with the reset wording.
-            notifs = Notification.query.filter_by(recipient_id=client_uid).all()
-            assert len(notifs) == 1
-            assert notifs[0].notification_type == 'system'
-            assert 'needs a new walker' in notifs[0].title
+            assert Notification.query.filter_by(recipient_id=client_uid).count() == 0
+            assert Notification.query.filter_by(recipient_id=walker_user_id).count() == 0
 
 
 # ---------------------------------------------------------------------------
@@ -571,7 +564,7 @@ class TestRemoveWalkerRoleResetNotification:
 
 class TestDeleteAdhocResetsBookings:
 
-    def test_delete_adhoc_resets_confirmed_booking_and_notifies_client(self, app, client):
+    def test_delete_adhoc_resets_confirmed_booking(self, app, client):
         monday = _next_weekday(0)
         with app.app_context():
             walker_u, walker = _make_walker(
@@ -597,9 +590,7 @@ class TestDeleteAdhocResetsBookings:
             b = Booking.query.filter_by(dog_id=dog_id).first()
             assert b.status == 'requested'
             assert b.walker_id is None
-            notifs = Notification.query.filter_by(recipient_id=client_uid).all()
-            assert len(notifs) == 1
-            assert 'needs a new walker' in notifs[0].title
+            assert Notification.query.filter_by(recipient_id=client_uid).count() == 0
             assert db.session.get(WalkerAdHocAvailability, adhoc_id) is None
 
     def test_delete_adhoc_skips_past_dated_row(self, app, client):
@@ -659,8 +650,7 @@ class TestBatchDeleteAdhocResetsBookings:
             b = Booking.query.filter_by(dog_id=dog_id).first()
             assert b.status == 'requested'
             assert b.walker_id is None
-            notifs = Notification.query.filter_by(recipient_id=client_uid).all()
-            assert len(notifs) == 1
+            assert Notification.query.filter_by(recipient_id=client_uid).count() == 0
 
 
 class TestAdminDeleteAdhocResetsBookings:
@@ -696,5 +686,4 @@ class TestAdminDeleteAdhocResetsBookings:
             b = Booking.query.filter_by(dog_id=dog_id).first()
             assert b.status == 'requested'
             assert b.walker_id is None
-            notifs = Notification.query.filter_by(recipient_id=client_uid).all()
-            assert len(notifs) == 1
+            assert Notification.query.filter_by(recipient_id=client_uid).count() == 0

@@ -15,7 +15,7 @@ from datetime import datetime, timezone, timedelta, date
 
 from app.blueprints.walker import walker_bp
 from app.utils.decorators import walker_required
-from app.utils.notifications import create_notification, NotificationBatch
+from app.utils.booking_notify import notify_walker_dropout
 from app.utils.availability_reset import reset_bookings_for_lost_availability
 from app.utils.pricing import is_drop_in as _is_drop_in
 from app.utils.weekly_schedule import (
@@ -226,19 +226,24 @@ def api_schedule_changes():
 @walker_required
 def upload_profile_photo():
     """AJAX endpoint: accept a cropped image blob and save as the walker's profile photo."""
-    from app.utils.uploads import process_cropped_photo
+    from app.utils.uploads import process_cropped_photo, delete_replaced_photo
     import logging
 
     if 'file' not in request.files:
         return jsonify(success=False, error="No file provided"), 400
 
+    filename = None
+    committed = False
     try:
         filename = process_cropped_photo(request.files['file'], subfolder='profiles')
         if not filename:
             return jsonify(success=False, error="Empty file"), 400
 
+        old_filename = current_user.profile_pic
         current_user.profile_pic = filename
         db.session.commit()
+        committed = True
+        delete_replaced_photo(old_filename, 'profiles')
 
         url = url_for('static', filename=f'uploads/profiles/{filename}')
         logging.info(f"Profile photo updated for walker {current_user.email}: {filename}")
@@ -248,6 +253,8 @@ def upload_profile_photo():
         return jsonify(success=False, error=str(e)), 400
     except Exception as e:
         db.session.rollback()
+        if not committed:
+            delete_replaced_photo(filename, 'profiles')  # the unsaved new file
         logging.exception(f"Error saving walker profile photo for {current_user.email}: {e}")
         return jsonify(success=False, error="Server error saving photo"), 500
 
@@ -313,29 +320,16 @@ def add_unavailability():
         walker_id=walker.id, date=unavail_date, slot=slot, status='confirmed',
     ).all()
 
-    walker_name = walker.user.firstname
-    date_label = unavail_date.strftime('%a %-d %b')
-    n = len(affected)
-    admins = User.query.filter(User.is_admin == True, User.id != current_user.id).all()
-    for admin in admins:
-        create_notification(
-            recipient_id=admin.id,
-            notification_type='walker_availability',
-            title=f'{walker_name} is unavailable — {slot} on {date_label}',
-            body=f'{n} booking{"s" if n != 1 else ""} need reassigning' if n else None,
-            link='/admin',
-            sender_id=current_user.id,
-        )
+    notify_walker_dropout(
+        current_user, affected=len(affected),
+        title=f"{walker.user.firstname} is unavailable — {slot} on {unavail_date.strftime('%a %-d %b')}")
 
-    # Reset to requested (walker unassigned) and notify each affected client
-    # (§7.1): one grouped booking_reset per user. Actor = the walker making
-    # themselves unavailable.
-    client_batch = NotificationBatch(actor_id=current_user.id)
+    # Reset to requested (walker unassigned). Actor = the walker making
+    # themselves unavailable, so nobody but the admins hears (above).
     reset_bookings_for_lost_availability(
-        affected, actor_id=current_user.id, batch=client_batch,
+        affected, actor_id=current_user.id,
         reason=f"{walker.user.firstname} marked unavailable",
     )
-    client_batch.flush()
 
     db.session.commit()
 
@@ -417,19 +411,7 @@ def add_adhoc():
         reason=reason,
     )
     db.session.add(adhoc)
-
-    walker_name = walker.user.firstname
-    date_label = adhoc_date.strftime('%a %-d %b')
-    admins = User.query.filter(User.is_admin == True, User.id != current_user.id).all()
-    for admin in admins:
-        create_notification(
-            recipient_id=admin.id,
-            notification_type='walker_availability',
-            title=f'{walker_name} added {slot} availability on {date_label}',
-            link='/admin',
-            sender_id=current_user.id,
-        )
-
+    # No admin notification: extra availability needs no action (activity feed).
     db.session.commit()
 
     return jsonify(success=True, message="Ad hoc availability added", adhoc=adhoc.to_dict()), 201
@@ -636,8 +618,8 @@ def schedule_changes_batch():
     # One batch_id ties together every booking reset by this batch schedule
     # change so the activity feed can cluster them (NOTIFICATIONS.md §9.2, D4).
     batch_id = uuid.uuid4().hex
-    # Collect all affected bookings across the loop so we can reset + send one
-    # grouped booking_reset per client after the loop (§7.1).
+    # Collect all affected bookings across the loop so they're reset in one
+    # pass after it.
     all_affected = []
 
     current = start_date
@@ -667,8 +649,7 @@ def schedule_changes_batch():
                 created_unavail_ids.append(row.id)
 
                 # Confirmed bookings for this slot are no longer guaranteed —
-                # collected here and reset in one pass after the loop so the
-                # whole range shares one grouped booking_reset per client (§7.1).
+                # collected here and reset in one pass after the loop.
                 affected = Booking.query.filter_by(
                     walker_id=walker.id, date=current, slot=slot, status='confirmed',
                 ).all()
@@ -699,50 +680,24 @@ def schedule_changes_batch():
     created = len(created_adhoc_ids) + len(created_unavail_ids)
     affected_count = len(all_affected)
 
-    # Notify admins of walker-initiated schedule changes (not when admin acts on behalf of walker).
-    if not current_user.is_admin and created > 0:
+    # Admins hear only when a walker's own time off leaves walks to reassign;
+    # added availability and admin-made changes are in the activity feed.
+    if change_type == 'unavailable':
         walker_name = walker.user.firstname
-        admins = User.query.filter_by(is_admin=True).all()
         if start_date == end_date:
             slots_str = ' & '.join(slots) if len(slots) > 1 else slots[0]
-            date_label = start_date.strftime('%a %-d %b')
-            if change_type == 'unavailable':
-                title = f'{walker_name} is unavailable — {slots_str} on {date_label}'
-                body = (f'{affected_count} booking{"s" if affected_count != 1 else ""} need reassigning'
-                        if affected_count else None)
-            else:
-                title = f'{walker_name} added {slots_str} availability on {date_label}'
-                body = None
+            title = f"{walker_name} is unavailable — {slots_str} on {start_date.strftime('%a %-d %b')}"
         else:
-            date_from = start_date.strftime('%-d %b')
-            date_to = end_date.strftime('%-d %b')
-            if change_type == 'unavailable':
-                title = f'{walker_name} is unavailable {date_from}–{date_to}'
-                body = (f'{created} slot{"s" if created != 1 else ""}' +
-                        (f', {affected_count} booking{"s" if affected_count != 1 else ""} need reassigning'
-                         if affected_count else ''))
-            else:
-                title = f'{walker_name} added availability {date_from}–{date_to}'
-                body = f'{created} slot{"s" if created != 1 else ""}'
-        for admin in admins:
-            create_notification(
-                recipient_id=admin.id,
-                notification_type='walker_availability',
-                title=title,
-                body=body,
-                link='/admin',
-                sender_id=current_user.id,
-            )
+            title = (f"{walker_name} is unavailable "
+                     f"{start_date.strftime('%-d %b')}–{end_date.strftime('%-d %b')}")
+        notify_walker_dropout(current_user, title=title, affected=affected_count)
 
-    # Reset to requested (walker unassigned) and notify each affected client
-    # (§7.1): one grouped booking_reset per user across the whole range.
-    client_batch = NotificationBatch(actor_id=current_user.id)
+    # Reset to requested (walker unassigned) across the whole range.
     reset_bookings_for_lost_availability(
-        all_affected, actor_id=current_user.id, batch=client_batch,
+        all_affected, actor_id=current_user.id,
         transition_batch_id=batch_id,
         reason=f"{walker.user.firstname} marked unavailable",
     )
-    client_batch.flush()
 
     db.session.commit()
 
@@ -811,12 +766,17 @@ def schedule_changes_batch_delete():
                 walker_id=walker.id, date=row.date, slot=row.slot, status='confirmed',
             ).all())
 
-    client_batch = NotificationBatch(actor_id=current_user.id)
     reset_bookings_for_lost_availability(
-        all_affected, actor_id=current_user.id, batch=client_batch,
+        all_affected, actor_id=current_user.id,
         reason=f"{walker.user.firstname}'s availability was removed",
     )
-    client_batch.flush()
+    if all_affected:
+        days = sorted({b.date for b in all_affected})
+        when = (days[0].strftime('%a %-d %b') if len(days) == 1
+                else f"{days[0].strftime('%-d %b')}–{days[-1].strftime('%-d %b')}")
+        notify_walker_dropout(
+            current_user, affected=len(all_affected),
+            title=f"{walker.user.firstname} removed their availability — {when}")
 
     deleted = 0
     if adhoc_ids:
@@ -863,12 +823,14 @@ def delete_adhoc(id):
             walker_id=adhoc.walker_id, date=adhoc.date, slot=adhoc.slot, status='confirmed',
         ).all()
 
-    client_batch = NotificationBatch(actor_id=current_user.id)
     reset_bookings_for_lost_availability(
-        affected, actor_id=current_user.id, batch=client_batch,
+        affected, actor_id=current_user.id,
         reason=f"{walker.user.firstname}'s availability was removed",
     )
-    client_batch.flush()
+    notify_walker_dropout(
+        current_user, affected=len(affected),
+        title=(f"{walker.user.firstname} removed their {adhoc.slot} availability — "
+               f"{adhoc.date.strftime('%a %-d %b')}"))
 
     db.session.delete(adhoc)
     db.session.commit()

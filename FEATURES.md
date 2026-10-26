@@ -27,7 +27,6 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 93 | P2 | M | 📋 | **London date everywhere** | Every "today" check uses the London date, so pages don't show yesterday's view just after midnight in summer. |
 | 94 | P3 | M | 📋 | **Simplify 8 — one month calendar** | The drop-in board uses the dashboard's month calendar (compact, with drop-in counts) instead of its own. |
 | 95 | P3 | S | 📋 | **Simplify 9 — retire the old assignment page** | Remove the unlinked standalone walk board and its unused charts; walks are assigned from the dashboard. |
-| 98 | P2 | L | 🔧 | **Admin walk notes + Week view** | Admins see and edit a walk's note on the assignment board (shared with the client, shown to walkers); Weekly Overview becomes "Week view", a walker-by-day grid of dog cards with their notes. |
 | 24 | P3 | L | 🔲 | **Dental cleans service type** | Admin-managed time slots that clients book into. |
 | 74 | P4 | S | 🔲 | **Drop `User.notification_preference`** | Remove a column that only ever holds `'email'`. |
 | 76 | P4 | L | 🔲 | **Keyboard operability** | Make the calendar and assignment board fully keyboard-usable. |
@@ -70,6 +69,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 73 | Slot freeze | Hold new bookings for a date/slot as requests instead of auto-confirming. |
 | 79 | Double-slot discount fix | The discount only applies when the dog actually gets both walks. |
 | 84 | Phone-friendly walk assignment | Compact dashboard calendar on phones (tap a day twice to assign), a full-screen assign board with Morning/Afternoon lined up across walkers, and a simpler drop-in board. |
+| 98 | Admin walk notes + Week view | Admins see and edit a walk's note on the assignment board (shared with the client, shown to walkers); Weekly Overview becomes "Week view", a walker-by-day grid of dog cards with their notes. |
 
 ### Walker
 
@@ -103,7 +103,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 60 | Newsletter | Rich-text newsletter with merge tags and test send. |
 | 61 | Email opt-out | One-click unsubscribe link in every newsletter. |
 | 85 | Notification bell badge alignment | The unread-count pill sits on the bell's corner in the same place in every browser, client and admin. |
-| 96 | Walker daily summaries | One summary of each walker's dogs per slot at 15:00 for the next working day and at 08:00 for today; instant walker notifications only for walks within a week. |
+| 96 | Walker daily summaries | One summary of each walker's dogs per slot at 10:00 on the day — walkers' only notification about their walks. |
 
 ### Platform & quality
 
@@ -116,7 +116,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 53 | Branching model | `develop` for work, `main` for production, PRs between them. |
 | 54 | Test suite | Postgres-backed test suite, run in CI. |
 | 56 | CI | Migrations from scratch, schema-drift check, tests and dependency audit on every push and PR. |
-| 57 | PWA | Installable app with offline shell, pull-to-refresh and per-user page cache. |
+| 57 | PWA | Installable app with offline shell, pull-to-refresh, per-user page cache, and an automatic reload when returning after an hour away. |
 | 59 | July 2026 code review | All findings resolved. |
 | 62 | Monitoring | Error tracking and uptime checks via Sentry. |
 | 63 | Backup confidence | Tested database restore and upload-backup reconciliation. |

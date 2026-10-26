@@ -1,22 +1,18 @@
-"""Daily walker summaries — one bell + push notification per walker listing
-the dogs they're walking on a given day, slot by slot.
+"""Daily walker summary — one bell + push notification per walker listing
+the dogs they're walking that day, slot by slot.
 
-Two runs per weekday, both London time:
-  * 'preview' at 15:00 — the next working day (Friday's covers Monday)
-  * 'morning' at 08:00 — today
-
-Walkers with no confirmed walks that day get nothing. The summary is built
-from the live confirmed bookings at send time, which is what makes it safe
-for instant walker notifications to stop beyond WALKER_NOTICE_DAYS
-(notifications.py::walker_notify_now): a change made weeks ahead is never
-lost, it just shows up here instead.
+One run per weekday at 10:00 London, covering that day (pickups start later).
+This is the only push a walker gets about their walks (owner decision
+2026-10-25): booking changes don't notify walkers, and a change after 10:00
+reaches them only through the live pickup list. Walkers with no confirmed
+walks that day get nothing, so no summary means no walks.
 
 Run by `flask send-walker-summaries` from the walker-summaries Railway cron
 service. WalkerSummarySent makes a re-run a no-op per walker.
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
@@ -31,48 +27,26 @@ from app.utils.sanitize import rich_text_to_plain
 
 logger = logging.getLogger(__name__)
 
-PREVIEW_HOUR = 15   # London — previews the next working day
-MORNING_HOUR = 8    # London — today
+SUMMARY_HOUR = 10    # London — that day's walks
+KIND = 'daily'       # WalkerSummarySent.kind
 
 MESSAGE_MAX_CHARS = 200
 
 
-def next_working_day(d):
-    """The next Mon-Fri date after d (Friday → Monday)."""
-    d += timedelta(days=1)
-    while d.weekday() >= 5:
-        d += timedelta(days=1)
-    return d
-
-
 def due_summary(now_utc=None):
-    """Which summary is due at this moment, as (kind, date), or None.
+    """The date whose summary is due at this moment, or None.
 
-    The cron fires at both UTC hours that can be 08:00 / 15:00 London (one
-    for GMT, one for BST); only the run whose London hour matches sends.
+    The cron fires at both UTC hours that can be 10:00 London (one for GMT,
+    one for BST); only the run whose London hour matches sends. Weekdays only.
     """
     now_utc = now_utc or datetime.now(timezone.utc)
     local = now_utc.astimezone(LOCAL_TZ)
-    if local.weekday() >= 5:
+    if local.weekday() >= 5 or local.hour != SUMMARY_HOUR:
         return None
-    if local.hour == MORNING_HOUR:
-        return 'morning', local.date()
-    if local.hour == PREVIEW_HOUR:
-        return 'preview', next_working_day(local.date())
-    return None
+    return local.date()
 
 
-def _day_label(kind, d):
-    """'today' / 'tomorrow' / 'on Monday', for the title."""
-    if kind == 'morning':
-        return 'today'
-    sent_on = d - timedelta(days=1)
-    if sent_on.weekday() < 5:
-        return 'tomorrow'
-    return f"on {d.strftime('%A')}"
-
-
-def build_summary(kind, d, bookings, message_html=None):
+def build_summary(d, bookings, message_html=None):
     """(title, body, link) for one walker's summary of day d.
 
     Body groups dogs by slot in pickup order — walks first, then drop-ins,
@@ -102,17 +76,15 @@ def build_summary(kind, d, bookings, message_html=None):
         if note:
             parts.append(f"Note: {note}")
 
-    title = f"Your walks {_day_label(kind, d)} ({d.strftime('%a %-d %b')})"
+    title = f"Your walks today ({d.strftime('%a %-d %b')})"
     return title, ' · '.join(parts), f"/walker/pickups/{d.isoformat()}"
 
 
-def send_walker_summaries(kind, d):
-    """Send the `kind` summary for day d to every eligible walker with at least
-    one confirmed booking that day and no summary of this kind already sent.
-    Commits once per walker so one failure can't block the rest. Returns the
-    number of summaries sent."""
-    if kind not in WalkerSummarySent.KINDS:
-        raise ValueError(f"unknown summary kind: {kind!r}")
+def send_walker_summaries(d):
+    """Send the summary for day d to every eligible walker with at least one
+    confirmed booking that day and no summary for it already sent. Commits
+    once per walker so one failure can't block the rest. Returns the number
+    of summaries sent."""
 
     bookings = (Booking.query
                 .join(Walker, Booking.walker_id == Walker.id)
@@ -128,7 +100,7 @@ def send_walker_summaries(kind, d):
         by_walker.setdefault(b.walker_id, []).append(b)
 
     already_sent = {row.walker_id for row in WalkerSummarySent.query.filter_by(
-        date=d, kind=kind)}
+        date=d, kind=KIND)}
     message = DailyMessage.query.filter_by(date=d).first()
     message_html = message.content if message else None
 
@@ -137,9 +109,9 @@ def send_walker_summaries(kind, d):
         if walker_id in already_sent:
             continue
         walker = rows[0].walker
-        title, body, link = build_summary(kind, d, rows, message_html)
+        title, body, link = build_summary(d, rows, message_html)
         try:
-            db.session.add(WalkerSummarySent(walker_id=walker_id, date=d, kind=kind))
+            db.session.add(WalkerSummarySent(walker_id=walker_id, date=d, kind=KIND))
             create_notification(
                 recipient_id=walker.user_id,
                 notification_type='walker_summary',
@@ -154,6 +126,5 @@ def send_walker_summaries(kind, d):
             db.session.rollback()
         except Exception:
             db.session.rollback()
-            logger.exception('Walker summary (%s, %s) failed for walker %s',
-                             kind, d, walker_id)
+            logger.exception('Walker summary (%s) failed for walker %s', d, walker_id)
     return sent
