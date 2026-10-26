@@ -107,6 +107,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 61 | Email opt-out | One-click unsubscribe link in every newsletter. |
 | 85 | Notification bell badge alignment | The unread-count pill sits on the bell's corner in the same place in every browser, client and admin. |
 | 96 | Walker daily summaries | One summary of each walker's dogs per slot at 10:00 on the day — walkers' only notification about their walks. |
+| 102 | Notification redesign | Fewer, clearer notifications: every owner of a dog gets the same message, nobody is told about their own action, and behind-the-scenes reshuffles stay quiet. |
 
 ### Platform & quality
 
