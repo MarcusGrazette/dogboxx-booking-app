@@ -34,7 +34,7 @@ ordered-set==4.1.0
 packaging==25.0
 nh3==0.3.6
 boto3==1.37.28
-pillow==12.3.0
+pillow==13.0.0
 psycogreen==1.0.2
 psycopg2-binary==2.9.11
 redis>=3.0
