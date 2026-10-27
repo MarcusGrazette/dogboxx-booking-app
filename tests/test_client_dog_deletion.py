@@ -346,6 +346,23 @@ class TestAnonymise:
             create_booking(dog=rex, user_id=jane.id, date=local_today(), slot='Morning',
                            service=_walk_service(), actor_id=owner.id, batch_id='x')
 
+    def test_create_booking_reads_deleted_at_from_the_db(self, app, owner):
+        """A delete committed elsewhere while this request holds a stale Dog
+        object must still be seen — create_booking re-reads the row under
+        FOR UPDATE (the same lock the delete route takes)."""
+        from sqlalchemy import update
+        from app.services.booking_service import create_booking, DeletedDogError
+        jane = _client('Jane', 'Smith')
+        rex = _dog('Rex', jane)
+        assert rex.deleted_at is None
+        db.session.execute(update(Dog).where(Dog.id == rex.id)
+                           .values(deleted_at=datetime.datetime(2026, 10, 1)),
+                           execution_options={'synchronize_session': False})
+        assert rex.deleted_at is None  # in-memory object is stale
+        with pytest.raises(DeletedDogError):
+            create_booking(dog=rex, user_id=jane.id, date=local_today(), slot='Morning',
+                           service=_walk_service(), actor_id=owner.id, batch_id='x')
+
     def test_two_deleted_dogs_walked_in_the_same_slot(self, client, owner):
         jane = _client('Jane', 'Smith')
         sam = _client('Sam', 'Jones')
