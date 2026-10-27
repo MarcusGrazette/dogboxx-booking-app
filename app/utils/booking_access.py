@@ -18,6 +18,7 @@ Usage
         return jsonify(success=False, message="Unauthorized"), 403
 """
 
+from app import db
 from app.capacity import is_eligible_walker
 from app.models import DogOwner, Booking, Dog
 
@@ -41,10 +42,16 @@ def get_accessible_dog_ids(user_id: int) -> list[int]:
     """Return a list of dog IDs the user has any ownership record for.
 
     This includes both 'primary' and 'secondary' roles, but not deleted dogs
-    (see get_accessible_dogs).  Returns an empty list if the user owns no
-    dogs (e.g. a walker or admin calling this).
+    (same filter as get_accessible_dogs, reading ids only).  Returns an empty
+    list if the user owns no dogs (e.g. a walker or admin calling this).
     """
-    return [d.id for d in get_accessible_dogs(user_id)]
+    rows = (
+        db.session.query(DogOwner.dog_id)
+        .join(Dog, Dog.id == DogOwner.dog_id)
+        .filter(DogOwner.user_id == user_id, Dog.deleted_at.is_(None))
+        .all()
+    )
+    return [dog_id for (dog_id,) in rows]
 
 
 def user_can_access_booking(user, booking: Booking) -> bool:

@@ -18,6 +18,7 @@ from app.models import (
     ActivityLog, Booking, BookingStatusChange, Client, Dog, DogOwner,
     Notification, PricingConfig, PushSubscription, ServiceType, User, Walker,
 )
+from app.utils.booking_access import get_accessible_dog_ids, user_can_access_booking
 from app.utils import uploads as uploads_mod
 from app.utils.dates import local_today
 from app.utils.invoicing import invoice_for_client
@@ -304,11 +305,15 @@ class TestAnonymise:
     def test_unticked_owner_keeps_account_but_not_the_dog(self, app, client, owner):
         jane = _client('Jane', 'Smith', email='jane@example.com')
         rex = _dog('Rex', jane)
-        _booking(jane, rex, local_today() - datetime.timedelta(days=7))
+        past = _booking(jane, rex, local_today() - datetime.timedelta(days=7))
         assert _delete_dog(client, rex).status_code == 200
 
         jane = _fresh(User, jane.id)
         assert jane.deleted_at is None and jane.active is True
+        # The id-only helper applies the same deleted-dog filter as
+        # get_accessible_dogs, so she can't act on the dog's old bookings.
+        assert rex.id not in get_accessible_dog_ids(jane.id)
+        assert not user_can_access_booking(jane, _fresh(Booking, past.id))
         jane_client = app.test_client()
         login(_as(jane_client), 'jane@example.com')
         r = jane_client.get('/profile')
