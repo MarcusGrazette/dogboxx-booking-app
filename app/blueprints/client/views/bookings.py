@@ -81,7 +81,7 @@ def index():
 
     # Return all non-cancelled bookings (past and upcoming) for date-filter support
     today = datetime.now(timezone.utc).date()
-    _index_dog_ids = get_accessible_dog_ids(current_user.id)
+    _index_dog_ids = [d.id for d in user_dogs]
     upcoming_bookings_query = Booking.query.options(
         joinedload(Booking.walker).joinedload(Walker.user),
         joinedload(Booking.service_type),

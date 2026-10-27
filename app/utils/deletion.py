@@ -13,10 +13,11 @@ rollup are unchanged:
   * invoices and revenue find a dog through its primary owner, so the
     DogOwner rows must stay even for owners who weren't deleted.
 
-The routes (admin/views/deletion.py) call check_* first and repeat every check
-on POST; the anonymise_* helpers mutate and queue, never commit. Photo files
-are returned to the caller, which deletes them only after its commit
-succeeds (same rule as uploads.delete_replaced_photo).
+The routes (admin/views/deletion.py) run the checks (future_bookings_for_dog,
+client_block_reason) for the preview and repeat every one on POST; the
+anonymise_* helpers mutate and queue, never commit. Photo files are returned
+to the caller, which deletes them only after its commit succeeds (same rule
+as uploads.delete_replaced_photo).
 """
 
 import secrets
@@ -26,7 +27,7 @@ from werkzeug.security import generate_password_hash
 
 from app import db
 from app.models import (
-    ActivityLog, Booking, BookingStatusChange, Dog, DogOwner, Notification, User,
+    ActivityLog, Booking, BookingStatusChange, Dog, DogOwner, Notification,
 )
 from app.utils.dates import local_today
 from app.utils.uploads import delete_replaced_photo
@@ -190,8 +191,3 @@ def delete_photos(photos):
     """Call after the commit. Never raises (delete_replaced_photo doesn't)."""
     for filename, subfolder in photos:
         delete_replaced_photo(filename, subfolder)
-
-
-def live_client_query():
-    """Client users who haven't been deleted (for lists and pickers)."""
-    return User.query.filter(User.client != None, User.deleted_at.is_(None))  # noqa: E711
