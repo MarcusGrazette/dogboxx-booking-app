@@ -19,17 +19,32 @@ Usage
 """
 
 from app.capacity import is_eligible_walker
-from app.models import DogOwner, Booking
+from app.models import DogOwner, Booking, Dog
+
+
+def get_accessible_dogs(user_id: int) -> list[Dog]:
+    """Return the dogs the user has any ownership record for (primary or
+    secondary), leaving out deleted dogs.
+
+    A deleted dog keeps its DogOwner rows (invoices find it through its
+    primary owner), so an owner who wasn't deleted with it still has a link —
+    this is what hides the dog from their own pages and booking forms.
+    """
+    return (
+        Dog.query.join(DogOwner)
+        .filter(DogOwner.user_id == user_id, Dog.deleted_at.is_(None))
+        .all()
+    )
 
 
 def get_accessible_dog_ids(user_id: int) -> list[int]:
     """Return a list of dog IDs the user has any ownership record for.
 
-    This includes both 'primary' and 'secondary' roles.  Returns an empty
-    list if the user owns no dogs (e.g. a walker or admin calling this).
+    This includes both 'primary' and 'secondary' roles, but not deleted dogs
+    (see get_accessible_dogs).  Returns an empty list if the user owns no
+    dogs (e.g. a walker or admin calling this).
     """
-    ownerships = DogOwner.query.filter_by(user_id=user_id).all()
-    return [o.dog_id for o in ownerships]
+    return [d.id for d in get_accessible_dogs(user_id)]
 
 
 def user_can_access_booking(user, booking: Booking) -> bool:
@@ -47,7 +62,7 @@ def user_can_access_booking(user, booking: Booking) -> bool:
     """
     if user.is_admin:
         return True
-    return DogOwner.query.filter_by(dog_id=booking.dog_id, user_id=user.id).first() is not None
+    return booking.dog_id in get_accessible_dog_ids(user.id)
 
 
 def user_can_view_pickup_details(user, dog_id: int) -> bool:

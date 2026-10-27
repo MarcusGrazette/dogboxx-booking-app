@@ -15,6 +15,7 @@ from app.utils.uploads import process_dog_photo, delete_replaced_photo
 from app.utils.sanitize import clean_rich_text_or_none
 from app.utils.activity_log import record_admin_action, diff_fields
 from app.utils.availability_reset import reset_future_bookings_for_walker
+from app.utils.deletion import client_block_reason
 from werkzeug.security import generate_password_hash
 import secrets
 
@@ -38,6 +39,9 @@ def clients():
         User.query
         .options(joinedload(User.client), joinedload(User.walker))
         .filter(User.client != None)  # noqa: E711 — SQLAlchemy uses != None for EXISTS check
+        # It lists inactive clients too, so active=False alone doesn't hide a
+        # deleted one; their read-only page stays reachable by link.
+        .filter(User.deleted_at.is_(None))
         .order_by(User.active.desc(), User.lastname, User.firstname)
         .all()
     )
@@ -51,14 +55,18 @@ def clients():
 def client_detail(client_id):
     """Show client detail with dog info, shared access, and notification audit trail (admin only)"""
     user = User.query.filter(User.client != None, User.id == client_id).first_or_404()
+    if user.deleted_at:
+        return _deleted_client_detail(user)
 
     # Batch all dog + co-owner lookups to avoid N+1 queries
-    primary_ownerships = DogOwner.query.filter_by(user_id=user.id, role='primary').all()
+    primary_ownerships = DogOwner.query.filter_by(user_id=user.id, role='primary').order_by(DogOwner.id).all()
     sec_as_secondary = DogOwner.query.filter_by(user_id=user.id, role='secondary').all()
 
     all_dog_ids = [o.dog_id for o in primary_ownerships + sec_as_secondary]
+    # Deleted dogs keep their DogOwner rows but get no card — the loops below
+    # skip ids missing from this dict.
     dogs_by_id = (
-        {d.id: d for d in Dog.query.filter(Dog.id.in_(all_dog_ids)).all()}
+        {d.id: d for d in Dog.query.filter(Dog.id.in_(all_dog_ids), Dog.deleted_at.is_(None)).all()}
         if all_dog_ids else {}
     )
 
@@ -140,7 +148,52 @@ def client_detail(client_id):
         add_dog_form=AddDogForm(),
         add_dog_modal_open=False,
         today=date_type.today(),
+        can_delete_client=_can_delete_dogless_client(user, primary_dogs, secondary_dogs),
     )
+
+
+def _can_delete_dogless_client(user, primary_dogs, secondary_dogs):
+    """Show "Delete client" only to the super-admin, only for a client with
+    no (live) dogs, and only when the server would allow it. A client with a
+    dog is deleted from the dog's card instead (dog-first)."""
+    if not current_user.is_super_admin or primary_dogs or secondary_dogs:
+        return False
+    return client_block_reason(user, current_user) is None
+
+
+def _deleted_client_detail(user):
+    """Read-only page for a deleted client: when, plus their bookings."""
+    from app.models import Booking
+    dog_ids = [o.dog_id for o in DogOwner.query.filter_by(user_id=user.id).all()]
+    who = Booking.user_id == user.id
+    if dog_ids:
+        who = db.or_(who, Booking.dog_id.in_(dog_ids))
+    bookings = (
+        Booking.query
+        .options(joinedload(Booking.dog), joinedload(Booking.service_type))
+        .filter(who)
+        .order_by(Booking.date.desc(), Booking.id.desc())
+        .all()
+    )
+    return render_template("admin_client_deleted.html", client=user, bookings=bookings)
+
+
+def _first_live_primary_dog(user):
+    """The client's first primary dog that hasn't been deleted — the dog the
+    client page's pickup-notes card shows and edits."""
+    return (
+        Dog.query.join(DogOwner, DogOwner.dog_id == Dog.id)
+        .filter(DogOwner.user_id == user.id, DogOwner.role == 'primary', Dog.deleted_at.is_(None))
+        .order_by(DogOwner.id)
+        .first()
+    )
+
+
+def _refuse_if_deleted(user):
+    """JSON 409 for an action on a deleted client, else None."""
+    if user.deleted_at:
+        return jsonify(success=False, message="This client has been deleted."), 409
+    return None
 
 
 @admin_bp.route("/clients/<int:client_id>/join", methods=["POST"])
@@ -154,6 +207,9 @@ def join_dog_access(client_id):
     the primary owner — they cannot modify the dog's profile.
     """
     primary_user = User.query.filter(User.client != None, User.id == client_id).first_or_404()
+    refused = _refuse_if_deleted(primary_user)
+    if refused:
+        return refused
     data = request.get_json(silent=True) or {}
     dog_id = data.get('dog_id')
     secondary_user_id = data.get('secondary_user_id')
@@ -163,7 +219,7 @@ def join_dog_access(client_id):
 
     # Verify dog belongs to this primary client
     ownership = DogOwner.query.filter_by(dog_id=dog_id, user_id=primary_user.id, role='primary').first()
-    if not ownership:
+    if not ownership or ownership.dog.deleted_at:
         return jsonify(success=False, message="Dog not found for this client"), 404
 
     # Membership test is presence of a Client record, not role == 'client', so a
@@ -171,7 +227,7 @@ def join_dog_access(client_id):
     # pure walker (no Client record) is still excluded. Matches the primary
     # lookup above and the /admin/clients list.
     secondary_user = User.query.filter(User.client != None, User.id == secondary_user_id).first()  # noqa: E711
-    if not secondary_user:
+    if not secondary_user or secondary_user.deleted_at:
         return jsonify(success=False, message="Secondary client not found"), 404
 
     if secondary_user_id == client_id:
@@ -405,8 +461,17 @@ def edit_client(client_id):
     onboarding complete automatically when address + dog are both present.
     """
     user = User.query.filter(User.client != None, User.id == client_id).first_or_404()
+    if user.deleted_at:
+        flash("This client has been deleted and can't be edited.", "error")
+        return redirect(url_for('admin.client_detail', client_id=user.id))
     client = Client.query.filter_by(user_id=user.id).first()
-    dog_owners = DogOwner.query.filter_by(user_id=user.id, role='primary').order_by(DogOwner.id).all()
+    # Live dogs only — a deleted dog keeps this client's DogOwner row, and the
+    # form would otherwise load (and save over) the anonymised dog.
+    dog_owners = (
+        DogOwner.query.join(Dog, Dog.id == DogOwner.dog_id)
+        .filter(DogOwner.user_id == user.id, DogOwner.role == 'primary', Dog.deleted_at.is_(None))
+        .order_by(DogOwner.id).all()
+    )
     dog = db.session.get(Dog, dog_owners[0].dog_id) if dog_owners else None
     additional_dogs = [db.session.get(Dog, do.dog_id) for do in dog_owners[1:]] if len(dog_owners) > 1 else []
 
@@ -616,6 +681,9 @@ def add_dog(client_id):
     """Add a second (or subsequent) primary dog to an existing client."""
     from app.forms import AddDogForm
     user = User.query.filter(User.client != None, User.id == client_id).first_or_404()
+    if user.deleted_at:
+        flash("This client has been deleted.", "error")
+        return redirect(url_for('admin.client_detail', client_id=user.id))
 
     form = AddDogForm()
     if form.validate_on_submit():
@@ -651,7 +719,7 @@ def add_dog(client_id):
     primary_dogs = []
     for ownership in primary_ownerships:
         dog = db.session.get(Dog, ownership.dog_id)
-        if not dog:
+        if not dog or dog.deleted_at:
             continue
         secondary_ownerships = DogOwner.query.filter_by(dog_id=dog.id, role='secondary').all()
         secondary_users = [db.session.get(User, so.user_id) for so in secondary_ownerships]
@@ -662,7 +730,7 @@ def add_dog(client_id):
     secondary_dogs = []
     for ownership in secondary_ownerships:
         dog = db.session.get(Dog, ownership.dog_id)
-        if not dog:
+        if not dog or dog.deleted_at:
             continue
         primary_o = DogOwner.query.filter_by(dog_id=dog.id, role='primary').first()
         primary_user = db.session.get(User, primary_o.user_id) if primary_o else None
@@ -715,6 +783,9 @@ def deactivate_client(client_id):
         user = User.query.filter(User.client != None, User.id == client_id).first()
         if not user:
             return jsonify(success=False, message="Client not found"), 404
+        refused = _refuse_if_deleted(user)
+        if refused:
+            return refused
 
         if user.id == current_user.id:
             return jsonify(success=False, message="You cannot deactivate your own account"), 400
@@ -766,6 +837,9 @@ def activate_client(client_id):
         user = User.query.filter(User.client != None, User.id == client_id).first()
         if not user:
             return jsonify(success=False, message="Client not found"), 404
+        refused = _refuse_if_deleted(user)
+        if refused:
+            return refused
 
         before = {'active': user.active}
         user.active = True
@@ -796,6 +870,9 @@ def unlock_client(client_id):
         user = User.query.filter(User.client != None, User.id == client_id).first()  # noqa: E711
         if not user:
             return jsonify(success=False, message="Client not found"), 404
+        refused = _refuse_if_deleted(user)
+        if refused:
+            return refused
 
         user.failed_login_attempts = 0
         user.locked_until = None
@@ -818,6 +895,9 @@ def update_client_pickup_details(client_id):
     user = User.query.filter(User.client != None, User.id == client_id).first()
     if not user:
         return jsonify(success=False, message="Client not found"), 404
+    refused = _refuse_if_deleted(user)
+    if refused:
+        return refused
 
     client = Client.query.filter_by(user_id=user.id).first()
     if not client:
@@ -836,9 +916,7 @@ def update_client_pickup_details(client_id):
     # URL change persisted anyway (Flask-Session commits db.session at response
     # time), and record_admin_action further down never ran — so the change also
     # bypassed the ActivityLog chokepoint and left no audit row.
-    from app.models import DogOwner
-    dog_owner = DogOwner.query.filter_by(user_id=user.id, role='primary').first()
-    dog = db.session.get(Dog, dog_owner.dog_id) if dog_owner else None
+    dog = _first_live_primary_dog(user)
     if not dog:
         return jsonify(success=False, message="No dog record found — add a dog first before saving pickup notes"), 404
 
@@ -881,9 +959,7 @@ def upload_client_pickup_photo(client_id):
     if not user:
         return jsonify(success=False, message="Client not found"), 404
 
-    from app.models import DogOwner
-    dog_owner = DogOwner.query.filter_by(user_id=user.id, role='primary').first()
-    dog = db.session.get(Dog, dog_owner.dog_id) if dog_owner else None
+    dog = _first_live_primary_dog(user)
     if not dog:
         return jsonify(success=False, message="No dog record found — add a dog first"), 404
 

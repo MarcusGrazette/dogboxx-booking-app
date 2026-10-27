@@ -1,0 +1,80 @@
+{% extends "admin_layout.html" %}
+
+{# Read-only page for a deleted (anonymised) client — no actions.
+   See app/utils/deletion.py and admin/views/clients.py::_deleted_client_detail. #}
+
+{% block title %}Admin - {{ client.full_name }}{% endblock %}
+
+{% block page_title %}{{ client.full_name }}{% endblock %}
+{% block page_subtitle %}Deleted on {{ (client.deleted_at | local_time).strftime('%d %b %Y') }}{% endblock %}
+
+{% block page_actions %}
+    <a href="{{ url_for('admin.clients') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Clients
+    </a>
+{% endblock %}
+
+{% block main %}
+<div class="row g-4 align-items-start">
+    <div class="col-12 col-lg-5">
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-person me-2" style="color:#E02FAC;"></i>Client Details
+            </div>
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <div class="rounded-circle bg-light d-flex align-items-center justify-content-center flex-shrink-0 text-muted fw-bold"
+                         style="width:56px;height:56px;font-size:1.4rem;">?</div>
+                    <div class="flex-grow-1 min-width-0">
+                        <div class="fw-bold fs-5 text-truncate">{{ client.full_name }}</div>
+                        <span class="badge bg-secondary">Deleted</span>
+                    </div>
+                </div>
+                <p class="text-muted small mb-0">
+                    <i class="bi bi-info-circle me-1"></i>
+                    This client's personal details were erased on {{ (client.deleted_at | local_time).strftime('%d %b %Y') }}.
+                    Their past walks are kept for invoices and reports.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-7">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-calendar3 me-2" style="color:#E02FAC;"></i>Bookings
+            </div>
+            <div class="card-body p-0">
+                {% if bookings %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>Dog</th>
+                                <th>Service</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for b in bookings %}
+                            <tr>
+                                <td class="text-nowrap small align-middle">{{ b.date.strftime('%a %d %b %Y') }} · {{ b.slot }}</td>
+                                <td class="small align-middle">{{ b.dog.name if b.dog else '—' }}</td>
+                                <td class="small align-middle">{{ b.service_type.name if b.service_type else '—' }}</td>
+                                <td class="small align-middle text-capitalize">{{ b.status }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    <p class="mb-0">No bookings on record.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

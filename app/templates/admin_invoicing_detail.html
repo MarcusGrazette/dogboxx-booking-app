@@ -43,7 +43,7 @@
           {% else %}
           <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center text-white fw-bold"
                style="width:48px;height:48px;font-size:1.1rem;">
-            {{ client_user.firstname[0] | upper }}{{ client_user.lastname[0] | upper if client_user.lastname else '' }}
+            {{ client_user.initials }}
           </div>
           {% endif %}
           <div>

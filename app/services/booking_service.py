@@ -28,6 +28,14 @@ class CapacityError(Exception):
     """Raised when a slot has no walkers and no waitlist (hard reject)."""
 
 
+class DeletedDogError(CapacityError):
+    """Raised when the dog has been deleted (app/utils/deletion.py).
+
+    A subclass of CapacityError so every creation site's existing handler
+    already refuses it with this message. The pages hide deleted dogs; this is
+    the backstop for a stale form or a hand-built request."""
+
+
 def create_booking(
     *,
     dog,
@@ -46,7 +54,8 @@ def create_booking(
 
     Returns ``(booking, auto_confirmed: bool)``. Never commits; caller must commit.
 
-    Raises CapacityError if the slot has no walkers and no waitlist.
+    Raises CapacityError if the slot has no walkers and no waitlist, and
+    DeletedDogError (a CapacityError) if the dog has been deleted.
 
     Parameters
     ----------
@@ -65,6 +74,8 @@ def create_booking(
     same_day        Forces initial status to 'requested' (no waitlist, no auto-assign).
     created_by_id   Set to the admin's user_id when booking on behalf of a client.
     """
+    if dog.deleted_at is not None:
+        raise DeletedDogError("This dog has been deleted and can't be booked.")
     acquire_booking_lock(service.slug, date, slot)
     available, can_waitlist, capacity_msg = check_availability(
         service, date, slot, admin_override=admin_override

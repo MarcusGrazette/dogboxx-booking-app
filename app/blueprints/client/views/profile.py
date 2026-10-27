@@ -32,6 +32,14 @@ USER_AUDIT_FIELDS = ['email_marketing']
 CLIENT_AUDIT_FIELDS = ['maps_url']
 
 
+def _live_dog(dog_id):
+    """The dog, or None if it doesn't exist or has been deleted. A deleted
+    dog keeps its DogOwner rows, so every ownership lookup here goes through
+    this to hide it from owners who weren't deleted with it."""
+    dog = db.session.get(Dog, dog_id)
+    return dog if dog and dog.deleted_at is None else None
+
+
 @client_bp.route("/profile", methods=["GET", "POST"])
 @login_required
 def profile():
@@ -45,7 +53,7 @@ def profile():
     primary_ownerships = DogOwner.query.filter_by(user_id=current_user.id, role='primary').all()
     primary_dogs = []
     for _po in primary_ownerships:
-        _d = db.session.get(Dog, _po.dog_id)
+        _d = _live_dog(_po.dog_id)
         if _d:
             primary_dogs.append(_d)
     dog = primary_dogs[0] if primary_dogs else None  # first primary dog (for form hidden fields)
@@ -62,7 +70,7 @@ def profile():
     secondary_ownerships = DogOwner.query.filter_by(user_id=current_user.id, role='secondary').all()
     secondary_dogs = []
     for so in secondary_ownerships:
-        secondary_dog = db.session.get(Dog, so.dog_id)
+        secondary_dog = _live_dog(so.dog_id)
         if not secondary_dog:
             continue
         primary_o = DogOwner.query.filter_by(dog_id=so.dog_id, role='primary').first()
@@ -339,7 +347,7 @@ def upload_dog_photo():
         if len(primary_owners) > 1:
             return jsonify(success=False, error="Please specify which dog."), 400
         dog_owner = primary_owners[0] if primary_owners else None
-    dog = db.session.get(Dog, dog_owner.dog_id) if dog_owner else None
+    dog = _live_dog(dog_owner.dog_id) if dog_owner else None
     if not dog:
         return jsonify(success=False, error="Dog profile not found"), 404
 
@@ -421,7 +429,7 @@ def upload_pickup_photo(dog_id):
     # Pickup notes (and now their reference photo) are shared by all co-owners,
     # not just the primary — mirrors update_pickup()'s ownership check.
     dog_owner = DogOwner.query.filter_by(user_id=current_user.id, dog_id=dog_id).first()
-    dog = db.session.get(Dog, dog_owner.dog_id) if dog_owner else None
+    dog = _live_dog(dog_owner.dog_id) if dog_owner else None
     if not dog:
         return jsonify(success=False, error="Dog not found"), 404
 
@@ -471,7 +479,7 @@ def update_pickup():
         return jsonify(success=False, error="Forbidden"), 403
 
     primary_ownerships = DogOwner.query.filter_by(user_id=current_user.id, role='primary').all()
-    primary_dogs = [db.session.get(Dog, po.dog_id) for po in primary_ownerships]
+    primary_dogs = [_live_dog(po.dog_id) for po in primary_ownerships]
     primary_dogs = [d for d in primary_dogs if d]
 
     secondary_ownerships = DogOwner.query.filter_by(user_id=current_user.id, role='secondary').all()
@@ -491,7 +499,7 @@ def update_pickup():
                         changes=changes,
                     )
         elif secondary_ownerships:
-            sec_dog = db.session.get(Dog, secondary_ownerships[0].dog_id)
+            sec_dog = _live_dog(secondary_ownerships[0].dog_id)
             if sec_dog:
                 before = sec_dog.pickup_instructions
                 sec_dog.pickup_instructions = clean_rich_text_or_none(
@@ -547,7 +555,7 @@ def update_dog_details(dog_id):
     if not ownership:
         return jsonify(success=False, error="Not authorised"), 403
 
-    dog = db.session.get(Dog, dog_id)
+    dog = _live_dog(dog_id)
     if not dog:
         return jsonify(success=False, error="Dog not found"), 404
 
