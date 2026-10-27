@@ -38,6 +38,10 @@ class User(UserMixin, db.Model):
     # admin unlock override in the schema itself — see is_locked_out below.
     failed_login_attempts = db.Column(db.Integer, default=0, nullable=False)
     locked_until = db.Column(db.DateTime, nullable=True)
+    # Set when a super-admin deletes this client (app/utils/deletion.py): the
+    # row and id stay so past bookings and invoices keep working, but every
+    # personal field has been wiped and the account can't be reactivated.
+    deleted_at = db.Column(db.DateTime, nullable=True)
 
     # Flask-Login reads is_active as an ATTRIBUTE (never calls it) — it must be
     # a property, not a method: a bound method is always truthy, which silently
@@ -105,6 +109,14 @@ class User(UserMixin, db.Model):
     @property
     def full_name(self):
         return f"{self.firstname} {self.lastname}"
+
+    @property
+    def initials(self):
+        # A deleted client's name is "[Deleted client #N]" — its first letter
+        # would be "[", so show a plain "?" instead.
+        if self.deleted_at:
+            return '?'
+        return ((self.firstname or '')[:1] + (self.lastname or '')[:1]).upper()
 
     def make_unsubscribe_token(self):
         """Return a signed token for one-click newsletter unsubscribe."""
@@ -192,6 +204,9 @@ class Dog(db.Model):
     pickup_notes_photo = db.Column(db.String(300), nullable=True)
     hold_key = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    # Set when a super-admin deletes this dog (app/utils/deletion.py). The row,
+    # id and DogOwner links stay — billing groups by dog and household.
+    deleted_at = db.Column(db.DateTime, nullable=True)
 
     # Many-to-many relationship with owners via DogOwner
     owners = db.relationship('DogOwner', back_populates='dog', lazy='dynamic')

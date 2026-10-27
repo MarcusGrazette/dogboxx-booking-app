@@ -52,7 +52,7 @@ def dogs():
         Dog.query
         .join(DogOwner, DogOwner.dog_id == Dog.id)
         .join(User, User.id == DogOwner.user_id)
-        .filter(DogOwner.role == 'primary')
+        .filter(DogOwner.role == 'primary', Dog.deleted_at.is_(None))
         .add_columns(User.id.label('owner_user_id'),
                      User.firstname.label('owner_firstname'),
                      User.lastname.label('owner_lastname'),
@@ -93,7 +93,7 @@ def update_dog(dog_id):
     """AJAX: update a dog's details from the admin dogs table."""
     from datetime import date as date_type
     dog = db.session.get(Dog, dog_id)
-    if not dog:
+    if not dog or dog.deleted_at:
         return jsonify(success=False, message="Dog not found"), 404
 
     data = request.get_json()
@@ -157,7 +157,7 @@ def upload_dog_pickup_photo(dog_id):
     """AJAX: attach/replace a reference photo for a dog's pickup notes,
     from the admin dogs table's edit modal."""
     dog = db.session.get(Dog, dog_id)
-    if not dog:
+    if not dog or dog.deleted_at:
         return jsonify(success=False, message="Dog not found"), 404
 
     if 'file' not in request.files:
@@ -241,7 +241,7 @@ def book_for_dog():
             return jsonify(success=False, message="Invalid slot"), 400
 
         dog = db.session.get(Dog, dog_id)
-        if not dog:
+        if not dog or dog.deleted_at:
             return jsonify(success=False, message="Dog not found"), 404
 
         slots_to_book = ['Morning', 'Afternoon'] if slot == 'Both' else [slot]
@@ -383,7 +383,7 @@ def recurring_for_dog():
             return jsonify(success=False, message="End date must be after start date"), 400
 
         dog = db.session.get(Dog, dog_id)
-        if not dog:
+        if not dog or dog.deleted_at:
             return jsonify(success=False, message="Dog not found"), 404
 
         default_service = ServiceType.query.filter_by(slug=ServiceType.WALK, active=True).first()
@@ -516,7 +516,7 @@ def dog_upcoming_bookings(dog_id):
     """AJAX: paginated upcoming (and future) bookings for a dog."""
     from datetime import date as date_type
     dog = db.session.get(Dog, dog_id)
-    if not dog:
+    if not dog or dog.deleted_at:
         return jsonify(success=False, message="Dog not found"), 404
 
     from_str = request.args.get('from', '')
@@ -581,7 +581,7 @@ def dog_cancel_preview(dog_id):
     """AJAX: preview bookings that would be cancelled in a date range (no writes)."""
     from datetime import date as date_type
     dog = db.session.get(Dog, dog_id)
-    if not dog:
+    if not dog or dog.deleted_at:
         return jsonify(success=False, message="Dog not found"), 404
 
     try:
@@ -660,7 +660,7 @@ def dog_bulk_cancel(dog_id):
     """Admin: cancel all active bookings for a dog within a date range."""
     from datetime import date as date_type
     dog = db.session.get(Dog, dog_id)
-    if not dog:
+    if not dog or dog.deleted_at:
         return jsonify(success=False, message="Dog not found"), 404
 
     data = request.get_json(silent=True) or {}
