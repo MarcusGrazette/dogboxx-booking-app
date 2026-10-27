@@ -13,7 +13,7 @@ would require complex parameterisation with no real benefit.
 """
 
 from app import db
-from app.models import Booking, ServiceType
+from app.models import Booking, Dog, ServiceType
 from app.capacity import (
     acquire_booking_lock,
     check_availability,
@@ -26,6 +26,14 @@ from app.utils.booking_status import record_booking_created, transition_booking
 
 class CapacityError(Exception):
     """Raised when a slot has no walkers and no waitlist (hard reject)."""
+
+
+class DeletedDogError(CapacityError):
+    """Raised when the dog has been deleted (app/utils/deletion.py).
+
+    A subclass of CapacityError so every creation site's existing handler
+    already refuses it with this message. The pages hide deleted dogs; this is
+    the backstop for a stale form or a hand-built request."""
 
 
 def create_booking(
@@ -46,7 +54,8 @@ def create_booking(
 
     Returns ``(booking, auto_confirmed: bool)``. Never commits; caller must commit.
 
-    Raises CapacityError if the slot has no walkers and no waitlist.
+    Raises CapacityError if the slot has no walkers and no waitlist, and
+    DeletedDogError (a CapacityError) if the dog has been deleted.
 
     Parameters
     ----------
@@ -66,6 +75,20 @@ def create_booking(
     created_by_id   Set to the admin's user_id when booking on behalf of a client.
     """
     acquire_booking_lock(service.slug, date, slot)
+    # Lock the dog row and read deleted_at from the DB, not the in-memory
+    # object: the delete route holds this same row lock while it checks for
+    # upcoming bookings, so a booking racing a delete either commits first
+    # (and the delete sees it and refuses) or waits and sees deleted_at here.
+    # Lock order stays advisory → row. A plain column select, so it doesn't
+    # refresh the caller's Dog object.
+    deleted_at = (
+        db.session.query(Dog.deleted_at)
+        .filter(Dog.id == dog.id)
+        .with_for_update()
+        .scalar()
+    )
+    if deleted_at is not None:
+        raise DeletedDogError("This dog has been deleted and can't be booked.")
     available, can_waitlist, capacity_msg = check_availability(
         service, date, slot, admin_override=admin_override
     )

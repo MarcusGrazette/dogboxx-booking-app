@@ -1192,7 +1192,7 @@ def api_daily_overview(date_str):
 @walker_required
 def dogs():
     """Dog directory — all dogs with owner contact info."""
-    all_dogs = Dog.query.order_by(Dog.name).all()
+    all_dogs = Dog.query.filter(Dog.deleted_at.is_(None)).order_by(Dog.name).all()
 
     # Pre-fetch primary owners (with client) in one query to avoid N+1
     ownerships = (

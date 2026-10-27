@@ -7,10 +7,10 @@ from flask import current_app, request, redirect, render_template, flash, url_fo
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError
-from app.models import User, Dog, Booking, DogOwner, ServiceType, Walker, Closure
+from app.models import User, Dog, Booking, ServiceType, Walker, Closure
 from app import db, limiter
 from app.utils.db_error_handler import DBErrorHandler
-from app.utils.booking_access import get_accessible_dog_ids, user_can_access_booking
+from app.utils.booking_access import get_accessible_dogs, get_accessible_dog_ids, user_can_access_booking
 from app.capacity import eligible_walker_clause, is_date_closed, MAX_RECURRING_SERIES
 from app.forms import BookingForm
 import logging
@@ -76,12 +76,12 @@ def index():
         joinedload(User.client)
     ).filter_by(id=current_user.id).first()
 
-    # Get user's dogs through DogOwner relationship
-    user_dogs = Dog.query.join(DogOwner).filter(DogOwner.user_id == current_user.id).all()
+    # The user's dogs (primary or co-owned), minus deleted dogs
+    user_dogs = get_accessible_dogs(current_user.id)
 
     # Return all non-cancelled bookings (past and upcoming) for date-filter support
     today = datetime.now(timezone.utc).date()
-    _index_dog_ids = get_accessible_dog_ids(current_user.id)
+    _index_dog_ids = [d.id for d in user_dogs]
     upcoming_bookings_query = Booking.query.options(
         joinedload(Booking.walker).joinedload(Walker.user),
         joinedload(Booking.service_type),
@@ -231,7 +231,7 @@ def book():
     if booking_slot not in ('Morning', 'Afternoon'):
         return jsonify({'success': False, 'message': 'Invalid slot selected.'}), 400
 
-    user_dogs = Dog.query.join(DogOwner).filter(DogOwner.user_id == current_user.id).all()
+    user_dogs = get_accessible_dogs(current_user.id)
     if not user_dogs:
         return jsonify({'success': False, 'message': 'No dog found on your account. Please add a dog before booking.'}), 400
 
@@ -358,7 +358,7 @@ def book_both():
     if booking_date < today:
         return jsonify({'success': False, 'message': 'Booking date cannot be in the past.'}), 400
 
-    user_dogs = Dog.query.join(DogOwner).filter(DogOwner.user_id == current_user.id).all()
+    user_dogs = get_accessible_dogs(current_user.id)
     if not user_dogs:
         return jsonify({'success': False, 'message': 'No dog found on your account.'}), 400
 
@@ -499,7 +499,7 @@ def book_drop_in():
     if booking_date < today:
         return jsonify({'success': False, 'message': 'Booking date cannot be in the past.'}), 400
 
-    user_dogs = Dog.query.join(DogOwner).filter(DogOwner.user_id == current_user.id).all()
+    user_dogs = get_accessible_dogs(current_user.id)
     if not user_dogs:
         return jsonify({'success': False, 'message': 'No dog found on your account.'}), 400
 
@@ -896,7 +896,7 @@ def recurring_booking():
             return jsonify(success=False, message="No valid dates in that range"), 400
 
         # Get dog
-        user_dogs = Dog.query.join(DogOwner).filter(DogOwner.user_id == current_user.id).all()
+        user_dogs = get_accessible_dogs(current_user.id)
         if not user_dogs:
             return jsonify(success=False, message="No dog found on your account"), 400
         try:

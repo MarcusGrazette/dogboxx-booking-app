@@ -24,6 +24,13 @@ CROPPED_SIZE = (400, 400)  # square output for cropper uploads
 # into a clean ValueError.
 Image.MAX_IMAGE_PIXELS = 50_000_000
 
+# Image.open() picks a decoder by sniffing the file's bytes, not its name, so
+# without this a TIFF/BMP/etc. renamed .jpg reaches that format's decoder —
+# where most of Pillow's parser CVEs live. Restrict decoding to the formats we
+# actually accept; anything else raises UnidentifiedImageError, which the
+# try/excepts below turn into "Invalid image file".
+PIL_FORMATS = ("JPEG", "PNG", "GIF")
+
 
 def subfolder_dir(subfolder):
     """On-disk folder for an upload subfolder ('dogs', 'profiles',
@@ -166,7 +173,7 @@ def process_dog_photo(file_storage, subfolder=None):
 
     # 1. Verify it's a valid image
     try:
-        img = Image.open(file_storage)
+        img = Image.open(file_storage, formats=PIL_FORMATS)
         img.verify()
         file_storage.seek(0)
     except Exception:
@@ -181,7 +188,7 @@ def process_dog_photo(file_storage, subfolder=None):
     #    `exif=` kwarg is passed to save() — since we never pass one, this also
     #    strips all metadata, without needing to copy pixel data through a fresh
     #    Image object.
-    img = Image.open(file_storage)
+    img = Image.open(file_storage, formats=PIL_FORMATS)
     img.thumbnail(MAX_SIZE, Image.LANCZOS)
 
     # 4. Save with a UUID filename
@@ -230,14 +237,14 @@ def process_cropped_photo(file_storage, subfolder='dogs'):
 
     # Verify it's a real image
     try:
-        img = Image.open(file_storage)
+        img = Image.open(file_storage, formats=PIL_FORMATS)
         img.verify()
         file_storage.seek(0)
     except Exception:
         raise ValueError("Invalid image file")
 
     # Re-open (verify() closes the file)
-    img = Image.open(file_storage)
+    img = Image.open(file_storage, formats=PIL_FORMATS)
 
     # Canvas may output RGBA — flatten onto a white background before saving JPEG
     if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
