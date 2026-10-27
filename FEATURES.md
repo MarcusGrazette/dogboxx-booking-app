@@ -29,6 +29,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 95 | P3 | S | 📋 | **Simplify 9 — retire the old assignment page** | Remove the unlinked standalone walk board and its unused charts; walks are assigned from the dashboard. |
 | 99 | P3 | S | 🔲 | **Prune old backups with a storage rule** | Old database backups expire automatically in storage, so the nightly backup job only needs permission to upload. |
 | 101 | P3 | L | 🔲 | **Nightly backup inside Railway** | Run the database backup as a Railway scheduled job over the private network, so the database needs no public connection. After #99. |
+| 100 | P2 | L | 🔧 | **Delete a client or dog** | The owner can permanently delete a dog, and optionally its owners, or a client with no dogs. Personal details are erased; past walks and invoices stay, labelled "[Deleted dog]" / "[Deleted client]". |
 | 24 | P3 | L | 🔲 | **Dental cleans service type** | Admin-managed time slots that clients book into. |
 | 74 | P4 | S | 🔲 | **Drop `User.notification_preference`** | Remove a column that only ever holds `'email'`. |
 | 76 | P4 | L | 🔲 | **Keyboard operability** | Make the calendar and assignment board fully keyboard-usable. |
