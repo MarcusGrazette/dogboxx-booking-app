@@ -715,7 +715,7 @@ def cancel_booking():
         # assign_walker could overwrite between our read and our write (lost
         # update: the assign commits 'confirmed' over this cancel). With it, the
         # second of two racing requests blocks here and then sees the first's
-        # committed status. No-op on SQLite.
+        # committed status.
         booking = db.session.get(Booking, booking_id, with_for_update=True,
                                  populate_existing=True)
         if not booking:

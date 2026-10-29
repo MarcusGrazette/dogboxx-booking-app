@@ -519,9 +519,6 @@ class TestAssignWalkerConcurrencyRace:
     """
 
     def test_concurrent_assign_calls_do_not_overfill_walker(self, app):
-        if db.engine.dialect.name != 'postgresql':
-            pytest.skip('advisory lock is a no-op on SQLite — race cannot be exercised')
-
         monday = _next_weekday(0)
         with app.app_context():
             # Capacity 1 so a second assignment to the same walker/slot must
@@ -668,9 +665,6 @@ class TestAssignVersusCancelRowLock:
     """
 
     def test_cancel_racing_an_assign_is_not_overwritten(self, app):
-        if db.engine.dialect.name != 'postgresql':
-            pytest.skip('FOR UPDATE is a no-op on SQLite — race cannot be exercised')
-
         monday = _next_weekday(0)
         with app.app_context():
             admin = _make_admin()

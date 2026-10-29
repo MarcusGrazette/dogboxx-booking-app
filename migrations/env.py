@@ -102,8 +102,7 @@ def run_migrations_online():
         # on a populated table can legitimately run longer than the app's 15s cap,
         # and a failure here blocks the deploy before gunicorn even starts. We
         # apply migrations serially under this connection, so a slow migration
-        # blocks only itself, not unrelated traffic. Guarded to Postgres only —
-        # SQLite (local dev fallback) doesn't support this GUC.
+        # blocks only itself, not unrelated traffic. Postgres-only GUCs.
         if connection.dialect.name == 'postgresql':
             from sqlalchemy import text as _text
             connection.execute(_text("SET statement_timeout = 0"))
