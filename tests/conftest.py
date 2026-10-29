@@ -1,12 +1,25 @@
 """
 Pytest configuration and shared fixtures for Dogboxx test suite.
 
-Tests run against PostgreSQL by default (matching CI), or in-memory SQLite
-when USE_SQLITE=1 is set — see TestingConfig in config.py. A fresh schema is
-created per test. CSRF is disabled in test config. Flask-Limiter is disabled.
+Tests run against PostgreSQL (matching CI and production) — see TestingConfig
+in config.py. The schema is
+created once per run and every table is emptied after each test. CSRF is
+disabled in test config. Flask-Limiter is disabled.
 """
+import functools
 import os
 import shutil
+
+import werkzeug.security
+
+# Werkzeug's default (scrypt) costs ~90ms per hash, and nearly every test
+# creates users and logs in. Swap in a one-iteration method for the whole run.
+# This must happen before `app` is imported so app modules that do
+# `from werkzeug.security import generate_password_hash` bind the fast one too.
+# check_password_hash reads the method from the stored hash, so logins against
+# these hashes are fast as well.
+werkzeug.security.generate_password_hash = functools.partial(
+    werkzeug.security.generate_password_hash, method='pbkdf2:sha256:1')
 
 import pytest
 from werkzeug.security import generate_password_hash
@@ -69,7 +82,7 @@ def _dirty_session_view():
 
 @pytest.fixture(scope='session')
 def app():
-    """Create application with testing config (in-memory SQLite)."""
+    """Create application with testing config."""
     application = create_app('testing')
     # Disable rate limiter in tests
     application.config['RATELIMIT_ENABLED'] = False
@@ -125,13 +138,29 @@ def dirty_session_route():
 @pytest.fixture(autouse=True)
 def db(app):
     """
-    Create all tables before each test, drop them after.
-    Reliable isolation across SQLAlchemy 2.x — slightly slower than
-    transaction rollback but avoids session.bind deprecation issues.
+    Empty every table after each test (the schema itself is built once by
+    `_schema`). DELETE in reverse dependency order is ~5ms on Postgres, against
+    ~380ms for a per-test create_all/drop_all and ~200ms for TRUNCATE on these
+    tiny tables. Row deletes rather than transaction rollback because tests
+    and the app commit freely, and the app's after_rollback listener assumes
+    no savepoints. Identity sequences are not reset — don't hard-code ids.
     """
     with app.app_context():
-        _db.create_all()
         yield _db
+        _db.session.remove()
+        with _db.engine.begin() as conn:
+            for table in reversed(_db.metadata.sorted_tables):
+                conn.execute(table.delete())
+
+
+@pytest.fixture(scope='session', autouse=True)
+def _schema(app):
+    """Build the schema once per run. The leading drop_all clears anything left
+    by an interrupted run (or by CI's `flask db upgrade` step)."""
+    with app.app_context():
+        _db.drop_all()
+        _db.create_all()
+        yield
         _db.session.remove()
         _db.drop_all()
 

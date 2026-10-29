@@ -218,9 +218,6 @@ class TestStreamReleasesDbConnection:
         from sqlalchemy import create_engine, text
         from app import db
 
-        if db.engine.dialect.name != 'postgresql':
-            pytest.skip('pg_stat_activity is Postgres-only')
-
         probe = create_engine(app.config['SQLALCHEMY_DATABASE_URI'])
         count_sql = text(
             "SELECT count(*) FROM pg_stat_activity "

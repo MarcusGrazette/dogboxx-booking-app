@@ -17,7 +17,7 @@ import getpass
 def main():
     # ── Bootstrap the Flask app ──────────────────────────────────────────────
     # Honour FLASK_ENV if set; fall back to 'production' so the script uses
-    # the real DATABASE_URL rather than the SQLite dev default.
+    # production config and its DATABASE_URL by default.
     flask_env = os.environ.get("FLASK_ENV", "production")
 
     try:

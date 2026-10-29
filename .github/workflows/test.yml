@@ -54,18 +54,9 @@ jobs:
         # Fails if any SQLAlchemy model column is not reflected in the migration chain.
         # Catches: columns added to models without a matching migration.
 
-      - name: Reset DB for test isolation
-        run: |
-          python - <<'EOF'
-          import os
-          os.environ['FLASK_ENV'] = 'testing'
-          from app import create_app, db
-          app = create_app('testing')
-          with app.app_context():
-              db.drop_all()
-          EOF
-
       - name: Run tests
+        # The migrated schema from the steps above is dropped and rebuilt from
+        # the models by conftest.py's session-scoped _schema fixture.
         run: pytest --tb=short -q
 
   audit:

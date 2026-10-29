@@ -5,7 +5,7 @@ A booking management app for a small dog walking business. Built with Flask and 
 ## Tech Stack
 
 - **Backend:** Python 3.12, Flask, SQLAlchemy, Flask-Migrate (Alembic), Flask-Login, Flask-WTF
-- **Database:** PostgreSQL (SQLite supported for local dev)
+- **Database:** PostgreSQL 16 (required in every environment, including local dev)
 - **Frontend:** Jinja2 templates, Bootstrap 5, Bootstrap Icons
 - **Auth:** Flask-Login with CSRF protection and rate limiting via Flask-Limiter
 - **Email:** Transactional and newsletter delivery via the Resend API
@@ -51,31 +51,30 @@ Walkers can:
 
 ## Local Development
 
-Quick start (SQLite — no Postgres needed):
+The app needs a local PostgreSQL 16 server — there is no SQLite fallback. With Postgres running and a `dogboxx` database created ([setup steps](docs/CONTRIBUTING.md#full-local-setup-postgresql)):
 
 ```bash
 git clone git@github.com:MarcusGrazette/dogboxx-booking-app.git
 cd dogboxx-booking-app
 python -m venv venv && source venv/bin/activate
 pip install -r requirements-dev.txt
-cp .env.example .env       # set SECRET_KEY at minimum
+cp .env.example .env       # set SECRET_KEY, DATABASE_URL and TEST_DATABASE_URL
 flask db upgrade           # create the schema
 python seed.py             # load test data (run once, on an empty database)
 flask run --port=5000
 ```
 
-The app runs at `http://localhost:5000`. With `DATABASE_URL` unset it falls back to SQLite, which is fine for a quick look. Test logins are listed in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md#test-accounts). For example, the client account is `john.doe@example.com` / `clientpass`.
+The app runs at `http://localhost:5000`. Test logins are listed in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md#test-accounts). For example, the client account is `john.doe@example.com` / `clientpass`.
 
-For production-fidelity work — full PostgreSQL 16 setup, the test workflow, and the branching model — see **[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)**.
+For the full setup, the test workflow, and the branching model, see **[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)**.
 
 ## Running Tests
 
 ```bash
 pytest                 # runs against Postgres (matches CI)
-USE_SQLITE=1 pytest    # faster in-memory SQLite loop
 ```
 
-Tests run on PostgreSQL by default to match CI and production. See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md#running-tests) for test-database setup.
+Tests run on PostgreSQL, matching CI and production. See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md#running-tests) for test-database setup.
 
 ---
 
