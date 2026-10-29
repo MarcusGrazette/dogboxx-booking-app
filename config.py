@@ -20,7 +20,7 @@ class Config:
     VAPID_PUBLIC_KEY    = os.environ.get('VAPID_PUBLIC_KEY', '')
     VAPID_CLAIMS_EMAIL  = os.environ.get('VAPID_CLAIMS_EMAIL', 'admin@dogboxx.org')
     SESSION_TYPE = "sqlalchemy"          # store sessions in the app DB (works on Railway)
-    SESSION_SQLALCHEMY_TABLE = "sessions" # table name in Postgres/SQLite
+    SESSION_SQLALCHEMY_TABLE = "sessions" # table name in Postgres
     SESSION_PERMANENT = True
     # Don't rewrite the session row on every request. With the SQL backend,
     # True meant an UPSERT + db.session.commit() on every request from a
@@ -119,7 +119,8 @@ class Config:
 class DevelopmentConfig(Config):
     """Development configuration."""
     DEBUG = True
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'sqlite:///app.db')
+    # Postgres only — create_app refuses to boot without a postgresql:// URL.
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
     
     # Enhanced logging for development
     LOG_LEVEL = "DEBUG"
@@ -142,15 +143,10 @@ class DevelopmentConfig(Config):
 class TestingConfig(Config):
     """Testing configuration.
 
-    Defaults to PostgreSQL so local test runs match CI and production. This
-    is the only place where `flask db check` (model↔migration drift), PG enum
-    constraints, native enum-type comparisons, and FK-needs-commit semantics
-    are meaningfully enforced — SQLite silently hides all of these.
+    Always PostgreSQL, matching CI and production.
 
     DB URL resolution (evaluated at import time; .env is already loaded by
     the time create_app imports this, so TEST_DATABASE_URL can live in .env):
-      USE_SQLITE=1            -> in-memory SQLite (fast escape hatch for the
-                                 tight local loop; will NOT catch the bugs above)
       TEST_DATABASE_URL set   -> that URL (CI sets this; locally, point it at a
                                  dogboxx_test DB on your existing dev Postgres)
       otherwise               -> the credentials CI uses. Locally this just
@@ -164,20 +160,17 @@ class TestingConfig(Config):
     # even by temporarily flipping app.testing for one request, since debug
     # would still block it. See tests/test_security_headers.py.
     DEBUG = False
-    if os.environ.get('USE_SQLITE') == '1':
-        SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
-    else:
-        SQLALCHEMY_DATABASE_URI = os.environ.get(
-            'TEST_DATABASE_URL',
-            'postgresql://dogboxx:dogboxx@localhost:5432/dogboxx_test',
-        )
-        # Postgres-only: a runaway query cancels itself instead of holding a
-        # pooled connection (and any lock it's waiting on) forever. See
-        # ProductionConfig for the full rationale.
-        SQLALCHEMY_ENGINE_OPTIONS = {
-            "pool_pre_ping": True,
-            "connect_args": {"options": Config.PG_CONNECT_OPTIONS},
-        }
+    SQLALCHEMY_DATABASE_URI = os.environ.get(
+        'TEST_DATABASE_URL',
+        'postgresql://dogboxx:dogboxx@localhost:5432/dogboxx_test',
+    )
+    # A runaway query cancels itself instead of holding a pooled connection
+    # (and any lock it's waiting on) forever. See ProductionConfig for the
+    # full rationale.
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "connect_args": {"options": Config.PG_CONNECT_OPTIONS},
+    }
     WTF_CSRF_ENABLED = False
     RATELIMIT_ENABLED = False
     SSE_REDIS_URL = None  # tests always use the in-memory SSE fan-out

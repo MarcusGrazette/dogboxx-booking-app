@@ -98,6 +98,14 @@ def create_app(config_name=None):
         raise RuntimeError("SECRET_KEY environment variable is not set. "
                           "This is required for application security.")
 
+    # PostgreSQL only, in every environment: the app relies on advisory locks,
+    # row locks, native enums and partial indexes, and there is no SQLite
+    # fallback. Fail loudly rather than boot against the wrong database.
+    db_url = app.config.get('SQLALCHEMY_DATABASE_URI') or ''
+    if not db_url.startswith('postgresql'):
+        raise RuntimeError("DATABASE_URL must be a postgresql:// URL. "
+                           "See docs/CONTRIBUTING.md for local Postgres setup.")
+
     # Defence in depth: if FLASK_ENV explicitly says production, refuse to
     # boot in debug mode. Catches FLASK_DEBUG=1 set by accident on Railway.
     if os.environ.get('FLASK_ENV') == 'production' and app.config.get('DEBUG'):

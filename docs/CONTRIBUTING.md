@@ -1,7 +1,7 @@
 # Contributing to DogBoxx
 
 This guide covers full local setup against PostgreSQL, the test workflow, and the
-branching model. For a quick SQLite-only start, see the [README](../README.md#local-development).
+branching model.
 
 ---
 
@@ -20,9 +20,8 @@ never add columns via standalone scripts, so CI's `flask db check` catches drift
 
 ## Full Local Setup (PostgreSQL)
 
-Production and CI run on **PostgreSQL 16** — matching it locally gives full fidelity.
-SQLite is supported as a fast escape hatch but silently hides a class of enum and
-foreign-key bugs that only surface on Postgres.
+Production and CI run on **PostgreSQL 16**, and so must local development and tests —
+the app refuses to start without a `postgresql://` `DATABASE_URL`.
 
 ### 1. Clone and create the virtual environment
 
@@ -126,10 +125,8 @@ Both use fixed May/June 2026 dates, so their bookings now appear in the past. Na
 
 ## Running Tests
 
-The suite runs against **PostgreSQL by default**, matching CI and production. SQLite
-silently hides bugs that only surface on Postgres (native enum constraints, enum-type
-comparisons in raw SQL, foreign-key visibility across request connections), so Postgres
-is the trustworthy signal.
+The suite runs against **PostgreSQL**, matching CI and production. The full suite
+takes under a minute.
 
 ```bash
 pytest                          # runs against dogboxx_test (Postgres)
@@ -140,17 +137,6 @@ Tests pick up `TEST_DATABASE_URL` from `.env` automatically (it's loaded before 
 read — no shell export needed). If it's unset, `TestingConfig` falls back to the
 credentials CI uses (`postgresql://dogboxx:dogboxx@localhost:5432/dogboxx_test`); locally
 that simply fails to authenticate rather than touching any real data.
-
-### Fast SQLite escape hatch
-
-For a quicker inner loop (the suite is ~2–3× faster on in-memory SQLite):
-
-```bash
-USE_SQLITE=1 pytest
-```
-
-Use this for rapid iteration, but **re-run against Postgres before pushing** — CI always
-runs on Postgres regardless.
 
 Don't run two `pytest` processes against the test database at once — each run creates and
 drops the tables, so concurrent runs deadlock or fail spuriously.
@@ -173,5 +159,5 @@ The app uses three config classes in `config.py`:
 | Config | Used when | Notes |
 |---|---|---|
 | `DevelopmentConfig` | `FLASK_ENV=development` | Debug on, CSP report-only; SQL logging opt-in via `SQL_ECHO=1` |
-| `TestingConfig` | Tests | PostgreSQL by default (`USE_SQLITE=1` for SQLite), CSRF disabled |
+| `TestingConfig` | Tests | PostgreSQL (`TEST_DATABASE_URL`), CSRF disabled |
 | `ProductionConfig` | `FLASK_ENV=production` | Secure cookies, enforced CSP, DB statement timeouts; rate limits in Redis when `REDIS_URL` is set |

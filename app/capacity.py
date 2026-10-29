@@ -24,11 +24,7 @@ def acquire_booking_lock(service_slug: str, booking_date, slot: str | None) -> N
     Prevents TOCTOU races where two concurrent requests both pass check_availability
     before either commits, over-filling a slot. The lock is released automatically
     when the surrounding transaction commits or rolls back.
-
-    No-op on SQLite — it serialises all writes at the DB level anyway.
     """
-    if db.engine.dialect.name != 'postgresql':
-        return
     key_str = f"{service_slug}:{booking_date.isoformat()}:{slot or ''}"
     raw = hashlib.sha256(key_str.encode()).digest()
     lock_key = struct.unpack('>q', raw[:8])[0]  # signed 64-bit for pg bigint

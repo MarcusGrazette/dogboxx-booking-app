@@ -101,7 +101,7 @@ _booking_counter = 0
 
 
 def make_booking(user, service_type, date, slot, status='confirmed', walker=None):
-    """Create a booking with a fresh dog each time (avoids SQLite unique constraint on dog+date+slot)."""
+    """Create a booking with a fresh dog each time (avoids the unique index on dog+date+slot)."""
     global _booking_counter
     _booking_counter += 1
     dog = Dog(name=f'Dog{_booking_counter}', breed='Mutt')

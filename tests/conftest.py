@@ -1,8 +1,8 @@
 """
 Pytest configuration and shared fixtures for Dogboxx test suite.
 
-Tests run against PostgreSQL by default (matching CI), or in-memory SQLite
-when USE_SQLITE=1 is set — see TestingConfig in config.py. The schema is
+Tests run against PostgreSQL (matching CI and production) — see TestingConfig
+in config.py. The schema is
 created once per run and every table is emptied after each test. CSRF is
 disabled in test config. Flask-Limiter is disabled.
 """
@@ -82,7 +82,7 @@ def _dirty_session_view():
 
 @pytest.fixture(scope='session')
 def app():
-    """Create application with testing config (in-memory SQLite)."""
+    """Create application with testing config."""
     application = create_app('testing')
     # Disable rate limiter in tests
     application.config['RATELIMIT_ENABLED'] = False
