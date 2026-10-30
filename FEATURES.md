@@ -16,7 +16,6 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 75 | P3 | L | 🔲 | **Locking consistency for closure and availability changes** | Make closures and availability changes coordinate with in-flight bookings. |
 | 72 | P3 | S | 🔲 | **Handle rate-limited push re-registration** | Back off quietly when push re-subscription is throttled. |
 | 82 | P3 | L | 📋 | **One typed invoice calculator** | Every billing page reads its numbers from one calculation instead of re-deriving them. |
-| 83 | P3 | M | 🔲 | **De-duplicate admin + walker notifications** | An admin who is also the assigned walker gets one notification per booking, not both the "assigned a walk" and "client booked" ones. |
 | 86 | P3 | M | 📋 | **Simplify 1 — dead code & one-offs** | Remove unused imports, scripts and pins; inline single-use helpers; use the shared toast on the board. |
 | 87 | P3 | M | 📋 | **Simplify 2 — capacity & board data** | One capacity/summary helper for walks and drop-ins; one board-data builder behind both board endpoints. |
 | 88 | P3 | M | 📋 | **Simplify 3 — shared utilities** | Shared email shell, dashboard chart payload, simpler link sanitizing and device detection. |
@@ -139,6 +138,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 |---|---|---|
 | 7 | Capacity display for clients | An "available" indicator is enough. |
 | 25 | Standalone invoicing | Superseded by #26. |
+| 83 | De-duplicate admin + walker notifications | Covered by #102: walkers no longer get booking notifications, so an admin who walks gets only the admin one. |
 | — | Firebase Auth | Overkill at this scale; Flask-Login is enough. |
 | — | Public self-registration | The business creates client accounts itself. |
 | — | Walker pickup status tracking | Won't build (owner decision). |
