@@ -197,14 +197,12 @@
 
         function updateRecurringEndMax() {
             if (!selectedDate) return;
-            const start = new Date(selectedDate + 'T00:00:00');
-            const max = new Date(start);
-            max.setFullYear(max.getFullYear() + 1);
+            const max = DogBoxxDates.addYears(selectedDate, 1);
             recurEnd.min = selectedDate;
-            recurEnd.max = max.toISOString().slice(0, 10);
+            recurEnd.max = max;
             // Default end date to 1 year out (user can shorten it)
             if (!recurEnd.value || recurEnd.value < selectedDate) {
-                recurEnd.value = max.toISOString().slice(0, 10);
+                recurEnd.value = max;
             }
             renderRecurPreview();
         }
@@ -246,14 +244,11 @@
         }
 
         // ─── Same-day confirmation ───────────────────────────────
-        // Today's London date (matches the server's local_today()) — used
-        // to decide whether the warning modal fires before submitting a
-        // booking. en-CA formats as YYYY-MM-DD.
-        function todayLondon() {
-            return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(new Date());
-        }
+        // Same-day check against the London date (matches the server's
+        // _is_same_day()) — decides whether the warning modal fires before
+        // submitting a booking.
         function isSameDay(dateStr) {
-            return dateStr === todayLondon();
+            return dateStr === DogBoxxDates.today();
         }
         // Returns a promise resolving to true if the client confirms,
         // false if they cancel/dismiss the modal.
@@ -905,9 +900,7 @@
         if (!startEl) return;
 
         // Start date must be strictly tomorrow or later
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+        const tomorrowStr = DogBoxxDates.addDays(DogBoxxDates.today(), 1);
         startEl.min = tomorrowStr;
         endEl.min = tomorrowStr;
 

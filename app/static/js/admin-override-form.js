@@ -34,9 +34,7 @@
         // The standalone page used Jinja to inject these — the JS does it now
         // so the partial is purely structural.
         if (cfg.todayIso && $startDate) {
-            const today    = new Date(cfg.todayIso + 'T00:00:00');
-            const oneYear  = new Date(today); oneYear.setFullYear(today.getFullYear() + 1);
-            const isoYear  = oneYear.toISOString().slice(0, 10);
+            const isoYear  = DogBoxxDates.addYears(cfg.todayIso, 1);
             $startDate.min = cfg.todayIso;
             $startDate.max = isoYear;
             if ($endDate) { $endDate.min = cfg.todayIso; $endDate.max = isoYear; }

@@ -7,10 +7,19 @@ between 00:00 and 01:00. Every date rule and date-defaulting page must use
 - the clock is frozen at 23:30 UTC on 14 July (00:30 on 15 July in London)
   and a few representative routes are checked against the London date
 - a source guard fails if a UTC "today" creeps back into app/
+- browser side (FEATURES #104): app/static/js/dates.js is run under Node in
+  several time zones, and a guard keeps toISOString() date strings out of
+  every other script and template
 """
 import datetime as dt
+import json
+import os
 import pathlib
 import re
+import shutil
+import subprocess
+
+import pytest
 
 from app.utils.dates import local_today
 
@@ -80,3 +89,75 @@ def test_no_utc_today_in_app():
         if _UTC_TODAY.search(line)
     ]
     assert offenders == [], 'Use app.utils.dates.local_today():\n' + '\n'.join(offenders)
+
+
+# ── Browser side ─────────────────────────────────────────────────────────────
+
+APP = pathlib.Path(__file__).resolve().parent.parent / 'app'
+DATES_JS = APP / 'static' / 'js' / 'dates.js'
+
+# Runs dates.js with "now" fixed at the given instant, prints the results.
+_NODE_HARNESS = """
+const fs = require('fs');
+const RealDate = Date;
+const fixed = new RealDate(process.argv[2]);
+global.Date = class extends RealDate {
+    constructor(...a) { if (a.length) { super(...a); } else { super(fixed); } }
+    static now() { return fixed.getTime(); }
+};
+global.window = {};
+eval(fs.readFileSync(process.argv[1], 'utf8'));
+const D = window.DogBoxxDates;
+console.log(JSON.stringify({
+    today: D.today(),
+    tomorrow: D.addDays(D.today(), 1),
+    yearOn: D.addYears('2026-07-15', 1),
+    acrossBstStart: D.addDays('2026-03-28', 1),
+    acrossBstEnd: D.addDays('2026-10-24', 1),
+    backOverMonth: D.addDays('2026-08-01', -1),
+}));
+"""
+
+
+def _run_dates_js(instant, tz):
+    out = subprocess.run(
+        ['node', '-e', _NODE_HARNESS, str(DATES_JS), instant],
+        capture_output=True, text=True, check=True, env={**os.environ, 'TZ': tz},
+    )
+    return json.loads(out.stdout)
+
+
+@pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
+@pytest.mark.parametrize('tz', ['Europe/London', 'UTC', 'America/New_York', 'Asia/Tokyo'])
+def test_dates_js_uses_london_calendar_in_any_browser_zone(tz):
+    # 23:30 UTC on 14 July = 00:30 BST on the 15th.
+    got = _run_dates_js('2026-07-14T23:30:00Z', tz)
+    assert got == {
+        'today': '2026-07-15',
+        'tomorrow': '2026-07-16',
+        'yearOn': '2027-07-15',  # the old local-midnight round trip gave 2027-07-14
+        'acrossBstStart': '2026-03-29',
+        'acrossBstEnd': '2026-10-25',
+        'backOverMonth': '2026-07-31',
+    }
+
+
+@pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
+def test_dates_js_today_in_winter():
+    # GMT: London and UTC agree, right up to midnight.
+    assert _run_dates_js('2026-12-14T23:30:00Z', 'Europe/London')['today'] == '2026-12-14'
+
+
+_ISO_DATE_FROM_DATE = re.compile(r'toISOString\(\)\s*\.\s*(slice|substring|substr|split)\b')
+
+
+def test_no_toisostring_date_strings_outside_dates_js():
+    files = sorted(APP.joinpath('static', 'js').glob('*.js')) + sorted(APP.joinpath('templates').rglob('*.html'))
+    offenders = [
+        f'{path.relative_to(APP.parent)}:{n}: {line.strip()}'
+        for path in files
+        if path != DATES_JS
+        for n, line in enumerate(path.read_text().splitlines(), 1)
+        if _ISO_DATE_FROM_DATE.search(line)
+    ]
+    assert offenders == [], 'Use DogBoxxDates (app/static/js/dates.js):\n' + '\n'.join(offenders)

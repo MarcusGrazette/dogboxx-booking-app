@@ -36,6 +36,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
     <meta name="apple-mobile-web-app-title" content="DogBoxx Admin">
 
+    <script src="{{ url_for('static', filename='js/dates.js') }}" nonce="{{ csp_nonce }}"></script>
+
     {% block head_extra %}{% endblock %}
 
     <title>{% block title %}DogBoxx Admin{% endblock %}</title>
