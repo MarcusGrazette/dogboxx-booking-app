@@ -36,7 +36,7 @@
 
 // ── Cache config ──────────────────────────────────────────────────────────────
 
-const CACHE_VERSION   = 'v45';
+const CACHE_VERSION   = 'v46';
 const CACHE_NAME      = `dogboxx-${CACHE_VERSION}`;
 const PAGE_CACHE_NAME = `dogboxx-pages-${CACHE_VERSION}`;
 
@@ -53,6 +53,7 @@ const PRECACHE_ASSETS = [
   // ── Local JS ──────────────────────────────────────────────────────────────
   '/static/js/reusable-calendar.js',
   '/static/js/client-home.js',
+  '/static/js/dates.js',
 
   // ── Key images ────────────────────────────────────────────────────────────
   '/static/logo-white-on-black.png',

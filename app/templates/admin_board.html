@@ -271,7 +271,7 @@
         amBtn.href  = q('morning');
         pmBtn.href  = q('afternoon');
 
-        const todayIso = new Date().toISOString().slice(0, 10);
+        const todayIso = DogBoxxDates.today();
         if (dateStr === todayIso) {
             dateEl.textContent = 'today';
         } else {
@@ -284,7 +284,7 @@
 
     // Calendar drives the board's date (decoupled from the board itself)
     document.addEventListener('DOMContentLoaded', () => {
-        const todayStr = new Date().toISOString().slice(0, 10);
+        const todayStr = DogBoxxDates.today();
         const calDataUrl = '{{ url_for("admin.calendar_data", year=0, month=0) }}';
 
         const cal = createCalendar('board-cal', {
