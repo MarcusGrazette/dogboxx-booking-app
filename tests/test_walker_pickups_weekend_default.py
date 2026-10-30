@@ -10,9 +10,8 @@ import datetime as dt
 
 
 class _FrozenDateTime(dt.datetime):
-    """Stand-in for the `datetime` class imported into
-    app.blueprints.walker.routes, freezing .now() while leaving .strptime()
-    (used to parse an explicit ?date=) untouched."""
+    """Stand-in for the `datetime` class in app.utils.dates, freezing the
+    .now() behind local_today() — the pickup list's "today"."""
     _frozen = None
 
     @classmethod
@@ -23,7 +22,7 @@ class _FrozenDateTime(dt.datetime):
 def _freeze(monkeypatch, frozen_date):
     frozen = dt.datetime.combine(frozen_date, dt.time(9, 0), tzinfo=dt.timezone.utc)
     fake = type('FrozenDateTime', (_FrozenDateTime,), {'_frozen': frozen})
-    monkeypatch.setattr('app.blueprints.walker.routes.datetime', fake)
+    monkeypatch.setattr('app.utils.dates.datetime', fake)
 
 
 class TestPickupsWeekendDefault:

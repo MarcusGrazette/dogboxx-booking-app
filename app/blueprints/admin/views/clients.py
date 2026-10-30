@@ -16,6 +16,7 @@ from app.utils.sanitize import clean_rich_text_or_none
 from app.utils.activity_log import record_admin_action, diff_fields
 from app.utils.availability_reset import reset_future_bookings_for_walker
 from app.utils.deletion import client_block_reason
+from app.utils.dates import local_today
 from werkzeug.security import generate_password_hash
 import secrets
 
@@ -136,7 +137,6 @@ def client_detail(client_id):
         .all()
     )
     from app.forms import AddDogForm
-    from datetime import date as date_type
     return render_template(
         "admin_client_detail.html",
         client=user,
@@ -147,7 +147,7 @@ def client_detail(client_id):
         notifications=notifications,
         add_dog_form=AddDogForm(),
         add_dog_modal_open=False,
-        today=date_type.today(),
+        today=local_today(),
         can_delete_client=_can_delete_dogless_client(user, primary_dogs, secondary_dogs),
     )
 

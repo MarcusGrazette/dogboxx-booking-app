@@ -5,6 +5,7 @@ from datetime import datetime, timezone, timedelta
 from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
 from app import db
+from app.utils.dates import local_today
 
 
 # ── Daily Messages ────────────────────────────────────────────────────────────
@@ -58,7 +59,7 @@ def daily_messages():
         .order_by(DailyMessage.date.desc())
         .all()
     )
-    today = datetime.now(timezone.utc).date()
+    today = local_today()
     return render_template("admin_daily_messages.html", messages=messages, today=today)
 
 
@@ -79,7 +80,7 @@ def delete_daily_message(message_id):
 @admin_required
 def bulk_delete_old_daily_messages():
     from app.models import DailyMessage
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).date()
+    cutoff = local_today() - timedelta(days=30)
     deleted = DailyMessage.query.filter(DailyMessage.date < cutoff).delete()
     db.session.commit()
     flash(f"Deleted {deleted} message{'s' if deleted != 1 else ''} older than 30 days.", "success")

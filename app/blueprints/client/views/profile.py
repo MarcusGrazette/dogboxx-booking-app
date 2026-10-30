@@ -12,12 +12,13 @@ from app.utils.booking_access import get_accessible_dog_ids
 from app.utils.sanitize import clean_rich_text_or_none
 from app.forms import ProfileForm
 import logging
-from datetime import datetime, timezone, date as date_type
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from app.blueprints.client import client_bp
 from app.utils.decorators import has_client_access
 from app.utils.activity_log import record_admin_action, diff_fields
+from app.utils.dates import local_today
 
 # Field sets diffed by activity_log.diff_fields for client self-service edits —
 # see app/utils/activity_log.py for REDACTED_FIELDS (street_address/postal_code/
@@ -82,7 +83,7 @@ def profile():
     # Use dog_ids so secondary owners see all bookings for their shared dog,
     # not just bookings they personally created.
     from datetime import date
-    today_date = date.today()
+    today_date = local_today()
     month_start = date(today_date.year, today_date.month, 1)
     if today_date.month == 12:
         month_end = date(today_date.year + 1, 1, 1)
@@ -259,7 +260,7 @@ def profile():
             form.dog_dob.data = dog.date_of_birth
             form.dog_allergies.data = dog.allergies
 
-    return render_template("profile.html", form=form, dog=dog, primary_dogs=primary_dogs, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=datetime.now().strftime("%Y-%m-%d"))
+    return render_template("profile.html", form=form, dog=dog, primary_dogs=primary_dogs, client=client, booking_stats=booking_stats, secondary_dogs=secondary_dogs, today=local_today().isoformat())
 
 
 @client_bp.route("/monthly-summary")
@@ -275,7 +276,7 @@ def monthly_summary():
 
     from app.utils.dates import parse_month_param
 
-    today = date_type.today()
+    today = local_today()
     month_str = request.args.get('month', f'{today.year}-{today.month:02d}')
     month_start, month_end = parse_month_param(month_str, today, cap_at_today=True)
     year, month = month_start.year, month_start.month
