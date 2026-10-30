@@ -71,7 +71,6 @@ def dogs():
         }
         for row in rows
     ]
-    from datetime import date as date_type
     service_types = (
         ServiceType.query
         .filter_by(active=True, slot_type='morning_afternoon')
@@ -81,7 +80,7 @@ def dogs():
     return render_template(
         "admin_dogs.html",
         dogs_data=dogs_data,
-        today=date_type.today(),
+        today=local_today(),
         service_types=service_types,
     )
 
@@ -368,7 +367,6 @@ def recurring_for_dog():
             if entry.get('slot') not in ('Morning', 'Afternoon'):
                 return jsonify(success=False, message="Invalid slot"), 400
 
-        from datetime import date as date_type
         from datetime import timedelta
         try:
             start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
@@ -376,7 +374,7 @@ def recurring_for_dog():
         except ValueError:
             return jsonify(success=False, message="Invalid date format"), 400
 
-        today = date_type.today()
+        today = local_today()
         if start_date <= today:
             return jsonify(success=False, message="Start date must be in the future"), 400
         if end_date < start_date:
@@ -521,9 +519,9 @@ def dog_upcoming_bookings(dog_id):
 
     from_str = request.args.get('from', '')
     try:
-        from_date = date_type.fromisoformat(from_str) if from_str else date_type.today()
+        from_date = date_type.fromisoformat(from_str) if from_str else local_today()
     except ValueError:
-        from_date = date_type.today()
+        from_date = local_today()
 
     page = max(1, int(request.args.get('page', 1) or 1))
     per_page = 10

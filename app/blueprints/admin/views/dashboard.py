@@ -7,6 +7,7 @@ from app.models import User, Booking, Walker, WalkerSchedule, WalkerUnavailabili
 from app import db
 from app.capacity import eligible_walker_clause, get_max_per_walker
 from app.utils.walker_visuals import walker_color as _walker_color, walker_initials as _walker_initials
+from app.utils.dates import local_today
 from sqlalchemy.orm import joinedload
 from datetime import timedelta
 
@@ -399,7 +400,7 @@ def index():
     """Admin dashboard — month-grid calendar with day-detail side panel."""
     from datetime import date
 
-    today = date.today()
+    today = local_today()
 
     sel_str = request.args.get('date')
     try:
@@ -437,7 +438,7 @@ def chart_data():
     from datetime import date, timedelta
     from sqlalchemy import func
 
-    today = date.today()
+    today = local_today()
 
     start_str = request.args.get('start')
     try:
@@ -495,15 +496,14 @@ def chart_data():
 @admin_required
 def api_month_data():
     """Return month-grid calendar data as JSON for client-side navigation."""
-    from datetime import date
     try:
-        year  = int(request.args.get('year',  date.today().year))
-        month = int(request.args.get('month', date.today().month))
+        year  = int(request.args.get('year',  local_today().year))
+        month = int(request.args.get('month', local_today().month))
         if not (1 <= month <= 12):
             raise ValueError
     except (TypeError, ValueError):
         return jsonify(error='Invalid year/month'), 400
-    today = date.today()
+    today = local_today()
     return jsonify(_compute_month_data(year, month, today))
 
 
@@ -516,8 +516,8 @@ def api_day_detail():
     try:
         selected_date = date.fromisoformat(request.args.get('date', ''))
     except ValueError:
-        selected_date = date.today()
-    today = date.today()
+        selected_date = local_today()
+    today = local_today()
     return jsonify(_compute_day_detail(selected_date, today))
 
 
@@ -537,7 +537,7 @@ def board_chart_data():
     try:
         selected = date.fromisoformat(date_str)
     except (TypeError, ValueError):
-        selected = date.today()
+        selected = local_today()
 
     # If weekend selected, advance to next Monday and show that week
     if selected.weekday() >= 5:

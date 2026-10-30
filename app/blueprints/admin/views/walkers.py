@@ -448,8 +448,7 @@ def walker_schedule_json(walker_id):
         # so they surface in the pending column on the board for reassignment.
         affected_count = 0
         if removed:
-            from datetime import date as _date
-            today = _date.today()
+            today = local_today()
             future_confirmed = (
                 Booking.query
                 .filter(
@@ -487,7 +486,6 @@ def admin_api_schedule_changes():
     Used by the admin overrides page to refresh the list after add/delete.
     ?walker_id=N required.
     """
-    from datetime import date
     from app.blueprints.walker.routes import _build_schedule_change_groups
 
     try:
@@ -496,7 +494,7 @@ def admin_api_schedule_changes():
         return "walker_id required", 400
 
     walker = db.get_or_404(Walker, wid)
-    today = date.today()
+    today = local_today()
 
     unavailabilities = WalkerUnavailability.query.filter(
         WalkerUnavailability.walker_id == walker.id,
@@ -520,7 +518,6 @@ def admin_api_schedule_changes():
 @admin_required
 def walker_overrides():
     """Admin page: manage ad hoc availability and unavailability for any walker."""
-    from datetime import date
 
     active_walkers = (
         Walker.query
@@ -530,7 +527,7 @@ def walker_overrides():
         .all()
     )
 
-    today = date.today()
+    today = local_today()
 
     selected_walker = None
     adhoc_list = []
@@ -639,8 +636,7 @@ def admin_delete_adhoc(walker_id, adhoc_id):
     # reset obligation as the walker-facing /adhoc/<id> delete. `adhoc.date`
     # was validated >= today only at creation time, so a stale row past its
     # date is skipped rather than queried — the walk already happened.
-    from datetime import date as _date
-    today = _date.today()
+    today = local_today()
     affected = []
     if adhoc.date >= today:
         affected = Booking.query.filter_by(

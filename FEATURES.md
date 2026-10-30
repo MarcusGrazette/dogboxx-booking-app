@@ -24,7 +24,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 90 | P3 | M | 📋 | **Simplify 5 — database error handling** | Replace the error-handler module with a small decorator, with tests. |
 | 91 | P3 | M | 📋 | **Simplify 6 — front-end helpers** | Merge duplicated confirm-modal, card and alert code in the client and admin scripts. |
 | 92 | P3 | L | 📋 | **Simplify 7 — booking request validation** | One validation/conflict path for the walk and drop-in booking routes; ship alone. |
-| 93 | P2 | M | 📋 | **London date everywhere** | Every "today" check uses the London date, so pages don't show yesterday's view just after midnight in summer. |
+| 104 | P3 | S | 🔲 | **London date in the browser** | Date pickers and auto-filled end dates use the London date, so recurring end dates aren't a day short in summer. |
 | 94 | P3 | M | 📋 | **Simplify 8 — one month calendar** | The drop-in board uses the dashboard's month calendar (compact, with drop-in counts) instead of its own. |
 | 95 | P3 | S | 📋 | **Simplify 9 — retire the old assignment page** | Remove the unlinked standalone walk board and its unused charts; walks are assigned from the dashboard. |
 | 99 | P3 | S | 🔲 | **Prune old backups with a storage rule** | Old database backups expire automatically in storage, so the nightly backup job only needs permission to upload. |
@@ -131,6 +131,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 80 | Code tidy-up | Unused variables removed during the client routes split. |
 | 81 | Lighter session storage | Login sessions are saved once a day instead of on every request. |
 | 97 | Hosting settings as code | Railway service settings (start commands, schedules, healthcheck, volume) live in the repo as Infrastructure as Code, replacing the retired config files. |
+| 93 | London date everywhere | Every "today" check uses the London date, so pages don't show yesterday's view just after midnight in summer. |
 
 ## Dropped
 

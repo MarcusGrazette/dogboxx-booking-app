@@ -10,6 +10,7 @@ from app import db
 from app.utils.notifications import create_notification
 from app.utils.sanitize import sanitize_rich_text, clean_rich_text_or_none, rich_text_to_plain
 from app.utils.activity_log import record_admin_action
+from app.utils.dates import local_today
 
 
 # ── Newsletter ────────────────────────────────────────────────────────────────
@@ -143,7 +144,7 @@ def broadcasts():
     from app.utils.broadcasts import resolve_recipients, scope_slot_label
     from app.utils.email import send_broadcast_batch
 
-    today = _date.today()
+    today = local_today()
 
     if request.method == "POST":
         # Parse + validate inputs

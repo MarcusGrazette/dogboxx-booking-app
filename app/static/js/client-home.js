@@ -246,13 +246,14 @@
         }
 
         // ─── Same-day confirmation ───────────────────────────────
-        // Today in UTC (matches server) — used to decide whether the
-        // warning modal fires before submitting a booking.
-        function todayUTC() {
-            return new Date().toISOString().slice(0, 10);
+        // Today's London date (matches the server's local_today()) — used
+        // to decide whether the warning modal fires before submitting a
+        // booking. en-CA formats as YYYY-MM-DD.
+        function todayLondon() {
+            return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(new Date());
         }
         function isSameDay(dateStr) {
-            return dateStr === todayUTC();
+            return dateStr === todayLondon();
         }
         // Returns a promise resolving to true if the client confirms,
         // false if they cancel/dismiss the modal.
