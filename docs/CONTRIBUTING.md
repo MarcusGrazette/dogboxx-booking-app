@@ -20,32 +20,36 @@ never add columns via standalone scripts, so CI's `flask db check` catches drift
 
 ## Full Local Setup (PostgreSQL)
 
-Production and CI run on **PostgreSQL 16**, and so must local development and tests —
-the app refuses to start without a `postgresql://` `DATABASE_URL`.
+Production runs **Python 3.12** and **PostgreSQL 18**; use the same versions locally. The
+app refuses to start without a `postgresql://` `DATABASE_URL`.
 
 ### 1. Clone and create the virtual environment
 
 ```bash
 git clone git@github.com:MarcusGrazette/dogboxx-booking-app.git
 cd dogboxx-booking-app
-python -m venv venv
+uv venv --python 3.12 venv        # or: python3.12 -m venv venv
 source venv/bin/activate          # Windows: venv\Scripts\activate
-pip install -r requirements-dev.txt   # app + test tooling (pytest etc.)
+uv pip install -r requirements-dev.txt   # app + test tooling (pytest etc.)
 ```
+
+[`uv`](https://docs.astral.sh/uv/) downloads its own Python 3.12 if your system doesn't
+have it, and the venv keeps using it after an OS upgrade changes the system Python. If
+you use plain `python3.12 -m venv`, install with `pip` instead of `uv pip`.
 
 `requirements-dev.txt` includes `requirements.txt` plus the test suite tooling. Use the
 plain `requirements.txt` only for runtime-only installs (production does this automatically).
 
-### 2. Install and start Postgres 16
+### 2. Install and start Postgres 18
 
 ```bash
-# Debian/Ubuntu
+# Debian/Ubuntu (Ubuntu 26.04 ships 18; older releases need the apt.postgresql.org repo)
 sudo apt install -y postgresql postgresql-client libpq-dev
 sudo systemctl enable --now postgresql        # starts now + on every boot
 
 # macOS (Homebrew)
-brew install postgresql@16
-brew services start postgresql@16
+brew install postgresql@18
+brew services start postgresql@18
 ```
 
 ### 3. Create the role and databases
