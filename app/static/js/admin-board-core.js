@@ -38,6 +38,10 @@
             maxCap:     null,
         };
 
+        // Bumped by every loadBoard(). A response or rollback from an older
+        // load is stale: the admin has moved on, so it must not touch state.
+        let loadSeq = 0;
+
         // ── Helpers ───────────────────────────────────────────────────────────
         function imgSrc(pic) {
             return pic
@@ -68,11 +72,12 @@
                 || state.assigned.find(b => b.id === id);
         }
 
+        // msg is plain text (server messages can contain dog and client names).
         function showToast(msg, type) {
             const el = document.createElement('div');
             el.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
             el.style.cssText = 'top:20px;right:20px;z-index:1055;max-width:380px;';
-            el.innerHTML = `${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+            el.innerHTML = `${escHtml(msg)}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
             document.body.appendChild(el);
             setTimeout(() => el.parentNode?.removeChild(el), 4000);
         }
@@ -502,12 +507,42 @@
             await doAssign(bookingId, walkerId, slot, true);
         });
 
+        // ── Optimistic moves ───────────────────────────────────────────────────
+        // Assign/unassign move the card before the server answers. A failure
+        // puts back just that booking — never a snapshot of the whole board,
+        // which would undo any other move made meanwhile, or repaint a date
+        // the admin has since left.
+        function snapshotBooking(booking) {
+            const list = state.pending.includes(booking) ? 'pending' : 'assigned';
+            return {
+                loadSeq,
+                list,
+                index:        state[list].indexOf(booking),
+                walker_id:    booking.walker_id,
+                slot:         booking.slot,
+                pickup_order: booking.pickup_order,
+            };
+        }
+
+        function rollbackBooking(booking, snap) {
+            // The board has been reloaded since, so it already shows the
+            // server's state.
+            if (snap.loadSeq !== loadSeq) return;
+            state.pending  = state.pending.filter(b => b !== booking);
+            state.assigned = state.assigned.filter(b => b !== booking);
+            booking.walker_id    = snap.walker_id;
+            booking.slot         = snap.slot;
+            booking.pickup_order = snap.pickup_order;
+            state[snap.list].splice(snap.index, 0, booking);
+            render();
+        }
+
         // ── API calls ──────────────────────────────────────────────────────────
         async function doAssign(bookingId, walkerId, slot, slotOverride = false) {
             const booking = findBooking(bookingId);
             if (!booking) return;
 
-            const prev = JSON.parse(JSON.stringify(state));
+            const snap = snapshotBooking(booking);
             state.pending  = state.pending.filter(b => b.id !== bookingId);
             state.assigned = state.assigned.filter(b => b.id !== bookingId);
             booking.walker_id    = walkerId;
@@ -529,8 +564,7 @@
                 refreshPendingBadges();
             } catch (err) {
                 console.error(err);
-                Object.assign(state, prev);
-                render();
+                rollbackBooking(booking, snap);
                 showToast(err.message || 'Could not assign — please try again.', 'danger');
             }
         }
@@ -563,7 +597,7 @@
             const booking = findBooking(bookingId);
             if (!booking) return;
 
-            const prev = JSON.parse(JSON.stringify(state));
+            const snap = snapshotBooking(booking);
             state.assigned       = state.assigned.filter(b => b.id !== bookingId);
             booking.walker_id    = null;
             booking.pickup_order = null;
@@ -583,14 +617,16 @@
                 refreshPendingBadges();
             } catch (err) {
                 console.error(err);
-                Object.assign(state, prev);
-                render();
+                rollbackBooking(booking, snap);
                 showToast(err.message || 'Could not unassign — please try again.', 'danger');
             }
         }
 
         // ── Board load ─────────────────────────────────────────────────────────
         async function loadBoard(dateStr) {
+            // Clicking through dates fires overlapping loads that can answer
+            // out of order: only the latest may fill the board.
+            const seq = ++loadSeq;
             // A Requested fade-out still in flight would repaint the previous
             // date's board over the loading spinner.
             if (fadeTimer) { clearTimeout(fadeTimer); fadeTimer = null; }
@@ -605,6 +641,7 @@
             try {
                 const res  = await fetch(cfg.boardDataUrl.replace('DATE', dateStr));
                 const data = await res.json();
+                if (seq !== loadSeq) return;
                 if (!data.success) throw new Error('Failed to load board');
                 state.pending     = data.pending;
                 state.assigned    = data.assigned;
@@ -614,6 +651,7 @@
                 render();
             } catch (err) {
                 console.error(err);
+                if (seq !== loadSeq) return;
                 placeholder.innerHTML = '<p class="text-danger">Could not load board. Please try again.</p>';
             }
         }
@@ -638,7 +676,8 @@
 
         document.getElementById('decline-confirm-btn').addEventListener('click', async () => {
             if (!_declineBookingId) return;
-            const id = _declineBookingId;
+            const id  = _declineBookingId;
+            const seq = loadSeq;
             declineModal.hide();
             try {
                 const res  = await fetch(DECLINE_URL(id), {
@@ -646,8 +685,10 @@
                 });
                 const data = await res.json();
                 if (!data.success) throw new Error(data.message || 'Could not decline');
-                state.pending = state.pending.filter(b => b.id !== id);
-                render();
+                if (seq === loadSeq) {
+                    state.pending = state.pending.filter(b => b.id !== id);
+                    render();
+                }
                 refreshPendingBadges();
                 showToast('Booking declined.', 'success');
             } catch (err) {
@@ -661,6 +702,7 @@
         function openNoteModal(id) {
             const b = findBooking(id);
             if (!b) return;
+            const seq  = loadSeq;
             const date = state.date
                 ? new Date(state.date + 'T00:00:00').toLocaleDateString('en-GB', {
                     weekday: 'short', day: 'numeric', month: 'short'
@@ -671,12 +713,14 @@
                 subtitle:  `${b.dog_name} · ${b.slot.toLowerCase()} ${cfg.declineLabel} · ${date}`,
                 note:      b.client_notes,
                 onSaved(note) {
-                    const booking = findBooking(id);
-                    if (booking) booking.client_notes = note;
-                    render();
+                    if (seq === loadSeq) {
+                        const booking = findBooking(id);
+                        if (booking) booking.client_notes = note;
+                        render();
+                    }
                     showToast(note ? 'Note saved.' : 'Note removed.', 'success');
                 },
-                onError(message) { showToast(escHtml(message), 'danger'); },
+                onError(message) { showToast(message, 'danger'); },
             });
         }
 
