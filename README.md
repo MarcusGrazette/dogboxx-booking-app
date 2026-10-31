@@ -51,7 +51,7 @@ Walkers can:
 
 ## Local Development
 
-The app needs Python 3.12 and a local PostgreSQL 18 server (matching production) — there is no SQLite fallback. With Postgres running and a `dogboxx` database created ([setup steps](docs/CONTRIBUTING.md#full-local-setup-postgresql)):
+The app needs Python 3.12 and a local PostgreSQL 18 server (matching production and CI) — there is no SQLite fallback. With Postgres running and a `dogboxx` database created ([setup steps](docs/CONTRIBUTING.md#full-local-setup-postgresql)):
 
 ```bash
 git clone git@github.com:MarcusGrazette/dogboxx-booking-app.git

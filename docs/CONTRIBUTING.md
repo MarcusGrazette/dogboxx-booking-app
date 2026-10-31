@@ -20,7 +20,7 @@ never add columns via standalone scripts, so CI's `flask db check` catches drift
 
 ## Full Local Setup (PostgreSQL)
 
-Production runs **Python 3.12** and **PostgreSQL 18**; use the same versions locally. The
+Production and CI run **Python 3.12** and **PostgreSQL 18**; use the same versions locally. The
 app refuses to start without a `postgresql://` `DATABASE_URL`.
 
 ### 1. Clone and create the virtual environment
