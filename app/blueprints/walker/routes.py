@@ -11,7 +11,7 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy import case, func
 from app.models import Walker, Booking, User, WalkerUnavailability, WalkerAdHocAvailability, WalkerSchedule, Client, Dog, DogOwner, DailyMessage, ServiceType
 from app import db
-from datetime import datetime, timezone, timedelta, date
+from datetime import datetime, timedelta, date
 
 from app.blueprints.walker import walker_bp
 from app.utils.decorators import walker_required
@@ -27,6 +27,7 @@ from app.utils.weekly_schedule import (
     WEEKDAYS,
     WEEKDAY_LABELS,
 )
+from app.utils.dates import local_today
 import uuid
 
 
@@ -166,7 +167,7 @@ def profile():
 
     # All future unavailabilities and ad hoc availability — no upper date cap
     # so walkers can see entries they've added months ahead (e.g. holidays).
-    today = datetime.now(timezone.utc).date()
+    today = local_today()
     unavailabilities = WalkerUnavailability.query.filter(
         WalkerUnavailability.walker_id == walker.id,
         WalkerUnavailability.date >= today,
@@ -201,7 +202,7 @@ def api_schedule_changes():
     if not walker:
         return "Walker not found", 404
 
-    today = datetime.now(timezone.utc).date()
+    today = local_today()
     unavailabilities = WalkerUnavailability.query.filter(
         WalkerUnavailability.walker_id == walker.id,
         WalkerUnavailability.date >= today,
@@ -287,7 +288,7 @@ def add_unavailability():
     except ValueError:
         return jsonify(success=False, message="Invalid date format (use YYYY-MM-DD)"), 400
 
-    if unavail_date < datetime.now(timezone.utc).date():
+    if unavail_date < local_today():
         return jsonify(success=False, message="Cannot mark past dates as unavailable"), 400
 
     # Validate walker actually works this slot on this day
@@ -386,7 +387,7 @@ def add_adhoc():
     except ValueError:
         return jsonify(success=False, message="Invalid date format (use YYYY-MM-DD)"), 400
 
-    if adhoc_date < datetime.now(timezone.utc).date():
+    if adhoc_date < local_today():
         return jsonify(success=False, message="Cannot add availability for past dates"), 400
 
     # Validate walker does NOT already work this slot on this day (would be redundant)
@@ -568,7 +569,7 @@ def schedule_changes_batch():
     except ValueError:
         return jsonify(success=False, message="Invalid date format (use YYYY-MM-DD)."), 400
 
-    today = datetime.now(timezone.utc).date()
+    today = local_today()
     if start_date < today:
         return jsonify(success=False, message="Start date cannot be in the past."), 400
     if end_date < start_date:
@@ -752,7 +753,7 @@ def schedule_changes_batch_delete():
     # availability, so unavail_ids never need this.
     all_affected = []
     if adhoc_ids:
-        today = datetime.now(timezone.utc).date()
+        today = local_today()
         adhoc_rows = WalkerAdHocAvailability.query.filter(
             WalkerAdHocAvailability.id.in_(adhoc_ids),
             WalkerAdHocAvailability.walker_id == walker.id,
@@ -816,7 +817,7 @@ def delete_adhoc(id):
     # bookings). `adhoc.date` was validated >= today only at creation time, so
     # a stale row past its date is skipped rather than queried — the walk has
     # already happened and re-requesting it would be wrong, not just useless.
-    today = datetime.now(timezone.utc).date()
+    today = local_today()
     affected = []
     if adhoc.date >= today:
         affected = Booking.query.filter_by(
@@ -854,7 +855,7 @@ def pickups(date_str=None):
         flash("Walker profile not found. Please contact support.", "error")
         return redirect(url_for('client.index'))
 
-    today = datetime.now(timezone.utc).date()
+    today = local_today()
 
     # Date resolution: path param wins, then ?date=, then today
     raw_date = date_str or request.args.get('date')
@@ -923,7 +924,7 @@ def weekly_overview(date_str=None):
         flash("Walker profile not found. Please contact support.", "error")
         return redirect(url_for('client.index'))
 
-    today = datetime.now(timezone.utc).date()
+    today = local_today()
 
     raw_date = date_str or request.args.get('date')
     if raw_date:
@@ -1007,7 +1008,7 @@ def monthly_summary():
         flash("Walker profile not found. Please contact support.", "error")
         return redirect(url_for('client.index'))
 
-    today = datetime.now(timezone.utc).date()
+    today = local_today()
     month_str = request.args.get('month', f'{today.year}-{today.month:02d}')
     try:
         year, month = int(month_str[:4]), int(month_str[5:7])
@@ -1207,5 +1208,5 @@ def dogs():
         "walker_dogs.html",
         dogs=all_dogs,
         primary_owners=primary_owners,
-        today=date.today(),
+        today=local_today(),
     )

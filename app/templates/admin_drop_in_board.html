@@ -62,7 +62,7 @@
     });
 
     document.addEventListener('DOMContentLoaded', () => {
-        const todayStr = new Date().toISOString().slice(0, 10);
+        const todayStr = DogBoxxDates.today();
         const calDataUrl = '{{ url_for("admin.calendar_data", year=0, month=0) }}';
 
         const cal = createCalendar('dropin-cal', {

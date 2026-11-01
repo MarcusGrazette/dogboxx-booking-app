@@ -75,9 +75,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Single-booking date has no min — admin can record past or same-day bookings.
     // Recurring start stays future-only (no use case for past-dated recurring sets).
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    startInput.min = tomorrow.toISOString().slice(0, 10);
+    startInput.min = DogBoxxDates.addDays(DogBoxxDates.today(), 1);
 
     // ── Open modal ──────────────────────────────────────────────────────────
     document.querySelectorAll('.book-btn').forEach(btn => {
@@ -131,9 +129,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // ── Auto-fill end date to start + 1 year ───────────────────────────────
     startInput.addEventListener('change', function () {
         if (!this.value) return;
-        const start = new Date(this.value + 'T00:00:00');
-        start.setFullYear(start.getFullYear() + 1);
-        endInput.value = start.toISOString().slice(0, 10);
+        endInput.value = DogBoxxDates.addYears(this.value, 1);
         endInput.min   = this.value;
         updateCount();
     });
@@ -532,7 +528,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 } else {
                     dbActiveDogId        = d.dogId;
                     dbDogName.textContent = d.dogName;
-                    dbFromDate.value     = new Date().toISOString().slice(0, 10);
+                    dbFromDate.value     = DogBoxxDates.today();
                     dbResults.innerHTML  = '';
                     dbPagination.style.display = 'none';
                     dbModal.show();
@@ -798,9 +794,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Switching to recurring with a date already chosen: seed the end date
         // (start + 1 year) so the range is valid without an extra click.
         if (bcIsRecurring() && bcStart.value && !bcEnd.value) {
-            const d = new Date(bcStart.value + 'T00:00:00');
-            d.setFullYear(d.getFullYear() + 1);
-            bcEnd.value = d.toISOString().slice(0, 10);
+            bcEnd.value = DogBoxxDates.addYears(bcStart.value, 1);
             bcEnd.min   = bcStart.value;
         }
         // A range/day change invalidates a prior preview — force a re-preview.
@@ -860,9 +854,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // modal). In one-off mode there is no end field to fill.
     bcStart.addEventListener('change', function () {
         if (!this.value || !bcIsRecurring()) return;
-        const d = new Date(this.value + 'T00:00:00');
-        d.setFullYear(d.getFullYear() + 1);
-        bcEnd.value = d.toISOString().slice(0, 10);
+        bcEnd.value = DogBoxxDates.addYears(this.value, 1);
         bcEnd.min   = this.value;
     });
 

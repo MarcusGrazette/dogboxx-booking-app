@@ -15,7 +15,7 @@ from app.capacity import eligible_walker_clause, is_date_closed, MAX_RECURRING_S
 from app.forms import BookingForm
 import logging
 import uuid
-from datetime import datetime, timezone, timedelta, date as date_type
+from datetime import datetime, timedelta, date as date_type
 
 from app.blueprints.client import client_bp
 from app.utils.booking_notify import notify_cancelled, notify_created
@@ -32,10 +32,10 @@ from app.services.booking_service import create_booking, CapacityError
 
 
 def _is_same_day(booking_date):
-    """True if booking_date is today (server UTC). Same-day bookings skip
+    """True if booking_date is today (London date). Same-day bookings skip
     auto-assignment — walker schedules are planned in advance, so Lydia
     reviews these manually."""
-    return booking_date == datetime.now(timezone.utc).date()
+    return booking_date == local_today()
 
 
 
@@ -80,7 +80,7 @@ def index():
     user_dogs = get_accessible_dogs(current_user.id)
 
     # Return all non-cancelled bookings (past and upcoming) for date-filter support
-    today = datetime.now(timezone.utc).date()
+    today = local_today()
     _index_dog_ids = [d.id for d in user_dogs]
     upcoming_bookings_query = Booking.query.options(
         joinedload(Booking.walker).joinedload(Walker.user),
@@ -104,7 +104,7 @@ def index():
         booking_date = form.date.data
         booking_slot = form.slot.data
 
-        today = datetime.now(timezone.utc).date()
+        today = local_today()
         errors = []
 
         if booking_date < today:
@@ -224,7 +224,7 @@ def book():
     except ValueError:
         return jsonify({'success': False, 'message': 'Invalid date format.'}), 400
 
-    today   = datetime.now(timezone.utc).date()
+    today   = local_today()
 
     if booking_date < today:
         return jsonify({'success': False, 'message': 'Booking date cannot be in the past.'}), 400
@@ -354,7 +354,7 @@ def book_both():
     except ValueError:
         return jsonify({'success': False, 'message': 'Invalid date format.'}), 400
 
-    today    = datetime.now(timezone.utc).date()
+    today    = local_today()
     if booking_date < today:
         return jsonify({'success': False, 'message': 'Booking date cannot be in the past.'}), 400
 
@@ -495,7 +495,7 @@ def book_drop_in():
     except ValueError:
         return jsonify({'success': False, 'message': 'Invalid date format.'}), 400
 
-    today    = datetime.now(timezone.utc).date()
+    today    = local_today()
     if booking_date < today:
         return jsonify({'success': False, 'message': 'Booking date cannot be in the past.'}), 400
 
@@ -866,7 +866,7 @@ def recurring_booking():
         except ValueError:
             return jsonify(success=False, message="Invalid date format"), 400
 
-        today = datetime.now(timezone.utc).date()
+        today = local_today()
         tomorrow = today + timedelta(days=1)
         max_end = start_date + timedelta(days=365)
 

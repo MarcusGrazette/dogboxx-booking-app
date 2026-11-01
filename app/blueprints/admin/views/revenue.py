@@ -5,6 +5,7 @@ from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
 from app import db
 from app.utils.activity_log import record_admin_action, diff_fields
+from app.utils.dates import local_today
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -140,10 +141,9 @@ def _revenue_for_range(start, end):
 @admin_required
 def revenue():
     """Revenue tracker page."""
-    from datetime import date
     from app.models import PricingConfig
 
-    today = date.today()
+    today = local_today()
     # Default: current calendar month
     start = today.replace(day=1)
     end   = (start.replace(month=start.month % 12 + 1, day=1)
@@ -192,7 +192,7 @@ def revenue_data():
     from datetime import date
     import datetime as _dt
 
-    today = date.today()
+    today = local_today()
     start_str = request.args.get('start')
     try:
         raw = date.fromisoformat(start_str)

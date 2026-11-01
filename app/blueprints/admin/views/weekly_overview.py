@@ -9,7 +9,7 @@ Copy buttons (per walker, and the whole team) carry plain-text summaries for
 email/WhatsApp, built from confirmed bookings only and never including notes.
 Shares app.utils.weekly_schedule with the walker-facing weekly view.
 """
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 
 from flask import request, render_template, flash, redirect, url_for
 from flask_login import login_required
@@ -30,6 +30,7 @@ from app.utils.weekly_schedule import (
     WEEKDAYS,
 )
 from app.utils.walker_visuals import walker_color, walker_initials
+from app.utils.dates import local_today
 
 
 @admin_bp.route("/weekly-overview")
@@ -39,7 +40,7 @@ from app.utils.walker_visuals import walker_color, walker_initials
 def weekly_overview(date_str=None):
     """The admin Week view grid for the Mon-Fri week containing the given
     date (default: this week)."""
-    today = datetime.now(timezone.utc).date()
+    today = local_today()
 
     raw_date = date_str or request.args.get('date')
     if raw_date:

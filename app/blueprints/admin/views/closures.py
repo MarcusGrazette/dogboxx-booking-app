@@ -1,6 +1,5 @@
 import uuid
 from collections import OrderedDict
-from datetime import date as date_type
 
 from flask import request, render_template, jsonify
 from flask_login import login_required, current_user
@@ -14,6 +13,7 @@ from app import db
 from app.utils.booking_notify import notify_cancelled
 from app.utils.booking_status import transition_booking
 from app.utils.date_ranges import parse_range, dates_in_range, range_label
+from app.utils.dates import local_today
 
 ACTIVE_STATUSES = ('requested', 'confirmed', 'waitlisted')
 # Sanity guard against a fat-fingered multi-year range wiping out the calendar.
@@ -29,7 +29,7 @@ def closures():
     for c in all_closures:
         groups.setdefault(c.range_id, []).append(c)
     closure_groups = sorted(groups.values(), key=lambda members: members[0].date)
-    return render_template('admin_closures.html', closure_groups=closure_groups, today=date_type.today())
+    return render_template('admin_closures.html', closure_groups=closure_groups, today=local_today())
 
 
 @admin_bp.route("/closures/preview")

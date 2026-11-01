@@ -16,6 +16,7 @@ import traceback
 from datetime import datetime, timezone
 
 from app.blueprints.client import client_bp
+from app.utils.dates import local_today
 
 
 @client_bp.route("/account-pending")
@@ -86,11 +87,11 @@ def onboard():
                 except ValueError as e:
                     logging.error(f"Invalid file upload: {e}")
                     flash(f"Upload error: {str(e)}. Please try a different file.", "error")
-                    return render_template("onboarding.html", form=form, existing_dog=existing_dog, has_address=has_address, has_dog_info=has_dog_info, today=datetime.now().strftime('%Y-%m-%d'))
+                    return render_template("onboarding.html", form=form, existing_dog=existing_dog, has_address=has_address, has_dog_info=has_dog_info, today=local_today().isoformat())
                 except Exception as e:
                     logging.exception(f"Error processing uploaded file: {e}")
                     flash("There was an error processing your image. Please try a different file.", "error")
-                    return render_template("onboarding.html", form=form, existing_dog=existing_dog, has_address=has_address, has_dog_info=has_dog_info, today=datetime.now().strftime('%Y-%m-%d'))
+                    return render_template("onboarding.html", form=form, existing_dog=existing_dog, has_address=has_address, has_dog_info=has_dog_info, today=local_today().isoformat())
 
             if not client:
                 client = Client(user_id=current_user.id)
@@ -183,4 +184,4 @@ def onboard():
             form.dog_dob.data = existing_dog.date_of_birth
             form.dog_allergies.data = existing_dog.allergies
 
-    return render_template("onboarding.html", form=form, existing_dog=existing_dog, has_address=has_address, has_dog_info=has_dog_info, today=datetime.now().strftime('%Y-%m-%d'))
+    return render_template("onboarding.html", form=form, existing_dog=existing_dog, has_address=has_address, has_dog_info=has_dog_info, today=local_today().isoformat())

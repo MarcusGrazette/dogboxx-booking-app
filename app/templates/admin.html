@@ -1105,7 +1105,7 @@ window._DASH = {
     amBtn.href  = q('morning');
     pmBtn.href  = q('afternoon');
 
-    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayIso = DogBoxxDates.today();
     if (dateStr === todayIso) {
       dateEl.textContent = 'today';
     } else {

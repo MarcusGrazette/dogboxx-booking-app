@@ -16,7 +16,6 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 75 | P3 | L | 🔲 | **Locking consistency for closure and availability changes** | Make closures and availability changes coordinate with in-flight bookings. |
 | 72 | P3 | S | 🔲 | **Handle rate-limited push re-registration** | Back off quietly when push re-subscription is throttled. |
 | 82 | P3 | L | 📋 | **One typed invoice calculator** | Every billing page reads its numbers from one calculation instead of re-deriving them. |
-| 83 | P3 | M | 🔲 | **De-duplicate admin + walker notifications** | An admin who is also the assigned walker gets one notification per booking, not both the "assigned a walk" and "client booked" ones. |
 | 86 | P3 | M | 📋 | **Simplify 1 — dead code & one-offs** | Remove unused imports, scripts and pins; inline single-use helpers; use the shared toast on the board. |
 | 87 | P3 | M | 📋 | **Simplify 2 — capacity & board data** | One capacity/summary helper for walks and drop-ins; one board-data builder behind both board endpoints. |
 | 88 | P3 | M | 📋 | **Simplify 3 — shared utilities** | Shared email shell, dashboard chart payload, simpler link sanitizing and device detection. |
@@ -24,14 +23,16 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 90 | P3 | M | 📋 | **Simplify 5 — database error handling** | Replace the error-handler module with a small decorator, with tests. |
 | 91 | P3 | M | 📋 | **Simplify 6 — front-end helpers** | Merge duplicated confirm-modal, card and alert code in the client and admin scripts. |
 | 92 | P3 | L | 📋 | **Simplify 7 — booking request validation** | One validation/conflict path for the walk and drop-in booking routes; ship alone. |
-| 93 | P2 | M | 📋 | **London date everywhere** | Every "today" check uses the London date, so pages don't show yesterday's view just after midnight in summer. |
 | 94 | P3 | M | 📋 | **Simplify 8 — one month calendar** | The drop-in board uses the dashboard's month calendar (compact, with drop-in counts) instead of its own. |
 | 95 | P3 | S | 📋 | **Simplify 9 — retire the old assignment page** | Remove the unlinked standalone walk board and its unused charts; walks are assigned from the dashboard. |
 | 99 | P3 | S | 🔲 | **Prune old backups with a storage rule** | Old database backups expire automatically in storage, so the nightly backup job only needs permission to upload. |
 | 101 | P3 | L | 🔲 | **Nightly backup inside Railway** | Run the database backup as a Railway scheduled job over the private network, so the database needs no public connection. After #99. |
+| 105 | P3 | M | 🔲 | **Move the docs site to Zensical** | Material for MkDocs gets fixes only until May 2027 and won't support MkDocs 2.0; switch to its successor, Zensical, before then. Check that image and diagram zoom still work. |
 | 24 | P3 | L | 🔲 | **Dental cleans service type** | Admin-managed time slots that clients book into. |
+| 103 | P4 | M | 🔲 | **Images in newsletters** | The admin can add images to a newsletter from its rich-text editor. |
 | 74 | P4 | S | 🔲 | **Drop `User.notification_preference`** | Remove a column that only ever holds `'email'`. |
 | 76 | P4 | L | 🔲 | **Keyboard operability** | Make the calendar and assignment board fully keyboard-usable. |
+| 106 | P4 | M | 🔲 | **Look again at Entire (Trails)** | Revisit Entire's Git hosting and Trails review flow once it supports public repos and documents how agent sessions are stored. Try it as a GitHub mirror first. |
 
 ## Shipped
 
@@ -130,6 +131,8 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 80 | Code tidy-up | Unused variables removed during the client routes split. |
 | 81 | Lighter session storage | Login sessions are saved once a day instead of on every request. |
 | 97 | Hosting settings as code | Railway service settings (start commands, schedules, healthcheck, volume) live in the repo as Infrastructure as Code, replacing the retired config files. |
+| 93 | London date everywhere | Every "today" check uses the London date, so pages don't show yesterday's view just after midnight in summer. |
+| 104 | London date in the browser | Date pickers and auto-filled end dates use the London date, so recurring end dates aren't a day short in summer. |
 
 ## Dropped
 
@@ -137,6 +140,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 |---|---|---|
 | 7 | Capacity display for clients | An "available" indicator is enough. |
 | 25 | Standalone invoicing | Superseded by #26. |
+| 83 | De-duplicate admin + walker notifications | Covered by #102: walkers no longer get booking notifications, so an admin who walks gets only the admin one. |
 | — | Firebase Auth | Overkill at this scale; Flask-Login is enough. |
 | — | Public self-registration | The business creates client accounts itself. |
 | — | Walker pickup status tracking | Won't build (owner decision). |

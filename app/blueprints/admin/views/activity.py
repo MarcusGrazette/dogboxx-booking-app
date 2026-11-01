@@ -11,6 +11,7 @@ from app.models import (
     ActivityLog, DailyMessage,
 )
 from app import db
+from app.utils.dates import local_today
 
 
 @admin_bp.route("/activity")
@@ -36,7 +37,7 @@ def activity_feed():
         else:
             raise ValueError
     except (ValueError, IndexError):
-        today = date_type.today()
+        today = local_today()
         month_start = date_type(today.year, today.month, 1)
 
     if month_start.month == 12:
@@ -511,7 +512,7 @@ def activity_feed():
         if ts and (earliest is None or ts < earliest):
             earliest = ts
 
-    today = date_type.today()
+    today = local_today()
     oldest = date_type(earliest.year, earliest.month, 1) if earliest else date_type(today.year, today.month, 1)
 
     month_options = []

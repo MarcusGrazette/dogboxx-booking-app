@@ -1,6 +1,5 @@
 import uuid
 from collections import OrderedDict
-from datetime import date as date_type
 
 from flask import request, render_template, jsonify
 from flask_login import login_required, current_user
@@ -11,6 +10,7 @@ from app.models import SlotFreeze
 from app import db
 from app.utils.date_ranges import parse_range, dates_in_range, range_label
 from app.utils.activity_log import record_admin_action
+from app.utils.dates import local_today
 
 # Sanity guard against a fat-fingered multi-year range — mirrors Closure's.
 MAX_FREEZE_RANGE_DAYS = 60
@@ -34,7 +34,7 @@ def freezes():
     for f in all_freezes:
         groups.setdefault(f.range_id, []).append(f)
     freeze_groups = sorted(groups.values(), key=lambda members: members[0].date)
-    return render_template('admin_freezes.html', freeze_groups=freeze_groups, today=date_type.today())
+    return render_template('admin_freezes.html', freeze_groups=freeze_groups, today=local_today())
 
 
 @admin_bp.route("/freezes", methods=["POST"])

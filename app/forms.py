@@ -3,7 +3,8 @@ from wtforms import StringField, PasswordField, BooleanField, SubmitField, TextA
 from wtforms.validators import DataRequired, Email, Length, EqualTo, Optional, URL
 from flask_wtf.file import FileField, FileAllowed
 from .validators import wtforms_password_validator
-from datetime import datetime, timezone, timedelta
+from datetime import timedelta
+from app.utils.dates import local_today
 from wtforms import ValidationError
 
 class LoginForm(FlaskForm):
@@ -103,7 +104,7 @@ class BookingForm(FlaskForm):
     def validate_date(self, field):
         """Custom validator to ensure date is at least tomorrow"""
         if field.data:
-            tomorrow = (datetime.now(timezone.utc) + timedelta(days=1)).date()
+            tomorrow = local_today() + timedelta(days=1)
             if field.data < tomorrow:
                 raise ValidationError('Booking date must be at least tomorrow.')
 

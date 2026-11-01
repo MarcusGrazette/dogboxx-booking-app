@@ -68,6 +68,8 @@
     <!-- Reusable Calendar Component CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/reusable-calendar.css') }}">
 
+    <script src="{{ url_for('static', filename='js/dates.js') }}" nonce="{{ csp_nonce }}"></script>
+
     {% block head_extra %}{% endblock %}
 
     {# Toast CSS lives in brand.css — loaded by both client and admin layouts #}

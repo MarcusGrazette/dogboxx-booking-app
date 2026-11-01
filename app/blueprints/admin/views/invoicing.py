@@ -9,6 +9,7 @@ from app.utils.decorators import admin_required
 from app.models import User, Dog, DogOwner
 from app import db
 from app.utils.invoicing import invoice_for_client as _invoice_for_client
+from app.utils.dates import local_today
 
 
 @admin_bp.route("/invoicing")
@@ -16,12 +17,11 @@ from app.utils.invoicing import invoice_for_client as _invoice_for_client
 @admin_required
 def invoicing():
     """Monthly invoicing summary — one row per client."""
-    from datetime import date
     from calendar import monthrange
     from app.utils.dates import parse_month_param
 
     # ── Month selection ───────────────────────────────────────────────────
-    today = date.today()
+    today = local_today()
     month_str = request.args.get('month', f'{today.year}-{today.month:02d}')
     month_start, month_end = parse_month_param(month_str, today)
     year, month = month_start.year, month_start.month
@@ -125,7 +125,6 @@ def invoicing():
 @admin_required
 def invoicing_detail(client_id):
     """Per-client invoice detail — line items for the selected month."""
-    from datetime import date
     from itertools import groupby
     from app.utils.dates import parse_month_param
 
@@ -133,7 +132,7 @@ def invoicing_detail(client_id):
         User.client != None, User.id == client_id
     ).first_or_404()
 
-    today = date.today()
+    today = local_today()
     month_str = request.args.get('month', f'{today.year}-{today.month:02d}')
     month_start, month_end = parse_month_param(month_str, today)
     year, month = month_start.year, month_start.month

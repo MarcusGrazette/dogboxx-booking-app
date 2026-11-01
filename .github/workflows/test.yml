@@ -12,7 +12,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18
         env:
           POSTGRES_USER: dogboxx
           POSTGRES_PASSWORD: dogboxx
@@ -53,6 +53,11 @@ jobs:
         run: flask db check
         # Fails if any SQLAlchemy model column is not reflected in the migration chain.
         # Catches: columns added to models without a matching migration.
+
+      - name: Check Node is available
+        # tests/test_board_js.py and test_london_date.py run browser JS under
+        # Node and skip without it; fail here instead of skipping silently.
+        run: node --version
 
       - name: Run tests
         # The migrated schema from the steps above is dropped and rebuilt from
