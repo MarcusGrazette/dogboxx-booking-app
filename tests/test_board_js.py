@@ -6,7 +6,8 @@ against a small fake DOM and a fetch whose replies the test releases by hand:
 
 - an older date's board load must not overwrite a newer one
 - a failed assign/unassign puts back only that booking: it must not undo
-  another move made meanwhile, nor repaint a date the admin has left
+  another move made meanwhile (of that booking or another), nor repaint a
+  date the admin has left
 - toast messages are plain text (server messages can contain names)
 """
 import json
@@ -153,10 +154,12 @@ def _booking(id, dog, walker_id=None, slot='Morning'):
 
 WALKER = {'id': 7, 'name': 'Wendy', 'available_slots': ['Morning', 'Afternoon'],
           'unavailable_slots': []}
+BOB = {'id': 8, 'name': 'Bob', 'available_slots': ['Morning', 'Afternoon'],
+       'unavailable_slots': []}
 
 
 def _board(*bookings):
-    return {'success': True, 'max_capacity': 6, 'frozen_slots': [], 'walkers': [WALKER],
+    return {'success': True, 'max_capacity': 6, 'frozen_slots': [], 'walkers': [WALKER, BOB],
             'pending': [b for b in bookings if not b['walker_id']],
             'assigned': [b for b in bookings if b['walker_id']]}
 
@@ -224,6 +227,42 @@ def test_failed_assign_after_changing_date_keeps_new_date():
     """)
     assert 'Tilly' in got
     assert 'Alfie' not in got
+
+
+def test_failed_assign_does_not_undo_a_later_move_of_the_same_booking():
+    got = _run(f"""
+        board.setDate('2026-11-02');
+        api.calls[0].reply({MONDAY});
+        await api.settle();
+        await api.assign(1, 7, 'Morning');  // Alfie → Wendy, reply held
+        await api.assign(1, 8, 'Morning');  // Alfie → Bob, reply held
+        api.calls[2].reply({{success: true}});
+        await api.settle();
+        api.calls[1].reply({{success: false, message: 'nope'}});
+        await api.settle();
+        return {{alfie: api.whereIs(1), toast: api.toastText()}};
+    """)
+    assert got['alfie'] == 8
+    assert 'nope' in got['toast']
+
+
+def test_failed_unassign_does_not_undo_a_later_reassign():
+    monday = json.dumps(_board(_booking(1, 'Alfie', walker_id=7), _booking(2, 'Bella')))
+    got = _run(f"""
+        board.setDate('2026-11-02');
+        api.calls[0].reply({monday});
+        await api.settle();
+        api.card(1).fire('click');          // select, then click again to unassign
+        api.card(1).fire('click');
+        await api.settle();
+        await api.assign(1, 8, 'Morning');  // back out to Bob, reply held
+        api.calls[2].reply({{success: true}});
+        await api.settle();
+        api.calls[1].reply({{success: false, message: 'nope'}});
+        await api.settle();
+        return api.whereIs(1);
+    """)
+    assert got == 8
 
 
 def test_failed_unassign_puts_only_that_booking_back():

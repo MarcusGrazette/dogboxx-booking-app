@@ -511,10 +511,17 @@
         // Assign/unassign move the card before the server answers. A failure
         // puts back just that booking — never a snapshot of the whole board,
         // which would undo any other move made meanwhile, or repaint a date
-        // the admin has since left.
+        // the admin has since left. Each move takes a ticket; only the latest
+        // move of a booking may put its card back.
+        let moveSeq = 0;
+        const latestMove = new Map();   // booking id → ticket of its latest move
+
         function snapshotBooking(booking) {
             const list = state.pending.includes(booking) ? 'pending' : 'assigned';
+            const move = ++moveSeq;
+            latestMove.set(booking.id, move);
             return {
+                move,
                 loadSeq,
                 list,
                 index:        state[list].indexOf(booking),
@@ -525,9 +532,11 @@
         }
 
         function rollbackBooking(booking, snap) {
-            // The board has been reloaded since, so it already shows the
-            // server's state.
+            // The board has been reloaded since (or is showing a load error),
+            // so this move's card is no longer the one on screen.
             if (snap.loadSeq !== loadSeq) return;
+            // A newer move of this booking owns the card now.
+            if (latestMove.get(booking.id) !== snap.move) return;
             state.pending  = state.pending.filter(b => b !== booking);
             state.assigned = state.assigned.filter(b => b !== booking);
             booking.walker_id    = snap.walker_id;
