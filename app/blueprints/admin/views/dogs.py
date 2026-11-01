@@ -115,9 +115,13 @@ def update_dog(dog_id):
         except ValueError:
             return jsonify(success=False, message="Invalid date of birth"), 400
 
+    breed = (data.get('breed') or '').strip()
     allergies = (data.get('allergies') or '').strip()
-    # Dog.allergies is db.String(200) — check before mutating, or a too-long
-    # value flushes fine and only fails at commit with an opaque DataError.
+    # Dog.breed is db.String(100), Dog.allergies db.String(200) — check before
+    # mutating, or a too-long value flushes fine and only fails at commit with
+    # an opaque DataError.
+    if len(breed) > 100:
+        return jsonify(success=False, message="Breed must be 100 characters or fewer"), 400
     if len(allergies) > 200:
         return jsonify(success=False, message="Allergies must be 200 characters or fewer"), 400
 
@@ -125,7 +129,7 @@ def update_dog(dog_id):
 
     dog.name = name
     dog.gender = gender or dog.gender
-    dog.breed = (data.get('breed') or '').strip()
+    dog.breed = breed
     dog.date_of_birth = dob
     dog.allergies = allergies
     dog.pickup_instructions = clean_rich_text_or_none(data.get('pickup_instructions'))

@@ -73,7 +73,7 @@ class OnboardingForm(FlaskForm):
 
     dog_breed = StringField(
         'Breed',
-        validators=[Optional()]
+        validators=[Optional(), Length(max=100)]
     )
 
     dog_allergies = StringField(
@@ -138,7 +138,7 @@ class ProfileForm(FlaskForm):
         choices=[('', 'Select Gender'), ('male', 'Male'), ('female', 'Female')],
         validators=[DataRequired()]
     )
-    dog_breed = StringField('Breed', validators=[Optional()])
+    dog_breed = StringField('Breed', validators=[Optional(), Length(max=100)])
     dog_dob = DateField(
         'Date of Birth',
         validators=[Optional()]
@@ -231,7 +231,7 @@ class ClientCreateForm(FlaskForm):
         choices=[('', 'Select Gender'), ('male', 'Male'), ('female', 'Female')],
         validators=[Optional()]
     )
-    dog_breed = StringField('Breed', validators=[Optional()])
+    dog_breed = StringField('Breed', validators=[Optional(), Length(max=100)])
     dog_dob = DateField(
         'Date of Birth',
         validators=[Optional()]
@@ -282,7 +282,7 @@ class AddDogForm(FlaskForm):
         'Date of Birth',
         validators=[Optional()]
     )
-    dog_breed = StringField('Breed', validators=[Optional()])
+    dog_breed = StringField('Breed', validators=[Optional(), Length(max=100)])
     dog_allergies = TextAreaField(
         'Allergies / health notes',
         validators=[Optional(), Length(max=200)],
