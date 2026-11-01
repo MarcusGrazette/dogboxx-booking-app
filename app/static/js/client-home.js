@@ -579,6 +579,8 @@
         const subtitle = document.getElementById('note-modal-subtitle');
         const charCount = document.getElementById('note-char-count');
         const errorEl = document.getElementById('note-error');
+        const cancelBtn = document.getElementById('note-cancel-btn');
+        const titleIcon = document.getElementById('note-modal-icon');
         let activeBookingId = null;
         let activeNoteBtn = null;
 
@@ -586,21 +588,41 @@
             charCount.textContent = `${textarea.value.length} / 500`;
         });
 
-        document.addEventListener('click', function (e) {
-            const btn = e.target.closest('.note-booking-btn');
-            if (!btn) return;
-            activeBookingId = btn.getAttribute('data-booking-id');
-            activeNoteBtn = btn;
+        // One modal, two modes: edit (pencil, upcoming walks) and view-only
+        // (file icon, past walks — the server refuses edits to those).
+        function openNote(btn, readOnly) {
             const slot = btn.getAttribute('data-booking-slot');
             const dateDisp = btn.getAttribute('data-booking-date');
             const current = btn.getAttribute('data-current-note') || '';
 
             subtitle.textContent = `${slot} · ${dateDisp}`;
             textarea.value = current;
+            textarea.readOnly = readOnly;
             charCount.textContent = `${current.length} / 500`;
+            charCount.classList.toggle('d-none', readOnly);
+            saveBtn.classList.toggle('d-none', readOnly);
+            cancelBtn.textContent = readOnly ? 'Close' : 'Cancel';
+            titleIcon.className = `bi bi-${readOnly ? 'file-earmark' : 'pencil'} me-2 text-primary`;
             errorEl.textContent = '';
             modal.show();
-            document.getElementById('noteModal').addEventListener('shown.bs.modal', () => textarea.focus(), { once: true });
+            if (!readOnly) {
+                document.getElementById('noteModal').addEventListener('shown.bs.modal', () => textarea.focus(), { once: true });
+            }
+        }
+
+        document.addEventListener('click', function (e) {
+            const viewBtn = e.target.closest('.note-view-btn');
+            if (viewBtn) {
+                activeBookingId = null;
+                activeNoteBtn = null;
+                openNote(viewBtn, true);
+                return;
+            }
+            const btn = e.target.closest('.note-booking-btn');
+            if (!btn) return;
+            activeBookingId = btn.getAttribute('data-booking-id');
+            activeNoteBtn = btn;
+            openNote(btn, false);
         });
 
         // Quick save: just disable while in flight, toast on success (same as

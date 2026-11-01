@@ -10,7 +10,7 @@ import datetime
 from app import db
 from app.models import Booking, Dog, DogOwner
 from app.utils.dates import local_today
-from tests.conftest import make_user
+from tests.conftest import login, make_user
 
 
 def _book(dog, user, service, date, slot='Morning', status='confirmed', note=None):
@@ -93,3 +93,31 @@ class TestDayBookings:
     def test_requires_login(self, client):
         resp = client.get(f'/day_bookings/{_days(-1).isoformat()}')
         assert resp.status_code in (302, 401)
+
+
+class TestPastNotesAreViewOnly:
+
+    def test_client_cannot_change_a_past_walks_note(self, logged_in_client, client_user,
+                                                    dog, service_type):
+        b = _book(dog, client_user, service_type, _days(-1), note='Muddy')
+        resp = logged_in_client.post(f'/booking/{b.id}/note', json={'note': 'changed'})
+        assert resp.status_code == 400
+        assert db.session.get(Booking, b.id).client_notes == 'Muddy'
+
+    def test_todays_walk_note_is_still_editable(self, logged_in_client, client_user,
+                                                dog, service_type):
+        b = _book(dog, client_user, service_type, _days(0))
+        resp = logged_in_client.post(f'/booking/{b.id}/note', json={'note': 'Back gate'})
+        assert resp.status_code == 200
+        assert db.session.get(Booking, b.id).client_notes == 'Back gate'
+
+    def test_admin_board_route_can_still_edit_a_past_note(self, app, client, client_user,
+                                                          dog, service_type):
+        # Admin notes go through board.update_booking_note_admin, which this
+        # rule deliberately doesn't touch.
+        admin = make_user(email='admin@test.dogboxx.org', role='walker', is_admin=True)
+        b = _book(dog, client_user, service_type, _days(-1), note='Muddy')
+        login(client, admin.email)
+        resp = client.post(f'/admin/booking/{b.id}/note', json={'note': 'Fixed typo'})
+        assert resp.status_code == 200
+        assert db.session.get(Booking, b.id).client_notes == 'Fixed typo'

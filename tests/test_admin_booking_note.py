@@ -10,6 +10,7 @@ import datetime
 
 from app import db
 from app.models import ActivityLog, Booking
+from app.utils.dates import local_today
 from tests.conftest import login
 
 NOTE_SECRET = 'Rex had surgery, lead only'
@@ -107,8 +108,10 @@ class TestAdminBookingNote:
 
     def test_client_still_sees_and_edits_admin_note(self, app, logged_in_admin, dog,
                                                     client_user, service_type):
-        """One shared note: the client's own route edits what the admin wrote."""
-        bid = _make_booking(dog, client_user, service_type)
+        """One shared note: the client's own route edits what the admin wrote.
+        Upcoming walk — the client route refuses past walks' notes."""
+        bid = _make_booking(dog, client_user, service_type,
+                            date=local_today() + datetime.timedelta(days=7))
         _post(logged_in_admin, bid, 'From the admin')
         client_session = app.test_client()
         login(client_session, client_user.email)

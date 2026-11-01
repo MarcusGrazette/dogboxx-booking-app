@@ -249,8 +249,25 @@ class TestPastDates:
         assert r['upcoming'] == []
         assert 'Mon 20 Oct' in r['past1'] and '(Sam)' in r['past1']
         assert 'cancel-booking-btn' not in r['past1']
-        assert 'note-booking-btn' in r['past1']
+        assert 'note-booking-btn' not in r['past1']   # no note: no icon at all
+        assert 'note-view-btn' not in r['past1']
         assert r['empty1'] is False and r['empty2'] is True
+
+    def test_a_past_note_is_view_only(self):
+        r = _run("""
+            api.makeDog(1, []);
+            L.applyDateFilter('2026-10-20');
+            api.calls[0].reply({ success: true, bookings: [{ id: 5, dog_id: 1,
+                date_display: 'Mon 20 Oct', slot: 'Morning', status: 'confirmed', note: 'Muddy' }] });
+            await api.settle();
+            api.book(1, '2026-11-03|Morning');   // an upcoming row, for contrast
+            return { past: api.pastHtml(1),
+                     upcoming: api.findRow(1, '2026-11-03|Morning').innerHTML };
+        """)
+        assert 'note-view-btn' in r['past'] and 'bi-file-earmark' in r['past']
+        assert 'note-booking-btn' not in r['past'] and 'bi-pencil' not in r['past']
+        assert 'data-current-note="Muddy"' in r['past']
+        assert 'note-booking-btn' in r['upcoming'] and 'cancel-booking-btn' in r['upcoming']
 
     def test_an_older_reply_does_not_overwrite_a_newer_date(self):
         r = _run("""

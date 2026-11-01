@@ -180,7 +180,7 @@ window.BookingsList = (function () {
                     const past = byId(`past-bookings-list-${dogId}`);
                     if (past) {
                         past.innerHTML = rows.map(b =>
-                            `<li class="${ROW_CLASS}">${rowHtml(b, { cancellable: false })}</li>`).join('');
+                            `<li class="${ROW_CLASS}">${rowHtml(b, { editable: false })}</li>`).join('');
                     }
                     setFilterEmpty(dogId, rows.length === 0);
                 });
@@ -193,9 +193,10 @@ window.BookingsList = (function () {
 
     // ─── Rows ───────────────────────────────────────────────────────────────
     // Inner HTML of one booking row (the server renders the same markup in
-    // index.html). Past rows (cancellable: false) keep the note pencil — a past
-    // walk's note can still be edited — but not cancel.
-    function rowHtml(b, { cancellable, isNew = false }) {
+    // index.html). Upcoming rows (editable: true) get the note pencil and the
+    // cancel button. Past rows are view-only: a file icon opens the note
+    // read-only, and there's no icon at all when the walk has no note.
+    function rowHtml(b, { editable, isNew = false }) {
         const badgeHtml = b.status === 'waitlisted'
             ? `<span class="badge rounded-pill text-bg-info py-2 text-center" style="min-width:90px;">Waitlisted</span>`
             : b.status === 'confirmed'
@@ -209,7 +210,16 @@ window.BookingsList = (function () {
         const dropInLabel = b.is_drop_in
             ? `<i class="bi bi-house-door-fill text-primary me-1"></i>Drop-in · ` : '';
         const note = b.note || '';
-        const cancelBtn = cancellable ? `
+        const actions = editable ? `
+            <button class="btn btn-link p-1 note-booking-btn text-secondary"
+                    data-booking-id="${escHtml(b.id)}"
+                    data-booking-slot="${escHtml(b.slot)}"
+                    data-booking-date="${escHtml(b.date_display)}"
+                    data-current-note="${escHtml(note)}"
+                    title="${note ? 'Edit note' : 'Add note'}"
+                    style="line-height:1;font-size:1.1rem;">
+                <i class="bi bi-pencil-square${note ? ' text-primary' : ''}"></i>
+            </button>
             <button class="btn btn-link p-1 cancel-booking-btn text-danger"
                     data-booking-id="${escHtml(b.id)}"
                     data-booking-slot="${escHtml(b.slot)}"
@@ -220,6 +230,14 @@ window.BookingsList = (function () {
                     title="Cancel booking"
                     style="line-height:1;font-size:1.1rem;">
                 <i class="bi bi-x-circle"></i>
+            </button>` : note ? `
+            <button class="btn btn-link p-1 note-view-btn text-primary"
+                    data-booking-slot="${escHtml(b.slot)}"
+                    data-booking-date="${escHtml(b.date_display)}"
+                    data-current-note="${escHtml(note)}"
+                    title="View note"
+                    style="line-height:1;font-size:1.1rem;">
+                <i class="bi bi-file-earmark"></i>
             </button>` : '';
         return `
         <div class="d-flex align-items-center gap-3">
@@ -229,16 +247,7 @@ window.BookingsList = (function () {
                 <div class="text-muted" style="font-size:0.78rem;">${dropInLabel}${escHtml(b.slot)}${walkerLabel}</div>
             </div>
         </div>
-        <div class="d-flex align-items-center gap-3">
-            <button class="btn btn-link p-1 note-booking-btn text-secondary"
-                    data-booking-id="${escHtml(b.id)}"
-                    data-booking-slot="${escHtml(b.slot)}"
-                    data-booking-date="${escHtml(b.date_display)}"
-                    data-current-note="${escHtml(note)}"
-                    title="${note ? 'Edit note' : 'Add note'}"
-                    style="line-height:1;font-size:1.1rem;">
-                <i class="bi bi-pencil-square${note ? ' text-primary' : ''}"></i>
-            </button>${cancelBtn}
+        <div class="d-flex align-items-center gap-3">${actions}
         </div>`;
     }
 
@@ -253,7 +262,7 @@ window.BookingsList = (function () {
         li.dataset.walkIdx = '0';  // renumbered by refreshList
         li.dataset.date = booking.date_iso;
         li.dataset.slot = booking.slot;
-        li.innerHTML = rowHtml(booking, { cancellable: true, isNew: true });
+        li.innerHTML = rowHtml(booking, { editable: true, isNew: true });
         li.style.opacity = '0';
         li.style.transition = 'opacity 0.3s ease';
         list.appendChild(li);

@@ -1088,6 +1088,12 @@ def update_booking_note(booking_id):
     if not user_can_access_booking(current_user, booking):
         return jsonify(success=False, message="Not your booking"), 403
 
+    # A past walk's note is view-only (client home shows it read-only). Only
+    # client home calls this route; admins edit notes via the board's
+    # update_booking_note_admin, which this doesn't restrict.
+    if booking.date < local_today():
+        return jsonify(success=False, message="This walk is in the past, so its note can't be changed"), 400
+
     data = request.get_json(silent=True) or {}
     note = (data.get('note') or '').strip()
     if len(note) > Booking.NOTE_MAX_LENGTH:
