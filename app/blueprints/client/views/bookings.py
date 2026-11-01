@@ -27,6 +27,7 @@ from app.utils.invoicing import (
     is_late_cancellation, bill_cancellation_for, group_by_bill_cancellation,
 )
 from app.utils.dates import local_today
+from app.utils.pricing import SLOT_ORDER
 from app.utils.decorators import has_client_access
 from app.services.booking_service import create_booking, CapacityError
 
@@ -60,6 +61,12 @@ def _resolve_dog(user_dogs, requested_id):
     return user_dogs[0]
 
 
+def _booking_sort_key(b):
+    """Chronological, Morning before Afternoon on the same day — the order
+    client-home.js's refreshList() keeps the list in."""
+    return (b.date, SLOT_ORDER.get(b.slot, len(SLOT_ORDER)))
+
+
 @client_bp.route("/", methods=["GET", "POST"])
 @login_required
 def index():
@@ -79,25 +86,23 @@ def index():
     # The user's dogs (primary or co-owned), minus deleted dogs
     user_dogs = get_accessible_dogs(current_user.id)
 
-    # Return all non-cancelled bookings (past and upcoming) for date-filter support
+    # Upcoming (today onwards) non-cancelled bookings only. Past days are
+    # fetched one at a time from day_bookings when the client taps a past
+    # calendar date, so this page doesn't grow with the client's history.
     today = local_today()
     _index_dog_ids = [d.id for d in user_dogs]
-    upcoming_bookings_query = Booking.query.options(
+    upcoming_bookings = Booking.query.options(
         joinedload(Booking.walker).joinedload(Walker.user),
         joinedload(Booking.service_type),
     ).filter(
         Booking.dog_id.in_(_index_dog_ids),
+        Booking.date >= today,
         Booking.status.notin_(['cancelled', 'rejected']),
-    ).order_by(Booking.date.asc())
-
-    upcoming_bookings = list(upcoming_bookings_query)
+    ).all()
+    upcoming_bookings.sort(key=_booking_sort_key)
     for b in upcoming_bookings:
-        if b.date:
-            b.date_display = b.date.strftime("%a %d %b")
-        else:
-            b.date_display = None
+        b.date_display = b.date.strftime("%a %d %b")
         b.is_drop_in = b.service_type and b.service_type.slug == ServiceType.DROP_IN
-        b.is_past = (b.date < today) if b.date else False
 
     form = BookingForm()
     if form.validate_on_submit():
@@ -587,32 +592,33 @@ def book_drop_in():
     })
 
 
-@client_bp.route("/pause-walks/preview")
-@login_required
-def pause_walks_preview():
-    """Return bookings that would be cancelled in a date range (no writes)."""
-    if not has_client_access(current_user):
-        return jsonify(success=False, error="Forbidden"), 403
+def _pause_scope(start_raw, end_raw, slots_raw):
+    """Validate a Pause Walks request and return (bookings, None) or
+    (None, error_response). Shared by the preview and the action so both pick
+    exactly the same bookings — every active booking of every service
+    (walks and drop-ins) for the client's dogs in the range.
+
+    slots_raw: 0 or 2 valid values = both slots; exactly 1 narrows to it.
+    """
     try:
-        start = date_type.fromisoformat(request.args.get('start', ''))
-        end   = date_type.fromisoformat(request.args.get('end', ''))
+        start = date_type.fromisoformat(start_raw or '')
+        end   = date_type.fromisoformat(end_raw or '')
     except (ValueError, TypeError):
-        return jsonify(success=False, error="Invalid dates"), 400
+        return None, (jsonify(success=False, error="Invalid dates"), 400)
 
-    today = local_today()
-    if start <= today:
-        return jsonify(success=False, error="Start date must be in the future"), 400
+    if start <= local_today():
+        return None, (jsonify(success=False, error="Start date must be in the future"), 400)
     if end < start:
-        return jsonify(success=False, error="End date must be after start date"), 400
+        return None, (jsonify(success=False, error="End date must be after start date"), 400)
     if (end - start).days > 365:
-        return jsonify(success=False, error="Range cannot exceed one year"), 400
+        return None, (jsonify(success=False, error="Range cannot exceed one year"), 400)
 
-    # Optional slot filter — accepts repeated ?slots=Morning&slots=Afternoon.
-    # 0 or 2 valid values = no filter (Both). Exactly 1 narrows to that slot.
-    slot_filter = [s for s in request.args.getlist('slots') if s in ('Morning', 'Afternoon')]
+    slot_filter = [s for s in (slots_raw or []) if s in ('Morning', 'Afternoon')]
 
     dog_ids = get_accessible_dog_ids(current_user.id)
-    q = Booking.query.filter(
+    q = Booking.query.options(
+        joinedload(Booking.service_type), joinedload(Booking.dog),
+    ).filter(
         Booking.dog_id.in_(dog_ids),
         Booking.date >= start,
         Booking.date <= end,
@@ -620,16 +626,39 @@ def pause_walks_preview():
     )
     if len(slot_filter) == 1:
         q = q.filter(Booking.slot == slot_filter[0])
-    bookings = q.order_by(Booking.date, Booking.slot).all()
+    bookings = q.all()
+    bookings.sort(key=_booking_sort_key)
+    return bookings, None
 
+
+@client_bp.route("/pause-walks/preview")
+@login_required
+def pause_walks_preview():
+    """Return bookings that would be cancelled in a date range (no writes).
+
+    `charged` per row is the same bill_cancellation_for() decision the action
+    persists, so the warning the client sees is exactly what gets billed.
+    """
+    if not has_client_access(current_user):
+        return jsonify(success=False, error="Forbidden"), 403
+    bookings, error = _pause_scope(request.args.get('start'), request.args.get('end'),
+                                   request.args.getlist('slots'))
+    if error:
+        return error
+
+    today = local_today()
+    rows = [{
+        'date':       b.date.strftime('%-d %b'),
+        'slot':       b.slot,
+        'dog':        b.dog.name if b.dog else '',
+        'is_drop_in': bool(b.service_type and b.service_type.slug == ServiceType.DROP_IN),
+        'charged':    bill_cancellation_for(b, cancelled_by='client', today=today),
+    } for b in bookings]
     return jsonify(
         success=True,
-        count=len(bookings),
-        bookings=[{
-            'date': b.date.strftime('%-d %b'),
-            'slot': b.slot,
-            'dog':  b.dog.name if b.dog else '',
-        } for b in bookings],
+        count=len(rows),
+        charged_count=sum(r['charged'] for r in rows),
+        bookings=rows,
     )
 
 
@@ -639,39 +668,15 @@ def pause_walks():
     """Cancel all active bookings for the client's dogs within a date range."""
     if not has_client_access(current_user):
         return jsonify(success=False, error="Forbidden"), 403
-    try:
-        data  = request.get_json(silent=True) or {}
-        start = date_type.fromisoformat(data.get('start', ''))
-        end   = date_type.fromisoformat(data.get('end', ''))
-    except (ValueError, TypeError):
-        return jsonify(success=False, error="Invalid dates"), 400
-
-    today = local_today()
-    if start <= today:
-        return jsonify(success=False, error="Start date must be in the future"), 400
-    if end < start:
-        return jsonify(success=False, error="End date must be after start date"), 400
-    if (end - start).days > 365:
-        return jsonify(success=False, error="Range cannot exceed one year"), 400
-
-    # Optional slot filter — 0 or 2 valid values = no filter (Both). 1 = narrow.
-    slots_raw   = data.get('slots') or []
-    slot_filter = [s for s in slots_raw if s in ('Morning', 'Afternoon')]
-
-    dog_ids = get_accessible_dog_ids(current_user.id)
-    q = Booking.query.filter(
-        Booking.dog_id.in_(dog_ids),
-        Booking.date >= start,
-        Booking.date <= end,
-        Booking.status.notin_(['cancelled', 'rejected', 'completed']),
-    )
-    if len(slot_filter) == 1:
-        q = q.filter(Booking.slot == slot_filter[0])
-    bookings = q.order_by(Booking.date).all()
+    data = request.get_json(silent=True) or {}
+    bookings, error = _pause_scope(data.get('start'), data.get('end'), data.get('slots'))
+    if error:
+        return error
 
     if not bookings:
         return jsonify(success=True, cancelled_count=0)
 
+    today      = local_today()
     n          = len(bookings)
     # Queued in the same transaction as the cancel; nothing commits until the end.
     notify_cancelled(bookings, actor=current_user, by_admin=False)
@@ -821,6 +826,41 @@ def calendar_data(year, month):
     closed_dates = [c.date.strftime('%Y-%m-%d') for c in closures]
 
     return jsonify(success=True, dates=dates, closed_dates=closed_dates)
+
+
+@client_bp.route("/day_bookings/<date_iso>")
+@login_required
+def day_bookings(date_iso):
+    """Return this client's bookings on one date, for the home page's
+    calendar filter when the client taps a past date (the page itself only
+    carries upcoming bookings). Same dog access and statuses as
+    calendar_data."""
+    try:
+        day = date_type.fromisoformat(date_iso)
+    except ValueError:
+        return jsonify(success=False, message="Invalid date"), 400
+
+    bookings = Booking.query.options(
+        joinedload(Booking.walker).joinedload(Walker.user),
+        joinedload(Booking.service_type),
+    ).filter(
+        Booking.dog_id.in_(get_accessible_dog_ids(current_user.id)),
+        Booking.date == day,
+        Booking.status.notin_(['cancelled', 'rejected']),
+    ).all()
+    bookings.sort(key=_booking_sort_key)
+
+    return jsonify(success=True, date=day.isoformat(), bookings=[{
+        'id':           b.id,
+        'dog_id':       b.dog_id,
+        'date_display': b.date.strftime("%a %d %b"),
+        'slot':         b.slot,
+        'status':       b.status,
+        'walker_name':  (b.walker.user.firstname
+                         if b.status == 'confirmed' and b.walker and b.walker.user else None),
+        'is_drop_in':   bool(b.service_type and b.service_type.slug == ServiceType.DROP_IN),
+        'note':         b.client_notes or '',
+    } for b in bookings])
 
 
 @client_bp.route("/recurring_booking", methods=["POST"])
@@ -1047,6 +1087,12 @@ def update_booking_note(booking_id):
 
     if not user_can_access_booking(current_user, booking):
         return jsonify(success=False, message="Not your booking"), 403
+
+    # A past walk's note is view-only (client home shows it read-only). Only
+    # client home calls this route; admins edit notes via the board's
+    # update_booking_note_admin, which this doesn't restrict.
+    if booking.date < local_today():
+        return jsonify(success=False, message="This walk is in the past, so its note can't be changed"), 400
 
     data = request.get_json(silent=True) or {}
     note = (data.get('note') or '').strip()

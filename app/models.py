@@ -149,7 +149,7 @@ class Client(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
 
-    street_address = db.Column(db.String(200), nullable=True)
+    street_address = db.Column(db.Text, nullable=True)  # up to 3 newline-joined lines
     city = db.Column(db.String(100), nullable=True)
     state = db.Column(db.String(50), nullable=True)
     postal_code = db.Column(db.String(20), nullable=True)
