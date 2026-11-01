@@ -892,12 +892,18 @@
         const step1Err = document.getElementById('pause-step1-error');
         const summary = document.getElementById('pause-preview-summary');
         const listEl = document.getElementById('pause-preview-list');
+        const chargeWarning = document.getElementById('pause-charge-warning');
         const backBtn = document.getElementById('pause-back-btn');
         const confirmBtn = document.getElementById('pause-confirm-btn');
         const successMsg = document.getElementById('pause-success-msg');
         const resetBtn = document.getElementById('pause-reset-btn');
 
         if (!startEl) return;
+
+        const PREVIEW_LABEL = 'Preview affected bookings<i class="bi bi-arrow-right ms-1"></i>';
+        const plural = (n, word) => `${n} ${word}${n !== 1 ? 's' : ''}`;
+        const escHtml = s => String(s).replace(/[&<>"']/g, c => (
+            { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
         // Start date must be strictly tomorrow or later
         const tomorrowStr = DogBoxxDates.addDays(DogBoxxDates.today(), 1);
@@ -935,24 +941,34 @@
                 .then(r => r.json())
                 .then(data => {
                     previewBtn.disabled = false;
-                    previewBtn.innerHTML = 'Preview affected walks<i class="bi bi-arrow-right ms-1"></i>';
+                    previewBtn.innerHTML = PREVIEW_LABEL;
                     if (!data.success) {
                         step1Err.textContent = data.error || 'Something went wrong.';
                         step1Err.style.display = '';
                         return;
                     }
                     if (data.count === 0) {
-                        step1Err.textContent = 'No active walks found in that date range.';
+                        step1Err.textContent = 'No active bookings found in that date range.';
                         step1Err.style.display = '';
                         return;
                     }
-                    const n = data.count;
-                    summary.textContent = `${n} walk${n !== 1 ? 's' : ''} will be cancelled:`;
+                    summary.textContent = `${plural(data.count, 'booking')} will be cancelled:`;
+                    // `charged` is the server's billing decision for each row —
+                    // the same rule the cancel applies — so this warning is
+                    // exactly what will be invoiced.
+                    const k = data.charged_count;
+                    chargeWarning.style.display = k ? '' : 'none';
+                    chargeWarning.querySelector('span').textContent = k
+                        ? `${k === data.count ? (k === 1 ? 'This booking is' : 'All of these are') : `${k} of these ${k === 1 ? 'is' : 'are'}`} ` +
+                          'inside the cancellation notice period and will be charged.'
+                        : '';
                     listEl.innerHTML = data.bookings.map(b =>
                         `<div class="d-flex align-items-center gap-2 py-1 border-bottom small last-child-no-border">
-                        <span class="text-muted" style="width:70px;">${b.date}</span>
-                        <span class="badge bg-secondary fw-normal">${b.slot}</span>
-                        ${b.dog ? `<span class="text-muted">· ${b.dog}</span>` : ''}
+                        <span class="text-muted" style="width:70px;">${escHtml(b.date)}</span>
+                        <span class="badge bg-secondary fw-normal">${escHtml(b.slot)}</span>
+                        ${b.is_drop_in ? '<span class="text-primary"><i class="bi bi-house-door-fill me-1"></i>Drop-in</span>' : ''}
+                        ${b.dog ? `<span class="text-muted">· ${escHtml(b.dog)}</span>` : ''}
+                        ${b.charged ? '<span class="badge fw-normal ms-auto" style="background:#fff3cd;color:#92400e;">Charged</span>' : ''}
                     </div>`
                     ).join('');
                     step1.style.display = 'none';
@@ -960,7 +976,7 @@
                 })
                 .catch(() => {
                     previewBtn.disabled = false;
-                    previewBtn.innerHTML = 'Preview affected walks<i class="bi bi-arrow-right ms-1"></i>';
+                    previewBtn.innerHTML = PREVIEW_LABEL;
                     step1Err.textContent = 'Network error — please try again.';
                     step1Err.style.display = '';
                 });
@@ -987,7 +1003,7 @@
                     confirmBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Cancel all';
                     if (data.success) {
                         const n = data.cancelled_count;
-                        successMsg.textContent = `${n} walk${n !== 1 ? 's' : ''} cancelled successfully.`;
+                        successMsg.textContent = `${plural(n, 'booking')} cancelled successfully.`;
                         step2.style.display = 'none';
                         step3.style.display = '';
                     } else {

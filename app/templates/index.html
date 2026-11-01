@@ -225,7 +225,7 @@
 
                     {# Step 1 — date range picker #}
                     <div id="pause-step-1">
-                        <p class="text-muted small mb-3">Going away? Cancel all walks in a date range at once.</p>
+                        <p class="text-muted small mb-3">Going away? Cancel all walks and drop-ins in a date range at once.</p>
                         <div class="row g-2 mb-3">
                             <div class="col-6">
                                 <label class="form-label small fw-semibold mb-1">From</label>
@@ -253,7 +253,7 @@
                         </div>
                         <button class="btn btn-sm w-100 fw-semibold" id="pause-preview-btn" disabled
                             style="background:#fff3cd;border:1px solid #f59e0b;color:#92400e;">
-                            Preview affected walks<i class="bi bi-arrow-right ms-1"></i>
+                            Preview affected bookings<i class="bi bi-arrow-right ms-1"></i>
                         </button>
                         <div id="pause-step1-error" class="text-danger small mt-2" style="display:none;"></div>
                     </div>
@@ -261,6 +261,10 @@
                     {# Step 2 — preview + confirm #}
                     <div id="pause-step-2" style="display:none;">
                         <p class="small fw-semibold mb-2" id="pause-preview-summary"></p>
+                        <div id="pause-charge-warning" class="small rounded p-2 mb-2"
+                            style="display:none;background:#fff3cd;border:1px solid #f59e0b;color:#92400e;">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i><span></span>
+                        </div>
                         <div id="pause-preview-list" class="mb-3 rounded"
                             style="max-height:180px;overflow-y:auto;border:1px solid #E5E5E5;background:#FAFAFA;padding:0.5rem;">
                         </div>
