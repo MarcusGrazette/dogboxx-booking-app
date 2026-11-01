@@ -3,6 +3,7 @@
  */
 (function () {
     const PAGE_CONFIG = JSON.parse(document.getElementById('page-config').textContent);
+    BookingsList.configure({ dayBookingsUrl: PAGE_CONFIG.dayBookingsUrl });
 
     // ─── Greeting ────────────────────────────────────────────────
     (function () {
@@ -82,7 +83,7 @@
                 fetchAvailability();
                 updateRecurringEndMax();
                 renderRecurPreview();
-                applyDateFilter(dateStr);
+                BookingsList.applyDateFilter(dateStr);
             },
             onMonthChange(year, month) {
                 loadCalendarData(year, month);
@@ -500,109 +501,19 @@
             }
         });
 
-        // ─── Walk pagination ──────────────────────────────────────
-        const PAGE_SIZE = 10;
-        const walkPages = {}; // dogId → current page (0-indexed)
-
-        function renderWalkPage(dogId) {
-            if (filterDate) return; // filter controls visibility instead
-            const list = document.getElementById(`bookings-list-${dogId}`);
-            if (!list) return;
-            const total = parseInt(list.dataset.total, 10);
-            const page = walkPages[dogId] || 0;
-            const start = page * PAGE_SIZE;
-            const end = Math.min(start + PAGE_SIZE, total);
-
-            list.querySelectorAll('li[data-walk-idx]').forEach(li => {
-                const idx = parseInt(li.dataset.walkIdx, 10);
-                li.classList.toggle('d-none', idx < start || idx >= end);
-            });
-
-            const label = document.getElementById(`walk-page-label-${dogId}`);
-            const prevBtn = document.querySelector(`.walk-prev-btn[data-dog-id="${dogId}"]`);
-            const nextBtn = document.querySelector(`.walk-next-btn[data-dog-id="${dogId}"]`);
-
-            if (label) label.textContent = `${start + 1} – ${end} of ${total}`;
-            if (prevBtn) prevBtn.disabled = (page === 0);
-            if (nextBtn) nextBtn.disabled = (end >= total);
-        }
-
+        // ─── Walk pagination + date filter (client-bookings-list.js) ─
         document.querySelectorAll('.walk-prev-btn, .walk-next-btn').forEach(btn => {
             btn.addEventListener('click', function () {
                 const dogId = this.getAttribute('data-dog-id');
-                const isPrev = this.classList.contains('walk-prev-btn');
-                walkPages[dogId] = (walkPages[dogId] || 0) + (isPrev ? -1 : 1);
-                renderWalkPage(dogId);
+                BookingsList.turnPage(dogId, this.classList.contains('walk-prev-btn') ? -1 : 1);
                 // Scroll back to the dog card header
                 const card = document.getElementById(`bookings-list-${dogId}`);
                 if (card) card.closest('.card').scrollIntoView({ behavior: 'smooth', block: 'start' });
             });
         });
 
-        // ─── Date filter ─────────────────────────────────────────
-        const filterBar = document.getElementById('date-filter-bar');
-        const filterLabel = document.getElementById('date-filter-label');
+        const clearDateFilter = BookingsList.clearDateFilter;
         const filterClear = document.getElementById('date-filter-clear');
-
-        function applyDateFilter(isoDate) {
-            filterDate = isoDate;
-            const d = new Date(isoDate + 'T00:00:00');
-            const label = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-            filterLabel.textContent = label;
-            filterBar.style.display = '';
-
-            document.querySelectorAll('[id^="bookings-list-"]').forEach(list => {
-                const dogId = list.dataset.dogId;
-                let matchCount = 0;
-
-                list.querySelectorAll('li[data-date]').forEach(li => {
-                    const matches = li.dataset.date === isoDate;
-                    li.classList.toggle('d-none', !matches);
-                    if (matches) matchCount++;
-                });
-
-                const pager = document.getElementById(`walk-pager-${dogId}`);
-                if (pager) pager.style.display = 'none';
-
-                const subtitle = document.getElementById(`dog-subtitle-${dogId}`);
-                if (subtitle) subtitle.textContent = label;
-
-                const filterEmpty = document.getElementById(`dog-filter-empty-${dogId}`);
-                if (filterEmpty) {
-                    filterEmpty.style.display = matchCount === 0 ? '' : 'none';
-                    if (matchCount === 0) {
-                        filterEmpty.querySelector('p').innerHTML =
-                            `<i class="bi bi-calendar2-x me-2"></i>No bookings on ${label}. ` +
-                            `<button type="button" class="btn btn-link p-0 border-0 align-baseline inline-filter-clear" ` +
-                            `style="font-size:inherit;color:#E02FAC;vertical-align:baseline;">Clear the filter</button> to see all bookings.`;
-                    }
-                }
-            });
-        }
-
-        function clearDateFilter() {
-            filterDate = null;
-            filterBar.style.display = 'none';
-
-            document.querySelectorAll('[id^="bookings-list-"]').forEach(list => {
-                const dogId = list.dataset.dogId;
-
-                const subtitle = document.getElementById(`dog-subtitle-${dogId}`);
-                if (subtitle) subtitle.textContent = 'Upcoming walks';
-
-                const filterEmpty = document.getElementById(`dog-filter-empty-${dogId}`);
-                if (filterEmpty) filterEmpty.style.display = 'none';
-
-                // Re-hide past bookings that may have been revealed by the filter
-                list.querySelectorAll('li[data-past]').forEach(li => li.classList.add('d-none'));
-
-                const pager = document.getElementById(`walk-pager-${dogId}`);
-                if (pager) pager.style.display = '';
-
-                renderWalkPage(dogId);
-            });
-        }
-
         filterClear.addEventListener('click', clearDateFilter);
         document.addEventListener('click', e => {
             if (e.target.closest('.inline-filter-clear')) clearDateFilter();
@@ -656,116 +567,8 @@
 
     }); // DOMContentLoaded
 
-    // filterDate is script-level so injectBooking (outside DOMContentLoaded) can read it
-    let filterDate = null;
-
-    // ─── Inject a new booking row into the DOM ───────────────────────────────────
     function injectBooking(booking) {
-        const container = document.getElementById(`dog-bookings-${booking.dog_id}`);
-        if (!container) { window.location.reload(); return; }
-
-        // If showing empty state, replace it with a fresh list
-        const empty = document.getElementById(`dog-empty-${booking.dog_id}`);
-        if (empty) {
-            empty.remove();
-            const ul = document.createElement('ul');
-            ul.className = 'list-group list-group-flush';
-            ul.id = `bookings-list-${booking.dog_id}`;
-            ul.setAttribute('data-dog-id', booking.dog_id);
-            ul.setAttribute('data-total', '0');
-            container.appendChild(ul);
-        }
-
-        const list = document.getElementById(`bookings-list-${booking.dog_id}`);
-        if (!list) { window.location.reload(); return; }
-
-        // Build status badge
-        const badgeHtml = booking.status === 'waitlisted'
-            ? `<span class="badge rounded-pill text-bg-info py-2 text-center" style="min-width:90px;">Waitlisted</span>`
-            : booking.status === 'confirmed'
-                ? `<span class="badge rounded-pill text-bg-success py-2 text-center" style="min-width:90px;">Confirmed</span>`
-                : `<span class="badge rounded-pill py-2 text-center" style="min-width:90px; background-color:#fff3cd; color:#856404;">Requested</span>`;
-
-        // "New" badge — fades out after 4s
-        const newBadge = `<span class="badge bg-pink ms-1 new-booking-badge"
-            style="background:#E02FAC;font-size:0.7em;vertical-align:middle;
-                   transition:opacity 0.6s ease;">New</span>`;
-
-        // Walker name (confirmed bookings)
-        const walkerLabel = (booking.status === 'confirmed' && booking.walker_name)
-            ? ` <span class="text-muted">(${booking.walker_name})</span>` : '';
-
-        // Drop-in label
-        const dropInLabel = booking.is_drop_in
-            ? `<i class="bi bi-house-door-fill text-primary me-1"></i>Drop-in · ` : '';
-
-        // (pickup notes icon intentionally omitted — pencil button handles this)
-
-        // Re-index existing items
-        list.querySelectorAll('li[data-walk-idx]').forEach(el => {
-            el.setAttribute('data-walk-idx', String(parseInt(el.getAttribute('data-walk-idx'), 10) + 1));
-        });
-
-        const li = document.createElement('li');
-        li.className = 'list-group-item px-0 py-3 border-bottom d-flex align-items-center justify-content-between gap-2';
-        li.setAttribute('data-walk-idx', '0');
-        if (booking.date_iso) li.setAttribute('data-date', booking.date_iso);
-        if (filterDate && booking.date_iso !== filterDate) li.classList.add('d-none');
-
-        // If a filter is active for this exact date, dismiss the "no bookings" empty state
-        if (filterDate && booking.date_iso === filterDate) {
-            const filterEmpty = document.getElementById(`dog-filter-empty-${booking.dog_id}`);
-            if (filterEmpty) filterEmpty.style.display = 'none';
-        }
-
-        li.innerHTML = `
-        <div class="d-flex align-items-center gap-3">
-            ${badgeHtml}
-            <div>
-                <div class="fw-semibold small">${booking.date_display}${newBadge}</div>
-                <div class="text-muted" style="font-size:0.78rem;">${dropInLabel}${booking.slot}${walkerLabel}</div>
-            </div>
-        </div>
-        <div class="d-flex align-items-center gap-3">
-            <button class="btn btn-link p-1 note-booking-btn text-secondary"
-                    data-booking-id="${booking.id}"
-                    data-booking-slot="${booking.slot}"
-                    data-booking-date="${booking.date_display}"
-                    data-current-note=""
-                    title="Add note"
-                    style="line-height:1;font-size:1.1rem;">
-                <i class="bi bi-pencil-square"></i>
-            </button>
-            <button class="btn btn-link p-1 cancel-booking-btn text-danger"
-                    data-booking-id="${booking.id}"
-                    data-booking-slot="${booking.slot}"
-                    data-booking-date="${booking.date_display}"
-                    data-booking-date-iso="${booking.date_iso}"
-                    data-booking-status="${booking.status}"
-                    data-is-drop-in="${booking.is_drop_in ? 'true' : 'false'}"
-                    title="Cancel booking"
-                    style="line-height:1;font-size:1.1rem;">
-                <i class="bi bi-x-circle"></i>
-            </button>
-        </div>`;
-
-        // Animate in
-        li.style.opacity = '0';
-        li.style.transition = 'opacity 0.3s ease';
-        list.insertBefore(li, list.firstChild);
-        requestAnimationFrame(() => { li.style.opacity = '1'; });
-
-        // Fade out "New" badge after 4s
-        setTimeout(() => {
-            const badge = li.querySelector('.new-booking-badge');
-            if (badge) {
-                badge.style.opacity = '0';
-                setTimeout(() => badge.remove(), 600);
-            }
-        }, 4000);
-
-        // Update total count
-        list.setAttribute('data-total', String(parseInt(list.getAttribute('data-total'), 10) + 1));
+        if (!BookingsList.injectBooking(booking)) window.location.reload();
     }
 
     // ─── Booking notes ───────────────────────────────────────────────────────────
@@ -856,17 +659,7 @@
             .then(data => {
                 if (data.success) {
                     const item = buttonElement.closest('li');
-                    if (item) {
-                        // Decrement data-total so pagination stays accurate
-                        const list = item.closest('ul[data-total]');
-                        if (list) {
-                            const curr = parseInt(list.getAttribute('data-total'), 10);
-                            if (curr > 0) list.setAttribute('data-total', String(curr - 1));
-                        }
-                        item.style.transition = 'opacity 0.3s ease';
-                        item.style.opacity = '0';
-                        setTimeout(() => item.remove(), 300);
-                    }
+                    if (item) BookingsList.removeRow(item);
                     showToast('Booking cancelled.', 'info');
                 } else {
                     buttonElement.disabled = false;
@@ -902,9 +695,6 @@
 
         const PREVIEW_LABEL = 'Preview affected bookings<i class="bi bi-arrow-right ms-1"></i>';
         const plural = (n, word) => `${n} ${word}${n !== 1 ? 's' : ''}`;
-        const escHtml = s => String(s).replace(/[&<>"']/g, c => (
-            { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
         // Start date must be strictly tomorrow or later
         const tomorrowStr = DogBoxxDates.addDays(DogBoxxDates.today(), 1);
         startEl.min = tomorrowStr;
@@ -964,10 +754,10 @@
                         : '';
                     listEl.innerHTML = data.bookings.map(b =>
                         `<div class="d-flex align-items-center gap-2 py-1 border-bottom small last-child-no-border">
-                        <span class="text-muted" style="width:70px;">${escHtml(b.date)}</span>
-                        <span class="badge bg-secondary fw-normal">${escHtml(b.slot)}</span>
+                        <span class="text-muted" style="width:70px;">${BookingsList.escHtml(b.date)}</span>
+                        <span class="badge bg-secondary fw-normal">${BookingsList.escHtml(b.slot)}</span>
                         ${b.is_drop_in ? '<span class="text-primary"><i class="bi bi-house-door-fill me-1"></i>Drop-in</span>' : ''}
-                        ${b.dog ? `<span class="text-muted">· ${escHtml(b.dog)}</span>` : ''}
+                        ${b.dog ? `<span class="text-muted">· ${BookingsList.escHtml(b.dog)}</span>` : ''}
                         ${b.charged ? '<span class="badge fw-normal ms-auto" style="background:#fff3cd;color:#92400e;">Charged</span>' : ''}
                     </div>`
                     ).join('');

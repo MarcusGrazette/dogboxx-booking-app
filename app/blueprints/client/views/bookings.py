@@ -61,6 +61,12 @@ def _resolve_dog(user_dogs, requested_id):
     return user_dogs[0]
 
 
+def _booking_sort_key(b):
+    """Chronological, Morning before Afternoon on the same day — the order
+    client-home.js's refreshList() keeps the list in."""
+    return (b.date, SLOT_ORDER.get(b.slot, len(SLOT_ORDER)))
+
+
 @client_bp.route("/", methods=["GET", "POST"])
 @login_required
 def index():
@@ -80,25 +86,23 @@ def index():
     # The user's dogs (primary or co-owned), minus deleted dogs
     user_dogs = get_accessible_dogs(current_user.id)
 
-    # Return all non-cancelled bookings (past and upcoming) for date-filter support
+    # Upcoming (today onwards) non-cancelled bookings only. Past days are
+    # fetched one at a time from day_bookings when the client taps a past
+    # calendar date, so this page doesn't grow with the client's history.
     today = local_today()
     _index_dog_ids = [d.id for d in user_dogs]
-    upcoming_bookings_query = Booking.query.options(
+    upcoming_bookings = Booking.query.options(
         joinedload(Booking.walker).joinedload(Walker.user),
         joinedload(Booking.service_type),
     ).filter(
         Booking.dog_id.in_(_index_dog_ids),
+        Booking.date >= today,
         Booking.status.notin_(['cancelled', 'rejected']),
-    ).order_by(Booking.date.asc())
-
-    upcoming_bookings = list(upcoming_bookings_query)
+    ).all()
+    upcoming_bookings.sort(key=_booking_sort_key)
     for b in upcoming_bookings:
-        if b.date:
-            b.date_display = b.date.strftime("%a %d %b")
-        else:
-            b.date_display = None
+        b.date_display = b.date.strftime("%a %d %b")
         b.is_drop_in = b.service_type and b.service_type.slug == ServiceType.DROP_IN
-        b.is_past = (b.date < today) if b.date else False
 
     form = BookingForm()
     if form.validate_on_submit():
@@ -623,7 +627,7 @@ def _pause_scope(start_raw, end_raw, slots_raw):
     if len(slot_filter) == 1:
         q = q.filter(Booking.slot == slot_filter[0])
     bookings = q.all()
-    bookings.sort(key=lambda b: (b.date, SLOT_ORDER.get(b.slot, len(SLOT_ORDER))))
+    bookings.sort(key=_booking_sort_key)
     return bookings, None
 
 
@@ -822,6 +826,41 @@ def calendar_data(year, month):
     closed_dates = [c.date.strftime('%Y-%m-%d') for c in closures]
 
     return jsonify(success=True, dates=dates, closed_dates=closed_dates)
+
+
+@client_bp.route("/day_bookings/<date_iso>")
+@login_required
+def day_bookings(date_iso):
+    """Return this client's bookings on one date, for the home page's
+    calendar filter when the client taps a past date (the page itself only
+    carries upcoming bookings). Same dog access and statuses as
+    calendar_data."""
+    try:
+        day = date_type.fromisoformat(date_iso)
+    except ValueError:
+        return jsonify(success=False, message="Invalid date"), 400
+
+    bookings = Booking.query.options(
+        joinedload(Booking.walker).joinedload(Walker.user),
+        joinedload(Booking.service_type),
+    ).filter(
+        Booking.dog_id.in_(get_accessible_dog_ids(current_user.id)),
+        Booking.date == day,
+        Booking.status.notin_(['cancelled', 'rejected']),
+    ).all()
+    bookings.sort(key=_booking_sort_key)
+
+    return jsonify(success=True, date=day.isoformat(), bookings=[{
+        'id':           b.id,
+        'dog_id':       b.dog_id,
+        'date_display': b.date.strftime("%a %d %b"),
+        'slot':         b.slot,
+        'status':       b.status,
+        'walker_name':  (b.walker.user.firstname
+                         if b.status == 'confirmed' and b.walker and b.walker.user else None),
+        'is_drop_in':   bool(b.service_type and b.service_type.slug == ServiceType.DROP_IN),
+        'note':         b.client_notes or '',
+    } for b in bookings])
 
 
 @client_bp.route("/recurring_booking", methods=["POST"])

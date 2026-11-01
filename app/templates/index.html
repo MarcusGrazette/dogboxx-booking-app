@@ -327,18 +327,17 @@
                 </div>
 
                 {% set dog_bookings = bookings | selectattr('dog_id', 'equalto', dog.id) | list if bookings else [] %}
-                {% set upcoming_dog_bookings = dog_bookings | rejectattr('is_past') | list %}
-                {% set past_dog_bookings = dog_bookings | selectattr('is_past') | list %}
 
+                {# Upcoming bookings only. client-bookings-list.js's refreshList() owns order,
+                   data-walk-idx, data-total, the pager and the empty state after any
+                   change; past days are fetched into past-bookings-list on demand. #}
                 <div id="dog-bookings-{{ dog.id }}" data-dog-id="{{ dog.id }}">
-                    {% if dog_bookings %}
                     <ul class="list-group list-group-flush" id="bookings-list-{{ dog.id }}" data-dog-id="{{ dog.id }}"
-                        data-total="{{ upcoming_dog_bookings | length }}">
-
-                        {# ── Upcoming bookings (visible by default) ── #}
-                        {% for booking in upcoming_dog_bookings %}
+                        data-bookings-list data-total="{{ dog_bookings | length }}">
+                        {% for booking in dog_bookings %}
                         <li class="list-group-item px-0 py-3 border-bottom d-flex align-items-center justify-content-between gap-2{% if loop.index0 >= 10 %} d-none{% endif %}"
-                            data-walk-idx="{{ loop.index0 }}" data-date="{{ booking.date.isoformat() }}">
+                            data-walk-idx="{{ loop.index0 }}" data-date="{{ booking.date.isoformat() }}"
+                            data-slot="{{ booking.slot }}">
                             <div class="d-flex align-items-center gap-3">
                                 <!-- Status pill -->
                                 {% if booking.status == 'confirmed' %}
@@ -389,91 +388,36 @@
                             </div>
                         </li>
                         {% endfor %}
-
-                        {# ── Past bookings (hidden by default, revealed when a past date is selected) ── #}
-                        {% for booking in past_dog_bookings %}
-                        <li class="list-group-item px-0 py-3 border-bottom d-flex align-items-center justify-content-between gap-2 d-none"
-                            data-past="true" data-date="{{ booking.date.isoformat() }}">
-                            <div class="d-flex align-items-center gap-3">
-                                <!-- Status pill -->
-                                {% if booking.status == 'confirmed' %}
-                                <span class="badge rounded-pill text-bg-success py-2 text-center"
-                                    style="min-width:90px;">Confirmed</span>
-                                {% elif booking.status == 'requested' %}
-                                <span class="badge rounded-pill py-2 text-center"
-                                    style="min-width:90px; background-color:#fff3cd; color:#856404;">Requested</span>
-                                {% elif booking.status == 'waitlisted' %}
-                                <span class="badge rounded-pill text-bg-info py-2 text-center"
-                                    style="min-width:90px;">Waitlisted</span>
-                                {% endif %}
-                                <!-- Date + slot + service type -->
-                                <div>
-                                    <div class="fw-semibold small">{{ booking.date_display }}</div>
-                                    <div class="text-muted" style="font-size: 0.78rem;">
-                                        {% if booking.is_drop_in %}
-                                        <i class="bi bi-house-door-fill text-primary me-1"
-                                            title="Drop-in visit"></i>Drop-in ·
-                                        {% endif %}
-                                        {{ booking.slot | capitalize }}
-                                        {% if booking.status == 'confirmed' and booking.walker %}
-                                        <span class="text-muted">({{ booking.walker.user.firstname }})</span>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            </div>
-                            <!-- Note button only — no cancel for past bookings -->
-                            <div class="d-flex align-items-center gap-3">
-                                <button class="btn btn-link p-1 note-booking-btn text-secondary"
-                                    data-booking-id="{{ booking.id }}" data-booking-slot="{{ booking.slot }}"
-                                    data-booking-date="{{ booking.date_display }}"
-                                    data-current-note="{{ booking.client_notes or '' }}"
-                                    title="{{ 'Edit note' if booking.client_notes else 'Add note' }}"
-                                    style="line-height: 1; font-size: 1.1rem;">
-                                    <i
-                                        class="bi bi-{{ 'pencil-square text-primary' if booking.client_notes else 'pencil-square' }}"></i>
-                                </button>
-                            </div>
-                        </li>
-                        {% endfor %}
-
                     </ul>
+
+                    {# Rows for a tapped past date, filled by client-bookings-list.js #}
+                    <ul class="list-group list-group-flush" id="past-bookings-list-{{ dog.id }}"></ul>
 
                     <div id="dog-filter-empty-{{ dog.id }}" class="rounded p-3 mt-1 mb-1"
                         style="display:none;background:#fafafa;border:1px solid #E5E5E5;">
-                        <p class="mb-0 small" style="color:#888;"></p>
+                        <p class="mb-0 small" style="color:#888;" id="dog-filter-empty-text-{{ dog.id }}"></p>
                     </div>
 
-                    {% if upcoming_dog_bookings | length > 10 %}
-                    <div class="d-flex align-items-center justify-content-between mt-2 pt-1"
+                    <div class="d-flex align-items-center justify-content-between mt-2 pt-1{% if dog_bookings | length <= 10 %} d-none{% endif %}"
                         id="walk-pager-{{ dog.id }}">
                         <button class="btn btn-link btn-sm text-muted px-0 walk-prev-btn" data-dog-id="{{ dog.id }}"
-                            disabled>
+                            id="walk-prev-{{ dog.id }}" disabled>
                             <i class="bi bi-chevron-left me-1"></i>Previous
                         </button>
                         <span class="text-muted small" id="walk-page-label-{{ dog.id }}">
-                            1 – {{ [10, upcoming_dog_bookings | length] | min }} of {{ upcoming_dog_bookings | length }}
+                            1 – {{ [10, dog_bookings | length] | min }} of {{ dog_bookings | length }}
                         </span>
-                        <button class="btn btn-link btn-sm text-muted px-0 walk-next-btn" data-dog-id="{{ dog.id }}">
+                        <button class="btn btn-link btn-sm text-muted px-0 walk-next-btn" data-dog-id="{{ dog.id }}"
+                            id="walk-next-{{ dog.id }}">
                             Next<i class="bi bi-chevron-right ms-1"></i>
                         </button>
                     </div>
-                    {% endif %}
 
-                    {% if not upcoming_dog_bookings %}
-                    <div class="text-center py-4">
+                    <div class="text-center py-4{% if dog_bookings %} d-none{% endif %}" id="dog-empty-{{ dog.id }}">
                         <i class="bi bi-calendar2-x fs-2 text-muted mb-2 d-block"></i>
                         <p class="text-muted small mb-0">No upcoming walks for {{ dog.name }}.<br>Use the form to
                             request one!</p>
                     </div>
-                    {% endif %}
-
-                    {% else %}
-                    <div class="text-center py-4" id="dog-empty-{{ dog.id }}">
-                        <i class="bi bi-calendar2-x fs-2 text-muted mb-2 d-block"></i>
-                        <p class="text-muted small mb-0">No upcoming walks for {{ dog.name }}.<br>Use the form to
-                            request one!</p>
-                    </div>
-                    {% endif %}
                 </div>{# /dog-bookings-{id} #}
             </div>
 
@@ -615,6 +559,7 @@
 {
   "userFirstname": {{ current_user.firstname | tojson }},
   "calendarDataUrl": "{{ url_for('client.calendar_data', year=0, month=0) }}",
+  "dayBookingsUrl": "{{ url_for('client.day_bookings', date_iso='0000-00-00') }}",
   "slotAvailabilityUrl": "{{ url_for('api.slot_availability') }}",
   "recurringBookingUrl": "{{ url_for('client.recurring_booking') }}",
   "bookDropInUrl": "{{ url_for('client.book_drop_in') }}",
@@ -625,5 +570,6 @@
   "pauseWalksUrl": "{{ url_for('client.pause_walks') }}"
 }
 </script>
+<script src="{{ url_for('static', filename='js/client-bookings-list.js') }}"></script>
 <script src="{{ url_for('static', filename='js/client-home.js') }}"></script>
 {% endblock %}
