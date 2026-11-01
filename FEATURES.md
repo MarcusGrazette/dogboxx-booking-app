@@ -25,6 +25,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 92 | P3 | L | 📋 | **Simplify 7 — booking request validation** | One validation/conflict path for the walk and drop-in booking routes; ship alone. |
 | 94 | P3 | M | 📋 | **Simplify 8 — one month calendar** | The drop-in board uses the dashboard's month calendar (compact, with drop-in counts) instead of its own. |
 | 95 | P3 | S | 📋 | **Simplify 9 — retire the old assignment page** | Remove the unlinked standalone walk board and its unused charts; walks are assigned from the dashboard. |
+| 107 | P3 | S | 🔲 | **Retire CSV client import** | Remove the unused bulk CSV import; clients are added one at a time from the new-client form. |
 | 99 | P3 | S | 🔲 | **Prune old backups with a storage rule** | Old database backups expire automatically in storage, so the nightly backup job only needs permission to upload. |
 | 101 | P3 | L | 🔲 | **Nightly backup inside Railway** | Run the database backup as a Railway scheduled job over the private network, so the database needs no public connection. After #99. |
 | 105 | P3 | M | 🔲 | **Move the docs site to Zensical** | Material for MkDocs gets fixes only until May 2027 and won't support MkDocs 2.0; switch to its successor, Zensical, before then. Check that image and diagram zoom still work. |

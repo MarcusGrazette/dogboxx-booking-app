@@ -450,6 +450,19 @@ def _blocks_owner_email_change(form, user):
     return False
 
 
+def _extra_dog_length_error(form_data):
+    """Error message if an additional dog's raw edit-client fields exceed
+    their columns (Dog.breed String(100), Dog.allergies String(200)), else
+    None. Those fields aren't WTForms fields, so nothing else bounds them, and
+    an overflow would only fail at commit. Checked before any mutation."""
+    for key in form_data.keys():
+        if key.startswith('dog_breed_') and len(form_data.get(key, '').strip()) > 100:
+            return "Breed must be 100 characters or fewer."
+        if key.startswith('dog_allergies_') and len(form_data.get(key, '').strip()) > 200:
+            return "Allergies must be 200 characters or fewer."
+    return None
+
+
 @admin_bp.route("/clients/<int:client_id>/edit", methods=["GET", "POST"])
 @login_required
 @admin_required
@@ -477,7 +490,12 @@ def edit_client(client_id):
 
     form = ClientCreateForm()
 
-    if form.validate_on_submit() and not _blocks_owner_email_change(form, user):
+    extra_dog_error = _extra_dog_length_error(request.form) if request.method == 'POST' else None
+    if extra_dog_error:
+        flash(extra_dog_error, "error")
+
+    if (form.validate_on_submit() and not _blocks_owner_email_change(form, user)
+            and not extra_dog_error):
         try:
             # Snapshots for activity_log.diff_fields — captured via getattr()
             # on the live objects before any mutation below, per the
