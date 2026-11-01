@@ -145,6 +145,9 @@ that simply fails to authenticate rather than touching any real data.
 Don't run two `pytest` processes against the test database at once — each run creates and
 drops the tables, so concurrent runs deadlock or fail spuriously.
 
+A few tests run browser JavaScript under **Node** (`tests/test_board_js.py`,
+`tests/test_london_date.py`). They're skipped if `node` isn't on your `PATH`; CI has it.
+
 ### What CI runs
 
 On every push and pull request to `main`/`develop`, GitHub Actions runs:
