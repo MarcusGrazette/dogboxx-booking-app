@@ -26,14 +26,14 @@ import datetime
 import pytest
 from werkzeug.security import generate_password_hash
 from decimal import Decimal
-from sqlalchemy import text
+from sqlalchemy import event, text
 
 from app import db
 from app.models import (
     User, Client, Dog, DogOwner, Walker, ServiceType,
     Booking, PricingConfig,
 )
-from app.utils.invoicing import invoice_for_client as _invoice_for_client
+from app.utils.invoicing import invoice_for_client as _invoice_for_client, invoices_for_clients
 from app.utils.pricing import build_double_slot_discounts
 
 
@@ -1306,3 +1306,82 @@ class TestRevenueMatchesInvoices:
         assert data['total_revenue'] == 143.00
         assert data['cancel_fees'] == 36.00
         assert data['total_walks'] == 9
+
+
+class TestInvoicesForClientsBatch:
+    """/admin/invoicing prices every client with invoices_for_clients (two
+    queries in all) instead of invoice_for_client per client (two each) —
+    develop review #20. Same numbers, flat query count."""
+
+    def _admin(self):
+        db.session.add(User(firstname='Admin', lastname='User', email='batch_admin@test.com',
+                            role='walker', is_admin=True, active=True,
+                            hashed_password=generate_password_hash('Testpass1!')))
+
+    def _login(self, client):
+        client.post('/auth/login', data={'email': 'batch_admin@test.com',
+                                         'password': 'Testpass1!'}, follow_redirects=True)
+
+    def _overview_queries(self, client):
+        statements = []
+        listener = lambda *args: statements.append(args[2])
+        event.listen(db.engine, 'before_cursor_execute', listener)
+        try:
+            resp = client.get('/admin/invoicing?month=2026-09')
+        finally:
+            event.remove(db.engine, 'before_cursor_execute', listener)
+        assert resp.status_code == 200
+        return len(statements)
+
+    def test_batch_matches_one_client_at_a_time(self, app):
+        with app.app_context():
+            a, b = TestRevenueMatchesInvoices()._september()
+            walk = ServiceType.query.filter_by(slug='group-walk').one()
+            # A two-dog household, one dog co-owned by a secondary who must not
+            # be billed for it, and a client with no dog at all.
+            c, dog_c1 = make_client_with_dog('batch_c@test.com')
+            dog_c2 = Dog(name='Second', breed='Mutt')
+            db.session.add(dog_c2)
+            db.session.flush()
+            db.session.add(DogOwner(dog_id=dog_c2.id, user_id=c.id, role='primary'))
+            co = make_user('batch_co@test.com')
+            db.session.add(Client(user_id=co.id, onboarding_completed=True))
+            db.session.add(DogOwner(dog_id=dog_c2.id, user_id=co.id, role='secondary'))
+            add_booking(c, dog_c1, walk, datetime.date(2026, 9, 21), 'Morning')
+            add_booking(co, dog_c2, walk, datetime.date(2026, 9, 21), 'Afternoon')
+            nodog = make_user('batch_nodog@test.com')
+            db.session.add(Client(user_id=nodog.id, onboarding_completed=True))
+            db.session.commit()
+
+            users = [a, b, c, co, nodog]
+            batch = invoices_for_clients([u.id for u in users], SEP_START, OCT_START, all_configs())
+            for u in users:
+                assert batch[u.id] == _invoice_for_client(u.id, SEP_START, OCT_START, all_configs())
+
+            # Anchored to the totals TestRevenueMatchesInvoices works out by hand.
+            assert batch[a.id]['subtotal'] == Decimal('90.00')
+            assert batch[b.id]['subtotal'] == Decimal('53.00')
+            # Two dogs' walks on one day — not a double (that's per dog).
+            assert batch[c.id]['subtotal'] == Decimal('24.00')
+            assert batch[c.id]['doubles'] == 0
+            assert batch[co.id] is None and batch[nodog.id] is None
+
+    def test_overview_query_count_does_not_grow_with_clients(self, app, client):
+        # Setup goes through the fixture's own session (no nested app context),
+        # so the requests below see these rows.
+        self._admin()
+        walk = make_walk_service()
+        make_pricing_config()
+
+        def add_clients(start, n):
+            for i in range(start, start + n):
+                u, dog = make_client_with_dog(f'batch_{i}@test.com')
+                add_booking(u, dog, walk, datetime.date(2026, 9, 7), 'Morning')
+            db.session.commit()
+
+        add_clients(0, 2)
+        self._login(client)
+        two = self._overview_queries(client)
+        add_clients(2, 6)
+        eight = self._overview_queries(client)
+        assert eight == two, f'{two} queries for 2 clients, {eight} for 8'

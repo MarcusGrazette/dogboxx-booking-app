@@ -27,7 +27,7 @@ Clients can:
 Admins can:
 - Confirm, cancel, and assign walkers to bookings on the walk and drop-in boards, with each walker's pickup order set automatically
 - Book on behalf of any client (one-off or recurring) and manage their dogs
-- Create and manage client accounts, including co-owners and CSV bulk import
+- Create and manage client accounts, including co-owners
 - Create walkers and manage their schedules, time off, and ad hoc availability, and see the whole week's roster
 - Generate monthly invoices with configurable pricing and discounts
 - Send newsletters and one-shot broadcasts to booked clients
@@ -85,7 +85,7 @@ app/
   blueprints/
     admin/          Admin routes — views/ package of domain modules (dashboard, board,
                     dogs, clients, walkers, invoicing, revenue, activity, closures,
-                    marketing, csv_import, daily_messages, weekly_overview)
+                    marketing, daily_messages, weekly_overview)
     auth/           Login, logout, password reset, unsubscribe
     client/         Client home, onboarding, bookings, profile
     walker/         Pickup list, daily/weekly views, dogs, profile, monthly summary

@@ -155,31 +155,61 @@ def invoice_for_client(user_id, month_start, month_end, all_configs):
       - Drop-ins: price_per_drop_in; no double discount; no weekly discount
 
     Returns None if the user has no primary dog (and therefore no bookings).
+    A thin wrapper over invoices_for_clients, so one client and the whole
+    overview are always priced by the same code.
     """
+    return invoices_for_clients([user_id], month_start, month_end, all_configs)[user_id]
 
-    dog_owner_ids = [
-        do.dog_id
-        for do in DogOwner.query.filter_by(user_id=user_id, role='primary').all()
-    ]
-    if not dog_owner_ids:
-        return None
+
+def invoices_for_clients(user_ids, month_start, month_end, all_configs):
+    """invoice_for_client for many clients at once: ``{user_id: invoice dict
+    or None}``, in two queries (primary ownership, then every booking for
+    those dogs) however many clients — the /admin/invoicing overview used to
+    run both queries once per client.
+
+    A client's invoice covers the dogs they are the primary owner of, exactly
+    as invoice_for_client always has.
+    """
+    user_ids = list(user_ids)
+    owners_by_dog = defaultdict(list)
+    for do in DogOwner.query.filter(DogOwner.user_id.in_(user_ids),
+                                    DogOwner.role == 'primary').all():
+        owners_by_dog[do.dog_id].append(do.user_id)
+    if not owners_by_dog:
+        return {uid: None for uid in user_ids}
 
     # Queried over the whole ISO weeks overlapping the month: a boundary week
     # qualifies for the weekly discount on all its walks (see
     # build_weekly_discounts). Everything else uses the in-month subset.
     weeks_from, weeks_to = iso_weeks_window(month_start, month_end)
-    week_bookings = (
+    week_bookings_by_user = defaultdict(list)
+    for b in (
         Booking.query
         .options(joinedload(Booking.dog), joinedload(Booking.service_type))
         .filter(
-            Booking.dog_id.in_(dog_owner_ids),
+            Booking.dog_id.in_(list(owners_by_dog)),
             Booking.date >= weeks_from,
             Booking.date < weeks_to,
             Booking.status.in_(Booking.INVOICE_STATUSES),
         )
-        .order_by(Booking.date, Booking.slot)
+        .order_by(Booking.date, Booking.slot, Booking.id)
         .all()
-    )
+    ):
+        for uid in owners_by_dog[b.dog_id]:
+            week_bookings_by_user[uid].append(b)
+
+    owners = {uid for uids in owners_by_dog.values() for uid in uids}
+    return {
+        uid: (_invoice_from_bookings(week_bookings_by_user[uid], month_start, month_end,
+                                     all_configs)
+              if uid in owners else None)
+        for uid in user_ids
+    }
+
+
+def _invoice_from_bookings(week_bookings, month_start, month_end, all_configs):
+    """The pricing itself, from one household's bookings over the ISO weeks
+    overlapping the month (no queries)."""
     bookings = [b for b in week_bookings if month_start <= b.date < month_end]
 
     confirmed, late_cancels = billable_bookings(bookings)
