@@ -25,7 +25,6 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 92 | P3 | L | 📋 | **Simplify 7 — booking request validation** | One validation/conflict path for the walk and drop-in booking routes; ship alone. |
 | 94 | P3 | M | 📋 | **Simplify 8 — one month calendar** | The drop-in board uses the dashboard's month calendar (compact, with drop-in counts) instead of its own. |
 | 95 | P3 | S | 📋 | **Simplify 9 — retire the old assignment page** | Remove the unlinked standalone walk board and its unused charts; walks are assigned from the dashboard. |
-| 107 | P3 | S | 🔲 | **Retire CSV client import** | Remove the unused bulk CSV import; clients are added one at a time from the new-client form. |
 | 99 | P3 | S | 🔲 | **Prune old backups with a storage rule** | Old database backups expire automatically in storage, so the nightly backup job only needs permission to upload. |
 | 101 | P3 | L | 🔲 | **Nightly backup inside Railway** | Run the database backup as a Railway scheduled job over the private network, so the database needs no public connection. After #99. |
 | 105 | P3 | M | 🔲 | **Move the docs site to Zensical** | Material for MkDocs gets fixes only until May 2027 and won't support MkDocs 2.0; switch to its successor, Zensical, before then. Check that image and diagram zoom still work. |
@@ -61,7 +60,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 23 | Dashboard | Headline stats, a 4-week booking chart and a walker availability grid. |
 | 26 | Invoicing | Monthly per-client invoices with configurable pricing, late-cancel billing and discounts. |
 | 27 | Multiple owners per dog | Primary/secondary owners; co-owners can book and view shared dogs. |
-| 28 | CSV client/dog import | Bulk-create clients and dogs from a CSV, with a per-row error report. |
+| 107 | CSV import retired | The unused bulk CSV client import is removed; clients are added one at a time from the new-client form. |
 | 34 | Multi-dog clients | Add further dogs to a client from the client detail page. |
 | 35 | Bulk booking operations | Preview-then-cancel a dog's upcoming bookings, filterable by service. |
 | 36 | Closures | Close a date or range: cancels bookings (with notices) and blocks new ones. |
@@ -141,6 +140,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 |---|---|---|
 | 7 | Capacity display for clients | An "available" indicator is enough. |
 | 25 | Standalone invoicing | Superseded by #26. |
+| 28 | CSV client/dog import | Shipped, never used; removed by #107. |
 | 83 | De-duplicate admin + walker notifications | Covered by #102: walkers no longer get booking notifications, so an admin who walks gets only the admin one. |
 | — | Firebase Auth | Overkill at this scale; Flask-Login is enough. |
 | — | Public self-registration | The business creates client accounts itself. |
