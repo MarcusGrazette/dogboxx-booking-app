@@ -8,7 +8,7 @@ from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
 from app.models import User, Dog, DogOwner
 from app import db
-from app.utils.invoicing import invoice_for_client as _invoice_for_client
+from app.utils.invoicing import invoice_for_client as _invoice_for_client, invoices_for_clients
 from app.utils.dates import local_today
 
 
@@ -59,7 +59,7 @@ def invoicing():
         .all()
     )
 
-    # Batch all DogOwner / Dog / secondary-User lookups — avoids ~2 queries per client
+    # Batch all DogOwner / Dog / secondary-User lookups — avoids per-client queries
     client_ids = [u.id for u in clients]
 
     primary_ownership_by_user = {
@@ -92,9 +92,12 @@ def invoicing():
             if user:
                 secondary_owners_by_dog[so.dog_id].append(user)
 
+    # Every client's invoice in two queries, not two per client.
+    invoices = invoices_for_clients(client_ids, month_start, month_end, all_configs)
+
     rows = []
     for u in clients:
-        inv = _invoice_for_client(u.id, month_start, month_end, all_configs)
+        inv = invoices[u.id]
         if inv is None or inv['total_billable'] == 0:
             continue
         primary_ownership = primary_ownership_by_user.get(u.id)
