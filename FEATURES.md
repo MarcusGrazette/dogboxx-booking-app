@@ -13,7 +13,6 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 58 | P3 | M | 📋 | **QuickBooks Online export** | Send monthly invoices to QBO — CSV export first, API push only if needed. |
 | 67 | P3 | L | 🔲 | **Progress indicator for large recurring bookings** | Warn before submitting a very long series; show progress while it's created. |
 | 69 | P3 | M | 🔲 | **Build pipeline hardening** | Tighten how the production image is built. |
-| 75 | P3 | L | 🔲 | **Locking consistency for closure and availability changes** | Make closures and availability changes coordinate with in-flight bookings. |
 | 72 | P3 | S | 🔲 | **Handle rate-limited push re-registration** | Back off quietly when push re-subscription is throttled. |
 | 82 | P3 | L | 📋 | **One typed invoice calculator** | Every billing page reads its numbers from one calculation instead of re-deriving them. |
 | 86 | P3 | M | 📋 | **Simplify 1 — dead code & one-offs** | Remove unused imports, scripts and pins; inline single-use helpers. |
@@ -44,6 +43,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 2 | Recurring bookings (client) | Date range + frequency, expanded server-side; skips weekends and duplicates. |
 | 5 | Duplicate-booking prevention | One booking per dog per slot per day, enforced by a database index. |
 | 8 | "Book both walks" | Book morning and afternoon in one action. |
+| 75 | Closures wait for in-flight bookings | A booking made at the same moment as a closure is either cancelled by it or refused — never left confirmed on a closed day. Walker-availability changes left as they are (rare overlap at this scale). |
 | 29 | Drop-in service | Morning/afternoon drop-in visits with their own board, walker flag and pricing. |
 | 78 | Booking lifecycle guards | Stale, repeated or simultaneous actions can't reopen or re-cancel a booking; never-confirmed cancellations aren't billed or warned about. |
 | 77 | Transaction integrity | A failed request can't leave partial changes behind. |
