@@ -8,7 +8,8 @@ against a small fake DOM and a fetch whose replies the test releases by hand:
 - a failed assign/unassign puts back only that booking: it must not undo
   another move made meanwhile (of that booking or another), nor repaint a
   date the admin has left
-- toast messages are plain text (server messages can contain names)
+- toasts go through the app-wide showToast (toast.js, which sets textContent),
+  passed the server's message unchanged
 """
 import json
 import pathlib
@@ -80,6 +81,10 @@ global.refreshPendingBadges = () => {};
 console.error = () => {};
 
 // fetch replies wait until the scenario releases them.
+// The app-wide toast (static/js/toast.js) — recorded, not rendered.
+const toasts = [];
+global.showToast = (msg, type) => toasts.push({ msg, type });
+
 const calls = [];
 global.fetch = (url, opts) => new Promise(resolve => {
     calls.push({ url, body: opts && opts.body ? JSON.parse(opts.body) : null,
@@ -92,7 +97,8 @@ const api = {
     calls, settle,
     lastCall: () => calls[calls.length - 1],
     boardText: () => columns().text(),
-    toastText: () => document.body.text(),
+    toasts,
+    toastText: () => toasts.map(t => t.msg).join(' | '),
     card(id) {
         let hit = null;
         columns().walk(el => { if (!hit && el.hasClass('board-card') && String(el.dataset.id) === String(id)) hit = el; });
@@ -132,7 +138,7 @@ const board = createBoard({
 (async () => {
     const scenario = new (Object.getPrototypeOf(async function () {}).constructor)('board', 'api', process.argv[2]);
     console.log(JSON.stringify(await scenario(board, api)));
-    process.exit(0);   // don't wait out the toasts' removal timers
+    process.exit(0);   // don't wait out pending timers
 })().catch(e => { process.stderr.write(String(e.stack || e)); process.exit(1); });
 """
 
@@ -286,7 +292,9 @@ def test_failed_unassign_puts_only_that_booking_back():
     assert got['bella'] == 7
 
 
-def test_toast_shows_server_message_as_text():
+def test_toast_passes_server_message_as_plain_text():
+    # The board hands the server's message to the app-wide showToast as-is;
+    # toast.js renders it with textContent, so a name like this stays text.
     got = _run(f"""
         board.setDate('2026-11-02');
         api.calls[0].reply({MONDAY});
@@ -294,10 +302,9 @@ def test_toast_shows_server_message_as_text():
         await api.assign(1, 7, 'Morning');
         api.calls[1].reply({{success: false, message: '<img src=x> is booked'}});
         await api.settle();
-        return api.toastText();
+        return api.toasts;
     """)
-    assert '&lt;img src=x&gt; is booked' in got
-    assert '<img' not in got
+    assert got == [{'msg': '<img src=x> is booked', 'type': 'danger'}]
 
 
 # ── Hint bar: short text + Note button (walk notes on phones) ────────────────

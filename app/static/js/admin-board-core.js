@@ -72,15 +72,9 @@
                 || state.assigned.find(b => b.id === id);
         }
 
-        // msg is plain text (server messages can contain dog and client names).
-        function showToast(msg, type) {
-            const el = document.createElement('div');
-            el.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
-            el.style.cssText = 'top:20px;right:20px;z-index:1055;max-width:380px;';
-            el.innerHTML = `${escHtml(msg)}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
-            document.body.appendChild(el);
-            setTimeout(() => el.parentNode?.removeChild(el), 4000);
-        }
+        // Toasts: the app-wide showToast (static/js/toast.js, loaded by
+        // admin_layout.html) — plain text, so server messages with dog and
+        // client names are safe.
 
         // ── Card rendering ────────────────────────────────────────────────────
         // Walk-note button: highlighted when the booking has a note, faded like
