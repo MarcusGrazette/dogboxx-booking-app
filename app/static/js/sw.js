@@ -36,7 +36,7 @@
 
 // ── Cache config ──────────────────────────────────────────────────────────────
 
-const CACHE_VERSION   = 'v47';
+const CACHE_VERSION   = 'v50';
 const CACHE_NAME      = `dogboxx-${CACHE_VERSION}`;
 const PAGE_CACHE_NAME = `dogboxx-pages-${CACHE_VERSION}`;
 

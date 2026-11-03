@@ -445,6 +445,26 @@ footer {
   to   { opacity: 0; transform: translateY(1.25rem) scale(0.92); }
 }
 
+/* ── Close buttons: a ✕ in a soft round chip ───────────────────────────────
+   Every modal's close button, plus .btn-close-soft where a bar needs the same
+   "close this" control (the board's selection bar). Distinct from the outline
+   bi-x-circle, which means decline / cancel a booking. Alert and toast close
+   buttons keep Bootstrap's look (they're positioned differently). */
+.modal .btn-close,
+.btn-close.btn-close-soft {
+  border-radius: 50%;
+  padding: 0.45em;
+  background-color: rgba(0, 0, 0, 0.06);
+  background-size: 0.7em;
+  opacity: 0.75;
+  transition: background-color 0.15s, opacity 0.15s;
+}
+.modal .btn-close:hover,
+.btn-close.btn-close-soft:hover {
+  background-color: rgba(0, 0, 0, 0.12);
+  opacity: 1;
+}
+
 /* ── Modifier pills (reused from admin board, available globally) ── */
 .modifier-pill {
   font-size: 0.65rem;

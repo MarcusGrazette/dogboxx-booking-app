@@ -333,4 +333,37 @@
 #selection-hint {
     transition: opacity 0.2s;
 }
+/* One line on phones: the hint text gives way (…) before the Note / Cancel
+   buttons do. */
+#hint-text {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* Dashboard Assign modal: while a modal inside the board is open (walk note,
+   decline, slot override) dim the board, since that modal's own backdrop is
+   drawn beneath the Assign modal (admin.html toggles .has-nested-modal). The
+   nested modal (z-index 1055) stacks above this overlay. Child combinators
+   only: the nested modals have their own .modal-content inside #assignModal. */
+#assignModal > .modal-dialog > .modal-content::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s linear;
+    z-index: 1050;  /* above the board's sticky headers, below nested modals (1055) */
+}
+#assignModal.has-nested-modal > .modal-dialog > .modal-content::after {
+    opacity: 1;
+}
+/* A walk with a note: the Note button fills, like the card pencil's
+   highlighted state. */
+#hint-note.has-note {
+    background: #C0258F;
+    color: #fff !important;
+}
 

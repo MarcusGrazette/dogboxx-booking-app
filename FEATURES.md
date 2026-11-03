@@ -16,7 +16,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 75 | P3 | L | 🔲 | **Locking consistency for closure and availability changes** | Make closures and availability changes coordinate with in-flight bookings. |
 | 72 | P3 | S | 🔲 | **Handle rate-limited push re-registration** | Back off quietly when push re-subscription is throttled. |
 | 82 | P3 | L | 📋 | **One typed invoice calculator** | Every billing page reads its numbers from one calculation instead of re-deriving them. |
-| 86 | P3 | M | 📋 | **Simplify 1 — dead code & one-offs** | Remove unused imports, scripts and pins; inline single-use helpers; use the shared toast on the board. |
+| 86 | P3 | M | 📋 | **Simplify 1 — dead code & one-offs** | Remove unused imports, scripts and pins; inline single-use helpers. |
 | 87 | P3 | M | 📋 | **Simplify 2 — capacity & board data** | One capacity/summary helper for walks and drop-ins; one board-data builder behind both board endpoints. |
 | 88 | P3 | M | 📋 | **Simplify 3 — shared utilities** | Shared email shell, dashboard chart payload, simpler link sanitizing and device detection. |
 | 89 | P3 | L | 📋 | **Simplify 4 — admin & walker view helpers** | Shared helpers for client detail, availability changes, bulk-cancel filters and profile photos. |
