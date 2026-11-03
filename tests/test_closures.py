@@ -7,12 +7,17 @@ out cancellations/notifications correctly across every date in the range.
 """
 import json
 import datetime
+import threading
+import time
 
 from werkzeug.security import generate_password_hash
 
 from app import db
+from app.blueprints.admin.views import closures as closures_module
+from app.services import booking_service
 from app.models import (
     User, Client, Walker, Dog, DogOwner, Booking, ServiceType, Notification, Closure,
+    WalkerSchedule,
 )
 
 
@@ -310,3 +315,115 @@ class TestClosureDateRange:
         row_count = html.count('id="closure-row-')
         assert row_count == 1, f"expected 1 collapsed row, found {row_count}"
         assert '3 days' in html
+
+
+class TestClosureVersusInFlightBooking:
+    """FEATURES #75: add_closure takes the same (service, date, slot) advisory
+    locks as create_booking(), so a closure and a booking on the same date
+    serialize instead of interleaving. Without the locks, a booking in flight
+    when the closure read its cancel list committed afterwards as 'confirmed'
+    on a closed day, never cancelled and never told.
+
+    Two real requests on separate connections, one test per interleaving —
+    the TestAssignWalkerConcurrencyRace pattern (test_admin_assign_walker.py).
+    """
+
+    def _setup(self, app):
+        monday = _next_weekday(0)
+        with app.app_context():
+            admin = _make_user('race_closure_admin@test.com', role='walker', is_admin=True)
+            client_u = _make_user('race_closure_client@test.com', role='client')
+            walker_u = _make_user('race_closure_walker@test.com', role='walker')
+            walker = Walker(user_id=walker_u.id)
+            db.session.add(walker); db.session.flush()
+            db.session.add(WalkerSchedule(
+                walker_id=walker.id, day_of_week=0, slot='Morning', active=True,
+            ))
+            db.session.add(Client(user_id=client_u.id, onboarding_completed=True))
+            db.session.add(ServiceType(
+                name='Group Walk', slug='group-walk',
+                capacity_model='walker_assigned', slot_type='morning_afternoon',
+                requires_walker=True, default_max_capacity=6, active=True,
+            ))
+            dog = Dog(name='Pip', breed='Whippet')
+            db.session.add(dog); db.session.flush()
+            db.session.add(DogOwner(dog_id=dog.id, user_id=client_u.id, role='primary'))
+            db.session.commit()
+            return monday, admin.email, client_u.email, dog.id
+
+    def _run_race(self, app, *, first, second, patch_target, patch_name):
+        """Run `first` until it hits `patch_name` on `patch_target`, start
+        `second`, give it time to block in Postgres, then let `first` finish."""
+        paused, release = threading.Event(), threading.Event()
+        orig = getattr(patch_target, patch_name)
+
+        def _paused(*a, **kw):
+            result = orig(*a, **kw)
+            paused.set()
+            release.wait(timeout=5)
+            return result
+
+        setattr(patch_target, patch_name, _paused)
+        try:
+            t_first = threading.Thread(target=first)
+            t_first.start()
+            assert paused.wait(timeout=5), 'first request never reached the paused point'
+            t_second = threading.Thread(target=second)
+            t_second.start()
+            time.sleep(0.5)  # let the second request reach Postgres and block
+            release.set()
+            t_first.join(timeout=10)
+            t_second.join(timeout=10)
+        finally:
+            setattr(patch_target, patch_name, orig)
+        assert not t_first.is_alive() and not t_second.is_alive(), 'a thread never finished — deadlock?'
+
+    def _requests(self, app, monday, admin_email, client_email, dog_id, results):
+        def book():
+            c = app.test_client()
+            _login(c, client_email)
+            resp = c.post('/book', data=json.dumps({
+                'date': monday.isoformat(), 'slot': 'Morning', 'dog_id': dog_id,
+            }), content_type='application/json')
+            results['book'] = (resp.status_code, resp.get_json())
+
+        def close():
+            c = app.test_client()
+            _login(c, admin_email)
+            resp = _post_closure(c, monday.isoformat())
+            results['close'] = (resp.status_code, resp.get_json())
+
+        return book, close
+
+    def test_booking_in_flight_when_closure_starts_is_cancelled(self, app):
+        monday, admin_email, client_email, dog_id = self._setup(app)
+        results = {}
+        book, close = self._requests(app, monday, admin_email, client_email, dog_id, results)
+
+        # Pause the booking under its advisory lock, after its capacity check
+        # found the day open — then the closure arrives.
+        self._run_race(app, first=book, second=close,
+                       patch_target=booking_service, patch_name='check_availability')
+
+        assert results['book'][0] == 200, results['book']
+        assert results['close'][0] == 200, results['close']
+        assert results['close'][1]['cancelled_count'] == 1, results['close']
+        with app.app_context():
+            booking = Booking.query.filter_by(dog_id=dog_id, date=monday).one()
+            assert booking.status == 'cancelled'
+
+    def test_booking_arriving_during_closure_is_refused(self, app):
+        monday, admin_email, client_email, dog_id = self._setup(app)
+        results = {}
+        book, close = self._requests(app, monday, admin_email, client_email, dog_id, results)
+
+        # Pause the closure after it has read its (empty) cancel list but
+        # before it commits — then the booking arrives.
+        self._run_race(app, first=close, second=book,
+                       patch_target=closures_module, patch_name='notify_cancelled')
+
+        assert results['close'][0] == 200, results['close']
+        assert results['book'][0] == 409, results['book']
+        assert 'closed' in results['book'][1]['message'].lower(), results['book']
+        with app.app_context():
+            assert Booking.query.filter_by(dog_id=dog_id, date=monday).count() == 0

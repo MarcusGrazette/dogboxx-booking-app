@@ -8,8 +8,9 @@ import logging
 
 from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
-from app.models import Booking, Closure
+from app.models import Booking, Closure, ServiceType
 from app import db
+from app.capacity import acquire_booking_lock
 from app.utils.booking_notify import notify_cancelled
 from app.utils.booking_status import transition_booking
 from app.utils.date_ranges import parse_range, dates_in_range, range_label
@@ -93,6 +94,21 @@ def add_closure():
 
         if not new_dates:
             return jsonify(success=False, message="All dates in that range are already closed"), 400
+
+        # Queue behind any booking in flight on these dates (FEATURES #75):
+        # take the advisory lock create_booking() and assign_walker take, for
+        # every (service, date, slot) the closure covers, before reading the
+        # bookings to cancel. A booking that got its lock first commits before
+        # the read below and is cancelled; one that comes after waits, then
+        # sees the closure in check_availability and is refused. Order is date,
+        # then Morning before Afternoon — the order book_both takes its two
+        # locks in — so the two can never deadlock. Day-care slots aren't
+        # bookable and aren't locked.
+        service_slugs = sorted(s for (s,) in db.session.query(ServiceType.slug))
+        for d in new_dates:
+            for slug in service_slugs:
+                for slot in ('Morning', 'Afternoon'):
+                    acquire_booking_lock(slug, d, slot)
 
         # One range_id ties together the per-date rows created by this action so
         # the admin list and activity feed can collapse them into one entry.
