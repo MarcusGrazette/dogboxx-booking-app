@@ -1184,10 +1184,19 @@ window._DASH = {
     }
   });
 
+  // A modal inside the board (walk note, decline, slot override) is nested in
+  // this one, and Bootstrap draws every backdrop beneath every modal — so its
+  // backdrop can't dim the board. .has-nested-modal dims the board's own
+  // content instead (admin-board.css) while one is open.
+  assignModalEl.addEventListener('show.bs.modal', (e) => {
+    if (e.target !== assignModalEl) assignModalEl.classList.add('has-nested-modal');
+  });
+
   assignModalEl.addEventListener('hidden.bs.modal', (e) => {
     // hidden.bs.modal bubbles — nested confirm modals (decline, slot
     // override) would otherwise wipe the board out from under the user.
     if (e.target !== assignModalEl) {
+      assignModalEl.classList.remove('has-nested-modal');
       // A nested modal closed. Bootstrap leaves focus on <body> (they're
       // opened from code, not a data-bs-toggle button), so move it back into
       // the Assign modal — otherwise a second Escape does nothing.

@@ -25,11 +25,9 @@
     </button>
     {# ✕ clears the selection — an icon, not "Cancel", so it can't read as
        cancelling the walk #}
-    <button type="button" class="btn btn-sm py-0 px-2 border-0 d-none flex-shrink-0" id="hint-deselect"
+    <button type="button" class="btn-close btn-close-soft d-none flex-shrink-0 ms-1" id="hint-deselect"
             title="Clear selection" aria-label="Clear selection"
-            style="color:#C0258F; font-size:1.1rem; line-height:1;">
-        <i class="bi bi-x-lg"></i>
-    </button>
+            style="font-size:0.85rem;"></button>
 </div>
 
 {# Board itself — JS renders #board-columns; placeholder shows loading/empty state #}
