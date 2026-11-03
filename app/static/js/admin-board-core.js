@@ -72,15 +72,9 @@
                 || state.assigned.find(b => b.id === id);
         }
 
-        // msg is plain text (server messages can contain dog and client names).
-        function showToast(msg, type) {
-            const el = document.createElement('div');
-            el.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
-            el.style.cssText = 'top:20px;right:20px;z-index:1055;max-width:380px;';
-            el.innerHTML = `${escHtml(msg)}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
-            document.body.appendChild(el);
-            setTimeout(() => el.parentNode?.removeChild(el), 4000);
-        }
+        // Toasts: the app-wide showToast (static/js/toast.js, loaded by
+        // admin_layout.html) — plain text, so server messages with dog and
+        // client names are safe.
 
         // ── Card rendering ────────────────────────────────────────────────────
         // Walk-note button: highlighted when the booking has a note, faded like
@@ -460,32 +454,59 @@
             updateSelectionUI();
         }
 
+        // Selected: the dog's name, then a short instruction that phones don't
+        // show (d-none d-md-inline) — the admin uses the board daily, and the
+        // bar stays one line next to Note + Cancel. Built from text, not HTML:
+        // names are client-controlled.
+        function setHintText(hintText, b) {
+            hintText.innerHTML = '';
+            if (!b) {
+                hintText.textContent = 'Tap a walker slot to assign';
+                return;
+            }
+            const name = document.createElement('strong');
+            name.textContent = b.dog_name;
+            const instruction = document.createElement('span');
+            instruction.className = 'd-none d-md-inline';
+            instruction.textContent =
+                ` · tap a ${b.slot} slot${b.walker_id ? `, or ${b.dog_name} to unassign` : ''}`;
+            hintText.appendChild(name);
+            hintText.appendChild(instruction);
+        }
+
         function updateSelectionUI() {
             const hint       = document.getElementById('selection-hint');
             const hintText   = document.getElementById('hint-text');
             const hintIcon   = document.getElementById('hint-icon');
+            const noteBtn    = document.getElementById('hint-note');
             const cancelBtn  = document.getElementById('hint-deselect');
+            const frozenNote = document.getElementById('hint-frozen');
             if (state.selectedId) {
                 const b = findBooking(state.selectedId);
                 // Active state — brand pink
                 hint.style.background   = '#fce8f6';
                 hint.style.borderColor  = '#C0258F';
                 hint.style.color        = '#7a0057';
-                hintIcon.className      = 'bi bi-cursor-fill';
+                hintIcon.className      = 'bi bi-cursor-fill flex-shrink-0';
                 hintIcon.style.color    = '#C0258F';
-                hintText.textContent    = b
-                    ? `${b.dog_name} selected — click a walker's ${b.slot} slot to assign${b.walker_id ? ', or click again to unassign' : ''}`
-                    : 'Click a walker slot to assign';
+                setHintText(hintText, b);
+                noteBtn.classList.toggle('d-none', !b);
+                noteBtn.classList.toggle('has-note', !!(b && b.client_notes));
+                noteBtn.title = b && b.client_notes ? 'Edit walk note' : 'Add walk note';
                 cancelBtn.classList.remove('d-none');
+                if (frozenNote) frozenNote.classList.add('d-none');
             } else {
                 // Idle state — neutral grey
                 hint.style.background   = '#f8f9fa';
                 hint.style.borderColor  = '#dee2e6';
                 hint.style.color        = '#6c757d';
-                hintIcon.className      = 'bi bi-cursor';
+                hintIcon.className      = 'bi bi-cursor flex-shrink-0';
                 hintIcon.style.color    = '';
+                hintText.innerHTML      = '';
                 hintText.textContent    = 'Select a dog to assign';
+                noteBtn.classList.add('d-none');
                 cancelBtn.classList.add('d-none');
+                updateFrozenNote();
             }
         }
 
@@ -493,6 +514,12 @@
             state.selectedId = null;
             render();
             updateSelectionUI();
+        });
+
+        // Same modal as the card pencil (hidden on phones). The dog stays
+        // selected afterwards, so the admin can add a note and then assign.
+        document.getElementById('hint-note').addEventListener('click', () => {
+            if (state.selectedId) openNoteModal(state.selectedId);
         });
 
         // ── Slot override modal ───────────────────────────────────────────────
@@ -725,7 +752,7 @@
                     if (seq === loadSeq) {
                         const booking = findBooking(id);
                         if (booking) booking.client_notes = note;
-                        render();
+                        render();  // also refreshes the hint bar's Note button
                     }
                     showToast(note ? 'Note saved.' : 'Note removed.', 'success');
                 },
