@@ -333,4 +333,18 @@
 #selection-hint {
     transition: opacity 0.2s;
 }
+/* One line on phones: the hint text gives way (…) before the Note / Cancel
+   buttons do. */
+#hint-text {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* A walk with a note: the Note button fills, like the card pencil's
+   highlighted state. */
+#hint-note.has-note {
+    background: #C0258F;
+    color: #fff !important;
+}
 

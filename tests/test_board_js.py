@@ -72,6 +72,7 @@ global.document = {
     querySelector: () => null,
     getElementById: id => byId[id] || (byId[id] = new FakeElement('div')),
     createElement: tag => new FakeElement(tag),
+    createTextNode: t => Object.assign(new FakeElement('#text'), { textContent: t }),
 };
 global.window = global;
 window.matchMedia = () => ({ matches: true });   // reduced motion: no column animation
@@ -298,3 +299,93 @@ def test_toast_shows_server_message_as_text():
     """)
     assert '&lt;img src=x&gt; is booked' in got
     assert '<img' not in got
+
+
+# ── Hint bar: short text + Note button (walk notes on phones) ────────────────
+# The card's note pencil is hidden on phones; the hint bar's Note button opens
+# the same walk-note modal for the selected dog, at every width.
+
+_HINT = """
+    const el = id => document.getElementById(id);
+    const hint = () => ({
+        text: el('hint-text').text(),
+        strong: el('hint-text').children.map(c => [c.tagName, c.textContent]),
+        noteShown: !el('hint-note').hasClass('d-none'),
+        hasNote: el('hint-note').hasClass('has-note'),
+        frozenShown: !el('hint-frozen').hasClass('d-none'),
+    });
+    const opened = [];
+    window.WalkNoteModal = { open: o => opened.push(o) };
+"""
+
+
+def test_selecting_a_dog_shows_short_hint_and_note_button():
+    got = _run(_HINT + f"""
+        board.setDate('2026-11-02');
+        api.calls[0].reply({MONDAY});
+        await api.settle();
+        const idle = hint();
+        api.card(1).fire('click');
+        const selected = hint();
+        el('hint-note').fire('click');
+        const afterNote = hint();
+        el('hint-deselect').fire('click');
+        return {{idle, selected, opened: opened.map(o => o.bookingId), afterNote, deselected: hint()}};
+    """)
+    assert got['idle']['noteShown'] is False
+    assert got['selected']['strong'] == [['strong', 'Alfie'], ['#text', ' · tap a Morning slot']]
+    assert 'tap a Morning slot' in got['selected']['text']
+    assert 'unassign' not in got['selected']['text']   # Alfie isn't assigned yet
+    assert got['selected']['noteShown'] is True and got['selected']['hasNote'] is False
+    assert got['opened'] == [1]
+    assert got['afterNote']['noteShown'] is True          # still selected after opening the note
+    assert got['deselected']['noteShown'] is False
+
+
+def test_assigned_dog_hint_mentions_unassign():
+    monday = json.dumps(_board(_booking(1, 'Alfie', walker_id=7)))
+    got = _run(_HINT + f"""
+        board.setDate('2026-11-02');
+        api.calls[0].reply({monday});
+        await api.settle();
+        api.card(1).fire('click');
+        return hint().text;
+    """)
+    assert 'tap a Morning slot, or Alfie to unassign' in got
+
+
+def test_note_button_fills_when_the_walk_has_a_note_and_after_saving():
+    with_note = _booking(1, 'Alfie')
+    with_note['client_notes'] = 'Back gate'
+    monday = json.dumps(_board(with_note, _booking(2, 'Bella')))
+    got = _run(_HINT + f"""
+        board.setDate('2026-11-02');
+        api.calls[0].reply({monday});
+        await api.settle();
+        api.card(1).fire('click');
+        const alfie = hint().hasNote;
+        el('hint-deselect').fire('click');
+        api.card(2).fire('click');
+        const bellaBefore = hint().hasNote;
+        el('hint-note').fire('click');
+        opened[0].onSaved('Ring the bell');
+        await api.settle();
+        return {{alfie, bellaBefore, bellaAfter: hint().hasNote, stillSelected: hint().noteShown}};
+    """)
+    assert got == {'alfie': True, 'bellaBefore': False, 'bellaAfter': True, 'stillSelected': True}
+
+
+def test_frozen_label_gives_way_while_a_dog_is_selected():
+    frozen = _board(_booking(1, 'Alfie'))
+    frozen['frozen_slots'] = ['Afternoon']
+    got = _run(_HINT + f"""
+        board.setDate('2026-11-02');
+        api.calls[0].reply({json.dumps(frozen)});
+        await api.settle();
+        const idle = hint().frozenShown;
+        api.card(1).fire('click');
+        const selected = hint().frozenShown;
+        el('hint-deselect').fire('click');
+        return {{idle, selected, after: hint().frozenShown}};
+    """)
+    assert got == {'idle': True, 'selected': False, 'after': True}

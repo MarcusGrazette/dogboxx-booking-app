@@ -9,14 +9,21 @@
 {# Selection hint bar — grey idle state, pink active state, JS toggles #}
 <div id="selection-hint" class="alert d-flex align-items-center gap-2 py-2 mb-3"
      style="font-size:0.88rem; background:#f8f9fa; border-color:#dee2e6; color:#6c757d;">
-    <i class="bi bi-cursor" id="hint-icon"></i>
+    <i class="bi bi-cursor flex-shrink-0" id="hint-icon"></i>
     <span id="hint-text" class="flex-grow-1">Select a dog to assign</span>
-    {# Frozen-slot note — JS fills the slot names and toggles d-none #}
+    {# Frozen-slot note — JS fills the slot names and toggles d-none; hidden
+       while a dog is selected, to leave room for Note + Cancel on phones #}
     <span id="hint-frozen" class="d-none text-primary fw-semibold text-nowrap small"
           title="Auto-confirm paused — new requests need manual review">
         <i class="bi bi-snow me-1"></i><span id="hint-frozen-text"></span>
     </span>
-    <button class="btn btn-sm ms-auto py-0 d-none" id="hint-deselect"
+    {# Walk note for the selected dog — the card pencil is hidden on phones,
+       so this is how a note is added there (shown at every width) #}
+    <button type="button" class="btn btn-sm ms-auto py-0 d-none flex-shrink-0 text-nowrap" id="hint-note"
+            style="border-color:#C0258F; color:#C0258F;">
+        <i class="bi bi-pencil-square me-1"></i>Note
+    </button>
+    <button type="button" class="btn btn-sm py-0 d-none flex-shrink-0" id="hint-deselect"
             style="border-color:#C0258F; color:#C0258F;">Cancel</button>
 </div>
 
