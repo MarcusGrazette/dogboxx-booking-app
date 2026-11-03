@@ -72,7 +72,6 @@ global.document = {
     querySelector: () => null,
     getElementById: id => byId[id] || (byId[id] = new FakeElement('div')),
     createElement: tag => new FakeElement(tag),
-    createTextNode: t => Object.assign(new FakeElement('#text'), { textContent: t }),
 };
 global.window = global;
 window.matchMedia = () => ({ matches: true });   // reduced motion: no column animation
@@ -309,7 +308,7 @@ _HINT = """
     const el = id => document.getElementById(id);
     const hint = () => ({
         text: el('hint-text').text(),
-        strong: el('hint-text').children.map(c => [c.tagName, c.textContent]),
+        strong: el('hint-text').children.map(c => [c.tagName, c.textContent, c.className]),
         noteShown: !el('hint-note').hasClass('d-none'),
         hasNote: el('hint-note').hasClass('has-note'),
         frozenShown: !el('hint-frozen').hasClass('d-none'),
@@ -333,7 +332,9 @@ def test_selecting_a_dog_shows_short_hint_and_note_button():
         return {{idle, selected, opened: opened.map(o => o.bookingId), afterNote, deselected: hint()}};
     """)
     assert got['idle']['noteShown'] is False
-    assert got['selected']['strong'] == [['strong', 'Alfie'], ['#text', ' · tap a Morning slot']]
+    # Name always; the instruction is hidden below md (phones show just the name).
+    assert got['selected']['strong'] == [['strong', 'Alfie', ''],
+                                         ['span', ' · tap a Morning slot', 'd-none d-md-inline']]
     assert 'tap a Morning slot' in got['selected']['text']
     assert 'unassign' not in got['selected']['text']   # Alfie isn't assigned yet
     assert got['selected']['noteShown'] is True and got['selected']['hasNote'] is False

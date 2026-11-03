@@ -460,8 +460,10 @@
             updateSelectionUI();
         }
 
-        // Hint text kept short so Note + Cancel fit beside it on a phone. The
-        // dog's name is a <strong> text node — names are client-controlled.
+        // Selected: the dog's name, then a short instruction that phones don't
+        // show (d-none d-md-inline) — the admin uses the board daily, and the
+        // bar stays one line next to Note + Cancel. Built from text, not HTML:
+        // names are client-controlled.
         function setHintText(hintText, b) {
             hintText.innerHTML = '';
             if (!b) {
@@ -470,9 +472,12 @@
             }
             const name = document.createElement('strong');
             name.textContent = b.dog_name;
+            const instruction = document.createElement('span');
+            instruction.className = 'd-none d-md-inline';
+            instruction.textContent =
+                ` · tap a ${b.slot} slot${b.walker_id ? `, or ${b.dog_name} to unassign` : ''}`;
             hintText.appendChild(name);
-            hintText.appendChild(document.createTextNode(
-                ` · tap a ${b.slot} slot${b.walker_id ? `, or ${b.dog_name} to unassign` : ''}`));
+            hintText.appendChild(instruction);
         }
 
         function updateSelectionUI() {
