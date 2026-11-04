@@ -9,7 +9,6 @@ from app.capacity import eligible_walker_clause, get_max_per_walker
 from app.utils.walker_visuals import walker_color as _walker_color, walker_initials as _walker_initials
 from app.utils.dates import local_today
 from sqlalchemy.orm import joinedload
-from datetime import timedelta
 
 
 # ─── Dashboard helpers ────────────────────────────────────────────────────────

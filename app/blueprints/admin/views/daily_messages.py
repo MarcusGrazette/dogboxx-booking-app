@@ -16,7 +16,6 @@ from app.utils.dates import local_today
 def daily_messages():
     """Create or update a daily message for the walker team."""
     from app.models import DailyMessage
-    from datetime import date as date_type
     from app.utils.sanitize import sanitize_rich_text
 
     if request.method == "POST":

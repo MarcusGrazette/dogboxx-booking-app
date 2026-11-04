@@ -589,7 +589,6 @@ def walker_overrides_fragment():
 @admin_required
 def admin_add_adhoc(walker_id):
     """Admin: add an ad hoc available slot for any walker."""
-    from datetime import date
 
     walker = db.get_or_404(Walker, walker_id)
 

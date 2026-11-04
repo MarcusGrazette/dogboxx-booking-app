@@ -17,7 +17,6 @@ from app.utils.dates import local_today
 @admin_required
 def invoicing():
     """Monthly invoicing summary — one row per client."""
-    from calendar import monthrange
     from app.utils.dates import parse_month_param
 
     # ── Month selection ───────────────────────────────────────────────────
@@ -128,7 +127,6 @@ def invoicing():
 @admin_required
 def invoicing_detail(client_id):
     """Per-client invoice detail — line items for the selected month."""
-    from itertools import groupby
     from app.utils.dates import parse_month_param
 
     client_user = User.query.filter(

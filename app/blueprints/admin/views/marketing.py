@@ -8,7 +8,7 @@ from app.utils.decorators import admin_required
 from app.models import User, DogOwner, Broadcast
 from app import db
 from app.utils.notifications import create_notification
-from app.utils.sanitize import sanitize_rich_text, clean_rich_text_or_none, rich_text_to_plain
+from app.utils.sanitize import clean_rich_text_or_none, rich_text_to_plain
 from app.utils.activity_log import record_admin_action
 from app.utils.dates import local_today
 
