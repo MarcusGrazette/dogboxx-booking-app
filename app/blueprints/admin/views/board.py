@@ -2,7 +2,7 @@ from flask import request, render_template, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 from collections import defaultdict
 import logging
 import traceback
@@ -12,7 +12,7 @@ from app.utils.decorators import admin_required
 from app.utils.db_error_handler import handle_db_errors
 from app.models import User, Booking, Walker, WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, ServiceType, DogOwner, SlotFreeze
 from app import db
-from app.capacity import get_max_per_walker, get_walker_slot_count, get_drop_in_capacity, auto_assign_walker, get_available_walkers, check_availability, acquire_booking_lock, eligible_walker_clause
+from app.capacity import get_max_per_walker, get_walker_slot_count, get_available_walkers, acquire_booking_lock, eligible_walker_clause
 from app.utils.booking_notify import notify_assigned, notify_declined
 from app.utils.booking_status import transition_booking, InvalidTransitionError
 from app.utils.activity_log import record_admin_action

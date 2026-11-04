@@ -2,7 +2,7 @@ from flask import request, render_template, jsonify, url_for
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError
-from datetime import datetime
+from datetime import date as date_type, datetime
 import logging
 import uuid
 
@@ -90,7 +90,6 @@ def dogs():
 @admin_required
 def update_dog(dog_id):
     """AJAX: update a dog's details from the admin dogs table."""
-    from datetime import date as date_type
     dog = db.session.get(Dog, dog_id)
     if not dog or dog.deleted_at:
         return jsonify(success=False, message="Dog not found"), 404
@@ -516,7 +515,6 @@ def recurring_for_dog():
 @admin_required
 def dog_upcoming_bookings(dog_id):
     """AJAX: paginated upcoming (and future) bookings for a dog."""
-    from datetime import date as date_type
     dog = db.session.get(Dog, dog_id)
     if not dog or dog.deleted_at:
         return jsonify(success=False, message="Dog not found"), 404
@@ -581,7 +579,6 @@ def dog_upcoming_bookings(dog_id):
 @admin_required
 def dog_cancel_preview(dog_id):
     """AJAX: preview bookings that would be cancelled in a date range (no writes)."""
-    from datetime import date as date_type
     dog = db.session.get(Dog, dog_id)
     if not dog or dog.deleted_at:
         return jsonify(success=False, message="Dog not found"), 404
@@ -660,7 +657,6 @@ def dog_cancel_preview(dog_id):
 @admin_required
 def dog_bulk_cancel(dog_id):
     """Admin: cancel all active bookings for a dog within a date range."""
-    from datetime import date as date_type
     dog = db.session.get(Dog, dog_id)
     if not dog or dog.deleted_at:
         return jsonify(success=False, message="Dog not found"), 404

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
 from app.models import (
-    User, Booking, BookingStatusChange, Walker, WalkerUnavailability,
+    Booking, BookingStatusChange, Walker, WalkerUnavailability,
     WalkerAdHocAvailability, ServiceType, Closure, Broadcast,
     ActivityLog, DailyMessage,
 )
@@ -93,7 +93,7 @@ def activity_feed():
     def _cluster_events(event_list):
         """Group BSC events sharing a batch_id into collapsible clusters (D4).
         Non-batch events and single-row batches pass through unchanged."""
-        from collections import defaultdict, Counter
+        from collections import defaultdict
         # Sort first so clusters appear at the position of their latest child.
         event_list.sort(key=lambda e: e['ts'] if e['ts'] else datetime.min.replace(tzinfo=timezone.utc), reverse=True)
 

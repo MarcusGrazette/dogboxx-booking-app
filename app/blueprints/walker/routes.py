@@ -9,7 +9,7 @@ from flask import request, redirect, render_template, flash, url_for, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy import case, func
-from app.models import Walker, Booking, User, WalkerUnavailability, WalkerAdHocAvailability, WalkerSchedule, Client, Dog, DogOwner, DailyMessage, ServiceType
+from app.models import Walker, Booking, User, WalkerUnavailability, WalkerAdHocAvailability, WalkerSchedule, Dog, DogOwner, DailyMessage, ServiceType
 from app import db
 from datetime import datetime, timedelta, date
 
@@ -503,14 +503,6 @@ def _build_schedule_change_groups(adhoc_rows, unavail_rows):
     return groups
 
 
-def _slots_walker_works(walker_id, day_of_week):
-    """Return set of slots the walker has in their default weekly schedule."""
-    rows = WalkerSchedule.query.filter_by(
-        walker_id=walker_id, day_of_week=day_of_week, active=True
-    ).all()
-    return {r.slot for r in rows}
-
-
 @walker_bp.route("/schedule-changes/batch", methods=["POST"])
 @login_required
 @walker_required
@@ -630,7 +622,10 @@ def schedule_changes_batch():
             current += timedelta(days=1)
             continue
 
-        scheduled_slots = _slots_walker_works(walker.id, current.weekday())
+        # Slots in the walker's default weekly schedule for this weekday.
+        scheduled_slots = {r.slot for r in WalkerSchedule.query.filter_by(
+            walker_id=walker.id, day_of_week=current.weekday(), active=True
+        )}
         date_label = current.strftime('%a %-d %b')
 
         for slot in slots:

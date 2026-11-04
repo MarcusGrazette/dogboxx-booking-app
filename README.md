@@ -104,8 +104,6 @@ config.py           Development / Testing / Production config classes
 migrations/         Alembic migration files
 scripts/start.sh    Production startup (volume symlink, migrations, gunicorn)
 seed.py             Base seed data + test data from seed_data/*.json
-seed_may_demo.py    Demo bookings — walks + drop-ins across two weekday weeks
-seed_june_demo.py   Demo bookings — mix of normal and at-capacity days for waitlist demo
 ```
 
 ---

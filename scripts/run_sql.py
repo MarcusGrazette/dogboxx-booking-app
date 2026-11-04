@@ -4,10 +4,10 @@ printing results as an aligned table.  Loads .env so it works the same way
 the app does.
 
 Usage:
-    venv/bin/python scripts/run_sql.py scripts/find_orphaned_bookings.sql
+    venv/bin/python scripts/run_sql.py path/to/query.sql
 
 Optional --db override (handy for prod):
-    venv/bin/python scripts/run_sql.py scripts/find_orphaned_bookings.sql \
+    venv/bin/python scripts/run_sql.py path/to/query.sql \
         --db "postgresql://..."
 
 Refuses to run files containing INSERT/UPDATE/DELETE/DROP/TRUNCATE/ALTER —

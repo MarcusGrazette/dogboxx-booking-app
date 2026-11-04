@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 from flask import render_template, request, jsonify, Response, stream_with_context, current_app, redirect, url_for
 from flask_login import login_required, current_user
 from . import notifications_bp
-from app.utils.notifications import mark_read, mark_all_read, get_recent
+from app.utils.notifications import mark_read, mark_all_read
 from app.models import Notification, PushSubscription
 from app.utils.notifications import get_meta
 from app.utils.http import wants_json
