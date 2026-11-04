@@ -15,7 +15,6 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 69 | P3 | M | 🔲 | **Build pipeline hardening** | Tighten how the production image is built. |
 | 72 | P3 | S | 🔲 | **Handle rate-limited push re-registration** | Back off quietly when push re-subscription is throttled. |
 | 82 | P3 | L | 📋 | **One typed invoice calculator** | Every billing page reads its numbers from one calculation instead of re-deriving them. |
-| 87 | P3 | M | 📋 | **Simplify 2 — capacity & board data** | One capacity/summary helper for walks and drop-ins; one board-data builder behind both board endpoints. |
 | 88 | P3 | M | 📋 | **Simplify 3 — shared utilities** | Shared email shell, dashboard chart payload, simpler link sanitizing and device detection. |
 | 89 | P3 | L | 📋 | **Simplify 4 — admin & walker view helpers** | Shared helpers for client detail, availability changes, bulk-cancel filters and profile photos. |
 | 90 | P3 | M | 📋 | **Simplify 5 — database error handling** | Replace the error-handler module with a small decorator, with tests. |
@@ -131,6 +130,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 81 | Lighter session storage | Login sessions are saved once a day instead of on every request. |
 | 97 | Hosting settings as code | Railway service settings (start commands, schedules, healthcheck, volume) live in the repo as Infrastructure as Code, replacing the retired config files. |
 | 86 | Simplify 1 — dead code & one-offs | Unused imports, one-off scripts, the old demo seeds and an unneeded package pin removed. |
+| 87 | Simplify 2 — capacity & board data | One capacity helper for walks and drop-ins; one board-data builder behind both board endpoints. |
 | 93 | London date everywhere | Every "today" check uses the London date, so pages don't show yesterday's view just after midnight in summer. |
 | 104 | London date in the browser | Date pickers and auto-filled end dates use the London date, so recurring end dates aren't a day short in summer. |
 
