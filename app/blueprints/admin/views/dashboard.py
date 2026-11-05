@@ -9,7 +9,6 @@ from app.capacity import eligible_walker_clause, get_max_per_walker
 from app.utils.walker_visuals import walker_color as _walker_color, walker_initials as _walker_initials
 from app.utils.dates import local_today
 from sqlalchemy.orm import joinedload
-from datetime import timedelta
 
 
 # ─── Dashboard helpers ────────────────────────────────────────────────────────
@@ -429,68 +428,6 @@ def index():
     )
 
 
-@admin_bp.route("/api/chart-data")
-@login_required
-@admin_required
-def chart_data():
-    """Return 28-day booking chart data as JSON starting from ?start=YYYY-MM-DD.
-    Start date is clamped to today at the minimum."""
-    from datetime import date, timedelta
-    from sqlalchemy import func
-
-    today = local_today()
-
-    start_str = request.args.get('start')
-    try:
-        start = date.fromisoformat(start_str)
-    except (TypeError, ValueError):
-        start = today
-
-    # Never allow scrolling before today
-    if start < today:
-        start = today
-
-    chart_days = [start + timedelta(days=i) for i in range(28)]
-    chart_end  = chart_days[-1]
-
-    chart_bookings = (
-        Booking.query
-        .filter(
-            Booking.date >= start,
-            Booking.date <= chart_end,
-            Booking.status.in_(Booking.ACTIVE_STATUSES),
-            Booking.slot.in_(['Morning', 'Afternoon']),
-        )
-        .with_entities(
-            Booking.date,
-            Booking.slot,
-            Booking.status,
-            func.count(Booking.id).label('cnt'),
-        )
-        .group_by(Booking.date, Booking.slot, Booking.status)
-        .all()
-    )
-
-    booking_lookup = {}
-    for row in chart_bookings:
-        booking_lookup.setdefault(row.date, {}).setdefault(row.slot, {})[row.status] = row.cnt
-
-    def slot_cnt(d, slot, status):
-        return booking_lookup.get(d, {}).get(slot, {}).get(status, 0)
-
-    return jsonify(
-        start=start.isoformat(),
-        labels=[d.strftime('%a %-d %b') for d in chart_days],
-        is_weekend=[1 if d.weekday() >= 5 else 0 for d in chart_days],
-        morning_confirmed=[slot_cnt(d, 'Morning',   'confirmed')  for d in chart_days],
-        morning_pending=[slot_cnt(d, 'Morning',   'requested')  for d in chart_days],
-        morning_waitlisted=[slot_cnt(d, 'Morning',   'waitlisted') for d in chart_days],
-        afternoon_confirmed=[slot_cnt(d, 'Afternoon', 'confirmed')  for d in chart_days],
-        afternoon_pending=[slot_cnt(d, 'Afternoon', 'requested')  for d in chart_days],
-        afternoon_waitlisted=[slot_cnt(d, 'Afternoon', 'waitlisted') for d in chart_days],
-    )
-
-
 @admin_bp.route("/api/month-data")
 @login_required
 @admin_required
@@ -519,80 +456,3 @@ def api_day_detail():
         selected_date = local_today()
     today = local_today()
     return jsonify(_compute_day_detail(selected_date, today))
-
-
-@admin_bp.route("/api/board-chart-data")
-@login_required
-@admin_required
-def board_chart_data():
-    """Return 7-day booking chart data for the week (Mon–Sun) containing ?date=YYYY-MM-DD.
-
-    Optional ?service=group-walk|drop-in filters by service type.
-    """
-    from datetime import date, timedelta
-    from sqlalchemy import func
-
-    date_str    = request.args.get('date')
-    service_slug = request.args.get('service')
-    try:
-        selected = date.fromisoformat(date_str)
-    except (TypeError, ValueError):
-        selected = local_today()
-
-    # If weekend selected, advance to next Monday and show that week
-    if selected.weekday() >= 5:
-        days_to_monday = 7 - selected.weekday()
-        week_start = selected + timedelta(days=days_to_monday)
-        selected_index = None   # selected day isn't in the chart
-    else:
-        week_start = selected - timedelta(days=selected.weekday())
-        selected_index = selected.weekday()  # 0=Mon … 4=Fri
-
-    # Weekdays only (Mon–Fri)
-    chart_days = [week_start + timedelta(days=i) for i in range(5)]
-    chart_end  = chart_days[-1]
-
-    q = Booking.query.filter(
-        Booking.date >= week_start,
-        Booking.date <= chart_end,
-        Booking.status.in_(Booking.ACTIVE_STATUSES),
-        Booking.slot.in_(['Morning', 'Afternoon']),
-    )
-    if service_slug:
-        svc = ServiceType.query.filter_by(slug=service_slug, active=True).first()
-        if svc:
-            q = q.filter(Booking.service_type_id == svc.id)
-
-    chart_bookings = (
-        q
-        .with_entities(
-            Booking.date,
-            Booking.slot,
-            Booking.status,
-            func.count(Booking.id).label('cnt'),
-        )
-        .group_by(Booking.date, Booking.slot, Booking.status)
-        .all()
-    )
-
-    booking_lookup = {}
-    for row in chart_bookings:
-        booking_lookup.setdefault(row.date, {}).setdefault(row.slot, {})[row.status] = row.cnt
-
-    def slot_cnt(d, slot, status):
-        return booking_lookup.get(d, {}).get(slot, {}).get(status, 0)
-
-    return jsonify(
-        week_start=week_start.isoformat(),
-        week_end=chart_days[-1].isoformat(),
-        selected=selected.isoformat(),
-        selected_index=selected_index,       # 0=Mon … 4=Fri, or null if weekend
-        labels=[d.strftime('%a %-d') for d in chart_days],
-        is_weekend=[0] * 5,                  # always weekdays
-        morning_confirmed=  [slot_cnt(d, 'Morning',   'confirmed')  for d in chart_days],
-        morning_pending=    [slot_cnt(d, 'Morning',   'requested')  for d in chart_days],
-        morning_waitlisted= [slot_cnt(d, 'Morning',   'waitlisted') for d in chart_days],
-        afternoon_confirmed=[slot_cnt(d, 'Afternoon', 'confirmed')  for d in chart_days],
-        afternoon_pending=  [slot_cnt(d, 'Afternoon', 'requested')  for d in chart_days],
-        afternoon_waitlisted=[slot_cnt(d,'Afternoon', 'waitlisted') for d in chart_days],
-    )

@@ -9,15 +9,13 @@ removed — clients are created by an admin.
 from flask import request, redirect, render_template, flash, url_for, current_app, session
 from flask_login import login_required, current_user, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
-from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError
 from flask_limiter.util import get_remote_address
-from app.models import User, Client
+from app.models import User
 from app import db, limiter
-from app.utils.db_error_handler import handle_db_errors, DBErrorHandler
 from app.forms import LoginForm, PasswordChangeForm
 import hashlib
 import logging
-import traceback
 from datetime import datetime, timezone, timedelta
 
 from app.blueprints.auth import auth_bp
@@ -244,7 +242,6 @@ def _redirect_by_role(user):
     view when they're out and about. Walkers on desktop go to schedule for
     planning. Admins and clients are device-agnostic for now.
     """
-    from app.utils.ua import get_device_info
 
     if user.is_admin:
         return redirect(url_for('admin.index'))

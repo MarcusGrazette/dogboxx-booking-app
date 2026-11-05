@@ -13,7 +13,7 @@ import pytest
 _FETCH_HEADERS = {'Accept': '*/*'}
 
 
-@pytest.mark.parametrize('endpoint', ['/admin/weekly-overview', '/admin/api/chart-data'])
+@pytest.mark.parametrize('endpoint', ['/admin/weekly-overview', '/admin/api/month-data'])
 def test_admin_required_returns_json_for_fetch_caller_without_xhr(
     app, client, client_user, endpoint
 ):

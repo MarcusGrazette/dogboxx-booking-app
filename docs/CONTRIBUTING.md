@@ -114,17 +114,6 @@ The seed also creates 10 client accounts with dogs — see `seed_data/` for the 
 
 `seed.py`'s test-data step isn't idempotent: running it a second time on a seeded database fails on duplicate emails. To re-seed, drop and recreate the database (or delete the test data) first.
 
-### Demo data
-
-Two demo seed scripts add realistic booking data:
-
-```bash
-python seed_may_demo.py   # ~10 walks/slot/weekday across two weeks, ±2 randomised, 3–5 drop-ins/day
-python seed_june_demo.py  # mix of normal and at-capacity days to demonstrate the waitlist
-```
-
-Both use fixed May/June 2026 dates, so their bookings now appear in the past. Navigate the calendar back to those months to see them.
-
 ---
 
 ## Running Tests
