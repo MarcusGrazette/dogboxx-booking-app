@@ -63,7 +63,6 @@ ADMIN_ROUTES = [
     '/admin/clients',
     '/admin/dogs',
     '/admin/walkers',
-    '/admin/board',
     '/admin/revenue',
 ]
 

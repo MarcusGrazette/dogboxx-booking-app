@@ -22,7 +22,6 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 91 | P3 | M | 📋 | **Simplify 6 — front-end helpers** | Merge duplicated confirm-modal, card and alert code in the client and admin scripts. |
 | 92 | P3 | L | 📋 | **Simplify 7 — booking request validation** | One validation/conflict path for the walk and drop-in booking routes; ship alone. |
 | 94 | P3 | M | 📋 | **Simplify 8 — one month calendar** | The drop-in board uses the dashboard's month calendar (compact, with drop-in counts) instead of its own. |
-| 95 | P3 | S | 📋 | **Simplify 9 — retire the old assignment page** | Remove the unlinked standalone walk board and its unused charts; walks are assigned from the dashboard. |
 | 99 | P3 | S | 🔲 | **Prune old backups with a storage rule** | Old database backups expire automatically in storage, so the nightly backup job only needs permission to upload. |
 | 101 | P3 | L | 🔲 | **Nightly backup inside Railway** | Run the database backup as a Railway scheduled job over the private network, so the database needs no public connection. After #99. |
 | 105 | P3 | M | 🔲 | **Move the docs site to Zensical** | Material for MkDocs gets fixes only until May 2027 and won't support MkDocs 2.0; switch to its successor, Zensical, before then. Check that image and diagram zoom still work. |
@@ -73,6 +72,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 84 | Phone-friendly walk assignment | Compact dashboard calendar on phones (tap a day twice to assign), a full-screen assign board with Morning/Afternoon lined up across walkers, and a simpler drop-in board. |
 | 98 | Admin walk notes + Week view | Admins see and edit a walk's note on the assignment board (shared with the client, shown to walkers); Weekly Overview becomes "Week view", a walker-by-day grid of dog cards with their notes. |
 | 100 | Delete a client or dog | The owner can permanently delete a dog, and optionally its owners, or a client with no dogs. Personal details are erased; past walks and invoices stay, labelled "[Deleted dog]" / "[Deleted client]". |
+| 95 | Simplify 9 — retire the old assignment page | Removed the unlinked standalone walk board and its unused charts; walks are assigned from the dashboard. |
 
 ### Walker
 

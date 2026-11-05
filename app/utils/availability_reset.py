@@ -2,7 +2,7 @@
 
 Every path that removes or shrinks a walker's availability for a (date, slot)
 must reset any confirmed booking still sitting on it — otherwise it stays
-'confirmed' in the DB while rendering nowhere on /admin/board (the board
+'confirmed' in the DB while rendering nowhere on the admin board (the board
 derives its walker columns from availability). See CLAUDE.md "Walker
 availability change must reset confirmed bookings" for the full list of
 call sites.

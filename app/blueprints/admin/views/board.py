@@ -63,14 +63,6 @@ def _booking_dict(b, both_slots_dog_ids=None, owners_display_map=None):
     return d
 
 
-@admin_bp.route("/board")
-@login_required
-@admin_required
-def board():
-    """Group walk assignment board — click-to-assign."""
-    return render_template("admin_board.html")
-
-
 @admin_bp.route("/board-fragment")
 @login_required
 @admin_required
