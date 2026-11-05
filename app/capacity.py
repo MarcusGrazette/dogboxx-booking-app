@@ -128,11 +128,12 @@ def get_max_per_walker(service_slug=ServiceType.WALK):
     return result
 
 
-def get_walk_capacity(date, slot):
-    """Return (total_slots, booked_slots, available_slots) for group walks on a date+slot."""
-    walkers = get_available_walkers(date, slot, drop_in=False)
-    max_per_walker = get_max_per_walker(ServiceType.WALK)
-    total_slots = len(walkers) * max_per_walker
+def _capacity(date, slot, service_slug):
+    """(total_slots, booked_slots, available_slots) for one service on a
+    date+slot: available walkers × the service's per-walker max, less its
+    capacity-counting bookings. Drop-ins count only does_drop_ins walkers."""
+    walkers = get_available_walkers(date, slot, drop_in=(service_slug == ServiceType.DROP_IN))
+    total_slots = len(walkers) * get_max_per_walker(service_slug)
 
     booked = (
         Booking.query
@@ -141,33 +142,22 @@ def get_walk_capacity(date, slot):
             Booking.date == date,
             Booking.slot == slot,
             Booking.status.in_(Booking.CAPACITY_STATUSES),
-            ServiceType.slug == ServiceType.WALK,
+            ServiceType.slug == service_slug,
         )
         .count()
     )
 
     return total_slots, booked, max(0, total_slots - booked)
+
+
+def get_walk_capacity(date, slot):
+    """Return (total_slots, booked_slots, available_slots) for group walks on a date+slot."""
+    return _capacity(date, slot, ServiceType.WALK)
 
 
 def get_drop_in_capacity(date, slot):
     """Return (total_slots, booked_slots, available_slots) for drop-ins on a date+slot."""
-    walkers = get_available_walkers(date, slot, drop_in=True)
-    max_per_walker = get_max_per_walker(ServiceType.DROP_IN)
-    total_slots = len(walkers) * max_per_walker
-
-    booked = (
-        Booking.query
-        .join(ServiceType)
-        .filter(
-            Booking.date == date,
-            Booking.slot == slot,
-            Booking.status.in_(Booking.CAPACITY_STATUSES),
-            ServiceType.slug == ServiceType.DROP_IN,
-        )
-        .count()
-    )
-
-    return total_slots, booked, max(0, total_slots - booked)
+    return _capacity(date, slot, ServiceType.DROP_IN)
 
 
 def get_walker_slot_count(walker_id, date, slot, service_slug=None):
@@ -317,17 +307,13 @@ def check_availability(service_type, date, slot=None, admin_override=False):
     return True, False, "Availability check not implemented for this service type."
 
 
-def get_slot_availability_summary(date):
-    """Return availability info for both slots on a given date for group walks.
-
-    Returns: {
-        'Morning': {'total': 12, 'booked': 8, 'available': 4, 'frozen': False},
-        'Afternoon': {'total': 6, 'booked': 2, 'available': 4, 'frozen': False},
-    }
-    """
+def _availability_summary(date, service_slug):
+    """Both slots' capacity for one service on a date, e.g.
+    {'Morning': {'total': 12, 'booked': 8, 'available': 4, 'frozen': False},
+     'Afternoon': {...}}."""
     result = {}
     for slot in ('Morning', 'Afternoon'):
-        total, booked, available = get_walk_capacity(date, slot)
+        total, booked, available = _capacity(date, slot, service_slug)
         result[slot] = {
             'total': total,
             'booked': booked,
@@ -335,23 +321,13 @@ def get_slot_availability_summary(date):
             'frozen': is_slot_frozen(date, slot),
         }
     return result
+
+
+def get_slot_availability_summary(date):
+    """Group-walk availability for both slots on a date (see _availability_summary)."""
+    return _availability_summary(date, ServiceType.WALK)
 
 
 def get_drop_in_availability_summary(date):
-    """Return drop-in availability info for both slots on a given date.
-
-    Returns: {
-        'Morning': {'total': 6, 'booked': 2, 'available': 4, 'frozen': False},
-        'Afternoon': {'total': 6, 'booked': 1, 'available': 5, 'frozen': False},
-    }
-    """
-    result = {}
-    for slot in ('Morning', 'Afternoon'):
-        total, booked, available = get_drop_in_capacity(date, slot)
-        result[slot] = {
-            'total': total,
-            'booked': booked,
-            'available': available,
-            'frozen': is_slot_frozen(date, slot),
-        }
-    return result
+    """Drop-in availability for both slots on a date (see _availability_summary)."""
+    return _availability_summary(date, ServiceType.DROP_IN)
