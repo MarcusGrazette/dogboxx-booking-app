@@ -119,25 +119,9 @@ def send_email(to: str, subject: str, html: str) -> bool:
         return False
 
 
-def send_newsletter_batch(subject: str, html_template: str, recipients: list) -> dict:
-    """
-    Send a personalised newsletter to a list of recipients via Resend batch API.
-
-    Each recipient dict must have:
-        email, firstname, dog_name, unsubscribe_url
-
-    Merge tags supported in html_template: {{firstname}}, {{dog_name}}
-
-    Returns {'sent': int, 'failed': int}
-    """
-    api_key = os.environ.get("RESEND_API_KEY")
-    mail_from = _mail_reply_sender()
-
-    if not api_key:
-        logging.error("RESEND_API_KEY is not set — cannot send newsletter")
-        return {'sent': 0, 'failed': len(recipients)}
-
-    SHELL_TOP = """<!DOCTYPE html>
+# Branded wrapper shared by the newsletter and broadcasts: the black DogBoxx
+# header bar over a white card. _EMAIL_TOP + body + footer + _EMAIL_BOTTOM.
+_EMAIL_TOP = """<!DOCTYPE html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="utf-8">
@@ -159,15 +143,7 @@ def send_newsletter_batch(subject: str, html_template: str, recipients: list) ->
             <td style="background-color:#ffffff;border:1px solid #e2dfde;border-top:none;border-radius:0 0 6px 6px;padding:36px 32px 28px;">
               <div style="font-size:1rem;color:#3d3d3d;line-height:1.6;">"""
 
-    SHELL_BOTTOM = """</div>
-              <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-top:24px;">
-                <tr>
-                  <td style="border-top:1px solid #e2dfde;padding-top:16px;font-size:0.8rem;color:#888888;line-height:1.6;text-align:center;">
-                    You're receiving this because you're a DogBoxx client.
-                    <a href="%%UNSUBSCRIBE_URL%%" style="color:#888888;">Unsubscribe</a>
-                  </td>
-                </tr>
-              </table>
+_EMAIL_BOTTOM = """
             </td>
           </tr>
         </table>
@@ -177,27 +153,67 @@ def send_newsletter_batch(subject: str, html_template: str, recipients: list) ->
 </body>
 </html>"""
 
+# Newsletter-only footer (marketing mail must offer an unsubscribe).
+_UNSUBSCRIBE_FOOTER = """
+              <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-top:24px;">
+                <tr>
+                  <td style="border-top:1px solid #e2dfde;padding-top:16px;font-size:0.8rem;color:#888888;line-height:1.6;text-align:center;">
+                    You're receiving this because you're a DogBoxx client.
+                    <a href="%%UNSUBSCRIBE_URL%%" style="color:#888888;">Unsubscribe</a>
+                  </td>
+                </tr>
+              </table>"""
+
+
+def _send_personalised_batch(subject: str, body_html: str, recipients: list, *,
+                             label: str, footer: str = '') -> dict:
+    """Wrap Quill-authored, already-sanitized `body_html` in the branded
+    shell once per recipient — filling the {{firstname}}/{{dog_name}} merge
+    tags and any %%UNSUBSCRIBE_URL%% in `footer` — and send the lot via
+    Resend's batch API. Returns {'sent': int, 'failed': int}."""
+    if not os.environ.get("RESEND_API_KEY"):
+        logging.error(f"RESEND_API_KEY is not set — cannot send {label.lower()}")
+        return {'sent': 0, 'failed': len(recipients)}
+    if not recipients:
+        return {'sent': 0, 'failed': 0}
+
+    mail_from = _mail_reply_sender()
     # Strip empty paragraphs (<p><br></p>) that Quill inserts for blank lines —
     # they render as large gaps in email clients.
-    html_template = re.sub(r'<p>\s*<br\s*/?>\s*</p>', '', html_template)
+    body_html = re.sub(r'<p>\s*<br\s*/?>\s*</p>', '', body_html)
 
     batch = []
     for r in recipients:
-        html = SHELL_TOP + html_template + SHELL_BOTTOM
         # firstname/dog_name are client-editable (profile.py) — escape before
-        # interpolating into HTML. sanitize_rich_text sanitized html_template
-        # itself, not these substituted values, so this is a separate escaping step.
-        html = html.replace("{{firstname}}", _htmllib.escape(r.get("firstname") or ""))
-        html = html.replace("{{dog_name}}", _htmllib.escape(r.get("dog_name") or "your dog"))
-        html = html.replace("%%UNSUBSCRIBE_URL%%", r["unsubscribe_url"])
+        # interpolating into HTML. sanitize_rich_text sanitized the body itself
+        # (tags and attributes), not these substituted values, so they need
+        # their own escaping pass here.
+        body = body_html.replace("{{firstname}}", _htmllib.escape(r.get("firstname") or ""))
+        body = body.replace("{{dog_name}}", _htmllib.escape(r.get("dog_name") or "your dog"))
+        foot = footer.replace("%%UNSUBSCRIBE_URL%%", r.get("unsubscribe_url") or "")
         batch.append({
             "from": mail_from,
             "to": [r["email"]],
             "subject": subject,
-            "html": html,
+            "html": _EMAIL_TOP + body + "</div>" + foot + _EMAIL_BOTTOM,
         })
 
-    return _send_batch_chunked(batch, "Newsletter")
+    return _send_batch_chunked(batch, label)
+
+
+def send_newsletter_batch(subject: str, html_template: str, recipients: list) -> dict:
+    """
+    Send a personalised newsletter to a list of recipients via Resend batch API.
+
+    Each recipient dict must have:
+        email, firstname, dog_name, unsubscribe_url
+
+    Merge tags supported in html_template: {{firstname}}, {{dog_name}}
+
+    Returns {'sent': int, 'failed': int}
+    """
+    return _send_personalised_batch(subject, html_template, recipients,
+                                    label="Newsletter", footer=_UNSUBSCRIBE_FOOTER)
 
 
 def send_broadcast_batch(subject: str, body_text: str, recipients: list) -> dict:
@@ -206,8 +222,8 @@ def send_broadcast_batch(subject: str, body_text: str, recipients: list) -> dict
     list of recipients via Resend batch API.
 
     body_text is Quill-authored HTML, already sanitized by the caller
-    (app.utils.sanitize.sanitize_rich_text) before it reached this function —
-    inserted into the shell as-is. No unsubscribe link (operational, not marketing).
+    (app.utils.sanitize.sanitize_rich_text). No unsubscribe link (operational,
+    not marketing).
 
     Each recipient dict must have: email, firstname. Optional: dog_name.
 
@@ -216,59 +232,4 @@ def send_broadcast_batch(subject: str, body_text: str, recipients: list) -> dict
 
     Returns {'sent': int, 'failed': int}
     """
-    api_key = os.environ.get("RESEND_API_KEY")
-    mail_from = _mail_reply_sender()
-
-    if not api_key:
-        logging.error("RESEND_API_KEY is not set — cannot send broadcast")
-        return {'sent': 0, 'failed': len(recipients)}
-
-    SHELL = """<!DOCTYPE html>
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title></title>
-</head>
-<body style="margin:0;padding:0;background-color:#f6f3f2;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
-  <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
-    <tr>
-      <td align="center" style="background-color:#f6f3f2;padding:32px;">
-        <table role="presentation" cellpadding="0" cellspacing="0" width="560" style="max-width:560px;width:100%;">
-          <tr>
-            <td style="background-color:#1B1B1B;border-bottom:3px solid #E02FAC;padding:18px 32px;border-radius:6px 6px 0 0;">
-              <span style="font-size:1.35rem;font-weight:800;color:#ffffff;letter-spacing:-0.01em;">DogBoxx</span>
-            </td>
-          </tr>
-          <tr>
-            <td style="background-color:#ffffff;border:1px solid #e2dfde;border-top:none;border-radius:0 0 6px 6px;padding:32px;">
-              <div style="font-size:1rem;color:#3d3d3d;line-height:1.6;">{{body}}</div>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>"""
-
-    batch = []
-    for r in recipients:
-        # firstname/dog_name are client-editable (profile.py) — escape before
-        # interpolating into HTML. sanitize_rich_text sanitized body_text itself
-        # (tags and attributes), not these substituted values, so they need
-        # their own escaping pass here.
-        body_html = body_text.replace("{{firstname}}", _htmllib.escape(r.get("firstname") or ""))
-        body_html = body_html.replace("{{dog_name}}", _htmllib.escape(r.get("dog_name") or "your dog"))
-        html = SHELL.replace("{{body}}", body_html)
-        batch.append({
-            "from": mail_from,
-            "to": [r["email"]],
-            "subject": subject,
-            "html": html,
-        })
-
-    if not batch:
-        return {'sent': 0, 'failed': 0}
-
-    return _send_batch_chunked(batch, "Broadcast")
+    return _send_personalised_batch(subject, body_text, recipients, label="Broadcast")

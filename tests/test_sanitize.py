@@ -70,9 +70,17 @@ class TestSanitizeRichText:
         assert 'rel="noopener noreferrer"' in result
         assert 'nofollow' not in result
 
-    def test_link_without_target_is_unaffected(self):
+    def test_link_without_target_also_gets_noopener_noreferrer(self):
+        """Every link gets the rel, not only target ones (FEATURES #88)."""
         result = sanitize_rich_text('<a href="https://example.com">link</a>')
-        assert 'rel=' not in result
+        assert result == '<a href="https://example.com" rel="noopener noreferrer">link</a>'
+
+    def test_gt_inside_attribute_value_survives(self):
+        """The old re-serializer existed partly so a `>` in a quoted attribute
+        couldn't be misparsed; nh3's own output must keep it intact."""
+        result = sanitize_rich_text('<a href="https://example.com/?q=a>b" target="_blank">x</a>')
+        assert result == ('<a href="https://example.com/?q=a>b" target="_blank" '
+                          'rel="noopener noreferrer">x</a>')
 
 
 class TestCleanRichTextOrNone:

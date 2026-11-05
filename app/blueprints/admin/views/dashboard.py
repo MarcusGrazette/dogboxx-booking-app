@@ -36,6 +36,31 @@ def _slot_state(walker_id, slot, dow, schedule_map, adhoc_slots, unavail_slots):
     return 'off'
 
 
+def _slot_stats(slot, dow, walkers, schedule_map, adhoc_by_walker, unavail_by_walker,
+                slot_bookings, walk_max):
+    """AM or PM figures for one day — the dashboard month calendar and the
+    day-detail panel both show these: walk bookings by status, walk capacity
+    (working walkers × the per-walker max) and drop-ins.
+
+    adhoc_by_walker / unavail_by_walker: {walker_id: {slot}} for that day.
+    slot_bookings: {status: {service_slug: count}} for that day + slot.
+    """
+    working = sum(
+        1 for w in walkers
+        if _slot_state(w.id, slot, dow, schedule_map,
+                       adhoc_by_walker.get(w.id, set()),
+                       unavail_by_walker.get(w.id, set())) in ('available', 'adhoc')
+    )
+    return {
+        'confirmed': slot_bookings.get('confirmed', {}).get(ServiceType.WALK, 0),
+        'pending':   slot_bookings.get('requested', {}).get(ServiceType.WALK, 0),
+        'waitlist':  slot_bookings.get('waitlisted', {}).get(ServiceType.WALK, 0),
+        'capacity':  working * walk_max,
+        'drop_ins':  sum(slot_bookings.get(st, {}).get(ServiceType.DROP_IN, 0)
+                         for st in ('confirmed', 'requested', 'waitlisted')),
+    }
+
+
 def _compute_month_data(year, month, today):
     """Compute month-grid calendar data. Returns a plain (JSON-serialisable) dict."""
     from calendar import monthrange
@@ -106,35 +131,6 @@ def _compute_month_data(year, month, today):
 
     walk_max = get_max_per_walker(ServiceType.WALK)
 
-    # ── Per-day slot helper ──────────────────────────────────────────────────
-    def slot_stats(d, slot_name):
-        dow = d.weekday()
-        n_walk = 0
-        n_dropin = 0
-        for w in all_walkers:
-            adhoc_s   = adhoc_by_walker.get(w.id, {}).get(d, set())
-            unavail_s = unavail_by_walker.get(w.id, {}).get(d, set())
-            sched_s   = schedule_map.get(w.id, {}).get(dow, set())
-            if (slot_name in sched_s or slot_name in adhoc_s) and slot_name not in unavail_s:
-                n_walk += 1
-                if w.does_drop_ins:
-                    n_dropin += 1
-        day_slot = booking_map.get(d, {}).get(slot_name, {})
-        confirmed = day_slot.get('confirmed', {}).get(ServiceType.WALK, 0)
-        pending   = day_slot.get('requested', {}).get(ServiceType.WALK, 0)
-        waitlist  = day_slot.get('waitlisted', {}).get(ServiceType.WALK, 0)
-        drop_ins  = sum(
-            day_slot.get(st, {}).get(ServiceType.DROP_IN, 0)
-            for st in ('confirmed', 'requested', 'waitlisted')
-        )
-        return {
-            'confirmed': confirmed,
-            'pending':   pending,
-            'waitlist':  waitlist,
-            'capacity':  n_walk * walk_max,
-            'drop_ins':  drop_ins,
-        }
-
     # ── Build unavailability spans ───────────────────────────────────────────
     unavail_dates_by_walker = {}
     for u in unavail_rows:
@@ -204,8 +200,14 @@ def _compute_month_data(year, month, today):
         d_iso      = d.isoformat()
         is_closure = d in closures
 
-        am = slot_stats(d, 'Morning')
-        pm = slot_stats(d, 'Afternoon')
+        dow = d.weekday()
+        day_adhoc   = {wid: by_date.get(d, set()) for wid, by_date in adhoc_by_walker.items()}
+        day_unavail = {wid: by_date.get(d, set()) for wid, by_date in unavail_by_walker.items()}
+        day_bookings = booking_map.get(d, {})
+        am = _slot_stats('Morning', dow, all_walkers, schedule_map, day_adhoc, day_unavail,
+                         day_bookings.get('Morning', {}), walk_max)
+        pm = _slot_stats('Afternoon', dow, all_walkers, schedule_map, day_adhoc, day_unavail,
+                         day_bookings.get('Afternoon', {}), walk_max)
         is_closed = is_closure or (am['capacity'] == 0 and pm['capacity'] == 0)
 
         unavail_count = 0
@@ -316,30 +318,10 @@ def _compute_day_detail(selected_date, today):
     walk_max = get_max_per_walker(ServiceType.WALK)
     dow = selected_date.weekday()
 
-    def slot_stats(slot_name):
-        n_walk = 0
-        for w in all_walkers:
-            adhoc_s   = adhoc_by_walker.get(w.id, set())
-            unavail_s = unavail_by_walker.get(w.id, set())
-            sched_s   = schedule_map.get(w.id, {}).get(dow, set())
-            if (slot_name in sched_s or slot_name in adhoc_s) and slot_name not in unavail_s:
-                n_walk += 1
-        slot_bk   = booking_map.get(slot_name, {})
-        confirmed = slot_bk.get('confirmed', {}).get(ServiceType.WALK, 0)
-        pending   = slot_bk.get('requested', {}).get(ServiceType.WALK, 0)
-        waitlist  = slot_bk.get('waitlisted', {}).get(ServiceType.WALK, 0)
-        drop_ins  = sum(slot_bk.get(st, {}).get(ServiceType.DROP_IN, 0)
-                        for st in ('confirmed', 'requested', 'waitlisted'))
-        return {
-            'confirmed': confirmed,
-            'pending':   pending,
-            'waitlist':  waitlist,
-            'capacity':  n_walk * walk_max,
-            'drop_ins':  drop_ins,
-        }
-
-    am = slot_stats('Morning')
-    pm = slot_stats('Afternoon')
+    am = _slot_stats('Morning', dow, all_walkers, schedule_map, adhoc_by_walker,
+                     unavail_by_walker, booking_map.get('Morning', {}), walk_max)
+    pm = _slot_stats('Afternoon', dow, all_walkers, schedule_map, adhoc_by_walker,
+                     unavail_by_walker, booking_map.get('Afternoon', {}), walk_max)
 
     # Mutually-exclusive walker category, priority: unavailable > extra > scheduled > off.
     # Used both for per-row tinting and for the summary count line.

@@ -8,7 +8,6 @@ offers — stays consistent.
 
 import html as _html
 import re as _re
-from html.parser import HTMLParser
 
 import nh3
 
@@ -26,72 +25,20 @@ RICH_TEXT_ATTRS = {
 _ALLOWED_CSS_PROPERTIES = {'color'}
 
 
-class _NoopenerRewriter(HTMLParser):
-    """Re-serializes nh3's (already-sanitized, well-formed) output, stamping
-    rel="noopener noreferrer" on any <a target=...> — client-authored
-    pickup_instructions render to admins/walkers, and a same-origin `rel`
-    from the author shouldn't be trusted to keep window.opener locked down.
-
-    nh3 has no cross-attribute hook (its attribute_filter sees one attribute
-    at a time, with no visibility into a sibling `target`), so this runs as
-    a second pass over the parser's own token stream rather than a plain
-    string replace — a regex over raw tag text would misparse an untouched
-    `>` character inside an attribute value (nh3 doesn't escape it, and
-    doesn't need to: it's unambiguous to a real tokenizer under a quoted
-    attribute, just not to a naive regex).
-    """
-
-    def __init__(self):
-        super().__init__(convert_charrefs=False)
-        self.out = []
-
-    def _emit_tag(self, tag, attrs, self_closing):
-        if tag == 'a':
-            attrs = dict(attrs)
-            if 'target' in attrs:
-                attrs['rel'] = 'noopener noreferrer'
-            attrs = list(attrs.items())
-        bits = [tag]
-        for name, value in attrs:
-            bits.append(name if value is None else f'{name}="{_html.escape(value, quote=True)}"')
-        self.out.append(f"<{' '.join(bits)}{'/' if self_closing else ''}>")
-
-    def handle_starttag(self, tag, attrs):
-        self._emit_tag(tag, attrs, False)
-
-    def handle_startendtag(self, tag, attrs):
-        self._emit_tag(tag, attrs, True)
-
-    def handle_endtag(self, tag):
-        self.out.append(f'</{tag}>')
-
-    def handle_data(self, data):
-        self.out.append(_html.escape(data, quote=False))
-
-    def handle_entityref(self, name):
-        self.out.append(f'&{name};')
-
-    def handle_charref(self, name):
-        self.out.append(f'&#{name};')
-
-
-def _force_noopener(cleaned_html):
-    parser = _NoopenerRewriter()
-    parser.feed(cleaned_html)
-    parser.close()
-    return ''.join(parser.out)
-
-
 def sanitize_rich_text(html):
-    """Clean Quill-authored HTML down to the shared rich-text allowlist."""
-    cleaned = nh3.clean(
+    """Clean Quill-authored HTML down to the shared rich-text allowlist.
+
+    Every link gets rel="noopener noreferrer", replacing any author-supplied
+    rel: client-authored pickup notes render to admins and walkers, and an
+    author's rel shouldn't be trusted to keep window.opener locked down.
+    """
+    return nh3.clean(
         html or '',
         tags=RICH_TEXT_TAGS,
         attributes=RICH_TEXT_ATTRS,
         filter_style_properties=_ALLOWED_CSS_PROPERTIES,
-        link_rel=None,
+        link_rel='noopener noreferrer',
     )
-    return _force_noopener(cleaned)
 
 
 def clean_rich_text_or_none(html):
