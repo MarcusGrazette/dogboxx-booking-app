@@ -2,7 +2,8 @@
 Regression tests for app/utils/email.py (audit M12, M13):
 - M12: batch sends must chunk at Resend's 100-recipient cap, not fail whole.
 - M13: merge tags ({{firstname}}, {{dog_name}}) must be HTML-escaped before
-  being interpolated into the email body — they're client-editable values.
+  being interpolated into the email body — they're plain-text values, so a
+  name containing <, > or & must read as typed, not be parsed as markup.
 """
 import pytest
 
