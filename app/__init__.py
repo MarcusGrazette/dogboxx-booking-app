@@ -622,22 +622,9 @@ def create_app(config_name=None):
 
     @app.context_processor
     def inject_device_info():
-        """Expose UA device flags to all templates.
-
-        Available in every template:
-            {{ is_mobile }}   — True on Android / any mobile browser
-            {{ is_desktop }}  — True on macOS / non-mobile
-            {{ is_android }}  — True specifically on Android Chrome
-            {{ is_macos }}    — True specifically on macOS Chrome
-        """
-        from app.utils.ua import get_device_info
-        d = get_device_info()
-        return dict(
-            is_mobile=d.is_mobile,
-            is_desktop=d.is_desktop,
-            is_android=d.is_android,
-            is_macos=d.is_macos,
-        )
+        """Expose {{ is_mobile }} (a phone browser) to every template."""
+        from app.utils.ua import is_mobile_request
+        return dict(is_mobile=is_mobile_request())
 
     @app.context_processor
     def inject_pending_counts():

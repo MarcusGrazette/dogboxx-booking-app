@@ -251,13 +251,14 @@
         function isSameDay(dateStr) {
             return dateStr === DogBoxxDates.today();
         }
-        // Returns a promise resolving to true if the client confirms,
-        // false if they cancel/dismiss the modal.
-        function confirmSameDay() {
+        // Shows a confirm modal; resolves true if the client presses its
+        // confirm button, false if they cancel or dismiss it. Used for the
+        // same-day and frozen-slot warnings.
+        function confirmModal(modalId, confirmBtnId) {
             return new Promise((resolve) => {
-                const el = document.getElementById('sameDayModal');
+                const el = document.getElementById(modalId);
                 const modal = bootstrap.Modal.getOrCreateInstance(el);
-                const confirmBtn = document.getElementById('sameday-confirm-btn');
+                const confirmBtn = document.getElementById(confirmBtnId);
                 let settled = false;
                 function cleanup() {
                     confirmBtn.removeEventListener('click', onConfirm);
@@ -280,6 +281,7 @@
                 modal.show();
             });
         }
+        const confirmSameDay = () => confirmModal('sameDayModal', 'sameday-confirm-btn');
 
         // ─── Frozen slot confirmation ─────────────────────────────
         // slotData is populated by fetchAvailability() and carries a `frozen`
@@ -292,35 +294,7 @@
             }
             return !!slotData[slotValue]?.frozen;
         }
-        // Returns a promise resolving to true if the client confirms,
-        // false if they cancel/dismiss the modal. Clone of confirmSameDay().
-        function confirmFrozen() {
-            return new Promise((resolve) => {
-                const el = document.getElementById('frozenModal');
-                const modal = bootstrap.Modal.getOrCreateInstance(el);
-                const confirmBtn = document.getElementById('frozen-confirm-btn');
-                let settled = false;
-                function cleanup() {
-                    confirmBtn.removeEventListener('click', onConfirm);
-                    el.removeEventListener('hidden.bs.modal', onHidden);
-                }
-                function onConfirm() {
-                    settled = true;
-                    cleanup();
-                    modal.hide();
-                    resolve(true);
-                }
-                function onHidden() {
-                    if (!settled) {
-                        cleanup();
-                        resolve(false);
-                    }
-                }
-                confirmBtn.addEventListener('click', onConfirm);
-                el.addEventListener('hidden.bs.modal', onHidden);
-                modal.show();
-            });
-        }
+        const confirmFrozen = () => confirmModal('frozenModal', 'frozen-confirm-btn');
 
         // ─── Form submit — all booking types ─────────────────────
         const bookingForm = document.getElementById('BookingForm');

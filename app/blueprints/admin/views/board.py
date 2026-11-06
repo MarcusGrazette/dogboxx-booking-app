@@ -1,7 +1,6 @@
 from flask import request, render_template, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
-from sqlalchemy.exc import IntegrityError, OperationalError
 from datetime import datetime
 from collections import defaultdict
 import logging
@@ -9,7 +8,6 @@ import traceback
 
 from app.blueprints.admin import admin_bp
 from app.utils.decorators import admin_required
-from app.utils.db_error_handler import handle_db_errors
 from app.models import User, Booking, Walker, WalkerSchedule, WalkerUnavailability, WalkerAdHocAvailability, ServiceType, DogOwner, SlotFreeze
 from app import db
 from app.capacity import get_max_per_walker, get_walker_slot_count, get_available_walkers, acquire_booking_lock, eligible_walker_clause
@@ -237,10 +235,6 @@ def board_data(date_str):
 @admin_bp.route("/assign_walker", methods=["POST"])
 @login_required
 @admin_required
-@handle_db_errors(json_response=True, flash_message=False, custom_error_messages={
-    IntegrityError: "Could not assign walker due to a data conflict.",
-    OperationalError: "Database is temporarily unavailable. Please try again."
-})
 def assign_walker():
     """Assign (or unassign) a walker and slot to a booking. Admin only. Returns JSON.
 
@@ -435,8 +429,7 @@ def assign_walker():
         db.session.rollback()
         return jsonify(success=False, message="This booking's status just changed — please reload the board"), 409
     except Exception as e:
-        # This will be handled by the @handle_db_errors decorator
-        # This code won't be reached for database errors, only for other types of exceptions
+        # Database errors included — roll back and report a generic failure.
         db.session.rollback()
         logging.exception(f"Error assigning/unassigning walker: {e}")
         logging.debug(traceback.format_exc())
