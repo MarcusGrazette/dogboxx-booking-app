@@ -11,9 +11,25 @@ Covers:
 - rich_text_to_plain: produces a readable, single-line summary for surfaces
   that can't render markup (the notification bell).
 """
+from html.parser import HTMLParser
+
 from app.utils.sanitize import (
     sanitize_rich_text, clean_rich_text_or_none, rich_text_to_plain,
 )
+
+
+def _links(html):
+    """The attributes of every <a> in `html`, as parsed by a real HTML parser
+    (entities decoded) — so tests don't depend on how nh3 serializes them."""
+    found = []
+
+    class _P(HTMLParser):
+        def handle_starttag(self, tag, attrs):
+            if tag == 'a':
+                found.append(dict(attrs))
+
+    _P().feed(html)
+    return found
 
 
 class TestSanitizeRichText:
@@ -73,14 +89,15 @@ class TestSanitizeRichText:
     def test_link_without_target_also_gets_noopener_noreferrer(self):
         """Every link gets the rel, not only target ones (FEATURES #88)."""
         result = sanitize_rich_text('<a href="https://example.com">link</a>')
-        assert result == '<a href="https://example.com" rel="noopener noreferrer">link</a>'
+        assert _links(result) == [{'href': 'https://example.com', 'rel': 'noopener noreferrer'}]
 
     def test_gt_inside_attribute_value_survives(self):
-        """The old re-serializer existed partly so a `>` in a quoted attribute
-        couldn't be misparsed; nh3's own output must keep it intact."""
+        """A `>` inside a quoted href must come through as the same URL. Checked
+        by parsing, not byte-for-byte: nh3 0.3.6 writes a literal `>` and
+        0.3.7 writes `&gt;`, which parse to the identical attribute."""
         result = sanitize_rich_text('<a href="https://example.com/?q=a>b" target="_blank">x</a>')
-        assert result == ('<a href="https://example.com/?q=a>b" target="_blank" '
-                          'rel="noopener noreferrer">x</a>')
+        assert _links(result) == [{'href': 'https://example.com/?q=a>b', 'target': '_blank',
+                                   'rel': 'noopener noreferrer'}]
 
 
 class TestCleanRichTextOrNone:
