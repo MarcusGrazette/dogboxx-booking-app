@@ -105,21 +105,42 @@
             });
         }
 
-        function makePendingCard(b) {
+        // The frame both card types share: photo (with a fallback), dog and
+        // owner names, the walk-note pencil and note line, and tap-to-select.
+        // `actions` is the markup between the names and the note (badges,
+        // buttons); `extraClass` adds to the card's class list.
+        //
+        // el is a freshly created node not yet inserted into the DOM, so these
+        // listeners are attached once per card instance directly — no CSP-inline-
+        // handler-attribute concern (that only applies to onclick=/onerror=
+        // string attributes) and no delegation needed (unlike a persistent
+        // wrapper whose innerHTML gets reassigned repeatedly).
+        function makeCardShell(b, actions, extraClass = '') {
             const el = document.createElement('div');
-            el.className = 'board-card'
-                + (b.status === 'waitlisted' ? ' card-waitlisted' : '')
-                + (state.selectedId === b.id  ? ' card-selected'  : '');
+            el.className = 'board-card' + extraClass
+                + (state.selectedId === b.id ? ' card-selected' : '');
             el.dataset.id = b.id;
-
-            const slotColor = b.slot === 'Morning' ? 'success' : 'danger';
-            const extraBadges = cfg.makePendingCardBadges ? cfg.makePendingCardBadges(b) : '';
             el.innerHTML = `
                 <img src="${imgSrc(b.dog_pic)}" class="board-dog-img">
                 <div class="board-card-info">
                     <div class="board-card-name">${escHtml(b.dog_name)}</div>
                     <div class="board-card-owner">${escHtml(b.owner_name)}</div>
                 </div>
+                ${actions}
+                ${noteHtml(b)}`;
+
+            el.querySelector('.board-dog-img').addEventListener('error', function () {
+                this.src = '/static/uploads/dogs/default-dog.png';
+            });
+            wireNoteBtn(el, b);
+            el.addEventListener('click', () => selectBooking(b.id));
+            return el;
+        }
+
+        function makePendingCard(b) {
+            const slotColor = b.slot === 'Morning' ? 'success' : 'danger';
+            const extraBadges = cfg.makePendingCardBadges ? cfg.makePendingCardBadges(b) : '';
+            const el = makeCardShell(b, `
                 <div class="d-flex gap-1 align-items-center flex-shrink-0">
                     ${b.status === 'waitlisted' ? '<span class="modifier-pill modifier-waitlisted" title="Waitlisted"><i class="bi bi-clock-history"></i></span>' : ''}
                     ${extraBadges}
@@ -131,51 +152,21 @@
                             style="font-size:0.9rem; opacity:0.55; line-height:1;">
                         <i class="bi bi-x-circle"></i>
                     </button>
-                </div>
-                ${noteHtml(b)}`;
+                </div>`, b.status === 'waitlisted' ? ' card-waitlisted' : '');
 
-            // el is a freshly created node not yet inserted into the DOM, so these
-            // listeners are attached once per card instance directly — no CSP-inline-
-            // handler-attribute concern (that only applies to onclick=/onerror=
-            // string attributes) and no delegation needed (unlike a persistent
-            // wrapper whose innerHTML gets reassigned repeatedly).
-            el.querySelector('.board-dog-img').addEventListener('error', function () {
-                this.src = '/static/uploads/dogs/default-dog.png';
-            });
             const declineBtn = el.querySelector('.decline-btn');
             declineBtn.addEventListener('click', function (e) {
                 e.stopPropagation();
                 openDeclineModal(declineBtn);
             });
-            wireNoteBtn(el, b);
-
-            el.addEventListener('click', () => selectBooking(b.id));
             return el;
         }
 
         function makeAssignedCard(b) {
-            const el = document.createElement('div');
-            el.className = 'board-card' + (state.selectedId === b.id ? ' card-selected' : '');
-            el.dataset.id = b.id;
-
             const extraContent = cfg.makeAssignedCardBadges ? cfg.makeAssignedCardBadges(b) : '';
-            el.innerHTML = `
-                <img src="${imgSrc(b.dog_pic)}" class="board-dog-img">
-                <div class="board-card-info">
-                    <div class="board-card-name">${escHtml(b.dog_name)}</div>
-                    <div class="board-card-owner">${escHtml(b.owner_name)}</div>
-                </div>
+            return makeCardShell(b, `
                 ${extraContent}
-                <div class="note-btn-wrap d-flex align-items-center flex-shrink-0">${noteBtnHtml(b)}</div>
-                ${noteHtml(b)}`;
-
-            el.querySelector('.board-dog-img').addEventListener('error', function () {
-                this.src = '/static/uploads/dogs/default-dog.png';
-            });
-            wireNoteBtn(el, b);
-
-            el.addEventListener('click', () => selectBooking(b.id));
-            return el;
+                <div class="note-btn-wrap d-flex align-items-center flex-shrink-0">${noteBtnHtml(b)}</div>`);
         }
 
         // ── Render ────────────────────────────────────────────────────────────
@@ -483,12 +474,8 @@
             const frozenNote = document.getElementById('hint-frozen');
             if (state.selectedId) {
                 const b = findBooking(state.selectedId);
-                // Active state — brand pink
-                hint.style.background   = '#fce8f6';
-                hint.style.borderColor  = '#C0258F';
-                hint.style.color        = '#7a0057';
-                hintIcon.className      = 'bi bi-cursor-fill flex-shrink-0';
-                hintIcon.style.color    = '#C0258F';
+                hint.classList.add('is-active');   // brand pink (admin-board.css)
+                hintIcon.className = 'bi bi-cursor-fill flex-shrink-0';
                 setHintText(hintText, b);
                 noteBtn.classList.toggle('d-none', !b);
                 noteBtn.classList.toggle('has-note', !!(b && b.client_notes));
@@ -496,12 +483,8 @@
                 cancelBtn.classList.remove('d-none');
                 if (frozenNote) frozenNote.classList.add('d-none');
             } else {
-                // Idle state — neutral grey
-                hint.style.background   = '#f8f9fa';
-                hint.style.borderColor  = '#dee2e6';
-                hint.style.color        = '#6c757d';
-                hintIcon.className      = 'bi bi-cursor flex-shrink-0';
-                hintIcon.style.color    = '';
+                hint.classList.remove('is-active');   // neutral grey
+                hintIcon.className = 'bi bi-cursor flex-shrink-0';
                 hintText.innerHTML      = '';
                 hintText.textContent    = 'Select a dog to assign';
                 noteBtn.classList.add('d-none');

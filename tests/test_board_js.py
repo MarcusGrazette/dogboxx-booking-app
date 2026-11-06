@@ -397,3 +397,63 @@ def test_frozen_label_gives_way_while_a_dog_is_selected():
         return {{idle, selected, after: hint().frozenShown}};
     """)
     assert got == {'idle': True, 'selected': False, 'after': True}
+
+
+# ── Cards (FEATURES #91: both card types share one shell) ─────────────────
+
+def test_requested_and_assigned_cards_render_their_parts():
+    waiting = _booking(1, 'Alfie')
+    waiting['status'] = 'waitlisted'
+    noted = _booking(2, 'Bella', walker_id=7, slot='Afternoon')
+    noted['client_notes'] = 'Back gate'
+    got = _run(f"""
+        board.setDate('2026-11-02');
+        api.calls[0].reply({json.dumps(_board(waiting, noted))});
+        await api.settle();
+        const card = id => {{ const c = api.card(id); return {{cls: c.className, html: c.innerHTML}}; }};
+        const before = {{alfie: card(1), bella: card(2)}};
+        api.card(2).fire('click');
+        return {{...before, bellaSelected: api.card(2).className, alfieAfter: api.card(1).className}};
+    """)
+    alfie, bella = got['alfie'], got['bella']
+    assert alfie['cls'].split() == ['board-card', 'card-waitlisted']
+    for part in ('Alfie', 'Owner', 'board-dog-img', 'modifier-waitlisted', '>AM<', 'decline-btn'):
+        assert part in alfie['html'], part
+    assert bella['cls'].split() == ['board-card']
+    for part in ('Bella', 'Owner', 'board-dog-img', 'note-btn-wrap', 'Back gate'):
+        assert part in bella['html'], part
+    assert 'decline-btn' not in bella['html']
+    # Tapping a card selects it (and only it).
+    assert 'card-selected' in got['bellaSelected'].split()
+    assert 'card-selected' not in got['alfieAfter'].split()
+
+
+def test_card_photo_falls_back_to_default_on_error():
+    got = _run(f"""
+        board.setDate('2026-11-02');
+        api.calls[0].reply({json.dumps(_board(_booking(1, 'Alfie'), _booking(2, 'Bella', walker_id=7)))});
+        await api.settle();
+        const srcs = [1, 2].map(id => {{
+            const img = api.card(id).querySelector('.board-dog-img');
+            img.fire('error');
+            return img.src;
+        }});
+        return srcs;
+    """)
+    assert got == ['/static/uploads/dogs/default-dog.png'] * 2
+
+
+def test_hint_bar_is_pink_only_while_a_dog_is_selected():
+    """The colours live in admin-board.css; the script only toggles .is-active."""
+    got = _run(_HINT + f"""
+        board.setDate('2026-11-02');
+        api.calls[0].reply({MONDAY});
+        await api.settle();
+        const active = () => el('selection-hint').hasClass('is-active');
+        const idle = active();
+        api.card(1).fire('click');
+        const selected = active();
+        el('hint-deselect').fire('click');
+        return {{idle, selected, after: active(), inline: el('selection-hint').style}};
+    """)
+    assert got == {'idle': False, 'selected': True, 'after': False, 'inline': {}}
