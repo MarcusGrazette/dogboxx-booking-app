@@ -330,8 +330,22 @@
 }
 
 /* ── Selection hint bar ────────────────────────────────────────────────────── */
+/* Grey while idle; brand pink while a dog is selected (admin-board-core.js
+   toggles .is-active). The id selector beats Bootstrap's .alert colours. */
 #selection-hint {
     transition: opacity 0.2s;
+    font-size: 0.88rem;
+    background: #f8f9fa;
+    border-color: #dee2e6;
+    color: #6c757d;
+}
+#selection-hint.is-active {
+    background: #fce8f6;
+    border-color: #C0258F;
+    color: #7a0057;
+}
+#selection-hint.is-active #hint-icon {
+    color: #C0258F;
 }
 /* One line on phones: the hint text gives way (…) before the Note / Cancel
    buttons do. */

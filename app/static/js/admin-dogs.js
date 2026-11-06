@@ -274,11 +274,17 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    function showResult(type, msg) {
-        resultDiv.className = `alert alert-${type} py-2 mb-0`;
-        resultDiv.textContent = msg;
-        resultDiv.style.display = 'block';
+    // One Bootstrap alert, with `msg` as plain text, replacing whatever
+    // `container` holds (and un-hiding it). Every message box on this page
+    // goes through here.
+    function showAlert(container, type, msg) {
+        const alert = document.createElement('div');
+        alert.className = `alert alert-${type} py-2 mb-0`;
+        alert.textContent = msg;
+        container.replaceChildren(alert);
+        container.style.display = '';
     }
+    const showResult = (type, msg) => showAlert(resultDiv, type, msg);
 
     function getCsrf() {
         return document.querySelector('meta[name=csrf-token]')?.content ||
@@ -451,11 +457,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    function showEditResult(type, msg) {
-        editResult.className = `alert alert-${type} py-2 mb-0`;
-        editResult.textContent = msg;
-        editResult.style.display = 'block';
-    }
+    const showEditResult = (type, msg) => showAlert(editResult, type, msg);
 
     // ── Live filter ─────────────────────────────────────────────────────────
     const searchInput   = document.getElementById('dog-search');
@@ -650,7 +652,7 @@ document.addEventListener('DOMContentLoaded', function () {
             dbResults.style.pointerEvents = '';
             dbPagination.style.display = 'none';
             if (!data.success) {
-                dbResults.innerHTML = `<div class="alert alert-danger py-2">${data.message || 'Error loading bookings'}</div>`;
+                showAlert(dbResults, 'danger', data.message || 'Error loading bookings');
                 return;
             }
             if (!data.bookings.length) {
@@ -685,7 +687,7 @@ document.addEventListener('DOMContentLoaded', function () {
             dbResults.style.opacity = '';
             dbResults.style.pointerEvents = '';
             dbPagination.style.display = 'none';
-            dbResults.innerHTML = '<div class="alert alert-danger py-2">Network error — please try again.</div>';
+            showAlert(dbResults, 'danger', 'Network error — please try again.');
         });
     }
 
@@ -868,11 +870,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
     bcPreviewBtn.addEventListener('click', function () {
         if (!bcStart.value) {
-            bcPreviewRes.innerHTML = '<div class="alert alert-warning py-2">Please pick a date.</div>';
+            showAlert(bcPreviewRes, 'warning', 'Please pick a date.');
             return;
         }
         if (bcIsRecurring() && !bcEnd.value) {
-            bcPreviewRes.innerHTML = '<div class="alert alert-warning py-2">Please enter an end date.</div>';
+            showAlert(bcPreviewRes, 'warning', 'Please enter an end date.');
             return;
         }
         const range  = bcEffectiveRange();
@@ -892,7 +894,7 @@ document.addEventListener('DOMContentLoaded', function () {
         .then(data => {
             bcLoading.style.display = 'none';
             if (!data.success) {
-                bcPreviewRes.innerHTML = `<div class="alert alert-danger py-2">${data.message || 'Error'}</div>`;
+                showAlert(bcPreviewRes, 'danger', data.message || 'Error');
                 return;
             }
             bcPreviewCount = data.count;
@@ -933,7 +935,7 @@ document.addEventListener('DOMContentLoaded', function () {
         })
         .catch(() => {
             bcLoading.style.display = 'none';
-            bcPreviewRes.innerHTML = '<div class="alert alert-danger py-2">Network error — please try again.</div>';
+            showAlert(bcPreviewRes, 'danger', 'Network error — please try again.');
         });
     });
 
@@ -963,13 +965,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 showConfirmed(`${n} ${bcNoun(n)} cancelled for ${bcDogName.textContent}.`,
                               bcModal, document.getElementById('bulkCancelModal'));
             } else {
-                bcPreviewRes.innerHTML = `<div class="alert alert-danger py-2">${data.message || 'Something went wrong'}</div>`;
+                showAlert(bcPreviewRes, 'danger', data.message || 'Something went wrong');
                 bcConfirmBtn.disabled = false;
                 resetBcConfirmBtn();
             }
         })
         .catch(() => {
-            bcPreviewRes.innerHTML = '<div class="alert alert-danger py-2">Network error — please try again.</div>';
+            showAlert(bcPreviewRes, 'danger', 'Network error — please try again.');
             bcConfirmBtn.disabled = false;
             resetBcConfirmBtn();
         });

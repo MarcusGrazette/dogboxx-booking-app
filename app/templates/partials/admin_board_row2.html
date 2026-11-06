@@ -6,8 +6,7 @@
    Caller must instantiate createBoard() with appropriate endpoints. #}
 
 {# Selection hint bar — grey idle state, pink active state, JS toggles #}
-<div id="selection-hint" class="alert d-flex align-items-center gap-2 py-2 mb-3"
-     style="font-size:0.88rem; background:#f8f9fa; border-color:#dee2e6; color:#6c757d;">
+<div id="selection-hint" class="alert d-flex align-items-center gap-2 py-2 mb-3">
     <i class="bi bi-cursor flex-shrink-0" id="hint-icon"></i>
     <span id="hint-text" class="flex-grow-1">Select a dog to assign</span>
     {# Frozen-slot note — JS fills the slot names and toggles d-none; hidden
