@@ -9,7 +9,6 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError
 from app.models import User, Dog, Booking, ServiceType, Walker, Closure
 from app import db, limiter
-from app.utils.db_error_handler import DBErrorHandler
 from app.utils.booking_access import get_accessible_dogs, get_accessible_dog_ids, user_can_access_booking
 from app.capacity import eligible_walker_clause, is_date_closed, MAX_RECURRING_SERIES
 from app.forms import BookingForm
@@ -156,14 +155,9 @@ def index():
             for e in errors:
                 flash(e, "error")
         else:
-            # Use context manager for error handling
-            with DBErrorHandler(
-                flash_message=True,
-                custom_error_messages={
-                    IntegrityError: "Could not create booking due to a conflict. You might already have a booking at this time.",
-                    OperationalError: "Our booking system is temporarily unavailable. Please try again later."
-                }
-            ):
+            # A database error rolls back, flashes and redirects home (the
+            # success paths redirect too), so a refresh can't resubmit the form.
+            try:
                 if not walk_service:
                     flash("No service type available. Please contact support.", "error")
                     return redirect(url_for("client.index"))
@@ -196,6 +190,17 @@ def index():
                 else:
                     flash("Booking request submitted — we'll confirm it shortly.", "success")
                 return redirect(url_for("client.index"))
+            except IntegrityError:
+                db.session.rollback()
+                flash("Could not create booking due to a conflict. You might already have a booking at this time.", "error")
+            except OperationalError:
+                db.session.rollback()
+                flash("Our booking system is temporarily unavailable. Please try again later.", "error")
+            except Exception:
+                db.session.rollback()
+                logging.exception(f"Booking form error for user {current_user.id}")
+                flash("An unexpected error occurred. Please try again later.", "error")
+            return redirect(url_for("client.index"))
 
     has_drop_in_walkers = Walker.query.join(User).filter(
         Walker.does_drop_ins == True,

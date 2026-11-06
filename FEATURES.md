@@ -16,7 +16,6 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 72 | P3 | S | 🔲 | **Handle rate-limited push re-registration** | Back off quietly when push re-subscription is throttled. |
 | 82 | P3 | L | 📋 | **One typed invoice calculator** | Every billing page reads its numbers from one calculation instead of re-deriving them. |
 | 89 | P3 | L | 📋 | **Simplify 4 — admin & walker view helpers** | Shared helpers for client detail, availability changes, bulk-cancel filters and profile photos. |
-| 90 | P3 | M | 📋 | **Simplify 5 — database error handling** | Replace the error-handler module with a small decorator, with tests. |
 | 91 | P3 | M | 📋 | **Simplify 6 — front-end helpers** | Merge duplicated confirm-modal, card and alert code in the client and admin scripts. |
 | 92 | P3 | L | 📋 | **Simplify 7 — booking request validation** | One validation/conflict path for the walk and drop-in booking routes; ship alone. |
 | 94 | P3 | M | 📋 | **Simplify 8 — one month calendar** | The drop-in board uses the dashboard's month calendar (compact, with drop-in counts) instead of its own. |
@@ -131,6 +130,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 86 | Simplify 1 — dead code & one-offs | Unused imports, one-off scripts, the old demo seeds and an unneeded package pin removed. |
 | 87 | Simplify 2 — capacity & board data | One capacity helper for walks and drop-ins; one board-data builder behind both board endpoints. |
 | 88 | Simplify 3 — shared utilities | One email template for newsletters and broadcasts, one dashboard slot-stats helper, simpler link sanitizing and device detection. |
+| 90 | Simplify 5 — database error handling | Retired the error-handler module; its two call sites use plain error handling, with tests. |
 | 93 | London date everywhere | Every "today" check uses the London date, so pages don't show yesterday's view just after midnight in summer. |
 | 104 | London date in the browser | Date pickers and auto-filled end dates use the London date, so recurring end dates aren't a day short in summer. |
 
