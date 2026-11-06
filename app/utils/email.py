@@ -184,10 +184,11 @@ def _send_personalised_batch(subject: str, body_html: str, recipients: list, *,
 
     batch = []
     for r in recipients:
-        # firstname/dog_name are client-editable (profile.py) — escape before
-        # interpolating into HTML. sanitize_rich_text sanitized the body itself
-        # (tags and attributes), not these substituted values, so they need
-        # their own escaping pass here.
+        # firstname/dog_name are plain text (names are admin-managed; a dog's
+        # name can also come from its owner at onboarding), so escape them
+        # before dropping them into the HTML body: "Tom <Tommy>" or "Smith &
+        # Jones" should read exactly as typed, not be parsed as markup. Each
+        # recipient's values only go into their own email.
         body = body_html.replace("{{firstname}}", _htmllib.escape(r.get("firstname") or ""))
         body = body.replace("{{dog_name}}", _htmllib.escape(r.get("dog_name") or "your dog"))
         foot = footer.replace("%%UNSUBSCRIBE_URL%%", r.get("unsubscribe_url") or "")
