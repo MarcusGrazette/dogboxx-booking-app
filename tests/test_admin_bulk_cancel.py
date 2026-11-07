@@ -439,3 +439,44 @@ class TestCancelServiceFilter:
         assert data['cancelled_count'] == 2
         assert db.session.get(Booking, di_id).status == 'cancelled'
         assert db.session.get(Booking, walk_id).status == 'cancelled'
+
+
+class TestPreviewMatchesCancel:
+    """Preview and bulk cancel share one filter (dogs.py::_filtered_bookings)."""
+
+    def test_preview_lists_morning_before_afternoon(self, client_user, dog, service_type,
+                                                    logged_in_admin):
+        day = _next_weekday(2)
+        # Afternoon seeded first so id order can't produce the right answer.
+        _seed_bookings(client_user, dog, service_type, [day], slot='Afternoon')
+        _seed_bookings(client_user, dog, service_type, [day], slot='Morning')
+        d = day.isoformat()
+        data = logged_in_admin.get(
+            f'/admin/dogs/{dog.id}/cancel-preview?start={d}&end={d}').get_json()
+        assert [b['slot'] for b in data['bookings']] == ['Morning', 'Afternoon']
+
+    def test_every_filter_cancels_exactly_what_preview_counted(
+            self, client_user, dog, service_type, logged_in_admin):
+        mon = _next_weekday(0)
+        days = [mon + datetime.timedelta(days=n) for n in range(10)
+                if (mon + datetime.timedelta(days=n)).weekday() < 5]
+        _seed_bookings(client_user, dog, service_type, days, slot='Morning')
+        _seed_bookings(client_user, dog, service_type, days, slot='Afternoon')
+        start, end = days[0].isoformat(), days[-1].isoformat()
+
+        before = {b.id for b in Booking.query.filter_by(dog_id=dog.id, status='requested')}
+        preview = logged_in_admin.get(
+            f'/admin/dogs/{dog.id}/cancel-preview?start={start}&end={end}'
+            f'&slots=Afternoon&days=1&days=3&service=group-walk').get_json()
+        resp = logged_in_admin.post(
+            f'/admin/dogs/{dog.id}/bulk-cancel',
+            data=json.dumps({'start': start, 'end': end, 'slots': ['Afternoon'],
+                             'days': [1, 3], 'service': 'group-walk'}),
+            content_type='application/json').get_json()
+
+        cancelled = before - {b.id for b in Booking.query.filter_by(dog_id=dog.id,
+                                                                    status='requested')}
+        expected = sum(1 for d in days if d.weekday() in (1, 3))
+        assert preview['count'] == resp['cancelled_count'] == len(cancelled) == expected
+        rows = [db.session.get(Booking, i) for i in cancelled]
+        assert {(r.slot, r.date.weekday()) for r in rows} == {('Afternoon', 1), ('Afternoon', 3)}
