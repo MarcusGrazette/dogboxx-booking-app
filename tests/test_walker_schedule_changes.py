@@ -452,33 +452,6 @@ class TestClientResetNotifications:
     """Walker self-service unavailability resets the booking without telling
     the client."""
 
-    def test_single_unavailability_resets_silently(self, app, client):
-        """POST /walker/unavailability with a slot that has a confirmed booking
-        → the booking resets to requested; the owner gets no notification."""
-        monday = _next_weekday(0)
-        with app.app_context():
-            walker_u, walker = _make_walker(
-                email='walker_notif@test.com',
-                schedule_days=[(0, 'Morning')],
-            )
-            client_u, dog = _make_client_with_dog('client_notif@test.com')
-            st = _make_service()
-            _confirmed_booking(client_u.id, dog.id, st.id, walker.id, monday)
-            walker_email = walker_u.email
-            client_uid = client_u.id
-
-        _login(client, walker_email)
-        resp = client.post('/walker/unavailability', json={
-            'date': monday.isoformat(),
-            'slot': 'Morning',
-        })
-        assert resp.status_code == 201
-
-        with app.app_context():
-            b = Booking.query.filter_by(user_id=client_uid).one()
-            assert (b.status, b.walker_id) == ('requested', None)
-            assert Notification.query.filter_by(recipient_id=client_uid).count() == 0
-
     def test_batch_unavailable_resets_silently(self, app, client):
         """POST /walker/schedule-changes/batch type=unavailable with affected
         confirmed bookings → both reset; the owner gets no notification."""
@@ -556,72 +529,11 @@ class TestRemoveWalkerRoleResetNotification:
 
 # ---------------------------------------------------------------------------
 # H6 fix: deleting ad-hoc availability must reset any confirmed booking sitting
-# on it. delete_adhoc, schedule_changes_batch_delete (adhoc_ids branch), and
-# admin_delete_adhoc all used to delete + commit with no reset at all —
-# UI-orphaned confirmed bookings (see CLAUDE.md "Walker availability change
-# must reset confirmed bookings").
+# on it. schedule_changes_batch_delete (adhoc_ids branch) used to delete +
+# commit with no reset at all — UI-orphaned confirmed bookings (see CLAUDE.md
+# "Lost walker availability resets bookings"). It is the only ad-hoc delete
+# path: walkers use it directly, admins pass walker_id.
 # ---------------------------------------------------------------------------
-
-class TestDeleteAdhocResetsBookings:
-
-    def test_delete_adhoc_resets_confirmed_booking(self, app, client):
-        monday = _next_weekday(0)
-        with app.app_context():
-            walker_u, walker = _make_walker(
-                email='walker_adhoc@test.com',
-                schedule_days=[(0, 'Morning')],  # not scheduled for Afternoon
-            )
-            adhoc = WalkerAdHocAvailability(walker_id=walker.id, date=monday, slot='Afternoon')
-            db.session.add(adhoc); db.session.commit()
-            adhoc_id = adhoc.id
-
-            client_u, dog = _make_client_with_dog('client_adhoc@test.com')
-            st = _make_service()
-            _confirmed_booking(client_u.id, dog.id, st.id, walker.id, monday, 'Afternoon')
-            walker_email = walker_u.email
-            client_uid = client_u.id
-            dog_id = dog.id
-
-        _login(client, walker_email)
-        resp = client.delete(f'/walker/adhoc/{adhoc_id}')
-        assert resp.get_json()['success'] is True
-
-        with app.app_context():
-            b = Booking.query.filter_by(dog_id=dog_id).first()
-            assert b.status == 'requested'
-            assert b.walker_id is None
-            assert Notification.query.filter_by(recipient_id=client_uid).count() == 0
-            assert db.session.get(WalkerAdHocAvailability, adhoc_id) is None
-
-    def test_delete_adhoc_skips_past_dated_row(self, app, client):
-        """A stale ad-hoc row whose date has already passed must not touch a
-        past (already-happened) confirmed booking when deleted — re-requesting
-        a walk that already took place would be wrong, not just useless."""
-        past_date = datetime.date.today() - datetime.timedelta(days=3)
-        with app.app_context():
-            walker_u, walker = _make_walker(email='walker_adhoc_past@test.com')
-            walker_id = walker.id
-            adhoc = WalkerAdHocAvailability(walker_id=walker.id, date=past_date, slot='Morning')
-            db.session.add(adhoc); db.session.commit()
-            adhoc_id = adhoc.id
-
-            client_u, dog = _make_client_with_dog('client_adhoc_past@test.com')
-            st = _make_service()
-            _confirmed_booking(client_u.id, dog.id, st.id, walker.id, past_date, 'Morning')
-            walker_email = walker_u.email
-            client_uid = client_u.id
-            dog_id = dog.id
-
-        _login(client, walker_email)
-        resp = client.delete(f'/walker/adhoc/{adhoc_id}')
-        assert resp.get_json()['success'] is True
-
-        with app.app_context():
-            b = Booking.query.filter_by(dog_id=dog_id).first()
-            assert b.status == 'confirmed'
-            assert b.walker_id == walker_id
-            assert Notification.query.filter_by(recipient_id=client_uid).count() == 0
-
 
 class TestBatchDeleteAdhocResetsBookings:
 
@@ -652,12 +564,43 @@ class TestBatchDeleteAdhocResetsBookings:
             assert b.walker_id is None
             assert Notification.query.filter_by(recipient_id=client_uid).count() == 0
 
+    def test_batch_delete_skips_past_dated_adhoc_row(self, app, client):
+        """A stale ad-hoc row whose date has already passed must not touch a
+        past (already-happened) confirmed booking when deleted — re-requesting
+        a walk that already took place would be wrong, not just useless."""
+        past_date = datetime.date.today() - datetime.timedelta(days=3)
+        with app.app_context():
+            walker_u, walker = _make_walker(email='walker_adhoc_past@test.com')
+            walker_id = walker.id
+            adhoc = WalkerAdHocAvailability(walker_id=walker.id, date=past_date, slot='Morning')
+            db.session.add(adhoc); db.session.commit()
+            adhoc_id = adhoc.id
+
+            client_u, dog = _make_client_with_dog('client_adhoc_past@test.com')
+            st = _make_service()
+            _confirmed_booking(client_u.id, dog.id, st.id, walker.id, past_date, 'Morning')
+            walker_email = walker_u.email
+            client_uid = client_u.id
+            dog_id = dog.id
+
+        _login(client, walker_email)
+        resp = client.post('/walker/schedule-changes/batch-delete', json={
+            'adhoc_ids': [adhoc_id],
+        })
+        assert resp.get_json() == {'success': True, 'deleted': 1}
+
+        with app.app_context():
+            b = Booking.query.filter_by(dog_id=dog_id).first()
+            assert b.status == 'confirmed'
+            assert b.walker_id == walker_id
+            assert Notification.query.filter_by(recipient_id=client_uid).count() == 0
+
 
 class TestAdminDeleteAdhocResetsBookings:
 
     def test_admin_delete_adhoc_resets_confirmed_booking(self, app, client):
-        """admin_delete_adhoc — found during the H6 fix, not named in the
-        original audit finding, but the same bug as delete_adhoc."""
+        """An admin deleting a walker's ad-hoc slot (batch-delete with
+        walker_id) resets the confirmed booking on it, same as the walker."""
         monday = _next_weekday(0)
         with app.app_context():
             admin = User(firstname='Admin', lastname='Boss', email='admin_del_adhoc@test.com',
@@ -679,8 +622,10 @@ class TestAdminDeleteAdhocResetsBookings:
             dog_id = dog.id
 
         _login(client, admin_email)
-        resp = client.delete(f'/admin/walkers/{walker_id}/adhoc/{adhoc_id}')
-        assert resp.get_json()['success'] is True
+        resp = client.post('/walker/schedule-changes/batch-delete', json={
+            'adhoc_ids': [adhoc_id], 'walker_id': walker_id,
+        })
+        assert resp.get_json() == {'success': True, 'deleted': 1}
 
         with app.app_context():
             b = Booking.query.filter_by(dog_id=dog_id).first()

@@ -227,195 +227,15 @@ def api_schedule_changes():
 @walker_required
 def upload_profile_photo():
     """AJAX endpoint: accept a cropped image blob and save as the walker's profile photo."""
-    from app.utils.uploads import process_cropped_photo, delete_replaced_photo
-    import logging
+    from app.utils.uploads import replace_photo
 
     if 'file' not in request.files:
         return jsonify(success=False, error="No file provided"), 400
 
-    filename = None
-    committed = False
-    try:
-        filename = process_cropped_photo(request.files['file'], subfolder='profiles')
-        if not filename:
-            return jsonify(success=False, error="Empty file"), 400
-
-        old_filename = current_user.profile_pic
-        current_user.profile_pic = filename
-        db.session.commit()
-        committed = True
-        delete_replaced_photo(old_filename, 'profiles')
-
-        url = url_for('static', filename=f'uploads/profiles/{filename}')
-        logging.info(f"Profile photo updated for walker {current_user.email}: {filename}")
-        return jsonify(success=True, url=url)
-
-    except ValueError as e:
-        return jsonify(success=False, error=str(e)), 400
-    except Exception as e:
-        db.session.rollback()
-        if not committed:
-            delete_replaced_photo(filename, 'profiles')  # the unsaved new file
-        logging.exception(f"Error saving walker profile photo for {current_user.email}: {e}")
-        return jsonify(success=False, error="Server error saving photo"), 500
-
-
-@walker_bp.route("/unavailability", methods=["POST"])
-@login_required
-@walker_required
-def add_unavailability():
-    """Add an unavailability exception. JSON endpoint."""
-    walker = Walker.query.filter_by(user_id=current_user.id).first()
-    if not walker:
-        return jsonify(success=False, message="Walker profile not found"), 404
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify(success=False, message="Invalid JSON"), 400
-
-    date_str = data.get('date')
-    slot = data.get('slot')
-    reason = data.get('reason', '').strip() or None
-
-    if not date_str or not slot:
-        return jsonify(success=False, message="Date and slot are required"), 400
-
-    if slot not in ('Morning', 'Afternoon'):
-        return jsonify(success=False, message="Invalid slot"), 400
-
-    try:
-        unavail_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-    except ValueError:
-        return jsonify(success=False, message="Invalid date format (use YYYY-MM-DD)"), 400
-
-    if unavail_date < local_today():
-        return jsonify(success=False, message="Cannot mark past dates as unavailable"), 400
-
-    # Validate walker actually works this slot on this day
-    day_of_week = unavail_date.weekday()
-    has_slot = WalkerSchedule.query.filter_by(
-        walker_id=walker.id, day_of_week=day_of_week, slot=slot, active=True
-    ).first()
-    if not has_slot:
-        return jsonify(success=False, message=f"You are not scheduled for {slot} on {unavail_date.strftime('%A')}s"), 400
-
-    # Check for duplicate
-    existing = WalkerUnavailability.query.filter_by(
-        walker_id=walker.id, date=unavail_date, slot=slot
-    ).first()
-    if existing:
-        return jsonify(success=False, message="Already marked as unavailable for this date/slot"), 400
-
-    unavail = WalkerUnavailability(
-        walker_id=walker.id,
-        date=unavail_date,
-        slot=slot,
-        reason=reason,
-        created_by_id=current_user.id,
+    return replace_photo(
+        current_user, 'profile_pic', request.files['file'], subfolder='profiles',
+        cropped=True, log_label=f"Profile photo for walker {current_user.email}",
     )
-    db.session.add(unavail)
-
-    # Any confirmed bookings this walker held for this date/slot are no longer
-    # guaranteed — reset them to requested so they surface as pending on the board.
-    affected = Booking.query.filter_by(
-        walker_id=walker.id, date=unavail_date, slot=slot, status='confirmed',
-    ).all()
-
-    notify_walker_dropout(
-        current_user, affected=len(affected),
-        title=f"{walker.user.firstname} is unavailable — {slot} on {unavail_date.strftime('%a %-d %b')}")
-
-    # Reset to requested (walker unassigned). Actor = the walker making
-    # themselves unavailable, so nobody but the admins hears (above).
-    reset_bookings_for_lost_availability(
-        affected, actor_id=current_user.id,
-        reason=f"{walker.user.firstname} marked unavailable",
-    )
-
-    db.session.commit()
-
-    return jsonify(success=True, message="Unavailability added", unavailability=unavail.to_dict()), 201
-
-
-@walker_bp.route("/unavailability/<int:id>", methods=["DELETE"])
-@login_required
-@walker_required
-def delete_unavailability(id):
-    """Remove an unavailability exception. Walker can only delete their own."""
-    walker = Walker.query.filter_by(user_id=current_user.id).first()
-    if not walker:
-        return jsonify(success=False, message="Walker profile not found"), 404
-
-    unavail = db.session.get(WalkerUnavailability, id)
-    if not unavail:
-        return jsonify(success=False, message="Not found"), 404
-
-    if unavail.walker_id != walker.id:
-        return jsonify(success=False, message="Forbidden"), 403
-
-    db.session.delete(unavail)
-    db.session.commit()
-
-    return jsonify(success=True, message="Unavailability removed")
-
-
-@walker_bp.route("/adhoc", methods=["POST"])
-@login_required
-@walker_required
-def add_adhoc():
-    """Add an ad hoc available day outside the default schedule. JSON endpoint."""
-    walker = Walker.query.filter_by(user_id=current_user.id).first()
-    if not walker:
-        return jsonify(success=False, message="Walker profile not found"), 404
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify(success=False, message="Invalid JSON"), 400
-
-    date_str = data.get('date')
-    slot = data.get('slot')
-    reason = (data.get('reason') or '').strip() or None
-
-    if not date_str or not slot:
-        return jsonify(success=False, message="Date and slot are required"), 400
-
-    if slot not in ('Morning', 'Afternoon'):
-        return jsonify(success=False, message="Invalid slot"), 400
-
-    try:
-        adhoc_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-    except ValueError:
-        return jsonify(success=False, message="Invalid date format (use YYYY-MM-DD)"), 400
-
-    if adhoc_date < local_today():
-        return jsonify(success=False, message="Cannot add availability for past dates"), 400
-
-    # Validate walker does NOT already work this slot on this day (would be redundant)
-    day_of_week = adhoc_date.weekday()
-    already_scheduled = WalkerSchedule.query.filter_by(
-        walker_id=walker.id, day_of_week=day_of_week, slot=slot, active=True
-    ).first()
-    if already_scheduled:
-        return jsonify(success=False, message=f"You are already scheduled for {slot} on {adhoc_date.strftime('%A')}s"), 400
-
-    # Check for duplicate
-    existing = WalkerAdHocAvailability.query.filter_by(
-        walker_id=walker.id, date=adhoc_date, slot=slot
-    ).first()
-    if existing:
-        return jsonify(success=False, message="Already marked as available for this date/slot"), 400
-
-    adhoc = WalkerAdHocAvailability(
-        walker_id=walker.id,
-        date=adhoc_date,
-        slot=slot,
-        reason=reason,
-    )
-    db.session.add(adhoc)
-    # No admin notification: extra availability needs no action (activity feed).
-    db.session.commit()
-
-    return jsonify(success=True, message="Ad hoc availability added", adhoc=adhoc.to_dict()), 201
 
 
 # ── Batch range endpoints (powers the unified Schedule changes form) ─────────
@@ -742,8 +562,7 @@ def schedule_changes_batch_delete():
         return jsonify(success=False, message="Invalid IDs."), 400
 
     # Deleting an ad-hoc slot can orphan a confirmed booking sitting on it,
-    # same as the single-row /adhoc/<id> delete — so the affected rows must be
-    # read (with their date/slot) *before* the bulk delete below discards
+    # so the affected rows must be read (with their date/slot) *before* the bulk delete below discards
     # that information. Deleting an unavailability row only ever increases
     # availability, so unavail_ids never need this.
     all_affected = []
@@ -788,50 +607,6 @@ def schedule_changes_batch_delete():
 
     db.session.commit()
     return jsonify(success=True, deleted=deleted)
-
-
-@walker_bp.route("/adhoc/<int:id>", methods=["DELETE"])
-@login_required
-@walker_required
-def delete_adhoc(id):
-    """Remove an ad hoc availability entry. Walker can only delete their own."""
-    walker = Walker.query.filter_by(user_id=current_user.id).first()
-    if not walker:
-        return jsonify(success=False, message="Walker profile not found"), 404
-
-    adhoc = db.session.get(WalkerAdHocAvailability, id)
-    if not adhoc:
-        return jsonify(success=False, message="Not found"), 404
-
-    if adhoc.walker_id != walker.id:
-        return jsonify(success=False, message="Forbidden"), 403
-
-    # This ad-hoc slot may have a confirmed booking sitting on it — losing the
-    # availability it was granted on must reset that booking, same as losing
-    # any other slot (§ Walker availability change must reset confirmed
-    # bookings). `adhoc.date` was validated >= today only at creation time, so
-    # a stale row past its date is skipped rather than queried — the walk has
-    # already happened and re-requesting it would be wrong, not just useless.
-    today = local_today()
-    affected = []
-    if adhoc.date >= today:
-        affected = Booking.query.filter_by(
-            walker_id=adhoc.walker_id, date=adhoc.date, slot=adhoc.slot, status='confirmed',
-        ).all()
-
-    reset_bookings_for_lost_availability(
-        affected, actor_id=current_user.id,
-        reason=f"{walker.user.firstname}'s availability was removed",
-    )
-    notify_walker_dropout(
-        current_user, affected=len(affected),
-        title=(f"{walker.user.firstname} removed their {adhoc.slot} availability — "
-               f"{adhoc.date.strftime('%a %-d %b')}"))
-
-    db.session.delete(adhoc)
-    db.session.commit()
-
-    return jsonify(success=True, message="Ad hoc availability removed")
 
 
 @walker_bp.route("/pickups")

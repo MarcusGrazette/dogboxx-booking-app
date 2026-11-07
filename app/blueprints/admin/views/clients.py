@@ -11,7 +11,7 @@ from app.utils.decorators import admin_required
 from app.models import User, Dog, Client, DogOwner, Notification, PushSubscription
 from app import db
 from app.forms import ClientCreateForm
-from app.utils.uploads import process_dog_photo, delete_replaced_photo
+from app.utils.uploads import replace_photo
 from app.utils.sanitize import clean_rich_text_or_none
 from app.utils.activity_log import record_admin_action, diff_fields
 from app.utils.availability_reset import reset_future_bookings_for_walker
@@ -59,6 +59,16 @@ def client_detail(client_id):
     if user.deleted_at:
         return _deleted_client_detail(user)
 
+    from app.forms import AddDogForm
+    return render_template(
+        "admin_client_detail.html",
+        **_client_detail_context(user, add_dog_form=AddDogForm(), add_dog_modal_open=False),
+    )
+
+
+def _client_detail_context(user, *, add_dog_form, add_dog_modal_open):
+    """Template context for admin_client_detail.html — shared by client_detail
+    and add_dog's validation-error re-render, so both pages show the same."""
     # Batch all dog + co-owner lookups to avoid N+1 queries
     primary_ownerships = DogOwner.query.filter_by(user_id=user.id, role='primary').order_by(DogOwner.id).all()
     sec_as_secondary = DogOwner.query.filter_by(user_id=user.id, role='secondary').all()
@@ -136,17 +146,15 @@ def client_detail(client_id):
         .limit(10)
         .all()
     )
-    from app.forms import AddDogForm
-    return render_template(
-        "admin_client_detail.html",
+    return dict(
         client=user,
         dog=dog,
         primary_dogs=primary_dogs,
         secondary_dogs=secondary_dogs,
         available_clients=available_clients,
         notifications=notifications,
-        add_dog_form=AddDogForm(),
-        add_dog_modal_open=False,
+        add_dog_form=add_dog_form,
+        add_dog_modal_open=add_dog_modal_open,
         today=local_today(),
         can_delete_client=_can_delete_dogless_client(user, primary_dogs, secondary_dogs),
     )
@@ -732,63 +740,9 @@ def add_dog(client_id):
         return redirect(url_for('admin.client_detail', client_id=client_id))
 
     # Validation failed — re-render the detail page with the modal open
-    # Re-build everything client_detail needs
-    primary_ownerships = DogOwner.query.filter_by(user_id=user.id, role='primary').all()
-    primary_dogs = []
-    for ownership in primary_ownerships:
-        dog = db.session.get(Dog, ownership.dog_id)
-        if not dog or dog.deleted_at:
-            continue
-        secondary_ownerships = DogOwner.query.filter_by(dog_id=dog.id, role='secondary').all()
-        secondary_users = [db.session.get(User, so.user_id) for so in secondary_ownerships]
-        secondary_users = [u for u in secondary_users if u]
-        primary_dogs.append({'dog': dog, 'secondary_owners': secondary_users})
-
-    secondary_ownerships = DogOwner.query.filter_by(user_id=user.id, role='secondary').all()
-    secondary_dogs = []
-    for ownership in secondary_ownerships:
-        dog = db.session.get(Dog, ownership.dog_id)
-        if not dog or dog.deleted_at:
-            continue
-        primary_o = DogOwner.query.filter_by(dog_id=dog.id, role='primary').first()
-        primary_user = db.session.get(User, primary_o.user_id) if primary_o else None
-        secondary_dogs.append({'dog': dog, 'primary_owner': primary_user})
-
-    already_linked_ids = {user.id}
-    for pd in primary_dogs:
-        for so in pd['secondary_owners']:
-            already_linked_ids.add(so.id)
-    for sd in secondary_dogs:
-        if sd['primary_owner']:
-            already_linked_ids.add(sd['primary_owner'].id)
-    available_clients = (
-        User.query
-        # presence of a Client record, not role == 'client' — includes dual-role
-        # users (walker + client) as eligible co-owners; excludes pure walkers.
-        .filter(User.client != None, User.active == True)  # noqa: E711
-        .filter(~User.id.in_(already_linked_ids))
-        .order_by(User.lastname, User.firstname)
-        .all()
-    )
-
-    dog = primary_dogs[0]['dog'] if primary_dogs else None
-    notifications = (
-        Notification.query
-        .filter_by(recipient_id=user.id)
-        .order_by(Notification.created_at.desc())
-        .limit(20)
-        .all()
-    )
     return render_template(
         "admin_client_detail.html",
-        client=user,
-        dog=dog,
-        primary_dogs=primary_dogs,
-        secondary_dogs=secondary_dogs,
-        available_clients=available_clients,
-        notifications=notifications,
-        add_dog_form=form,
-        add_dog_modal_open=True,
+        **_client_detail_context(user, add_dog_form=form, add_dog_modal_open=True),
     )
 
 
@@ -984,33 +938,15 @@ def upload_client_pickup_photo(client_id):
     if 'file' not in request.files:
         return jsonify(success=False, message="No file provided"), 400
 
-    filename = None
-    committed = False
-    try:
-        filename = process_dog_photo(request.files['file'], subfolder='pickup_notes')
-        if not filename:
-            return jsonify(success=False, message="Empty file"), 400
-
-        old_filename = dog.pickup_notes_photo
-        dog.pickup_notes_photo = filename
+    def log_change(old, new):
         record_admin_action(
             'dog', dog.id, 'updated', actor_id=current_user.id,
             summary=f"Updated pickup photo for {dog.name}",
-            changes={'pickup_notes_photo': [old_filename, filename]},
+            changes={'pickup_notes_photo': [old, new]},
         )
-        db.session.commit()
-        committed = True
-        delete_replaced_photo(old_filename, 'pickup_notes')
 
-        url = url_for('media.pickup_photo', filename=filename)
-        logging.info(f"Pickup notes photo updated for dog {dog.id} by admin {current_user.email}: {filename}")
-        return jsonify(success=True, url=url)
-
-    except ValueError as e:
-        return jsonify(success=False, message=str(e)), 400
-    except Exception as e:
-        db.session.rollback()
-        if not committed:
-            delete_replaced_photo(filename, 'pickup_notes')  # the unsaved new file
-        logging.exception(f"Error saving pickup notes photo for dog {dog.id}: {e}")
-        return jsonify(success=False, message="Server error saving photo"), 500
+    return replace_photo(
+        dog, 'pickup_notes_photo', request.files['file'], subfolder='pickup_notes',
+        cropped=False, error_key='message', log_change=log_change,
+        log_label=f"Pickup notes photo for dog {dog.id} by admin {current_user.email}",
+    )

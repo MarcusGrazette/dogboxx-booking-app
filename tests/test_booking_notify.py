@@ -396,9 +396,9 @@ class TestWalkerAvailability:
         walker = _schedule(walker_user)
         b = _walk(client_user, dog, service_type, walker=walker)
         login(client, walker_user.email)
-        resp = client.post('/walker/unavailability', json={'date': DAY.isoformat(),
-                                                             'slot': 'Morning'})
-        assert resp.status_code == 201
+        resp = client.post('/walker/schedule-changes/batch', json={
+            'start_date': DAY.isoformat(), 'slots': ['Morning'], 'type': 'unavailable'})
+        assert resp.get_json()['success'] is True
 
         assert (_db.session.get(Booking, b.id).status) == 'requested'
         assert _notifs(client_user) == []
@@ -412,14 +412,16 @@ class TestWalkerAvailability:
             self, app, client, admin_user, walker_user, service_type):
         _schedule(walker_user)
         login(client, walker_user.email)
-        client.post('/walker/unavailability', json={'date': DAY.isoformat(), 'slot': 'Morning'})
+        client.post('/walker/schedule-changes/batch', json={
+            'start_date': DAY.isoformat(), 'slots': ['Morning'], 'type': 'unavailable'})
         assert _notifs(admin_user) == []
 
     def test_walker_adding_a_day_tells_nobody(self, app, client, admin_user, walker_user):
         _schedule(walker_user)                         # Morning only
         login(client, walker_user.email)
-        resp = client.post('/walker/adhoc', json={'date': DAY.isoformat(), 'slot': 'Afternoon'})
-        assert resp.status_code == 201
+        resp = client.post('/walker/schedule-changes/batch', json={
+            'start_date': DAY.isoformat(), 'slots': ['Afternoon'], 'type': 'available'})
+        assert resp.get_json()['created'] == 1
         assert _notifs(admin_user) == []
 
     def test_walker_removing_a_day_with_walks_tells_admins(
@@ -430,12 +432,14 @@ class TestWalkerAvailability:
         _db.session.commit()
         _walk(client_user, dog, service_type, walker=walker, slot='Afternoon')
         login(client, walker_user.email)
-        assert client.delete(f'/walker/adhoc/{adhoc.id}').get_json()['success'] is True
+        resp = client.post('/walker/schedule-changes/batch-delete',
+                           json={'adhoc_ids': [adhoc.id]})
+        assert resp.get_json()['success'] is True
 
         assert _notifs(client_user) == []
         assert _notifs(admin_user) == [
             ('walker_availability',
-             f"Walker removed their Afternoon availability — {TITLE_DAY}",
+             f"Walker removed their availability — {TITLE_DAY}",
              '1 booking needs reassigning')]
 
     def test_admin_marking_walker_off_tells_nobody(
@@ -444,8 +448,9 @@ class TestWalkerAvailability:
         walker = _schedule(walker_user)
         _walk(client_user, dog, service_type, walker=walker)
         login(client, admin_user.email)
-        resp = client.post(f'/admin/walkers/{walker.id}/unavailability',
-                           json={'date': DAY.isoformat(), 'slot': 'Morning'})
+        resp = client.post('/walker/schedule-changes/batch', json={
+            'start_date': DAY.isoformat(), 'slots': ['Morning'], 'type': 'unavailable',
+            'walker_id': walker.id})
         assert resp.get_json()['success'] is True
 
         assert _notifs(client_user) == []
@@ -460,7 +465,8 @@ class TestWalkerAvailability:
         walker = _schedule(admin_user)
         _walk(client_user, dog, service_type, walker=walker)
         login(client, admin_user.email)
-        client.post('/walker/unavailability', json={'date': DAY.isoformat(), 'slot': 'Morning'})
+        client.post('/walker/schedule-changes/batch', json={
+            'start_date': DAY.isoformat(), 'slots': ['Morning'], 'type': 'unavailable'})
 
         assert _notifs(other_admin) == []
         assert _notifs(client_user) == []
