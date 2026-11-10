@@ -713,6 +713,8 @@ class TestReset:
         """Marking a walker unavailable resets their confirmed bookings, one BSC row each."""
         with app.app_context():
             tom = tomorrow()
+            while tom.weekday() >= 5:      # the batch endpoint skips weekends
+                tom += datetime.timedelta(days=1)
             walker = make_walker_with_schedule('w_reset@test.com', tom.weekday(), 'Morning')
             admin = make_user('admin_reset@test.com', role='walker', is_admin=True)
             b, _ = seed_booking(status='confirmed', date=tom)
@@ -721,10 +723,11 @@ class TestReset:
             admin_email, admin_id, bid, wid = admin.email, admin.id, b.id, walker.id
 
         login(client, admin_email)
-        resp = client.post(f'/admin/walkers/{wid}/unavailability', data=json.dumps({
-            'date': tom.isoformat(), 'slot': 'Morning',
+        resp = client.post('/walker/schedule-changes/batch', data=json.dumps({
+            'start_date': tom.isoformat(), 'slots': ['Morning'], 'type': 'unavailable',
+            'walker_id': wid,
         }), content_type='application/json')
-        assert resp.status_code == 201
+        assert resp.get_json()['success'] is True
 
         with app.app_context():
             rows = bsc_rows(bid)

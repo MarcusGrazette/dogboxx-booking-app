@@ -266,6 +266,34 @@ class TestRoutesDeleteThePreviousPhoto:
         assert _r2_deletes(spawned) == []
 
 
+class TestErrorResponseKey:
+    """Client/walker JS reads the failure text from `error`, admin JS from
+    `message` — replace_photo must keep each route's key."""
+
+    def _post_junk(self, flask_client, url):
+        return flask_client.post(url, data={'file': (io.BytesIO(b'not an image'), 'x.png')},
+                                 content_type='multipart/form-data')
+
+    def test_client_routes_use_error(self, app, logged_in_client, dog):
+        for url in ('/profile/upload-dog-photo', '/profile/upload-profile-photo',
+                    f'/profile/dog/{dog.id}/pickup-photo'):
+            resp = self._post_junk(logged_in_client, url)
+            assert resp.status_code == 400, url
+            assert resp.get_json() == {'success': False, 'error': 'Invalid image file'}, url
+
+    def test_walker_route_uses_error(self, app, logged_in_walker):
+        resp = self._post_junk(logged_in_walker, '/walker/profile/upload-photo')
+        assert resp.status_code == 400
+        assert resp.get_json() == {'success': False, 'error': 'Invalid image file'}
+
+    def test_admin_routes_use_message(self, app, logged_in_admin, client_user, dog):
+        for url in (f'/admin/clients/{client_user.id}/pickup-photo',
+                    f'/admin/dogs/{dog.id}/pickup-photo'):
+            resp = self._post_junk(logged_in_admin, url)
+            assert resp.status_code == 400, url
+            assert resp.get_json() == {'success': False, 'message': 'Invalid image file'}, url
+
+
 def _fail(*args, **kwargs):
     raise RuntimeError('simulated failure')
 
@@ -293,11 +321,32 @@ class TestFailedSave:
         discarded = _r2_deletes(spawned)
         assert len(discarded) == 1 and discarded[0] != 'pickup_notes/keep-me.png'
 
+    def test_value_error_after_processing_is_a_server_error(
+            self, app, logged_in_admin, dog, spawned, monkeypatch):
+        """Only a bad image is a 400. A ValueError from the activity-log
+        callback (or the commit) is a 500: rolled back, new file discarded."""
+        old = _place_file(app, 'pickup_notes', 'keep-me-too.png')
+        db.session.get(Dog, dog.id).pickup_notes_photo = 'keep-me-too.png'
+        db.session.commit()
+        before = set(os.listdir(_folder(app, 'pickup_notes')))
+
+        def _value_error(*args, **kwargs):
+            raise ValueError('not an upload problem')
+        monkeypatch.setattr('app.blueprints.admin.views.dogs.record_admin_action', _value_error)
+        resp = _post_file(logged_in_admin, f'/admin/dogs/{dog.id}/pickup-photo')
+
+        assert resp.status_code == 500
+        assert resp.get_json() == {'success': False, 'message': 'Server error saving photo'}
+        assert os.path.exists(old)
+        assert db.session.get(Dog, dog.id).pickup_notes_photo == 'keep-me-too.png'
+        assert set(os.listdir(_folder(app, 'pickup_notes'))) == before, \
+            'the unsaved new file was left on disk'
+
     def test_error_after_the_commit_keeps_the_new_photo(
             self, app, logged_in_client, dog, spawned, monkeypatch):
         """An exception after a successful commit (here url_for) must not
         discard the photo the row now points at — the `committed` guard."""
-        monkeypatch.setattr('app.blueprints.client.views.profile.url_for', _fail)
+        monkeypatch.setattr('app.utils.uploads.url_for', _fail)
         resp = _post_file(logged_in_client, f'/profile/dog/{dog.id}/pickup-photo')
         assert resp.status_code == 500
 

@@ -1,4 +1,4 @@
-from flask import request, render_template, jsonify, url_for
+from flask import request, render_template, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError
@@ -16,8 +16,9 @@ from app.services.booking_service import create_booking, CapacityError
 from app.capacity import MAX_RECURRING_SERIES, check_availability
 from app.utils.invoicing import is_late_cancellation, group_by_bill_cancellation
 from app.utils.dates import local_today
+from app.utils.pricing import SLOT_ORDER
 from app.utils.sanitize import clean_rich_text_or_none
-from app.utils.uploads import process_dog_photo, delete_replaced_photo
+from app.utils.uploads import replace_photo
 from app.utils.activity_log import record_admin_action, diff_fields
 
 # Mirrors clients.py's DOG_AUDIT_FIELDS — see app/utils/activity_log.py for
@@ -41,6 +42,53 @@ def _parse_day_filter(raw_values):
         if 0 <= n <= 4:
             out.add(n)
     return out
+
+
+def _filtered_bookings(dog_id, *, start, end, slots, days, service):
+    """The active bookings a dog cancel covers — shared by dog_cancel_preview
+    and dog_bulk_cancel so the count the admin previews is the count cancelled.
+
+    Returns (bookings, None) or (None, (json_response, status)) on bad input.
+    Bookings are sorted by date, SLOT_ORDER (Morning before Afternoon), then id.
+    """
+    try:
+        start = date_type.fromisoformat(start or '')
+        end = date_type.fromisoformat(end or '')
+    except (ValueError, TypeError):
+        return None, (jsonify(success=False, message="Invalid dates"), 400)
+    if end < start:
+        return None, (jsonify(success=False, message="End date must be on or after start date"), 400)
+    if (end - start).days > 365:
+        return None, (jsonify(success=False, message="Range cannot exceed one year"), 400)
+
+    # Slot filter — 0 or 2 valid values = no filter (Both). 1 = narrow.
+    slot_filter = [s for s in slots if s in ('Morning', 'Afternoon')]
+    # Day-of-week filter — empty set = no filter (matches slot semantic).
+    day_filter = _parse_day_filter(days)
+
+    q = (
+        Booking.query
+        .options(joinedload(Booking.service_type))
+        .filter(
+            Booking.dog_id == dog_id,
+            Booking.date >= start,
+            Booking.date <= end,
+            Booking.status.notin_(['cancelled', 'rejected', 'completed']),
+        )
+    )
+    if len(slot_filter) == 1:
+        q = q.filter(Booking.slot == slot_filter[0])
+    # Service filter — 'all' (or missing) = every service type.
+    if service and service != 'all':
+        q = q.join(ServiceType).filter(ServiceType.slug == service)
+    bookings = q.all()
+
+    # Weekdays filtered in Python — avoids the Postgres DOW-offset gotcha
+    # (see CLAUDE.md), and the per-dog dataset is small.
+    if day_filter:
+        bookings = [b for b in bookings if b.date.weekday() in day_filter]
+    bookings.sort(key=lambda b: (b.date, SLOT_ORDER.get(b.slot, len(SLOT_ORDER)), b.id))
+    return bookings, None
 
 
 @admin_bp.route("/dogs")
@@ -162,39 +210,29 @@ def upload_dog_pickup_photo(dog_id):
     if not dog or dog.deleted_at:
         return jsonify(success=False, message="Dog not found"), 404
 
+    return replace_pickup_photo_as_admin(dog)
+
+
+def replace_pickup_photo_as_admin(dog):
+    """Save the uploaded file as `dog`'s pickup-notes photo, logged as an admin
+    change — shared by this route and clients.py::upload_client_pickup_photo.
+    The client's own route (profile.py) differs on purpose: self-service
+    summary, `error` key, co-owner access check."""
     if 'file' not in request.files:
         return jsonify(success=False, message="No file provided"), 400
 
-    filename = None
-    committed = False
-    try:
-        filename = process_dog_photo(request.files['file'], subfolder='pickup_notes')
-        if not filename:
-            return jsonify(success=False, message="Empty file"), 400
-
-        old_filename = dog.pickup_notes_photo
-        dog.pickup_notes_photo = filename
+    def log_change(old, new):
         record_admin_action(
             'dog', dog.id, 'updated', actor_id=current_user.id,
             summary=f"Updated pickup photo for {dog.name}",
-            changes={'pickup_notes_photo': [old_filename, filename]},
+            changes={'pickup_notes_photo': [old, new]},
         )
-        db.session.commit()
-        committed = True
-        delete_replaced_photo(old_filename, 'pickup_notes')
 
-        url = url_for('media.pickup_photo', filename=filename)
-        logging.info(f"Pickup notes photo updated for dog {dog.id} by admin {current_user.email}: {filename}")
-        return jsonify(success=True, url=url)
-
-    except ValueError as e:
-        return jsonify(success=False, message=str(e)), 400
-    except Exception as e:
-        db.session.rollback()
-        if not committed:
-            delete_replaced_photo(filename, 'pickup_notes')  # the unsaved new file
-        logging.exception(f"Error saving pickup notes photo for dog {dog.id}: {e}")
-        return jsonify(success=False, message="Server error saving photo"), 500
+    return replace_photo(
+        dog, 'pickup_notes_photo', request.files['file'], subfolder='pickup_notes',
+        cropped=False, error_key='message', log_change=log_change,
+        log_label=f"Pickup notes photo for dog {dog.id} by admin {current_user.email}",
+    )
 
 
 @admin_bp.route("/book_for_dog", methods=["POST"])
@@ -583,44 +621,16 @@ def dog_cancel_preview(dog_id):
     if not dog or dog.deleted_at:
         return jsonify(success=False, message="Dog not found"), 404
 
-    try:
-        start = date_type.fromisoformat(request.args.get('start', ''))
-        end   = date_type.fromisoformat(request.args.get('end', ''))
-    except (ValueError, TypeError):
-        return jsonify(success=False, message="Invalid dates"), 400
-
-    if end < start:
-        return jsonify(success=False, message="End date must be on or after start date"), 400
-    if (end - start).days > 365:
-        return jsonify(success=False, message="Range cannot exceed one year"), 400
-
-    # Optional slot filter — 0 or 2 valid values = no filter (Both). 1 = narrow.
-    slot_filter = [s for s in request.args.getlist('slots') if s in ('Morning', 'Afternoon')]
-    # Optional day-of-week filter — empty set = no filter (matches slot semantic).
-    day_filter = _parse_day_filter(request.args.getlist('days'))
-    # Optional service filter — 'all' (or missing) = every service type.
-    service_filter = request.args.get('service', 'all')
-
-    q = (
-        Booking.query
-        .options(joinedload(Booking.service_type))
-        .filter(
-            Booking.dog_id == dog_id,
-            Booking.date >= start,
-            Booking.date <= end,
-            Booking.status.notin_(['cancelled', 'rejected', 'completed']),
-        )
+    bookings, error = _filtered_bookings(
+        dog_id,
+        start=request.args.get('start'),
+        end=request.args.get('end'),
+        slots=request.args.getlist('slots'),
+        days=request.args.getlist('days'),
+        service=request.args.get('service', 'all'),
     )
-    if len(slot_filter) == 1:
-        q = q.filter(Booking.slot == slot_filter[0])
-    if service_filter and service_filter != 'all':
-        q = q.join(ServiceType).filter(ServiceType.slug == service_filter)
-    bookings = q.order_by(Booking.date, Booking.slot).all()
-
-    # Filter weekdays in Python — avoids the Postgres DOW-offset gotcha
-    # (see CLAUDE.md), and the per-dog dataset is small.
-    if day_filter:
-        bookings = [b for b in bookings if b.date.weekday() in day_filter]
+    if error:
+        return error
 
     # How many fall inside the notice window — these bill by default unless the
     # admin waives. The UI uses late_count to show/hide the late-fee checkbox.
@@ -662,45 +672,16 @@ def dog_bulk_cancel(dog_id):
         return jsonify(success=False, message="Dog not found"), 404
 
     data = request.get_json(silent=True) or {}
-    try:
-        start = date_type.fromisoformat(data.get('start', ''))
-        end   = date_type.fromisoformat(data.get('end', ''))
-    except (ValueError, TypeError):
-        return jsonify(success=False, message="Invalid dates"), 400
-
-    if end < start:
-        return jsonify(success=False, message="End date must be on or after start date"), 400
-    if (end - start).days > 365:
-        return jsonify(success=False, message="Range cannot exceed one year"), 400
-
-    # Optional slot filter — 0 or 2 valid values = no filter (Both). 1 = narrow.
-    slots_raw   = data.get('slots') or []
-    slot_filter = [s for s in slots_raw if s in ('Morning', 'Afternoon')]
-    # Optional day-of-week filter — empty set = no filter (matches slot semantic).
-    day_filter = _parse_day_filter(data.get('days') or [])
-    # Optional service filter — 'all' (or missing) = every service type. Must
-    # match the preview's filter exactly so the count the admin saw is the
-    # count cancelled.
-    service_filter = data.get('service', 'all')
-
-    q = (
-        Booking.query
-        .filter(
-            Booking.dog_id == dog_id,
-            Booking.date >= start,
-            Booking.date <= end,
-            Booking.status.notin_(['cancelled', 'rejected', 'completed']),
-        )
+    bookings, error = _filtered_bookings(
+        dog_id,
+        start=data.get('start'),
+        end=data.get('end'),
+        slots=data.get('slots') or [],
+        days=data.get('days') or [],
+        service=data.get('service', 'all'),
     )
-    if len(slot_filter) == 1:
-        q = q.filter(Booking.slot == slot_filter[0])
-    if service_filter and service_filter != 'all':
-        q = q.join(ServiceType).filter(ServiceType.slug == service_filter)
-    bookings = q.order_by(Booking.date).all()
-
-    # Filter weekdays in Python (see preview route for rationale).
-    if day_filter:
-        bookings = [b for b in bookings if b.date.weekday() in day_filter]
+    if error:
+        return error
 
     if not bookings:
         return jsonify(success=True, cancelled_count=0)

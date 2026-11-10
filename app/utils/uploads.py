@@ -6,9 +6,11 @@ import uuid
 from pathlib import Path
 
 import gevent
-from flask import current_app
+from flask import current_app, jsonify, url_for
 from PIL import Image
 from werkzeug.utils import secure_filename
+
+from app import db
 
 ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif'}
 MAX_SIZE = (800, 800)
@@ -105,8 +107,8 @@ def delete_replaced_photo(filename, subfolder):
     failed cleanup must not turn the upload into an error.
 
     Call only AFTER the commit that stops referencing `filename`: deleting
-    first would lose the photo if that commit then failed. The upload routes
-    also call it the other way round — on the NEW file when their commit
+    first would lose the photo if that commit then failed. replace_photo()
+    also calls it the other way round — on the NEW file when its commit
     fails (guarded by a `committed` flag, since an exception after a
     successful commit must not delete the photo just saved). The R2 copy has to
     go too, not just the local file — scripts/start.sh's disaster-recovery
@@ -146,6 +148,60 @@ def delete_replaced_photo(filename, subfolder):
         gevent.spawn(_delete_from_r2, f"{subfolder}/{filename}")
     except Exception as e:
         logging.warning(f"Could not delete photo {subfolder}/{filename!r}: {e}")
+
+
+def replace_photo(obj, attr, file_storage, *, subfolder, cropped, log_label,
+                  error_key='error', log_change=None):
+    """Save an uploaded photo onto `obj.<attr>` and return the JSON response
+    for the upload routes: process the file, set the column, commit, THEN
+    delete the replaced photo (see delete_replaced_photo for the ordering).
+
+    cropped:    True for a Cropper.js blob (process_cropped_photo), False for
+                an arbitrary upload (process_dog_photo).
+    log_label:  What was updated, for the log lines ("Profile photo for ...").
+    error_key:  'error' (client/walker JS) or 'message' (admin JS) — the key
+                each page's JS reads the failure text from.
+    log_change: Optional callable(old_filename, new_filename), run before the
+                commit — e.g. record_admin_action for the activity feed.
+
+    A pickup-notes photo's URL is the private media route, never /static.
+    """
+    # Only the image processing can be a bad upload (ValueError → 400, nothing
+    # saved yet). Anything after it is a server error: rolled back, and the
+    # new file discarded unless the commit already went through.
+    try:
+        if cropped:
+            filename = process_cropped_photo(file_storage, subfolder=subfolder)
+        else:
+            filename = process_dog_photo(file_storage, subfolder=subfolder)
+    except ValueError as e:
+        return jsonify(success=False, **{error_key: str(e)}), 400
+    if not filename:
+        return jsonify(success=False, **{error_key: "Empty file"}), 400
+
+    committed = False
+    try:
+        old_filename = getattr(obj, attr)
+        setattr(obj, attr, filename)
+        if log_change:
+            log_change(old_filename, filename)
+        db.session.commit()
+        committed = True
+        delete_replaced_photo(old_filename, subfolder)
+
+        if subfolder == 'pickup_notes':
+            url = url_for('media.pickup_photo', filename=filename)
+        else:
+            url = url_for('static', filename=f'uploads/{subfolder}/{filename}')
+        logging.info(f"{log_label} updated: {filename}")
+        return jsonify(success=True, url=url), 200
+
+    except Exception as e:
+        db.session.rollback()
+        if not committed:
+            delete_replaced_photo(filename, subfolder)  # the unsaved new file
+        logging.exception(f"Error saving {log_label}: {e}")
+        return jsonify(success=False, **{error_key: "Server error saving photo"}), 500
 
 
 def process_dog_photo(file_storage, subfolder=None):
