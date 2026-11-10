@@ -7,11 +7,11 @@ from datetime import datetime, timezone
 import logging
 
 from app.blueprints.admin import admin_bp
+from app.blueprints.admin.views.dogs import replace_pickup_photo_as_admin
 from app.utils.decorators import admin_required
 from app.models import User, Dog, Client, DogOwner, Notification, PushSubscription
 from app import db
 from app.forms import ClientCreateForm
-from app.utils.uploads import replace_photo
 from app.utils.sanitize import clean_rich_text_or_none
 from app.utils.activity_log import record_admin_action, diff_fields
 from app.utils.availability_reset import reset_future_bookings_for_walker
@@ -935,18 +935,4 @@ def upload_client_pickup_photo(client_id):
     if not dog:
         return jsonify(success=False, message="No dog record found — add a dog first"), 404
 
-    if 'file' not in request.files:
-        return jsonify(success=False, message="No file provided"), 400
-
-    def log_change(old, new):
-        record_admin_action(
-            'dog', dog.id, 'updated', actor_id=current_user.id,
-            summary=f"Updated pickup photo for {dog.name}",
-            changes={'pickup_notes_photo': [old, new]},
-        )
-
-    return replace_photo(
-        dog, 'pickup_notes_photo', request.files['file'], subfolder='pickup_notes',
-        cropped=False, error_key='message', log_change=log_change,
-        log_label=f"Pickup notes photo for dog {dog.id} by admin {current_user.email}",
-    )
+    return replace_pickup_photo_as_admin(dog)

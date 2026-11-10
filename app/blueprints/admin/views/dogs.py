@@ -49,7 +49,7 @@ def _filtered_bookings(dog_id, *, start, end, slots, days, service):
     and dog_bulk_cancel so the count the admin previews is the count cancelled.
 
     Returns (bookings, None) or (None, (json_response, status)) on bad input.
-    Bookings are sorted by date then SLOT_ORDER (Morning before Afternoon).
+    Bookings are sorted by date, SLOT_ORDER (Morning before Afternoon), then id.
     """
     try:
         start = date_type.fromisoformat(start or '')
@@ -87,7 +87,7 @@ def _filtered_bookings(dog_id, *, start, end, slots, days, service):
     # (see CLAUDE.md), and the per-dog dataset is small.
     if day_filter:
         bookings = [b for b in bookings if b.date.weekday() in day_filter]
-    bookings.sort(key=lambda b: (b.date, SLOT_ORDER.get(b.slot, len(SLOT_ORDER))))
+    bookings.sort(key=lambda b: (b.date, SLOT_ORDER.get(b.slot, len(SLOT_ORDER)), b.id))
     return bookings, None
 
 
@@ -210,6 +210,14 @@ def upload_dog_pickup_photo(dog_id):
     if not dog or dog.deleted_at:
         return jsonify(success=False, message="Dog not found"), 404
 
+    return replace_pickup_photo_as_admin(dog)
+
+
+def replace_pickup_photo_as_admin(dog):
+    """Save the uploaded file as `dog`'s pickup-notes photo, logged as an admin
+    change — shared by this route and clients.py::upload_client_pickup_photo.
+    The client's own route (profile.py) differs on purpose: self-service
+    summary, `error` key, co-owner access check."""
     if 'file' not in request.files:
         return jsonify(success=False, message="No file provided"), 400
 
