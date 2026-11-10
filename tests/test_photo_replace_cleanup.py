@@ -321,6 +321,27 @@ class TestFailedSave:
         discarded = _r2_deletes(spawned)
         assert len(discarded) == 1 and discarded[0] != 'pickup_notes/keep-me.png'
 
+    def test_value_error_after_processing_is_a_server_error(
+            self, app, logged_in_admin, dog, spawned, monkeypatch):
+        """Only a bad image is a 400. A ValueError from the activity-log
+        callback (or the commit) is a 500: rolled back, new file discarded."""
+        old = _place_file(app, 'pickup_notes', 'keep-me-too.png')
+        db.session.get(Dog, dog.id).pickup_notes_photo = 'keep-me-too.png'
+        db.session.commit()
+        before = set(os.listdir(_folder(app, 'pickup_notes')))
+
+        def _value_error(*args, **kwargs):
+            raise ValueError('not an upload problem')
+        monkeypatch.setattr('app.blueprints.admin.views.dogs.record_admin_action', _value_error)
+        resp = _post_file(logged_in_admin, f'/admin/dogs/{dog.id}/pickup-photo')
+
+        assert resp.status_code == 500
+        assert resp.get_json() == {'success': False, 'message': 'Server error saving photo'}
+        assert os.path.exists(old)
+        assert db.session.get(Dog, dog.id).pickup_notes_photo == 'keep-me-too.png'
+        assert set(os.listdir(_folder(app, 'pickup_notes'))) == before, \
+            'the unsaved new file was left on disk'
+
     def test_error_after_the_commit_keeps_the_new_photo(
             self, app, logged_in_client, dog, spawned, monkeypatch):
         """An exception after a successful commit (here url_for) must not

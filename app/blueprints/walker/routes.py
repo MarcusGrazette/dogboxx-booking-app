@@ -1,8 +1,9 @@
 """
 Walker routes.
 
-This module defines routes for walker functionality, including schedule management,
-unavailability exceptions, and pickup lists.
+This module defines routes for walker functionality: the profile, schedule
+changes (time off and extra days — admins use the same endpoints via
+walker_id), and pickup lists.
 """
 
 from flask import request, redirect, render_template, flash, url_for, jsonify
@@ -561,10 +562,10 @@ def schedule_changes_batch_delete():
     if not isinstance(adhoc_ids, list) or not isinstance(unavail_ids, list):
         return jsonify(success=False, message="Invalid IDs."), 400
 
-    # Deleting an ad-hoc slot can orphan a confirmed booking sitting on it,
-    # so the affected rows must be read (with their date/slot) *before* the bulk delete below discards
-    # that information. Deleting an unavailability row only ever increases
-    # availability, so unavail_ids never need this.
+    # Deleting an ad-hoc slot can orphan a confirmed booking sitting on it, so
+    # the affected rows must be read (with their date/slot) *before* the bulk
+    # delete below discards that information. Deleting an unavailability row
+    # only ever increases availability, so unavail_ids never need this.
     all_affected = []
     if adhoc_ids:
         today = local_today()

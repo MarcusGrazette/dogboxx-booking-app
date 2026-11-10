@@ -166,16 +166,21 @@ def replace_photo(obj, attr, file_storage, *, subfolder, cropped, log_label,
 
     A pickup-notes photo's URL is the private media route, never /static.
     """
-    filename = None
-    committed = False
+    # Only the image processing can be a bad upload (ValueError → 400, nothing
+    # saved yet). Anything after it is a server error: rolled back, and the
+    # new file discarded unless the commit already went through.
     try:
         if cropped:
             filename = process_cropped_photo(file_storage, subfolder=subfolder)
         else:
             filename = process_dog_photo(file_storage, subfolder=subfolder)
-        if not filename:
-            return jsonify(success=False, **{error_key: "Empty file"}), 400
+    except ValueError as e:
+        return jsonify(success=False, **{error_key: str(e)}), 400
+    if not filename:
+        return jsonify(success=False, **{error_key: "Empty file"}), 400
 
+    committed = False
+    try:
         old_filename = getattr(obj, attr)
         setattr(obj, attr, filename)
         if log_change:
@@ -191,8 +196,6 @@ def replace_photo(obj, attr, file_storage, *, subfolder, cropped, log_label,
         logging.info(f"{log_label} updated: {filename}")
         return jsonify(success=True, url=url), 200
 
-    except ValueError as e:
-        return jsonify(success=False, **{error_key: str(e)}), 400
     except Exception as e:
         db.session.rollback()
         if not committed:
