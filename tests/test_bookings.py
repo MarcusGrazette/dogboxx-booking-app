@@ -149,7 +149,7 @@ def login(flask_client, email, password='Testpass1!'):
 
 
 # ---------------------------------------------------------------------------
-# T3a — Client one-off booking (POST /)
+# T3a — Client one-off booking (POST /book)
 # ---------------------------------------------------------------------------
 
 class TestClientOneOffBooking:
@@ -175,10 +175,10 @@ class TestClientOneOffBooking:
             db.session.commit()
 
         login(client, self._email)
-        resp = client.post('/', data={
+        resp = client.post('/book', json={
             'date': tomorrow().isoformat(),
             'slot': 'Morning',
-        }, follow_redirects=True)
+        })
 
         assert resp.status_code == 200
         with app.app_context():
@@ -199,10 +199,10 @@ class TestClientOneOffBooking:
             db.session.commit()
 
         login(client, self._email)
-        client.post('/', data={
+        client.post('/book', json={
             'date': tomorrow().isoformat(),
             'slot': 'Morning',
-        }, follow_redirects=True)
+        })
 
         with app.app_context():
             assert Booking.query.count() == 0
@@ -234,10 +234,10 @@ class TestClientOneOffBooking:
             db.session.commit()
 
         login(client, self._email)
-        client.post('/', data={
+        client.post('/book', json={
             'date': tomorrow().isoformat(),
             'slot': 'Morning',
-        }, follow_redirects=True)
+        })
 
         with app.app_context():
             booking = Booking.query.filter_by(status='waitlisted').first()
@@ -265,10 +265,10 @@ class TestClientOneOffBooking:
             db.session.commit()
 
         login(client, self._email)
-        client.post('/', data={
+        client.post('/book', json={
             'date': tomorrow().isoformat(),
             'slot': 'Morning',
-        }, follow_redirects=True)
+        })
 
         with app.app_context():
             # Still only 1 booking (the pre-existing one)
@@ -905,9 +905,9 @@ class TestBookingClientNotifications:
             user_id = user.id
 
         login(client, email)
-        client.post('/', data={
+        client.post('/book', json={
             'date': tom.isoformat(), 'slot': 'Morning',
-        }, follow_redirects=True)
+        })
 
         with app.app_context():
             assert Notification.query.filter_by(recipient_id=user_id).count() == 0
