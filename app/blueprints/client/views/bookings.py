@@ -11,7 +11,6 @@ from app.models import User, Booking, ServiceType, Walker, Closure
 from app import db, limiter
 from app.utils.booking_access import get_accessible_dogs, get_accessible_dog_ids, user_can_access_booking
 from app.capacity import eligible_walker_clause, is_date_closed, MAX_RECURRING_SERIES
-from app.forms import BookingForm
 import logging
 import uuid
 from datetime import datetime, timedelta, date as date_type
@@ -108,7 +107,8 @@ def _create_booking_request(service_slug, *, auto_confirm, missing_service):
     commit once — booking and notifications are saved together or not at all.
 
     missing_service: (message, status) to reply with if the service is off.
-    Returns ((booking, status, auto_confirmed, same_day), None), or
+    Returns (booking_fields, None) — a dict of what the replies need, read
+    before the commit so nothing is queried after it — or
     (None, (json_response, status)).
     """
     def error(message, code):
@@ -149,7 +149,18 @@ def _create_booking_request(service_slug, *, auto_confirm, missing_service):
             same_day=same_day, auto_confirm=auto_confirm,
         )
         notify_created([booking], actor=current_user, by_admin=False, same_day=same_day)
-        status = booking.status  # read before the commit expires it
+        # Everything the replies need, read before the commit expires `booking`.
+        booking_fields = {
+            'id':               booking.id,
+            'date':             booking_date,
+            'slot':             slot,
+            'dog_id':           dog.id,
+            'status':           booking.status,
+            'walker_name':      booking.walker.user.firstname if booking.walker_id else None,
+            'has_pickup_notes': bool(dog.pickup_instructions),
+            'auto_confirmed':   auto_confirmed,
+            'same_day':         same_day,
+        }
         db.session.commit()
     except CapacityError as e:
         db.session.rollback()
@@ -165,7 +176,7 @@ def _create_booking_request(service_slug, *, auto_confirm, missing_service):
         db.session.rollback()
         logging.exception(f'Booking request error for user {current_user.id}: {e}')
         return error('An error occurred. Please try again.', 500)
-    return (booking, status, auto_confirmed, same_day), None
+    return booking_fields, None
 
 
 @client_bp.route("/")
@@ -205,17 +216,13 @@ def index():
         b.date_display = b.date.strftime("%a %d %b")
         b.is_drop_in = b.service_type and b.service_type.slug == ServiceType.DROP_IN
 
-    # Rendered only for its CSRF token (form.hidden_tag()) — client-home.js
-    # reads it and posts every booking to the JSON endpoints below.
-    form = BookingForm()
-
     has_drop_in_walkers = Walker.query.join(User).filter(
         Walker.does_drop_ins == True,
         eligible_walker_clause(),
     ).first() is not None
 
     return render_template("index.html", user=user, client=user.client, dogs=user_dogs,
-                           bookings=upcoming_bookings, form=form,
+                           bookings=upcoming_bookings,
                            has_drop_in_walkers=has_drop_in_walkers,
                            today=today) # type: ignore
 
@@ -234,32 +241,32 @@ def book():
     )
     if error:
         return error
-    booking, status, auto_confirmed, same_day = result
-    day = booking.date.strftime('%d %b')
+    b = result
+    day = b['date'].strftime('%d %b')
 
-    if status == 'waitlisted':
+    if b['status'] == 'waitlisted':
         message = (f"All slots are full — you've been added to the waitlist "
-                   f"for {booking.slot} on {day}.")
-    elif auto_confirmed:
-        message = f"Booking confirmed for {booking.slot} on {day}!"
-    elif same_day:
+                   f"for {b['slot']} on {day}.")
+    elif b['auto_confirmed']:
+        message = f"Booking confirmed for {b['slot']} on {day}!"
+    elif b['same_day']:
         message = f"Same-day request submitted — {current_app.config['OWNER_FIRSTNAME']} will confirm shortly."
     else:
         message = "Booking request submitted — we'll confirm it shortly."
 
     return jsonify({
         'success': True,
-        'status':  status,
+        'status':  b['status'],
         'message': message,
         'booking': {
-            'id':               booking.id,
-            'date_display':     booking.date.strftime('%a %-d %b'),
-            'date_iso':         booking.date.isoformat(),
-            'slot':             booking.slot,
-            'status':           status,
-            'dog_id':           booking.dog_id,
-            'walker_name':      booking.walker.user.firstname if booking.walker_id else None,
-            'has_pickup_notes': bool(booking.dog.pickup_instructions),
+            'id':               b['id'],
+            'date_display':     b['date'].strftime('%a %-d %b'),
+            'date_iso':         b['date'].isoformat(),
+            'slot':             b['slot'],
+            'status':           b['status'],
+            'dog_id':           b['dog_id'],
+            'walker_name':      b['walker_name'],
+            'has_pickup_notes': b['has_pickup_notes'],
         },
     })
 
@@ -399,27 +406,27 @@ def book_drop_in():
     )
     if error:
         return error
-    booking, status, _, same_day = result
+    b = result
 
-    if same_day:
+    if b['same_day']:
         message = f"Same-day drop-in request submitted — {current_app.config['OWNER_FIRSTNAME']} will confirm shortly."
-    elif status == 'waitlisted':
-        message = (f"All drop-in slots are full for {booking.slot} on "
-                   f"{booking.date.strftime('%d %b')}. You've been added to the waitlist.")
+    elif b['status'] == 'waitlisted':
+        message = (f"All drop-in slots are full for {b['slot']} on "
+                   f"{b['date'].strftime('%d %b')}. You've been added to the waitlist.")
     else:
         message = "Drop-in request submitted — we'll confirm shortly."
 
     return jsonify({
         'success':  True,
-        'status':   status,
+        'status':   b['status'],
         'message':  message,
         'booking':  {
-            'id':           booking.id,
-            'dog_id':       booking.dog_id,
-            'date_display': booking.date.strftime('%a %-d %b'),
-            'date_iso':     booking.date.isoformat(),
-            'slot':         booking.slot,
-            'status':       status,
+            'id':           b['id'],
+            'dog_id':       b['dog_id'],
+            'date_display': b['date'].strftime('%a %-d %b'),
+            'date_iso':     b['date'].isoformat(),
+            'slot':         b['slot'],
+            'status':       b['status'],
             'is_drop_in':   True,
         },
     })

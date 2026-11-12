@@ -4,7 +4,6 @@
 messages, statuses, payload fields — and what they share: the input checks,
 the duplicate and closed-date 409s, and one commit for booking + notifications.
 """
-import datetime
 import uuid
 from unittest.mock import patch
 
@@ -13,6 +12,7 @@ import pytest
 from app import db
 from app.blueprints.client.views import bookings as bookings_module
 from app.models import Booking, BookingStatusChange, Closure
+from app.utils.dates import local_today
 from tests import test_bookings as tb
 
 WALK, DROP_IN = '/book', '/book_drop_in'
@@ -101,7 +101,7 @@ class TestWalkReplies:
                                    f"for Morning on {_day_label(day)}.")
 
     def test_same_day(self, app, client):
-        day = datetime.date.today()
+        day = local_today()
         email, dog_id = _setup(app, day)
         tb.login(client, email)
 
@@ -140,7 +140,7 @@ class TestDropInReplies:
                                    f"{_day_label(day)}. You've been added to the waitlist.")
 
     def test_same_day(self, app, client):
-        day = datetime.date.today()
+        day = local_today()
         email, dog_id = _setup(app, day)
         tb.login(client, email)
 
@@ -200,7 +200,7 @@ class TestSharedChecks:
     def test_closed_date_rejects_same_day_request(self, app, client, endpoint):
         """create_booking() lets same-day requests past the closure check, so
         the route's own check is what stops them."""
-        day = datetime.date.today()
+        day = local_today()
         email, dog_id = _setup(app, day)
         with app.app_context():
             db.session.add(Closure(date=day, reason='Holiday', range_id=uuid.uuid4().hex))
@@ -259,3 +259,49 @@ class TestHomeFormRetired:
         resp = client.post('/', data={'date': tb.tomorrow().isoformat(), 'slot': 'Morning'})
         assert resp.status_code == 405
         assert Booking.query.count() == 0
+
+    def test_home_page_still_renders_the_csrf_token(self, app, client):
+        """client-home.js reads input[name=csrf_token] for every booking POST."""
+        import re
+        email, _ = _setup(app, tb.tomorrow())
+        tb.login(client, email)
+        html = client.get('/').get_data(as_text=True)
+        assert re.search(r'<form id="BookingForm" novalidate>\s*'
+                         r'<input type="hidden" name="csrf_token" value="[^"]+">', html)
+
+
+class TestNoQueriesAfterCommit:
+    """The reply is built from fields read before the commit — the booking,
+    its dog and walker aren't re-fetched once it has been saved."""
+
+    @pytest.mark.parametrize('endpoint', [WALK, DROP_IN])
+    def test_reply_needs_no_post_commit_reads(self, app, client, endpoint):
+        from sqlalchemy import event
+        day = tb.tomorrow()
+        email, dog_id = _setup(app, day)
+        tb.login(client, email)
+
+        state = {'committed': False, 'after': []}
+
+        def _on_commit(session):
+            state['committed'] = True
+
+        def _on_execute(conn, cursor, statement, params, context, executemany):
+            if state['committed'] and any(
+                    f'FROM {t} ' in statement or statement.endswith(f'FROM {t}')
+                    for t in ('bookings', 'dogs', 'walkers', 'users')):
+                state['after'].append(statement)
+
+        event.listen(db.session, 'after_commit', _on_commit)
+        event.listen(db.engine, 'before_cursor_execute', _on_execute)
+        try:
+            data = _post(client, endpoint, dog_id=dog_id, date=day.isoformat(),
+                         slot='Morning').get_json()
+        finally:
+            event.remove(db.session, 'after_commit', _on_commit)
+            event.remove(db.engine, 'before_cursor_execute', _on_execute)
+
+        assert data['success'] is True
+        if endpoint == WALK:
+            assert data['booking']['walker_name'] == 'Test'
+        assert state['after'] == []

@@ -15,6 +15,7 @@ from flask import url_for
 from sqlalchemy import text
 
 from app import db
+from app.utils.dates import local_today
 from app.models import (
     User, Client, Dog, DogOwner, Walker, WalkerSchedule,
     ServiceType, Booking,
@@ -50,12 +51,14 @@ def clean_tables(app):
 # ---------------------------------------------------------------------------
 
 def tomorrow():
-    return datetime.date.today() + datetime.timedelta(days=1)
+    # London date, like the app — a UTC date.today() is a day behind
+    # between 23:00 and 00:00 UTC in summer time.
+    return local_today() + datetime.timedelta(days=1)
 
 
 def next_monday():
     """Return the next Monday (skipping today if today is Monday)."""
-    d = datetime.date.today() + datetime.timedelta(days=1)
+    d = local_today() + datetime.timedelta(days=1)
     while d.weekday() != 0:
         d += datetime.timedelta(days=1)
     return d
@@ -1031,7 +1034,7 @@ class TestSameDayBooking:
     def test_book_same_day_stays_requested_with_walker_available(self, app, client):
         """Even when a walker has capacity, same-day requests skip auto-assign."""
         from app.models import Notification
-        today = datetime.date.today()
+        today = local_today()
         with app.app_context():
             make_walker_with_schedule(
                 f'walker_sd_{id(self)}@test.com', today.weekday(), 'Morning',
@@ -1095,7 +1098,7 @@ class TestSameDayBooking:
     def test_drop_in_same_day_stays_requested(self, app, client):
         """Same-day drop-in sits at 'requested' and sends same_day_request notif."""
         from app.models import Notification
-        today = datetime.date.today()
+        today = local_today()
         with app.app_context():
             wu = make_user(f'walker_di_sd_{id(self)}@test.com', role='walker')
             w = Walker(user_id=wu.id, does_drop_ins=True)
@@ -1142,7 +1145,7 @@ class TestSameDayBooking:
     def test_book_both_same_day_stays_requested(self, app, client):
         """Same-day book_both creates both slots as requested with no walker."""
         from app.models import Notification
-        today = datetime.date.today()
+        today = local_today()
         with app.app_context():
             wu = make_user(f'walker_bb_sd_{id(self)}@test.com', role='walker')
             w = Walker(user_id=wu.id)
