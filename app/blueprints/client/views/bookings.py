@@ -3,15 +3,14 @@ Client booking routes — creation (single, both-slots, drop-in, recurring),
 cancellation, pause-walks, calendar JSON, and booking notes.
 """
 
-from flask import current_app, request, redirect, render_template, flash, url_for, jsonify, session
+from flask import current_app, request, redirect, render_template, url_for, jsonify, session
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
-from sqlalchemy.exc import IntegrityError, OperationalError
-from app.models import User, Dog, Booking, ServiceType, Walker, Closure
+from sqlalchemy.exc import IntegrityError
+from app.models import User, Booking, ServiceType, Walker, Closure
 from app import db, limiter
 from app.utils.booking_access import get_accessible_dogs, get_accessible_dog_ids, user_can_access_booking
 from app.capacity import eligible_walker_clause, is_date_closed, MAX_RECURRING_SERIES
-from app.forms import BookingForm
 import logging
 import uuid
 from datetime import datetime, timedelta, date as date_type
@@ -66,7 +65,121 @@ def _booking_sort_key(b):
     return (b.date, SLOT_ORDER.get(b.slot, len(SLOT_ORDER)))
 
 
-@client_bp.route("/", methods=["GET", "POST"])
+# 'modified' is a fossil label (never written); kept so the filter matches the
+# statuses the duplicate index treats as active.
+_ACTIVE_STATUSES = ('requested', 'confirmed', 'modified', 'waitlisted')
+
+
+def _validate_booking_request(data, *, with_slot=True):
+    """Input checks shared by /book, /book_drop_in and /book_both (no slot).
+
+    Returns ((date, slot, dog), None), or (None, (json_response, status)).
+    """
+    def error(message):
+        return None, (jsonify({'success': False, 'message': message}), 400)
+
+    date_str = (data.get('date') or '').strip()
+    slot = (data.get('slot') or '').strip() if with_slot else None
+    if not date_str or (with_slot and not slot):
+        return error('Date and slot are required.' if with_slot else 'Date is required.')
+    try:
+        booking_date = date_type.fromisoformat(date_str)
+    except ValueError:
+        return error('Invalid date format.')
+    if booking_date < local_today():
+        return error('Booking date cannot be in the past.')
+    if with_slot and slot not in ('Morning', 'Afternoon'):
+        return error('Invalid slot selected.')
+
+    user_dogs = get_accessible_dogs(current_user.id)
+    if not user_dogs:
+        return error('No dog found on your account. Please add a dog before booking.')
+    try:
+        dog = _resolve_dog(user_dogs, data.get('dog_id'))
+    except ValueError as e:
+        return error(str(e))
+    return (booking_date, slot, dog), None
+
+
+def _create_booking_request(service_slug, *, auto_confirm, missing_service):
+    """One booking from a /book or /book_drop_in JSON request: validate,
+    refuse a taken slot or closed date, create, queue notifications and
+    commit once — booking and notifications are saved together or not at all.
+
+    missing_service: (message, status) to reply with if the service is off.
+    Returns (booking_fields, None) — a dict of what the replies need, read
+    before the commit so nothing is queried after it — or
+    (None, (json_response, status)).
+    """
+    def error(message, code):
+        return None, (jsonify({'success': False, 'message': message}), code)
+
+    data = request.get_json(silent=True) or {}
+    request_fields, invalid = _validate_booking_request(data)
+    if invalid:
+        return None, invalid
+    booking_date, slot, dog = request_fields
+
+    service = ServiceType.query.filter_by(slug=service_slug, active=True).first()
+    if not service:
+        return error(*missing_service)
+
+    # Any service: the duplicate index is (dog, date, slot) across services.
+    existing = Booking.query.filter(
+        Booking.dog_id == dog.id,
+        Booking.date   == booking_date,
+        Booking.slot   == slot,
+        Booking.status.in_(_ACTIVE_STATUSES),
+    ).first()
+    if existing:
+        svc_label = existing.service_type.name.lower() if existing.service_type else 'booking'
+        return error(f'{dog.name} already has a {svc_label} booked for that slot.', 409)
+
+    # create_booking() lets same-day requests past its own closure check
+    # (owner assigns manually), so this check is what stops them.
+    closed, close_msg = is_date_closed(booking_date)
+    if closed:
+        return error(close_msg, 409)
+
+    same_day = _is_same_day(booking_date)
+    try:
+        booking, auto_confirmed = create_booking(
+            dog=dog, user_id=current_user.id, date=booking_date, slot=slot,
+            service=service, actor_id=current_user.id, batch_id=uuid.uuid4().hex,
+            same_day=same_day, auto_confirm=auto_confirm,
+        )
+        notify_created([booking], actor=current_user, by_admin=False, same_day=same_day)
+        # Everything the replies need, read before the commit expires `booking`.
+        booking_fields = {
+            'id':               booking.id,
+            'date':             booking_date,
+            'slot':             slot,
+            'dog_id':           dog.id,
+            'status':           booking.status,
+            'walker_name':      booking.walker.user.firstname if booking.walker_id else None,
+            'has_pickup_notes': bool(dog.pickup_instructions),
+            'auto_confirmed':   auto_confirmed,
+            'same_day':         same_day,
+        }
+        db.session.commit()
+    except CapacityError as e:
+        db.session.rollback()
+        return error(str(e), 409)
+    except IntegrityError:
+        # Lost a concurrent-duplicate race (two co-owners / a double tap, or a
+        # walk racing a drop-in — the advisory lock is per-service, the unique
+        # index cross-service). create_booking() flushes, so this usually
+        # fires there rather than at the commit; both are covered.
+        db.session.rollback()
+        return error(f'{dog.name} already has a booking for that slot.', 409)
+    except Exception as e:
+        db.session.rollback()
+        logging.exception(f'Booking request error for user {current_user.id}: {e}')
+        return error('An error occurred. Please try again.', 500)
+    return booking_fields, None
+
+
+@client_bp.route("/")
 @login_required
 def index():
     """Render the home page for clients."""
@@ -103,112 +216,13 @@ def index():
         b.date_display = b.date.strftime("%a %d %b")
         b.is_drop_in = b.service_type and b.service_type.slug == ServiceType.DROP_IN
 
-    form = BookingForm()
-    if form.validate_on_submit():
-        booking_date = form.date.data
-        booking_slot = form.slot.data
-
-        today = local_today()
-        errors = []
-
-        if booking_date < today:
-            errors.append("Booking date cannot be in the past.")
-
-        # Validate slot against allowed enum values
-        if booking_slot not in ("Morning", "Afternoon"):
-            errors.append("Invalid booking slot selected.")
-
-         # Ensure the user has at least one dog to book
-        if not user or not user_dogs:
-            errors.append("No dog found on your account. Please add a dog before booking.")
-
-        if not errors:
-            try:
-                selected_dog = _resolve_dog(user_dogs, request.form.get('dog_id'))
-                dog_id = selected_dog.id
-            except ValueError as e:
-                errors.append(str(e))
-
-        if not errors:
-            # Prevent duplicate booking: same dog + date + slot (any service type)
-            active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
-            walk_service = ServiceType.query.filter_by(slug=ServiceType.WALK, active=True).first()
-            existing = Booking.query.filter(
-                Booking.dog_id == dog_id,
-                Booking.date == booking_date,
-                Booking.slot == booking_slot,
-                Booking.status.in_(active_statuses),
-            ).first()
-            if existing:
-                errors.append("This dog already has a booking for that slot on that date.")
-
-            # Cap at 2 bookings per dog per day (one per slot)
-            day_count = Booking.query.filter(
-                Booking.dog_id == dog_id,
-                Booking.date == booking_date,
-                Booking.status.in_(active_statuses)
-            ).count()
-            if day_count >= 2:
-                errors.append("This dog already has two bookings on that date (one per slot is the maximum).")
-
-        if errors:
-            for e in errors:
-                flash(e, "error")
-        else:
-            # A database error rolls back, flashes and redirects home (the
-            # success paths redirect too), so a refresh can't resubmit the form.
-            try:
-                if not walk_service:
-                    flash("No service type available. Please contact support.", "error")
-                    return redirect(url_for("client.index"))
-                default_service = walk_service
-
-                same_day = _is_same_day(booking_date)
-                dog = db.session.get(Dog, dog_id)
-                batch_id = uuid.uuid4().hex
-                try:
-                    new_booking, auto_confirmed = create_booking(
-                        dog=dog, user_id=user.id, date=booking_date, slot=booking_slot,
-                        service=default_service, actor_id=current_user.id, batch_id=batch_id,
-                        same_day=same_day,
-                    )
-                except CapacityError as e:
-                    flash(str(e), "warning")
-                    return redirect(url_for("client.index"))
-
-                booking_status = new_booking.status
-                notify_created([new_booking], actor=current_user, by_admin=False,
-                               same_day=same_day)
-                db.session.commit()
-                if booking_status == 'waitlisted':
-                    flash(f"All slots are currently full for {booking_slot} on {booking_date.strftime('%d %b')}. "
-                          f"You've been added to the waitlist — we'll let you know if a spot opens up.", "info")
-                elif auto_confirmed:
-                    flash(f"Booking confirmed for {booking_slot} on {booking_date.strftime('%d %b')}!", "success")
-                elif same_day:
-                    flash(f"Same-day request submitted — {current_app.config['OWNER_FIRSTNAME']} will confirm shortly.", "info")
-                else:
-                    flash("Booking request submitted — we'll confirm it shortly.", "success")
-                return redirect(url_for("client.index"))
-            except IntegrityError:
-                db.session.rollback()
-                flash("Could not create booking due to a conflict. You might already have a booking at this time.", "error")
-            except OperationalError:
-                db.session.rollback()
-                flash("Our booking system is temporarily unavailable. Please try again later.", "error")
-            except Exception:
-                db.session.rollback()
-                logging.exception(f"Booking form error for user {current_user.id}")
-                flash("An unexpected error occurred. Please try again later.", "error")
-            return redirect(url_for("client.index"))
-
     has_drop_in_walkers = Walker.query.join(User).filter(
         Walker.does_drop_ins == True,
         eligible_walker_clause(),
     ).first() is not None
 
     return render_template("index.html", user=user, client=user.client, dogs=user_dogs,
-                           bookings=upcoming_bookings, form=form,
+                           bookings=upcoming_bookings,
                            has_drop_in_walkers=has_drop_in_walkers,
                            today=today) # type: ignore
 
@@ -216,132 +230,45 @@ def index():
 @client_bp.route("/book", methods=["POST"])
 @login_required
 def book():
-    """AJAX single booking endpoint — returns JSON, no page reload.
+    """AJAX single walk booking — returns JSON, no page reload.
 
-    Accepts JSON body: { "date": "YYYY-MM-DD", "slot": "Morning"|"Afternoon" }
-    Returns: { "success": bool, "message": str, "booking": {...} }
+    Accepts JSON body: { "date": "YYYY-MM-DD", "slot": "Morning"|"Afternoon", "dog_id"? }
+    Returns: { "success": bool, "status": str, "message": str, "booking": {...} }
     """
-    data = request.get_json(silent=True) or {}
-    booking_date_str = data.get('date', '').strip()
-    booking_slot     = data.get('slot', '').strip()
+    result, error = _create_booking_request(
+        ServiceType.WALK, auto_confirm=True,
+        missing_service=('No service type available. Please contact support.', 500),
+    )
+    if error:
+        return error
+    b = result
+    day = b['date'].strftime('%d %b')
 
-    # ── Validate inputs ───────────────────────────────────────────────────────
-    if not booking_date_str or not booking_slot:
-        return jsonify({'success': False, 'message': 'Date and slot are required.'}), 400
+    if b['status'] == 'waitlisted':
+        message = (f"All slots are full — you've been added to the waitlist "
+                   f"for {b['slot']} on {day}.")
+    elif b['auto_confirmed']:
+        message = f"Booking confirmed for {b['slot']} on {day}!"
+    elif b['same_day']:
+        message = f"Same-day request submitted — {current_app.config['OWNER_FIRSTNAME']} will confirm shortly."
+    else:
+        message = "Booking request submitted — we'll confirm it shortly."
 
-    try:
-        booking_date = date_type.fromisoformat(booking_date_str)
-    except ValueError:
-        return jsonify({'success': False, 'message': 'Invalid date format.'}), 400
-
-    today   = local_today()
-
-    if booking_date < today:
-        return jsonify({'success': False, 'message': 'Booking date cannot be in the past.'}), 400
-    if booking_slot not in ('Morning', 'Afternoon'):
-        return jsonify({'success': False, 'message': 'Invalid slot selected.'}), 400
-
-    user_dogs = get_accessible_dogs(current_user.id)
-    if not user_dogs:
-        return jsonify({'success': False, 'message': 'No dog found on your account. Please add a dog before booking.'}), 400
-
-    try:
-        dog = _resolve_dog(user_dogs, data.get('dog_id'))
-    except ValueError as e:
-        return jsonify({'success': False, 'message': str(e)}), 400
-    dog_id = dog.id
-
-    # ── Service type + duplicate / cap checks ────────────────────────────────
-    default_service = ServiceType.query.filter_by(slug=ServiceType.WALK, active=True).first()
-    if not default_service:
-        return jsonify({'success': False, 'message': 'No service type available. Please contact support.'}), 500
-
-    active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
-    existing = Booking.query.filter(
-        Booking.dog_id == dog_id,
-        Booking.date   == booking_date,
-        Booking.slot   == booking_slot,
-        Booking.status.in_(active_statuses),
-    ).first()
-    if existing:
-        svc_label = existing.service_type.name.lower() if existing.service_type else 'booking'
-        return jsonify({'success': False, 'message': f'{dog.name} already has a {svc_label} booked for that slot.'}), 409
-
-    day_count = Booking.query.filter(
-        Booking.dog_id == dog_id,
-        Booking.date   == booking_date,
-        Booking.status.in_(active_statuses),
-    ).count()
-    if day_count >= 2:
-        return jsonify({'success': False, 'message': 'This dog already has two bookings on that date.'}), 409
-
-    # ── Create + auto-assign ─────────────────────────────────────────────────
-    try:
-        same_day = _is_same_day(booking_date)
-        closed, close_msg = is_date_closed(booking_date)
-        if closed:
-            return jsonify({'success': False, 'message': close_msg}), 409
-
-        batch_id = uuid.uuid4().hex
-        try:
-            new_booking, auto_confirmed = create_booking(
-                dog=dog, user_id=current_user.id, date=booking_date, slot=booking_slot,
-                service=default_service, actor_id=current_user.id, batch_id=batch_id,
-                same_day=same_day,
-            )
-        except CapacityError as e:
-            return jsonify({'success': False, 'message': str(e)}), 409
-
-        booking_status = new_booking.status
-        notify_created([new_booking], actor=current_user, by_admin=False,
-                       same_day=same_day)
-
-        if booking_status == 'waitlisted':
-            message = (f"All slots are full — you've been added to the waitlist "
-                       f"for {booking_slot} on {booking_date.strftime('%d %b')}.")
-        elif auto_confirmed:
-            booking_status = 'confirmed'
-            message = f"Booking confirmed for {booking_slot} on {booking_date.strftime('%d %b')}!"
-        else:
-            message = (f"Same-day request submitted — {current_app.config['OWNER_FIRSTNAME']} will confirm shortly."
-                       if same_day else "Booking request submitted — we'll confirm it shortly.")
-
-        db.session.commit()
-
-        walker_name = None
-        if new_booking.walker_id and new_booking.walker:
-            walker_name = new_booking.walker.user.firstname
-
-        has_pickup_notes = bool(dog and dog.pickup_instructions)
-
-        return jsonify({
-            'success': True,
-            'status':  booking_status,
-            'message': message,
-            'booking': {
-                'id':               new_booking.id,
-                'date_display':     booking_date.strftime('%a %-d %b'),
-                'date_iso':         booking_date.isoformat(),
-                'slot':             booking_slot,
-                'status':           new_booking.status,
-                'dog_id':           dog_id,
-                'walker_name':      walker_name,
-                'has_pickup_notes': has_pickup_notes,
-            },
-        })
-
-    except IntegrityError:
-        # Lost a concurrent-duplicate race (two co-owners / double-tapped Book):
-        # the partial unique index on (dog_id, date, slot) rejected the second
-        # write. Return the same graceful 409 the pre-check uses instead of a 500
-        # (SECURITY_REVIEW.md #2).
-        db.session.rollback()
-        return jsonify({'success': False,
-                        'message': f'{dog.name} already has a booking for that slot.'}), 409
-    except Exception as e:
-        db.session.rollback()
-        logging.exception(f'AJAX booking error for user {current_user.id}: {e}')
-        return jsonify({'success': False, 'message': 'An error occurred. Please try again.'}), 500
+    return jsonify({
+        'success': True,
+        'status':  b['status'],
+        'message': message,
+        'booking': {
+            'id':               b['id'],
+            'date_display':     b['date'].strftime('%a %-d %b'),
+            'date_iso':         b['date'].isoformat(),
+            'slot':             b['slot'],
+            'status':           b['status'],
+            'dog_id':           b['dog_id'],
+            'walker_name':      b['walker_name'],
+            'has_pickup_notes': b['has_pickup_notes'],
+        },
+    })
 
 
 @client_bp.route("/book_both", methods=["POST"])
@@ -353,36 +280,17 @@ def book_both():
     Each slot is booked independently — one can be requested while the other
     is waitlisted if capacity is tight. Returns both results.
     """
-    data             = request.get_json(silent=True) or {}
-    booking_date_str = data.get('date', '').strip()
-
-    if not booking_date_str:
-        return jsonify({'success': False, 'message': 'Date is required.'}), 400
-
-    try:
-        booking_date = date_type.fromisoformat(booking_date_str)
-    except ValueError:
-        return jsonify({'success': False, 'message': 'Invalid date format.'}), 400
-
-    today    = local_today()
-    if booking_date < today:
-        return jsonify({'success': False, 'message': 'Booking date cannot be in the past.'}), 400
-
-    user_dogs = get_accessible_dogs(current_user.id)
-    if not user_dogs:
-        return jsonify({'success': False, 'message': 'No dog found on your account.'}), 400
-
-    try:
-        dog = _resolve_dog(user_dogs, data.get('dog_id'))
-    except ValueError as e:
-        return jsonify({'success': False, 'message': str(e)}), 400
+    data = request.get_json(silent=True) or {}
+    request_fields, invalid = _validate_booking_request(data, with_slot=False)
+    if invalid:
+        return invalid
+    booking_date, _, dog = request_fields
     dog_id = dog.id
 
     default_service = ServiceType.query.filter_by(slug=ServiceType.WALK, active=True).first()
     if not default_service:
         return jsonify({'success': False, 'message': 'No service type available.'}), 500
 
-    active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
     same_day = _is_same_day(booking_date)
     closed, close_msg = is_date_closed(booking_date)
     if closed:
@@ -400,7 +308,7 @@ def book_both():
             Booking.dog_id == dog_id,
             Booking.date   == booking_date,
             Booking.slot   == slot,
-            Booking.status.in_(active_statuses),
+            Booking.status.in_(_ACTIVE_STATUSES),
         ).first():
             skipped.append(slot)
             continue
@@ -486,112 +394,39 @@ def book_both():
 @client_bp.route("/book_drop_in", methods=["POST"])
 @login_required
 def book_drop_in():
-    """AJAX endpoint: request a drop-in visit for a given date + slot.
+    """AJAX endpoint: request a drop-in visit for a given date + slot. Drop-ins
+    never auto-confirm — the owner assigns them.
 
-    Accepts JSON: { "date": "YYYY-MM-DD", "slot": "Morning"|"Afternoon" }
+    Accepts JSON: { "date": "YYYY-MM-DD", "slot": "Morning"|"Afternoon", "dog_id"? }
     Returns JSON response (success/failure + booking info).
     """
-    data             = request.get_json(silent=True) or {}
-    booking_date_str = data.get('date', '').strip()
-    booking_slot     = data.get('slot', '').strip()
+    result, error = _create_booking_request(
+        ServiceType.DROP_IN, auto_confirm=False,
+        missing_service=('Drop-in service is not currently available.', 503),
+    )
+    if error:
+        return error
+    b = result
 
-    if not booking_date_str:
-        return jsonify({'success': False, 'message': 'Date is required.'}), 400
-    if booking_slot not in ('Morning', 'Afternoon'):
-        return jsonify({'success': False, 'message': 'Invalid slot. Choose Morning or Afternoon.'}), 400
-
-    try:
-        booking_date = date_type.fromisoformat(booking_date_str)
-    except ValueError:
-        return jsonify({'success': False, 'message': 'Invalid date format.'}), 400
-
-    today    = local_today()
-    if booking_date < today:
-        return jsonify({'success': False, 'message': 'Booking date cannot be in the past.'}), 400
-
-    user_dogs = get_accessible_dogs(current_user.id)
-    if not user_dogs:
-        return jsonify({'success': False, 'message': 'No dog found on your account.'}), 400
-
-    try:
-        dog = _resolve_dog(user_dogs, data.get('dog_id'))
-    except ValueError as e:
-        return jsonify({'success': False, 'message': str(e)}), 400
-    dog_id = dog.id
-
-    drop_in_service = ServiceType.query.filter_by(slug=ServiceType.DROP_IN, active=True).first()
-    if not drop_in_service:
-        return jsonify({'success': False, 'message': 'Drop-in service is not currently available.'}), 503
-
-    # Prevent duplicate (any service type for this slot)
-    active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
-    existing = Booking.query.filter(
-        Booking.dog_id == dog_id,
-        Booking.date   == booking_date,
-        Booking.slot   == booking_slot,
-        Booking.status.in_(active_statuses),
-    ).first()
-    if existing:
-        svc_label = existing.service_type.name.lower() if existing.service_type else 'booking'
-        return jsonify({'success': False, 'message': f'{dog.name} already has a {svc_label} booked for that slot.'}), 409
-
-    same_day = _is_same_day(booking_date)
-    closed, close_msg = is_date_closed(booking_date)
-    if closed:
-        return jsonify({'success': False, 'message': close_msg}), 409
-
-    batch_id = uuid.uuid4().hex
-    try:
-        new_booking, _ = create_booking(
-            dog=dog, user_id=current_user.id, date=booking_date, slot=booking_slot,
-            service=drop_in_service, actor_id=current_user.id, batch_id=batch_id,
-            same_day=same_day, auto_confirm=False,
-        )
-    except CapacityError as e:
-        return jsonify({'success': False, 'message': str(e)}), 409
-    except IntegrityError:
-        # Concurrent-duplicate race. create_booking() flushes the INSERT to
-        # populate booking.id for the audit row, so the unique index rejects it
-        # here rather than at the commit below — the commit-only handler that
-        # used to be the sole guard never saw it, and this 500'd. A drop-in
-        # racing a walk is the realistic case: the advisory lock is per-service,
-        # the index is cross-service (dog, date, slot).
-        db.session.rollback()
-        return jsonify({'success': False,
-                        'message': f'{dog.name} already has a booking for that slot.'}), 409
-
-    booking_status = new_booking.status
-    try:
-        db.session.commit()
-    except IntegrityError:
-        # Backstop for a collision that somehow survives to commit time.
-        db.session.rollback()
-        return jsonify({'success': False,
-                        'message': f'{dog.name} already has a booking for that slot.'}), 409
-
-    notify_created([new_booking], actor=current_user, by_admin=False,
-                   same_day=same_day)
-    db.session.commit()
-
-    if same_day:
+    if b['same_day']:
         message = f"Same-day drop-in request submitted — {current_app.config['OWNER_FIRSTNAME']} will confirm shortly."
-    elif booking_status == 'waitlisted':
-        message = (f"All drop-in slots are full for {booking_slot} on "
-                   f"{booking_date.strftime('%d %b')}. You've been added to the waitlist.")
+    elif b['status'] == 'waitlisted':
+        message = (f"All drop-in slots are full for {b['slot']} on "
+                   f"{b['date'].strftime('%d %b')}. You've been added to the waitlist.")
     else:
         message = "Drop-in request submitted — we'll confirm shortly."
 
     return jsonify({
         'success':  True,
-        'status':   booking_status,
+        'status':   b['status'],
         'message':  message,
         'booking':  {
-            'id':           new_booking.id,
-            'dog_id':       dog_id,
-            'date_display': booking_date.strftime('%a %-d %b'),
-            'date_iso':     booking_date.isoformat(),
-            'slot':         booking_slot,
-            'status':       booking_status,
+            'id':           b['id'],
+            'dog_id':       b['dog_id'],
+            'date_display': b['date'].strftime('%a %-d %b'),
+            'date_iso':     b['date'].isoformat(),
+            'slot':         b['slot'],
+            'status':       b['status'],
             'is_drop_in':   True,
         },
     })
@@ -883,7 +718,6 @@ def recurring_booking():
     For each date in the range:
         - Skips weekends when frequency='daily'
         - Skips dates where this dog already has an active booking in that slot
-        - Skips dates where the dog already has 2 bookings (one per slot limit)
         - Books as 'requested' if capacity available, 'waitlisted' if full
 
     Returns JSON: { success, created, waitlisted, skipped }
@@ -960,7 +794,6 @@ def recurring_booking():
         if is_drop_in and slot == 'Both':
             return jsonify(success=False, message="Drop-ins cannot use the 'Both' slot"), 400
 
-        active_statuses = ('requested', 'confirmed', 'modified', 'waitlisted')
         confirmed = created = waitlisted = skipped = 0
         made = []  # committed bookings, for the notifications after the loop
 
@@ -994,18 +827,9 @@ def recurring_booking():
                         Booking.dog_id == dog.id,
                         Booking.date   == d,
                         Booking.slot   == s,
-                        Booking.status.in_(active_statuses),
+                        Booking.status.in_(_ACTIVE_STATUSES),
                     ).first()
                     if existing:
-                        skipped += 1
-                        continue
-
-                    day_count = Booking.query.filter(
-                        Booking.dog_id == dog.id,
-                        Booking.date == d,
-                        Booking.status.in_(active_statuses)
-                    ).count()
-                    if day_count >= 2:
                         skipped += 1
                         continue
 

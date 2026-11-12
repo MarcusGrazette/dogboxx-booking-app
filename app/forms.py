@@ -2,9 +2,6 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, BooleanField, SubmitField, TextAreaField, SelectField, DateField
 from wtforms.validators import DataRequired, Email, Length, EqualTo, Optional, URL
 from .validators import wtforms_password_validator
-from datetime import timedelta
-from app.utils.dates import local_today
-from wtforms import ValidationError
 
 class LoginForm(FlaskForm):
     email = StringField(
@@ -87,26 +84,6 @@ class OnboardingForm(FlaskForm):
     )
 
     submit = SubmitField("Next")
-
-class BookingForm(FlaskForm):
-    date = DateField(
-        validators=[DataRequired()]
-    )
-    slot = SelectField(
-        'Slot',
-        choices=[('', 'Slot'), ('Morning', 'Morning'), ('Afternoon', 'Afternoon')],
-        validators=[DataRequired()]
-    )
-
-    submit = SubmitField('Book')
-    
-    def validate_date(self, field):
-        """Custom validator to ensure date is at least tomorrow"""
-        if field.data:
-            tomorrow = local_today() + timedelta(days=1)
-            if field.data < tomorrow:
-                raise ValidationError('Booking date must be at least tomorrow.')
-
 
 class ProfileForm(FlaskForm):
     """Form for clients to edit their pickup details, notification prefs and dog info."""

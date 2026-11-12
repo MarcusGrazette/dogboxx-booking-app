@@ -270,8 +270,7 @@ class TestCreationTransitions:
             email, uid = user.email, user.id
 
         login(client, email)
-        client.post('/', data={'date': tomorrow().isoformat(), 'slot': 'Morning'},
-                    follow_redirects=True)
+        client.post('/book', json={'date': tomorrow().isoformat(), 'slot': 'Morning'})
 
         with app.app_context():
             booking = Booking.query.filter_by(status='confirmed').first()
@@ -302,8 +301,7 @@ class TestCreationTransitions:
             email, uid = user.email, user.id
 
         login(client, email)
-        client.post('/', data={'date': tomorrow().isoformat(), 'slot': 'Morning'},
-                    follow_redirects=True)
+        client.post('/book', json={'date': tomorrow().isoformat(), 'slot': 'Morning'})
 
         with app.app_context():
             booking = Booking.query.filter_by(user_id=uid, status='waitlisted').first()
