@@ -576,10 +576,10 @@ class TestBookingNotifications:
         )
 
         login(client, client_email)
-        client.post('/', data={
+        client.post('/book', json={
             'date': tom.isoformat(),
             'slot': 'Morning',
-        }, follow_redirects=True)
+        })
 
         with app.app_context():
             admin_notifs = Notification.query.filter_by(
@@ -601,10 +601,10 @@ class TestBookingNotifications:
 
         # Client makes a booking — auto-assign fires immediately
         login(client, client_email)
-        client.post('/', data={
+        client.post('/book', json={
             'date': tom.isoformat(),
             'slot': 'Morning',
-        }, follow_redirects=True)
+        })
 
         with app.app_context():
             # Booking should be confirmed with walker assigned

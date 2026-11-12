@@ -132,8 +132,9 @@
             <div id="service-collapse" class="collapse show">
                 <div class="px-3 pt-2 pb-3">
 
-                    <form action="{{ url_for('client.index') }}" method="post" id="BookingForm" novalidate>
-                        {{ form.hidden_tag() }}
+                    {# Submitted only by client-home.js, which posts JSON to the booking endpoints. #}
+                    <form id="BookingForm" novalidate>
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="date" id="booking-date-hidden">
 
                         {# Service type selector — only shown when drop-ins are available #}
