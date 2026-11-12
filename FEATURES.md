@@ -25,6 +25,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 74 | P4 | S | 🔲 | **Drop `User.notification_preference`** | Remove a column that only ever holds `'email'`. |
 | 76 | P4 | L | 🔲 | **Keyboard operability** | Make the calendar and assignment board fully keyboard-usable. |
 | 106 | P4 | M | 🔲 | **Look again at Entire (Trails)** | Revisit Entire's Git hosting and Trails review flow once it supports public repos and documents how agent sessions are stored. Try it as a GitHub mirror first. |
+| 109 | P4 | M | 🔲 | **Fewer queries on walker pages and booking replies** | The walker dog list and pickup list load all owner names in one query instead of one per dog; booking and board replies are built before saving, so nothing is re-read afterwards. |
 
 ## Shipped
 
