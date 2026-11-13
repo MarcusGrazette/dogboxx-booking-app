@@ -1,9 +1,7 @@
 {# Row 2 of the admin assignment board: selection hint, board, modals.
-   Used by:
-     - admin_drop_in_board.html (drop-ins page)
-     - admin_board_fragment.html (dashboard modal embed)
-
-   Caller must instantiate createBoard() with appropriate endpoints. #}
+   Served bare by board.py::board_fragment for the dashboard's Assign modal,
+   which mounts a fresh copy per view (Walks / Drop-ins) and calls
+   createBoard() with that view's endpoints. #}
 
 {# Selection hint bar — grey idle state, pink active state, JS toggles #}
 <div id="selection-hint" class="alert d-flex align-items-center gap-2 py-2 mb-3">

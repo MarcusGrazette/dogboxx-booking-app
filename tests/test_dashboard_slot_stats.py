@@ -67,11 +67,16 @@ def _setup():
     booking(drop_in, dogs[5], 'Morning', 'requested')
     booking(drop_in, dogs[0], 'Afternoon', 'confirmed')
     booking(walk, dogs[1], 'Afternoon', 'confirmed')
+    booking(drop_in, dogs[2], 'Afternoon', 'waitlisted')  # to assign, like requested
     db.session.commit()
 
 
-EXPECTED_AM = {'confirmed': 2, 'pending': 1, 'waitlist': 1, 'capacity': 18, 'drop_ins': 1}
-EXPECTED_PM = {'confirmed': 1, 'pending': 0, 'waitlist': 0, 'capacity': 6, 'drop_ins': 1}
+# drop_ins counts every active drop-in; drop_ins_to_assign only the requested
+# and waitlisted ones the dashboard flags amber (FEATURES #94).
+EXPECTED_AM = {'confirmed': 2, 'pending': 1, 'waitlist': 1, 'capacity': 18,
+               'drop_ins': 1, 'drop_ins_to_assign': 1}
+EXPECTED_PM = {'confirmed': 1, 'pending': 0, 'waitlist': 0, 'capacity': 6,
+               'drop_ins': 2, 'drop_ins_to_assign': 1}
 
 
 def _cell(data, day):
@@ -109,5 +114,6 @@ def test_day_with_no_walkers_has_zero_capacity(logged_in_admin):
     _setup()
     resp = logged_in_admin.get(f'/admin/api/day-detail?date={TUESDAY.isoformat()}')
     data = resp.get_json()
-    zero = {'confirmed': 0, 'pending': 0, 'waitlist': 0, 'capacity': 0, 'drop_ins': 0}
+    zero = {'confirmed': 0, 'pending': 0, 'waitlist': 0, 'capacity': 0,
+            'drop_ins': 0, 'drop_ins_to_assign': 0}
     assert data['am'] == zero and data['pm'] == zero

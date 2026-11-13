@@ -267,7 +267,7 @@ class TestWeekGrid:
         db.session.add(dropin)
         db.session.commit()
         html = self._html(logged_in_admin)
-        assert 'Drop-ins' not in html
+        assert 'class="wv-chip wv-chip-drop"' not in html
         self._booking(client_user, dog, dropin, WEEK, 'Afternoon', status='requested')
         html = self._html(logged_in_admin)
         # One drop-in row, rendered in both layouts.

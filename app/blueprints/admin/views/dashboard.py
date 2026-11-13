@@ -40,7 +40,8 @@ def _slot_stats(slot, dow, walkers, schedule_map, adhoc_by_walker, unavail_by_wa
                 slot_bookings, walk_max):
     """AM or PM figures for one day — the dashboard month calendar and the
     day-detail panel both show these: walk bookings by status, walk capacity
-    (working walkers × the per-walker max) and drop-ins.
+    (working walkers × the per-walker max) and drop-ins, with the requested or
+    waitlisted ones still to assign (the calendar's amber house icon).
 
     adhoc_by_walker / unavail_by_walker: {walker_id: {slot}} for that day.
     slot_bookings: {status: {service_slug: count}} for that day + slot.
@@ -58,6 +59,8 @@ def _slot_stats(slot, dow, walkers, schedule_map, adhoc_by_walker, unavail_by_wa
         'capacity':  working * walk_max,
         'drop_ins':  sum(slot_bookings.get(st, {}).get(ServiceType.DROP_IN, 0)
                          for st in ('confirmed', 'requested', 'waitlisted')),
+        'drop_ins_to_assign': sum(slot_bookings.get(st, {}).get(ServiceType.DROP_IN, 0)
+                                  for st in Booking.PENDING_STATUSES),
     }
 
 

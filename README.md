@@ -25,7 +25,7 @@ Clients can:
 
 ### Admin
 Admins can:
-- Confirm, cancel, and assign walkers to bookings on the walk and drop-in boards, with each walker's pickup order set automatically
+- Confirm, cancel, and assign walkers to walks and drop-ins from the dashboard's assignment board, with each walker's pickup order set automatically
 - Book on behalf of any client (one-off or recurring) and manage their dogs
 - Create and manage client accounts, including co-owners
 - Create walkers and manage their schedules, time off, and ad hoc availability, and see the whole week's roster
