@@ -4,18 +4,20 @@ name: Restore Database from Backup
 # Only run this during a declared incident after confirming with Lydia.
 #
 # Restore process:
-#   1. Downloads the chosen backup from R2
-#   2. Runs it against DATABASE_PUBLIC_URL (production Postgres)
+#   1. Finds the newest backup from the chosen date in R2 (read-only)
+#   2. Only if confirm is RESTORE: runs it against DATABASE_PUBLIC_URL
+#      (production Postgres). Any other confirm value is a dry run — the job
+#      reports which dump it would restore and skips the restore step.
 #   3. The --clean dump drops and recreates all tables before restoring data
 
 on:
   workflow_dispatch:
     inputs:
       backup_date:
-        description: 'Backup to restore (YYYY-MM-DD). Run the backup workflow first to see available dates.'
+        description: 'Date to restore (YYYY-MM-DD) — the newest backup from that day is used.'
         required: true
       confirm:
-        description: 'Type RESTORE to confirm. This overwrites production data.'
+        description: 'Type RESTORE to restore. Anything else only finds the backup (dry run).'
         required: true
 
 jobs:
@@ -23,16 +25,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Confirm intent
-        run: |
-          if [ "${{ github.event.inputs.confirm }}" != "RESTORE" ]; then
-            echo "Confirmation string does not match. Aborting."
-            exit 1
-          fi
-
-      - name: Install PostgreSQL client
-        run: sudo apt-get install -y postgresql-client
-
       - name: Configure AWS CLI for Cloudflare R2
         run: |
           aws configure set aws_access_key_id     "$R2_ACCESS_KEY_ID"
@@ -42,23 +34,47 @@ jobs:
           R2_ACCESS_KEY_ID:     ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
-      - name: Check backup exists
+      - name: Find backup
+        id: find
         run: |
-          KEY="${{ github.event.inputs.backup_date }}.sql.gz"
-          aws s3 ls "s3://dogboxx-db-backups/$KEY" --endpoint-url "$R2_ENDPOINT_URL" \
-            || { echo "Backup not found: $KEY"; exit 1; }
+          set -euo pipefail
+          if [[ ! "$BACKUP_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo "::error::backup_date must be YYYY-MM-DD, got: $BACKUP_DATE"
+            exit 1
+          fi
+          # Dumps are named <date>T<time>Z.sql.gz (older ones <date>.sql.gz);
+          # both sort by time within a day, so the last is the newest.
+          KEY=$(aws s3 ls "s3://dogboxx-db-backups/${BACKUP_DATE}" --endpoint-url "$R2_ENDPOINT_URL" \
+                  | awk '{print $4}' | grep '\.sql\.gz$' | sort | tail -n 1 || true)
+          if [ -z "$KEY" ]; then
+            echo "::error::No backup found for $BACKUP_DATE"
+            exit 1
+          fi
+          echo "Backup to restore: $KEY"
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
         env:
+          BACKUP_DATE:     ${{ github.event.inputs.backup_date }}
           R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
 
+      - name: Dry run — nothing restored
+        if: github.event.inputs.confirm != 'RESTORE'
+        run: echo "::notice::Dry run — would restore ${KEY}. Type RESTORE as confirm to restore it."
+        env:
+          KEY: ${{ steps.find.outputs.key }}
+
       - name: Restore database
+        if: github.event.inputs.confirm == 'RESTORE'
         run: |
-          KEY="${{ github.event.inputs.backup_date }}.sql.gz"
+          set -euo pipefail
           echo "Restoring from: $KEY"
-          aws s3 cp "s3://dogboxx-db-backups/$KEY" - \
-              --endpoint-url "$R2_ENDPOINT_URL" \
+          # psql from the same postgres:18 image backup.yml dumps with — the
+          # runner's apt client is an older major version that doesn't know
+          # newer dump commands such as \restrict.
+          aws s3 cp "s3://dogboxx-db-backups/$KEY" - --endpoint-url "$R2_ENDPOINT_URL" \
             | gunzip \
-            | psql "$DATABASE_PUBLIC_URL"
+            | docker run --rm -i postgres:18 psql "$DATABASE_PUBLIC_URL"
           echo "Restore complete."
         env:
+          KEY:                 ${{ steps.find.outputs.key }}
           DATABASE_PUBLIC_URL: ${{ secrets.DATABASE_PUBLIC_URL }}
           R2_ENDPOINT_URL:     ${{ secrets.R2_ENDPOINT_URL }}
