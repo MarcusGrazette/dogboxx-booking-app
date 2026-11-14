@@ -17,7 +17,6 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 82 | P3 | L | 📋 | **One typed invoice calculator** | Every billing page reads its numbers from one calculation instead of re-deriving them. |
 | 94 | P3 | M | 📋 | **Simplify 8 — one month calendar** | The drop-in board uses the dashboard's month calendar (compact, with drop-in counts) instead of its own. |
 | 108 | P3 | S | 🔲 | **London date in tests** | Tests compute dates in London time like the app, so they can't fail between 23:00 and midnight UTC in summer time; a guard test blocks `date.today()` in `tests/`. Before 29 Mar 2027. |
-| 99 | P3 | S | 🔲 | **Prune old backups with a storage rule** | Old database backups expire automatically in storage, so the nightly backup job only needs permission to upload. |
 | 101 | P3 | L | 🔲 | **Nightly backup inside Railway** | Run the database backup as a Railway scheduled job over the private network, so the database needs no public connection. After #99. |
 | 105 | P3 | M | 🔲 | **Move the docs site to Zensical** | Material for MkDocs gets fixes only until May 2027 and won't support MkDocs 2.0; switch to its successor, Zensical, before then. Check that image and diagram zoom still work. |
 | 24 | P3 | L | 🔲 | **Dental cleans service type** | Admin-managed time slots that clients book into. |
@@ -119,6 +118,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 59 | July 2026 code review | All findings resolved. |
 | 62 | Monitoring | Error tracking and uptime checks via Sentry. |
 | 63 | Backup confidence | Tested database restore and upload-backup reconciliation. |
+| 99 | Backups pruned by storage rules | Old database backups expire automatically in storage, and recent ones are locked against deletion or overwrite; the nightly job only uploads. Restores can be dry-run first. |
 | 64 | Session cleanup | Scheduled removal of expired sessions. |
 | 68 | Strict script policy | No inline event handlers; CSP blocks them. |
 | 70 | Login lockout | Temporary per-account lockout after repeated wrong passwords. |

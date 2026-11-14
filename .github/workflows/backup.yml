@@ -1,5 +1,11 @@
 name: Nightly Database Backup
 
+# Retention is done by the R2 bucket, not this job (FEATURES #99):
+#   - a lifecycle rule deletes dumps 31 days after upload;
+#   - a 30-day bucket lock stops anyone without admin access — including this
+#     job's token — deleting or overwriting a dump before then.
+# The token is Object Read & Write scoped to dogboxx-db-backups only.
+
 on:
   schedule:
     - cron: '0 2 * * *'   # 2am UTC daily
@@ -22,7 +28,9 @@ jobs:
       - name: Dump and upload to R2
         run: |
           set -euo pipefail
-          TIMESTAMP=$(date -u +%Y-%m-%d)
+          # Timestamped, not just dated: under the bucket lock a second run on
+          # the same day (a manual re-run) can't overwrite the first dump.
+          TIMESTAMP=$(date -u +%Y-%m-%dT%H%M%SZ)
           FILE="${TIMESTAMP}.sql.gz"
 
           # Run pg_dump via a postgres:18 container rather than the runner's apt-installed
@@ -49,18 +57,3 @@ jobs:
         env:
           DATABASE_PUBLIC_URL: ${{ secrets.DATABASE_PUBLIC_URL }}
           R2_ENDPOINT_URL:     ${{ secrets.R2_ENDPOINT_URL }}
-
-      - name: Delete backups older than 30 days
-        run: |
-          CUTOFF=$(date -u -d '30 days ago' +%Y-%m-%d)
-          aws s3 ls s3://dogboxx-db-backups/ --endpoint-url "$R2_ENDPOINT_URL" \
-            | awk '{print $4}' \
-            | while read KEY; do
-                DATE="${KEY%.sql.gz}"
-                if [[ "$DATE" < "$CUTOFF" ]]; then
-                  echo "Deleting old backup: $KEY"
-                  aws s3 rm "s3://dogboxx-db-backups/$KEY" --endpoint-url "$R2_ENDPOINT_URL"
-                fi
-              done
-        env:
-          R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
