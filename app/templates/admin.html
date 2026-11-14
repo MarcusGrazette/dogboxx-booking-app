@@ -300,6 +300,9 @@
 .cal-di-badge i { font-size: 8px; line-height: 1; }
 .cal-day-label { display: inline-flex; align-items: center; gap: 3px; }
 .cal-di-icon { display: none; font-size: 10px; color: #52525b; line-height: 1; }
+/* Drop-ins still to assign (requested or waitlisted) — the pending amber */
+.cal-di-badge.cal-di--assign { color: #a16207; background: #fef3c7; }
+.cal-di-icon.cal-di--assign  { color: #d97706; }
 
 /* ── Span bars ───────────────────────────────────────────────────────── */
 .cal-spans { margin-top: auto; padding-top: 3px; }
@@ -577,11 +580,23 @@
 </div>
 
 <!-- Assign modal — board fragment is injected into #assign-modal-body on open -->
+{# Not modal-dialog-centered: anchored at the top, so if the board grows when
+   switching Walks <-> Drop-ins only the bottom edge moves. #}
 <div class="modal fade" id="assignModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable modal-fullscreen-md-down">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable modal-fullscreen-md-down">
     <div class="modal-content border-0 shadow">
       <div class="modal-header py-2">
         <h6 class="modal-title fw-bold mb-0" id="assign-modal-title">Assign walks</h6>
+        {# Walks | Drop-ins — always opens on Walks; the Drop-ins button shows
+           an amber count of drop-ins to assign (FEATURES #94) #}
+        <div class="btn-group btn-group-sm ms-3 flex-shrink-0" role="group" aria-label="Show walks or drop-ins"
+             id="assign-view-switch">
+          <button type="button" class="btn btn-outline-secondary text-nowrap" data-assign-view="walks">Walks</button>
+          <button type="button" class="btn btn-outline-secondary text-nowrap" data-assign-view="drop-ins">
+            <i class="bi bi-house-door me-1 d-none d-sm-inline"></i>Drop-ins<span class="badge rounded-pill ms-1 d-none"
+              id="assign-view-drop-in-count" style="background:#d97706;"></span>
+          </button>
+        </div>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <!-- Broadcast action bar — deep-links into /admin/broadcasts scoped to the
@@ -705,6 +720,16 @@ window._DASH = {
            `padding-left:${pl};">${label}</div>`;
   }
 
+  /* ── Drop-in figures ─────────────────────────────────────────────────── */
+  // "2 drop-ins, 1 to assign" — to assign = requested or waitlisted, shown amber.
+  function dropInTitle(total, toAssign) {
+    const base = `${total} drop-in${total !== 1 ? 's' : ''}`;
+    return toAssign > 0 ? `${base}, ${toAssign} to assign` : base;
+  }
+  function dropInsToAssign(src) {
+    return (src.am.drop_ins_to_assign || 0) + (src.pm.drop_ins_to_assign || 0);
+  }
+
   /* ── Capacity bar row ───────────────────────────────────────────────── */
   function renderCapRow(slot, label) {
     const color  = capColor(slot);
@@ -715,7 +740,8 @@ window._DASH = {
       ? `${booked}<span style="font-size:8px;">+${slot.waitlist}</span>`
       : `${booked}`;
     const diTag = slot.drop_ins > 0
-      ? `<span class="cal-di-badge" title="${slot.drop_ins} drop-in${slot.drop_ins !== 1 ? 's' : ''}">` +
+      ? `<span class="cal-di-badge${slot.drop_ins_to_assign > 0 ? ' cal-di--assign' : ''}" ` +
+          `title="${dropInTitle(slot.drop_ins, slot.drop_ins_to_assign)}">` +
           `<i class="bi bi-house-door"></i>${slot.drop_ins}` +
         `</span>`
       : '';
@@ -753,9 +779,11 @@ window._DASH = {
 
     // Drop-in reminder beside the date. Compact (phone) layout only — the
     // full layout already shows a per-slot drop-in badge with a count.
-    const dropInTotal = (am.drop_ins || 0) + (pm.drop_ins || 0);
+    const dropInTotal  = (am.drop_ins || 0) + (pm.drop_ins || 0);
+    const dropInAssign = dropInsToAssign(cell);
     const dropInIcon = dropInTotal > 0
-      ? `<i class="bi bi-house-door-fill cal-di-icon" title="${dropInTotal} drop-in${dropInTotal !== 1 ? 's' : ''}"></i>`
+      ? `<i class="bi bi-house-door-fill cal-di-icon${dropInAssign > 0 ? ' cal-di--assign' : ''}" ` +
+          `title="${dropInTitle(dropInTotal, dropInAssign)}"></i>`
       : '';
 
     const pendingTotal = (am.pending || 0) + (pm.pending || 0);
@@ -771,7 +799,7 @@ window._DASH = {
         `<div class="cal-cell-actions">` +
           pendingBadge +
           `<button type="button" class="cal-assign-btn" data-date="${date_str}" ` +
-                  `title="Assign walks for this day">` +
+                  `title="Assign walks and drop-ins for this day">` +
             `Assign<i class="bi bi-arrow-right-circle-fill"></i>` +
           `</button>` +
         `</div>` +
@@ -836,10 +864,15 @@ window._DASH = {
     const pendingHtml = pendingTotal > 0
       ? `<span class="cal-strip-stat cal-strip-pending"><i class="bi bi-hourglass"></i>${pendingTotal} pending</span>`
       : '';
+    const dropInAssign = dropInsToAssign(src);
+    const dropInHtml = dropInAssign > 0
+      ? `<span class="cal-strip-stat cal-strip-pending"><i class="bi bi-house-door-fill"></i>` +
+          `${dropInAssign} drop-in${dropInAssign !== 1 ? 's' : ''} to assign</span>`
+      : '';
     return `<div class="cal-strip-info">` +
         `<div class="cal-strip-date">${esc(dateLabel)}</div>` +
         `<div class="cal-strip-stats">` +
-          renderStripStat(src.am, 'AM') + renderStripStat(src.pm, 'PM') + pendingHtml +
+          renderStripStat(src.am, 'AM') + renderStripStat(src.pm, 'PM') + pendingHtml + dropInHtml +
         `</div>` +
       `</div>` +
       `<button type="button" class="btn btn-sm btn-primary cal-strip-assign" data-date="${selectedDate}">` +
@@ -882,9 +915,10 @@ window._DASH = {
       );
     }
     if (slot.drop_ins > 0) {
+      const iconColor = slot.drop_ins_to_assign > 0 ? '#d97706' : '#52525b';
       badges.push(
-        `<span class="detail-slot-icon" title="${slot.drop_ins} drop-in${slot.drop_ins !== 1 ? 's' : ''}">`
-        + `<i class="bi bi-house-door" style="color:#52525b;"></i>${slot.drop_ins}`
+        `<span class="detail-slot-icon" title="${dropInTitle(slot.drop_ins, slot.drop_ins_to_assign)}">`
+        + `<i class="bi bi-house-door" style="color:${iconColor};"></i>${slot.drop_ins}`
         + `</span>`
       );
     }
@@ -1075,6 +1109,22 @@ window._DASH = {
     });
   }
 
+  // Modal title: the long date, or "Thu 19 Nov" on phones so it fits beside
+  // the Walks | Drop-ins switch.
+  function setAssignModalTitle(dateStr) {
+    const short = new Date(dateStr + 'T00:00:00').toLocaleDateString('en-GB', {
+      weekday: 'short', day: 'numeric', month: 'short'
+    });
+    const title = document.getElementById('assign-modal-title');
+    title.replaceChildren();
+    for (const [text, cls] of [[fmtDateLabel(dateStr), 'd-none d-sm-inline'], [short, 'd-sm-none']]) {
+      const span = document.createElement('span');
+      span.className = cls;
+      span.textContent = text;
+      title.appendChild(span);
+    }
+  }
+
   async function refreshDashboard() {
     const { year, month } = currentMonthData;
     try {
@@ -1115,60 +1165,130 @@ window._DASH = {
     }
   }
 
+  // The two boards the modal can show. Drop-in settings are the ones the
+  // retired /admin/drop-in-board page used.
+  const DROP_IN_PILL =
+    '<span class="modifier-pill" style="background:#e8f4fd;color:#0c63e4;border:1px solid #9ec5fe;"'
+    + ' title="Drop-in"><i class="bi bi-house-door-fill"></i></span>';
+  const BOTH_PILL =
+    '<span class="modifier-pill modifier-both" title="Both walks requested"><i class="bi bi-layers-fill"></i></span>';
+  const BOARD_VIEWS = {
+    'walks': {
+      boardDataUrl: '{{ url_for("admin.board_data", date_str="DATE") }}',
+      emptyIcon:    'bi-emoji-smile',
+      emptyText:    'No bookings for this date',
+      declineLabel: 'walk',
+      makePendingCardBadges:  b => b.has_both_slots ? BOTH_PILL : '',
+      makeAssignedCardBadges: b => b.has_both_slots
+        ? `<div class="d-flex gap-1 align-items-center flex-shrink-0">${BOTH_PILL}</div>`
+        : '',
+    },
+    'drop-ins': {
+      boardDataUrl: '{{ url_for("admin.drop_in_board_data", date_str="DATE") }}',
+      emptyIcon:    'bi-house-door',
+      emptyText:    'No drop-in bookings for this date',
+      declineLabel: 'drop-in',
+      makePendingCardBadges:  () => DROP_IN_PILL,
+      makeAssignedCardBadges: () =>
+        `<div class="d-flex gap-1 align-items-center flex-shrink-0 ms-auto">${DROP_IN_PILL}</div>`,
+    },
+  };
+
+  let modalDate     = null;
+  let modalFragment = null;   // board fragment HTML, fetched once per open
+  let modalBoard    = null;
+  let modalView     = 'walks';
+
+  // A day's figures — the month cell, or the day detail for a day outside the
+  // month on screen.
+  function dayFigures(dateStr) {
+    return findCell(currentMonthData, dateStr)
+      || (currentDetailData.date_str === dateStr ? currentDetailData : null);
+  }
+
+  function paintViewSwitch() {
+    document.querySelectorAll('#assign-view-switch [data-assign-view]').forEach(btn => {
+      const on = btn.dataset.assignView === modalView;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    const src = dayFigures(modalDate);
+    const n = src ? dropInsToAssign(src) : 0;
+    const countEl = document.getElementById('assign-view-drop-in-count');
+    countEl.textContent = n;
+    countEl.classList.toggle('d-none', n === 0);
+    countEl.title = `${n} to assign`;
+  }
+
+  // Build the board for `view` in a fresh copy of the fragment. The old board
+  // is destroyed first so a reply still in flight can't paint into the new one.
+  function mountBoard(view) {
+    const body = document.getElementById('assign-modal-body');
+    if (modalBoard) {
+      // Switching views: hold the current height so the modal doesn't shrink
+      // to the loading spinner, or to a smaller board, while it stays open.
+      // It can still grow. Cleared when the modal closes.
+      body.style.minHeight = body.offsetHeight + 'px';
+      modalBoard.destroy();
+      modalBoard = null;
+    }
+    modalView = view;
+    paintViewSwitch();
+    body.innerHTML = modalFragment;
+    if (typeof window.createBoard !== 'function') {
+      console.error('[assign-modal] createBoard is not defined — admin-board-core.js failed to load?');
+      body.innerHTML =
+        '<div class="alert alert-danger m-3">Board script failed to load. Please refresh the page.</div>';
+      return;
+    }
+    try {
+      modalBoard = window.createBoard({
+        assignUrl:       '{{ url_for("admin.assign_walker") }}',
+        ...BOARD_VIEWS[view],
+        initialDate:     modalDate,
+        onAfterAssign:   () => { modalDirty = true; },
+        onAfterUnassign: () => { modalDirty = true; },
+      });
+    } catch (e) {
+      console.error('[assign-modal] createBoard threw:', e);
+      body.innerHTML =
+        '<div class="alert alert-danger m-3">Could not initialise the board: ' + (e.message || e) + '</div>';
+    }
+  }
+
+  document.getElementById('assign-view-switch').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-assign-view]');
+    if (!btn || !modalFragment || btn.dataset.assignView === modalView) return;
+    mountBoard(btn.dataset.assignView);
+  });
+
   async function _openAssignModal(dateStr) {
     // Date only — a longer "Assign walks — …" title wrapped on phones.
-    document.getElementById('assign-modal-title').textContent = fmtDateLabel(dateStr);
+    setAssignModalTitle(dateStr);
     document.getElementById('assign-modal-body').innerHTML =
       '<div class="text-center py-5 text-muted">'
       + '<div class="spinner-border spinner-border-sm text-primary"></div>'
       + '<div class="mt-2 small">Loading…</div></div>';
     updateModalBroadcastBar(dateStr);
-    modalDirty = false;
+    modalDirty    = false;
+    modalDate     = dateStr;
+    modalFragment = null;
+    modalView     = 'walks';   // always — the Drop-ins button's amber count flags drop-ins to assign
+    paintViewSwitch();
     assignModal.show();
 
-    // Phase 1: fetch the fragment HTML
-    let html;
+    // Fetch the board fragment HTML once; each view mounts a fresh copy of it.
     try {
       const res = await fetch('{{ url_for("admin.board_fragment") }}');
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      html = await res.text();
+      modalFragment = await res.text();
     } catch (e) {
       console.error('[assign-modal] fragment fetch failed:', e);
       document.getElementById('assign-modal-body').innerHTML =
         '<div class="alert alert-danger m-3">Could not load the board (network or server error). Please close and try again.</div>';
       return;
     }
-    document.getElementById('assign-modal-body').innerHTML = html;
-
-    // Phase 2: instantiate the board against the freshly-injected fragment
-    if (typeof window.createBoard !== 'function') {
-      console.error('[assign-modal] createBoard is not defined — admin-board-core.js failed to load?');
-      document.getElementById('assign-modal-body').innerHTML =
-        '<div class="alert alert-danger m-3">Board script failed to load. Please refresh the page.</div>';
-      return;
-    }
-    try {
-      window.createBoard({
-        assignUrl:    '{{ url_for("admin.assign_walker") }}',
-        boardDataUrl: '{{ url_for("admin.board_data", date_str="DATE") }}',
-        emptyIcon:    'bi-emoji-smile',
-        emptyText:    'No bookings for this date',
-        declineLabel: 'walk',
-        makePendingCardBadges: b => b.has_both_slots
-          ? '<span class="modifier-pill modifier-both" title="Both walks requested"><i class="bi bi-layers-fill"></i></span>'
-          : '',
-        makeAssignedCardBadges: b => b.has_both_slots
-          ? '<div class="d-flex gap-1 align-items-center flex-shrink-0"><span class="modifier-pill modifier-both" title="Both walks requested"><i class="bi bi-layers-fill"></i></span></div>'
-          : '',
-        initialDate:     dateStr,
-        onAfterAssign:   () => { modalDirty = true; },
-        onAfterUnassign: () => { modalDirty = true; },
-      });
-    } catch (e) {
-      console.error('[assign-modal] createBoard threw:', e);
-      document.getElementById('assign-modal-body').innerHTML =
-        '<div class="alert alert-danger m-3">Could not initialise the board: ' + (e.message || e) + '</div>';
-    }
+    mountBoard(modalView);
   };
 
   // Escape inside a modal nested in the board (decline, slot override, walk
@@ -1202,7 +1322,10 @@ window._DASH = {
       if (assignModalEl.classList.contains('show')) assignModalEl.focus();
       return;
     }
+    if (modalBoard) { modalBoard.destroy(); modalBoard = null; }
+    modalFragment = null;
     document.getElementById('assign-modal-body').innerHTML = '';
+    document.getElementById('assign-modal-body').style.minHeight = '';
     if (modalDirty) {
       modalDirty = false;
       refreshDashboard();

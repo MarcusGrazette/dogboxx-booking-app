@@ -457,3 +457,26 @@ def test_hint_bar_is_pink_only_while_a_dog_is_selected():
         return {{idle, selected, after: active(), inline: el('selection-hint').style}};
     """)
     assert got == {'idle': False, 'selected': True, 'after': False, 'inline': {}}
+
+
+def test_destroyed_board_ignores_its_late_reply():
+    """The dashboard's Assign modal swaps Walks <-> Drop-ins by building a new
+    board on the same elements: the old board's late reply must not paint
+    over the new one."""
+    got = _run(f"""
+        board.setDate('2026-11-02');                 // walks board starts loading
+        board.destroy();
+        const dropIns = createBoard({{
+            assignUrl: '/assign', boardDataUrl: '/drop-ins/DATE',
+            emptyIcon: 'bi-house-door', emptyText: 'No drop-ins', declineLabel: 'drop-in',
+        }});
+        dropIns.setDate('2026-11-02');
+        api.calls[1].reply({TUESDAY});               // the drop-in board answers...
+        await api.settle();
+        api.calls[0].reply({MONDAY});                // ...then the old walks reply lands
+        await api.settle();
+        return [api.calls[1].url, api.boardText()];
+    """)
+    assert got[0] == '/drop-ins/2026-11-02'
+    assert 'Tilly' in got[1]
+    assert 'Alfie' not in got[1]

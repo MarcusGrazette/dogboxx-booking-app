@@ -15,7 +15,6 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 69 | P3 | M | 🔲 | **Build pipeline hardening** | Tighten how the production image is built. |
 | 72 | P3 | S | 🔲 | **Handle rate-limited push re-registration** | Back off quietly when push re-subscription is throttled. |
 | 82 | P3 | L | 📋 | **One typed invoice calculator** | Every billing page reads its numbers from one calculation instead of re-deriving them. |
-| 94 | P3 | M | 📋 | **Simplify 8 — one month calendar** | The drop-in board uses the dashboard's month calendar (compact, with drop-in counts) instead of its own. |
 | 108 | P3 | S | 🔲 | **London date in tests** | Tests compute dates in London time like the app, so they can't fail between 23:00 and midnight UTC in summer time; a guard test blocks `date.today()` in `tests/`. Before 29 Mar 2027. |
 | 99 | P3 | S | 🔲 | **Prune old backups with a storage rule** | Old database backups expire automatically in storage, so the nightly backup job only needs permission to upload. |
 | 101 | P3 | L | 🔲 | **Nightly backup inside Railway** | Run the database backup as a Railway scheduled job over the private network, so the database needs no public connection. After #99. |
@@ -25,6 +24,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 74 | P4 | S | 🔲 | **Drop `User.notification_preference`** | Remove a column that only ever holds `'email'`. |
 | 76 | P4 | L | 🔲 | **Keyboard operability** | Make the calendar and assignment board fully keyboard-usable. |
 | 106 | P4 | M | 🔲 | **Look again at Entire (Trails)** | Revisit Entire's Git hosting and Trails review flow once it supports public repos and documents how agent sessions are stored. Try it as a GitHub mirror first. |
+| 109 | P4 | M | 🔲 | **Fewer queries on walker pages and booking replies** | The walker dog list and pickup list load all owner names in one query instead of one per dog; booking and board replies are built before saving, so nothing is re-read afterwards. |
 
 ## Shipped
 
@@ -132,6 +132,7 @@ A short public roadmap: what's planned, what's shipped, what was dropped. One li
 | 90 | Simplify 5 — database error handling | Retired the error-handler module; its two call sites use plain error handling, with tests. |
 | 91 | Simplify 6 — front-end helpers | One confirm-modal helper (client home), one card builder and CSS-driven hint bar (board), one alert helper (dogs page). |
 | 92 | Simplify 7 — booking request validation | One request path for walk and drop-in bookings (drop-ins now save booking and notifications together); the unused no-JS booking form and a never-firing day limit retired. |
+| 94 | Simplify 8 — drop-ins on the dashboard | Drop-ins are assigned from the dashboard's Assign modal (Walks / Drop-ins switch); days with drop-ins to assign show an amber house icon, and the separate drop-in page is retired. |
 | 93 | London date everywhere | Every "today" check uses the London date, so pages don't show yesterday's view just after midnight in summer. |
 | 104 | London date in the browser | Date pickers and auto-filled end dates use the London date, so recurring end dates aren't a day short in summer. |
 

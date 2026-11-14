@@ -621,12 +621,6 @@ def create_app(config_name=None):
         return to_local_time(dt)
 
     @app.context_processor
-    def inject_device_info():
-        """Expose {{ is_mobile }} (a phone browser) to every template."""
-        from app.utils.ua import is_mobile_request
-        return dict(is_mobile=is_mobile_request())
-
-    @app.context_processor
     def inject_pending_counts():
         """Inject pending booking counts for sidebar badges (admin only)."""
         from flask_login import current_user

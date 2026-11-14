@@ -57,6 +57,12 @@ def _fmt_day(d):
     return d.strftime('%a %-d %b')
 
 
+def _admin_day_link(booking):
+    """Dashboard opened on the booking's day — drop-ins are assigned from its
+    Assign modal (FEATURES #94)."""
+    return f'/admin?date={booking.date.isoformat()}'
+
+
 def _same_day_admin_notice(bookings, actor):
     """(title, link) of the urgent admin notice for same-day pending bookings.
     summarise() has no same-day kind, so this stays a direct create_notification."""
@@ -68,7 +74,7 @@ def _same_day_admin_notice(bookings, actor):
     plural = 's' if len(bookings) > 1 else ''
     title = (f"Same-day request — {actor.firstname} requested "
              f"{', '.join(dog_names)}'s {slots} {svc}{plural} on {_fmt_day(b0.date)}")
-    link = '/admin/drop-in-board' if svc == 'drop-in' else '/admin'
+    link = _admin_day_link(b0) if svc == 'drop-in' else '/admin'
     return title, link
 
 
@@ -116,7 +122,7 @@ def notify_created(bookings, *, actor, by_admin, same_day=False):
                             if kind == 'booking_confirmed' and b.walker and b.walker.user
                             else None)
             link = (f'/admin/clients/{actor.id}' if kind == 'booking_confirmed'
-                    else '/admin/drop-in-board' if svc == 'drop-in' else '/admin')
+                    else _admin_day_link(b) if svc == 'drop-in' else '/admin')
             for uid in admins:
                 batch.add(uid, kind, actor_first=actor.firstname, link=link,
                           walker_name=walker_first, **payload)
