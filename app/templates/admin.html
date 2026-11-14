@@ -585,8 +585,8 @@
     <div class="modal-content border-0 shadow">
       <div class="modal-header py-2">
         <h6 class="modal-title fw-bold mb-0" id="assign-modal-title">Assign walks</h6>
-        {# Walks | Drop-ins — opens on Drop-ins when only drop-ins need
-           assigning that day (FEATURES #94) #}
+        {# Walks | Drop-ins — always opens on Walks; the Drop-ins button shows
+           an amber count of drop-ins to assign (FEATURES #94) #}
         <div class="btn-group btn-group-sm ms-3 flex-shrink-0" role="group" aria-label="Show walks or drop-ins"
              id="assign-view-switch">
           <button type="button" class="btn btn-outline-secondary text-nowrap" data-assign-view="walks">Walks</button>
@@ -1204,14 +1204,6 @@ window._DASH = {
       || (currentDetailData.date_str === dateStr ? currentDetailData : null);
   }
 
-  // Open on Drop-ins only when drop-ins are the only thing to do that day.
-  function defaultAssignView(dateStr) {
-    const src = dayFigures(dateStr);
-    if (!src) return 'walks';
-    const walksToDo = src.am.pending + src.am.waitlist + src.pm.pending + src.pm.waitlist;
-    return dropInsToAssign(src) > 0 && walksToDo === 0 ? 'drop-ins' : 'walks';
-  }
-
   function paintViewSwitch() {
     document.querySelectorAll('#assign-view-switch [data-assign-view]').forEach(btn => {
       const on = btn.dataset.assignView === modalView;
@@ -1272,7 +1264,7 @@ window._DASH = {
     modalDirty    = false;
     modalDate     = dateStr;
     modalFragment = null;
-    modalView     = defaultAssignView(dateStr);
+    modalView     = 'walks';   // always — the Drop-ins button's amber count flags drop-ins to assign
     paintViewSwitch();
     assignModal.show();
 
