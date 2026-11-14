@@ -21,6 +21,9 @@
  *   onDateSelect           {fn(date)} Called after every successful setDate()
  *   onAfterAssign          {fn(date)} Called after a successful assign
  *   onAfterUnassign        {fn(date)} Called after a successful unassign
+ *   onRender               {fn({pendingCount})} Called on every render with the
+ *                          number of requested/waitlisted cards (optimistic moves
+ *                          and rollbacks included)
  */
 (function (global) {
     'use strict';
@@ -192,6 +195,7 @@
             if (fadeTimer) { clearTimeout(fadeTimer); fadeTimer = null; }
 
             const showPending = state.pending.length > 0;
+            if (cfg.onRender) cfg.onRender({ pendingCount: state.pending.length });
             const toggling = pendingShown !== null && pendingShown !== showPending
                 && wrap.style.display !== 'none' && !prefersReducedMotion();
             pendingShown = showPending;

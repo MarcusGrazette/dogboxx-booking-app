@@ -1198,6 +1198,7 @@ window._DASH = {
   let modalFragment = null;   // board fragment HTML, fetched once per open
   let modalBoard    = null;
   let modalView     = 'walks';
+  let dropInCount   = null;   // live from the drop-in board once it has rendered
 
   // A day's figures — the month cell, or the day detail for a day outside the
   // month on screen.
@@ -1212,8 +1213,10 @@ window._DASH = {
       btn.classList.toggle('active', on);
       btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
+    // The month data only reloads when the modal closes, so once the drop-in
+    // board has rendered its own count is the up-to-date one.
     const src = dayFigures(modalDate);
-    const n = src ? dropInsToAssign(src) : 0;
+    const n = dropInCount ?? (src ? dropInsToAssign(src) : 0);
     const countEl = document.getElementById('assign-view-drop-in-count');
     countEl.textContent = n;
     countEl.classList.toggle('d-none', n === 0);
@@ -1246,6 +1249,9 @@ window._DASH = {
         assignUrl:       '{{ url_for("admin.assign_walker") }}',
         ...BOARD_VIEWS[view],
         initialDate:     modalDate,
+        onRender:        view === 'drop-ins'
+          ? ({ pendingCount }) => { dropInCount = pendingCount; paintViewSwitch(); }
+          : undefined,
         onAfterAssign:   () => { modalDirty = true; },
         onAfterUnassign: () => { modalDirty = true; },
       });
@@ -1273,6 +1279,7 @@ window._DASH = {
     modalDirty    = false;
     modalDate     = dateStr;
     modalFragment = null;
+    dropInCount   = null;
     modalView     = 'walks';   // always — the Drop-ins button's amber count flags drop-ins to assign
     paintViewSwitch();
     assignModal.show();
