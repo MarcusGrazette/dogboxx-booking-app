@@ -344,6 +344,16 @@ def book_for_dog():
                 # Roll back so an earlier slot in this loop doesn't persist.
                 db.session.rollback()
                 return jsonify(success=False, message=str(e)), 400
+            except IntegrityError:
+                # Lost a duplicate race after the pre-check above: the advisory
+                # lock is per-service but the (dog_id, date, slot) unique index
+                # is cross-service, so a walk racing a drop-in collides here, at
+                # create_booking()'s flush. Roll back so an earlier slot in this
+                # loop doesn't persist.
+                db.session.rollback()
+                label = f"the {s.lower()} slot" if slot == 'Both' else "that slot"
+                return jsonify(success=False,
+                               message=f"{dog.name} already has a booking for {label} on that date"), 409
 
             bookings_created.append(booking)
 
