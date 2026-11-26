@@ -85,8 +85,9 @@ class TestClientBooking:
         assert _notifs(client_user) == []
         assert [n[:2] for n in _notifs(co_owner)] == [('booking_requested', title)]
         assert [n[:2] for n in _notifs(admin_user)] == [('booking_requested', title)]
+        # Drop-ins are assigned from the dashboard, opened on the booking's day.
         assert Notification.query.filter_by(recipient_id=admin_user.id).one().link == \
-            '/admin/drop-in-board'
+            f'/admin?date={DAY.isoformat()}'
         assert _notifs(walker_user) == []
 
     def test_same_day_reaches_admins_as_urgent(self, app, client, client_user, dog,

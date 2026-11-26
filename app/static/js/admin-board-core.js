@@ -4,6 +4,7 @@
  * Usage:
  *   const board = createBoard(config);
  *   board.setDate('2026-05-19');   // load a date
+ *   board.destroy();               // before building another board in its place
  *
  * The caller is responsible for picking a date (via its own calendar UI,
  * a URL param, or anything else). The Board does not own date-selection.
@@ -20,6 +21,9 @@
  *   onDateSelect           {fn(date)} Called after every successful setDate()
  *   onAfterAssign          {fn(date)} Called after a successful assign
  *   onAfterUnassign        {fn(date)} Called after a successful unassign
+ *   onRender               {fn({pendingCount})} Called on every render with the
+ *                          number of requested/waitlisted cards (optimistic moves
+ *                          and rollbacks included)
  */
 (function (global) {
     'use strict';
@@ -191,6 +195,7 @@
             if (fadeTimer) { clearTimeout(fadeTimer); fadeTimer = null; }
 
             const showPending = state.pending.length > 0;
+            if (cfg.onRender) cfg.onRender({ pendingCount: state.pending.length });
             const toggling = pendingShown !== null && pendingShown !== showPending
                 && wrap.style.display !== 'none' && !prefersReducedMotion();
             pendingShown = showPending;
@@ -749,9 +754,19 @@
             if (cfg.onDateSelect) cfg.onDateSelect(dateStr);
         }
 
+        // Every in-flight reply is checked against loadSeq before it touches
+        // the board, so bumping it makes them all stale. Needed when the
+        // dashboard's Assign modal swaps Walks <-> Drop-ins: the new board
+        // reuses the same element ids, and a late reply from the old one
+        // would otherwise paint into it.
+        function destroy() {
+            loadSeq++;
+            if (fadeTimer) { clearTimeout(fadeTimer); fadeTimer = null; }
+        }
+
         if (cfg.initialDate) setDate(cfg.initialDate);
 
-        return { setDate };
+        return { setDate, destroy };
     }
 
     global.createBoard = createBoard;

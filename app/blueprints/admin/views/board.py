@@ -1,4 +1,4 @@
-from flask import request, render_template, jsonify
+from flask import request, render_template, jsonify, redirect, url_for
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from datetime import datetime
@@ -75,8 +75,9 @@ def board_fragment():
 @login_required
 @admin_required
 def drop_in_board():
-    """Drop-in assignment board."""
-    return render_template("admin_drop_in_board.html")
+    """Retired page (FEATURES #94) — drop-ins are assigned from the dashboard's
+    Assign modal. Kept as a redirect for old notification links and bookmarks."""
+    return redirect(url_for('admin.index'))
 
 
 @admin_bp.route("/api/pending-counts")
@@ -506,48 +507,3 @@ def update_booking_note_admin(booking_id):
     return jsonify(success=True, note=note)
 
 
-@admin_bp.route("/calendar_data/<int:year>/<int:month>")
-@login_required
-@admin_required
-def calendar_data(year, month):
-    """Return calendar data for the admin booking view"""
-# Validate input
-    try:
-        start_date = datetime(year, month, 1).date()
-        if month == 12:
-            end_date = datetime(year + 1, 1, 1).date()
-        else:
-            end_date = datetime(year, month + 1, 1).date()
-    except ValueError:
-        return jsonify(success=False, message="Invalid date"), 400
-
-    service_slug = request.args.get('service')
-
-    # Get bookings for the month
-    q = Booking.query.filter(
-        Booking.date >= start_date,
-        Booking.date < end_date,
-        Booking.status != 'cancelled'
-    )
-    if service_slug:
-        q = q.join(ServiceType).filter(ServiceType.slug == service_slug)
-    bookings = q.all()
-
-    # Group by date
-    booking_counts = {}
-    pending_dates = set()
-
-    for booking in bookings:
-        date_str = booking.date.strftime('%Y-%m-%d')
-        date_day = booking.date.day
-
-        if date_str not in booking_counts:
-            booking_counts[date_str] = {'total': 0, 'assigned': 0}
-        booking_counts[date_str]['total'] += 1
-
-        if booking.walker_id:
-            booking_counts[date_str]['assigned'] += 1
-        elif booking.status in Booking.PENDING_STATUSES:
-            pending_dates.add(date_day)
-
-    return jsonify(success=True, data=booking_counts, pending_dates=list(pending_dates))

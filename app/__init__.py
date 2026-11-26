@@ -226,36 +226,24 @@ def create_app(config_name=None):
         Flask-Session stores sessions in the app's own db.session
         (SESSION_SQLALCHEMY = db above), and its _upsert_session() ends with
         db.session.commit(). That runs whenever the session was modified — any
-        flash(), a login, the first request of each day (_touch_session_daily)
-        — and until 2026-09 ran on every logged-in request, because
-        SESSION_REFRESH_EACH_REQUEST was left at its True default. So
-        `return jsonify(...), 400` without a rollback is not an escape hatch,
+        flash(), a login, the daily touch (_touch_session_daily). So
+        `return jsonify(...), 400` without a rollback is not an escape hatch:
         it can be a deferred commit of whatever the route already mutated.
 
-        Ordering is load-bearing: Flask.process_response runs after_request funcs
-        and *then* save_session, so this rolls back before that commit ever fires.
+        This must run before that commit, and does: Flask.process_response runs
+        after_request funcs and *then* save_session.
 
-        Triggering on pending writes rather than status code is also deliberate —
-        the onboarding photo-error path returns HTTP 200 while leaving
-        onboarding_completed=True pending, so a 4xx/5xx check would miss it.
+        It triggers on pending writes, not status code, because an error path
+        can return HTTP 200 with a mutation pending.
 
         "Pending" means either unflushed ORM changes (new/dirty/deleted) or a
         flush that no commit or rollback has followed — see
-        _mark_flushed_uncommitted above for why the second half is the important
-        one.
+        _mark_flushed_uncommitted above for why the second half matters most.
 
-        ENFORCING as of 2026-09-21, after a clean week in prod (zero hits across
-        every deploy since PR #212/#213) proved the accompanying route fixes found
-        every leak site at the time. Was log-only through that week; see
-        FEATURES.md #77 and CLAUDE.md "Transactions & session state". Same
-        staging pattern as the Web Push SSRF allowlist (FEATURES #51). A hit now
-        is a genuine bug in some other route we haven't found yet — the rollback
-        keeps its failure response honest (nothing partially saved) so a client
-        retry is a clean retry, not a collision with a half-written prior attempt.
-
-        ERROR level is intentional: Sentry's LoggingIntegration turns this into an
-        event, and a hit here is a real bug that should surface rather than sit in
-        a log file.
+        Enforcing: a hit is a real bug in some route. It logs at ERROR (Sentry's
+        LoggingIntegration turns this into an event) and rolls back, so the
+        failure response is honest (nothing partially saved) and a retry is
+        clean.
         """
         try:
             sess = db.session
@@ -619,12 +607,6 @@ def create_app(config_name=None):
         """Convert a stored UTC datetime to Europe/London for display."""
         from app.utils.dates import to_local_time
         return to_local_time(dt)
-
-    @app.context_processor
-    def inject_device_info():
-        """Expose {{ is_mobile }} (a phone browser) to every template."""
-        from app.utils.ua import is_mobile_request
-        return dict(is_mobile=is_mobile_request())
 
     @app.context_processor
     def inject_pending_counts():
