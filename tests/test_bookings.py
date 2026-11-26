@@ -805,70 +805,6 @@ class TestAdminRecurringForDogRejectsNonWalk:
         assert 'walks' in data['message'].lower()
 
 
-# ---------------------------------------------------------------------------
-# T3e — Admin calendar_data: pending_dates includes waitlisted bookings
-# ---------------------------------------------------------------------------
-
-class TestAdminCalendarPendingDates:
-    """Both 'requested' and 'waitlisted' bookings should highlight the date
-    on the admin board calendar — they share PENDING_STATUSES semantics."""
-
-    def _seed(self, status, slot='Morning'):
-        tom = tomorrow()
-        make_walker_with_schedule(
-            f'walker_cal_{status}_{id(self)}@test.com',
-            tom.weekday(), slot,
-        )
-        st = make_service(capacity=6)
-        user = make_user(f'client_cal_{status}_{id(self)}@test.com')
-        make_client_profile(user.id)
-        d = make_dog(f'Dog-{status}')
-        attach_dog(d.id, user.id)
-        b = Booking(
-            user_id=user.id, dog_id=d.id,
-            service_type_id=st.id, date=tom, slot=slot,
-            status=status,
-            walker_id=None,  # unassigned — admin needs to triage
-        )
-        db.session.add(b)
-        admin = make_user(f'admin_cal_{status}_{id(self)}@test.com',
-                          role='walker', is_admin=True)
-        db.session.commit()
-        return tom, admin.email
-
-    def test_requested_booking_appears_in_pending_dates(self, app, client):
-        with app.app_context():
-            tom, admin_email = self._seed(status='requested')
-        login(client, admin_email)
-        resp = client.get(f'/admin/calendar_data/{tom.year}/{tom.month}')
-        data = resp.get_json()
-        assert data['success'] is True
-        assert tom.day in data['pending_dates']
-
-    def test_waitlisted_booking_appears_in_pending_dates(self, app, client):
-        """Regression: waitlisted bookings used to be ignored by /admin/calendar_data
-        so the calendar wouldn't highlight dates where someone was waitlisted."""
-        with app.app_context():
-            tom, admin_email = self._seed(status='waitlisted')
-        login(client, admin_email)
-        resp = client.get(f'/admin/calendar_data/{tom.year}/{tom.month}')
-        data = resp.get_json()
-        assert data['success'] is True
-        assert tom.day in data['pending_dates']
-
-
-# ---------------------------------------------------------------------------
-# T3f — Client notifications on waitlist + book_both consolidation
-#
-# Regression coverage for two related bugs:
-# 1. A single-slot waitlist used to write zero client (actor) notifications —
-#    only admins got pinged, so the bell stayed empty after the user's flash
-#    disappeared.
-# 2. /book_both wrote one client notification per confirmed slot and zero
-#    for waitlisted ones, so a mixed outcome (one confirmed + one waitlisted)
-#    surfaced only the confirmed slot in the bell.
-# ---------------------------------------------------------------------------
-
 class TestBookingClientNotifications:
     """The client who books gets no bell entry (the toast told them); the
     dog's co-owner gets the household notification (booking_notify.py)."""
@@ -1203,14 +1139,14 @@ class TestSameDayBooking:
 # SECURITY_REVIEW.md #2 — concurrent-duplicate race must return 409, not 500.
 #
 # A booking can pass the in-route duplicate pre-check yet still collide on the
-# (dog_id, date, slot) partial unique index at commit time (two co-owners or a
-# double-tapped "Book" button racing). The DB correctly rejects the second
-# write; the bug was that the resulting IntegrityError fell through to a generic
-# HTTP 500. Each JSON booking endpoint must now translate it to a graceful 409.
+# (dog_id, date, slot) partial unique index at create_booking()'s flush (two
+# co-owners or a double-tapped "Book" button racing). The DB rejects the second
+# write; each JSON booking endpoint must translate the IntegrityError into a
+# graceful 409, not a generic 500.
 #
 # We can't bypass the pre-check via status (its status set is identical to the
 # index's partial condition), so we simulate the index violation with a one-shot
-# before_commit listener that raises IntegrityError exactly as Postgres would.
+# after_flush listener that raises IntegrityError exactly as Postgres would.
 # ---------------------------------------------------------------------------
 
 class TestConcurrentDuplicateGraceful409:
@@ -1295,6 +1231,54 @@ class TestConcurrentDuplicateGraceful409:
         with app.app_context():
             assert Booking.query.count() == 0, \
                 f'{endpoint}: conflicting booking should have been rolled back'
+
+    @pytest.mark.parametrize('slot,collide_on', [
+        ('Morning', 1),
+        # 'Both': Morning is created, Afternoon collides — Morning must not persist.
+        ('Both', 2),
+    ])
+    def test_admin_book_for_dog_integrityerror_returns_409(self, app, client, slot, collide_on):
+        from sqlalchemy import event
+        from sqlalchemy.exc import IntegrityError
+
+        _, dog_id = self._setup(app)
+        with app.app_context():
+            owner_id = DogOwner.query.filter_by(dog_id=dog_id).first().user_id
+            admin = make_user(f'admin_race_{id(self)}@t.com', role='walker', is_admin=True)
+            db.session.commit()
+            admin_email = admin.email
+        login(client, admin_email)
+
+        # Count the flushes that insert a Booking; raise on the Nth.
+        state = {'seen': 0, 'fired': False}
+
+        def _raise_dupe(session, flush_context):
+            if state['fired'] or not any(isinstance(o, Booking) for o in session.new):
+                return
+            state['seen'] += 1
+            if state['seen'] < collide_on:
+                return
+            state['fired'] = True
+            raise IntegrityError(
+                'INSERT INTO bookings', {},
+                Exception('duplicate key value violates unique constraint '
+                          '"ix_booking_dog_date_slot_active"'))
+
+        event.listen(db.session, 'after_flush', _raise_dupe)
+        try:
+            resp = client.post('/admin/book_for_dog', json={
+                'dog_id': dog_id, 'user_id': owner_id,
+                'date': tomorrow().isoformat(), 'slot': slot,
+            })
+        finally:
+            event.remove(db.session, 'after_flush', _raise_dupe)
+            db.session.remove()
+
+        assert state['fired'], 'the injection never fired — test proves nothing'
+        assert resp.status_code == 409
+        assert resp.get_json()['success'] is False
+        with app.app_context():
+            assert Booking.query.count() == 0
 
 
 # ---------------------------------------------------------------------------

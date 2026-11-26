@@ -457,3 +457,49 @@ def test_hint_bar_is_pink_only_while_a_dog_is_selected():
         return {{idle, selected, after: active(), inline: el('selection-hint').style}};
     """)
     assert got == {'idle': False, 'selected': True, 'after': False, 'inline': {}}
+
+
+def test_destroyed_board_ignores_its_late_reply():
+    """The dashboard's Assign modal swaps Walks <-> Drop-ins by building a new
+    board on the same elements: the old board's late reply must not paint
+    over the new one."""
+    got = _run(f"""
+        board.setDate('2026-11-02');                 // walks board starts loading
+        board.destroy();
+        const dropIns = createBoard({{
+            assignUrl: '/assign', boardDataUrl: '/drop-ins/DATE',
+            emptyIcon: 'bi-house-door', emptyText: 'No drop-ins', declineLabel: 'drop-in',
+        }});
+        dropIns.setDate('2026-11-02');
+        api.calls[1].reply({TUESDAY});               // the drop-in board answers...
+        await api.settle();
+        api.calls[0].reply({MONDAY});                // ...then the old walks reply lands
+        await api.settle();
+        return [api.calls[1].url, api.boardText()];
+    """)
+    assert got[0] == '/drop-ins/2026-11-02'
+    assert 'Tilly' in got[1]
+    assert 'Alfie' not in got[1]
+
+
+def test_on_render_reports_the_requested_count():
+    """The dashboard's Drop-ins button count follows the board: down as soon
+    as a card is assigned, back up if the assign fails."""
+    got = _run(f"""
+        const counts = [];
+        board.destroy();
+        const b = createBoard({{
+            assignUrl: '/assign', boardDataUrl: '/drop-ins/DATE',
+            emptyIcon: 'bi-house-door', emptyText: 'No drop-ins', declineLabel: 'drop-in',
+            onRender: ({{ pendingCount }}) => counts.push(pendingCount),
+        }});
+        b.setDate('2026-11-02');
+        api.calls[0].reply({MONDAY});                  // Alfie + Bella requested
+        await api.settle();
+        await api.assign(1, 7, 'Morning');             // Alfie assigned (optimistic)
+        api.lastCall().reply({{ success: false, message: 'Full' }});
+        await api.settle();                            // ...and rolled back
+        // Selecting a card re-renders too — compare the changes only.
+        return counts.filter((n, i) => i === 0 || n !== counts[i - 1]);
+    """)
+    assert got == [2, 1, 2]
